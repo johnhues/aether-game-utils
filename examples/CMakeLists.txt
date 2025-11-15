@@ -127,14 +127,14 @@ if(NOT EMSCRIPTEN)
 	)
 endif()
 
-# Text Input
-ae_add_bundle("Text Input"
-	TARGET_NAME "05_text_input"
-	BUNDLE_ID "ae.05_text_input"
+# Text
+ae_add_bundle("Text"
+	TARGET_NAME "05_text"
+	BUNDLE_ID "ae.05_text"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
-	SRC_FILES "05_TextInput.cpp"
+	SRC_FILES "05_Text.cpp"
 	RESOURCES "${AE_EXAMPLE_RESOURCES};data/font.tga"
 	LIBS "ae"
 )

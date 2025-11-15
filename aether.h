@@ -3174,6 +3174,7 @@ public:
 	void SetTextMode( bool enabled );
 	bool GetTextMode() const { return m_textMode; }
 	void SetText( const char* text ) { m_text = text; }
+	void AppendText( const char* text ) { m_text += text; }
 	const char* GetText() const { return m_text.c_str(); }
 	const char* GetTextInput() const { return m_textInput.c_str(); }
 	
@@ -4317,10 +4318,21 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::SpriteFont class
+//! A mapping of ascii characters to glyph infos for use with ae::SpriteRenderer.
 //------------------------------------------------------------------------------
 class SpriteFont
 {
 public:
+	//! Sets '[firstCharacter, lastCharacter]' glyphs (inclusive) assuming a
+	//! contiguous fixed size for each character within the given texture
+	//! dimensions.
+	void SetGlyphsASCIISpriteSheet( uint32_t textureWidth, uint32_t textureHeight, uint32_t charWidth, uint32_t charHeight, char firstCharacter, char lastCharacter, ae::Rect sprite );
+	//! Adds an (ascii) symbol to this font. The \p quad will be internally
+	//! passed to ae::SpriteRenderer::AddSprite() along with an offset based on
+	//! the text region. This lets you choose if the origin of each quad should
+	//! be the center, bottom left etc. and handle descending characters like p
+	//! and q. The corners of this \p quad will be passed into the
+	//! ae::SpriteRenderer::SetParams() vertex shader.
 	void SetGlyph( char c, ae::Rect quad, ae::Rect uvs, float advance );
 	bool GetGlyph( char c, ae::Rect* quad, ae::Rect* uv, float* advance, float uiSize ) const;
 	float GetTextWidth( const char* text, float uiSize ) const;
@@ -4343,6 +4355,8 @@ private:
 //! (2 floats) are all provided to the vertex shader. See example.
 // Example vertex shader:
 /*
+	AE_UNIFORM mat4 u_toNdc;
+
 	AE_IN_HIGHP vec4 a_position;
 	AE_IN_HIGHP vec4 a_color;
 	AE_IN_HIGHP vec2 a_uv;
@@ -4354,7 +4368,7 @@ private:
 	{
 		v_color = a_color;
 		v_uv = a_uv;
-		gl_Position = a_position;
+		gl_Position = u_toNdc * a_position;
 	}
 */
 // Example fragment shader:
@@ -4366,7 +4380,8 @@ private:
 
 	void main()
 	{
-		AE_COLOR = v_color * AE_TEXTURE2D( u_tex, v_uv );
+		AE_COLOR.rgb = v_color.rgb;
+		AE_COLOR.a = v_color.a * AE_TEXTURE2D( u_tex, v_uv ).r;
 	}
 */
 //------------------------------------------------------------------------------
@@ -4377,6 +4392,7 @@ public:
 	void Initialize( uint32_t maxGroups, uint32_t maxCount );
 	void Terminate();
 
+// @TODO: Can't use a rect for uvs, because 'flipped' uvs aren't possible
 	void AddSprite( uint32_t group, ae::Vec2 pos, ae::Vec2 size, ae::Rect uvs, ae::Color color );
 	void AddSprite( uint32_t group, ae::Rect quad, ae::Rect uvs, ae::Color color );
 	void AddSprite( uint32_t group, const ae::Matrix4& transform, ae::Rect uvs, ae::Color color );
@@ -24224,7 +24240,11 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 		{
 			if( !isspace( str[ 0 ] ) && charCount < m_maxGlyphCount )
 			{
-				int32_t index = str[ 0 ];
+				if( str[ 0 ] < ' ' || str[ 0 ] > '~' )
+				{
+					continue;
+				}
+				int32_t index = str[ 0 ] - ' ';
 				uint32_t columns = m_texture->GetWidth() / m_fontSize;
 				ae::Vec2 offset( index % columns, columns - index / columns - 1 ); // @HACK: Assume same number of columns and rows
 
@@ -24841,6 +24861,23 @@ SpriteFont::GlyphData::GlyphData()
 	advance = 0.0f;
 }
 
+void SpriteFont::SetGlyphsASCIISpriteSheet( uint32_t textureWidth, uint32_t textureHeight, uint32_t charWidth, uint32_t charHeight, char firstCharacter, char lastCharacter, ae::Rect sprite )
+{
+	const uint32_t glyphsPerRow = textureWidth / charWidth;
+	const uint32_t glyphsPerColumn = textureHeight / charHeight;
+	const ae::Vec2 uvSize( 1.0f / glyphsPerRow, 1.0f / glyphsPerColumn );
+	uint32_t i = 0;
+	for( char c = firstCharacter; c <= lastCharacter; ++c )
+	{
+		const uint32_t index = static_cast< uint32_t >( c - firstCharacter );
+		const uint32_t x = index % glyphsPerRow;
+		const uint32_t y = index / glyphsPerRow;
+		const ae::Vec2 uv0( uvSize.x * x, 1.0f - ( uvSize.y * ( y + 1 ) ) );
+		const ae::Rect uvs = ae::Rect::FromPoints( uv0, uv0 + uvSize );
+		SetGlyph( c, sprite, uvs, 1.0f );
+	}
+}
+
 void SpriteFont::SetGlyph( char c, ae::Rect quad, ae::Rect uvs, float advance )
 {
 	if( c < 32 || c >= 32 + countof(m_glyphs) )
@@ -24895,6 +24932,8 @@ SpriteRenderer::SpriteRenderer( const ae::Tag& tag ) :
 
 void SpriteRenderer::Initialize( uint32_t maxGroups, uint32_t maxCount )
 {
+	AE_ASSERT_MSG( maxGroups, "Sprite renderer must be initialized with at least one group" );
+	AE_ASSERT_MSG( maxCount, "Sprite renderer must be initialized with a non-zero sprite count" );
 	m_params.Append( {}, maxGroups );
 	m_spriteGroups.Reserve( maxCount );
 
@@ -24947,6 +24986,7 @@ void SpriteRenderer::AddSprite( uint32_t group, ae::Rect quad, ae::Rect uvs, ae:
 
 void SpriteRenderer::AddSprite( uint32_t group, const ae::Matrix4& transform, ae::Rect uvs, ae::Color color )
 {
+	AE_ASSERT_MSG( m_params.Length(), "Sprite renderer is not initialized" );
 	if( m_vertexArray.GetVertexCount() >= m_vertexArray.GetMaxVertexCount() )
 	{
 		return;
@@ -24967,14 +25007,16 @@ void SpriteRenderer::AddSprite( uint32_t group, const ae::Matrix4& transform, ae
 
 void SpriteRenderer::AddText( uint32_t group, const char* text, const SpriteFont* font, ae::Rect region, float fontSize, float lineHeight, ae::Color color )
 {
+	AE_ASSERT_MSG( m_params.Length(), "Sprite renderer is not initialized" );
 	ae::Vec2 offset( region.GetMin().x, region.GetMax().y - lineHeight );
 	while( *text )
 	{
+		auto IsSpace = []( char c ){ return ( c != '\r' ) && ( c != '\n' ) && isspace( c ); };
 		const char c = *text;
-		const bool isSpace = isspace( c );
+		const bool isSpace = IsSpace( c );
 		ae::Rect quad, uv;
 		float advance;
-		font->GetGlyph( *text, &quad, &uv, &advance, fontSize );
+		font->GetGlyph( *text, &quad, &uv, &advance, fontSize ); // @TODO: Check return value and skip
 		if( !isSpace )
 		{
 			AddSprite( group, quad + offset, uv, color );
@@ -24983,11 +25025,11 @@ void SpriteRenderer::AddText( uint32_t group, const char* text, const SpriteFont
 		text++;
 
 		bool newline = false;
-		if( isSpace && !isspace( *text ) )
+		if( isSpace && !IsSpace( *text ) )
 		{
 			const char* word = text;
 			float wordSize = 0.0f;
-			while( *word && !isspace( *word ) )
+			while( *word && !IsSpace( *word ) )
 			{
 				float advance2 = 0.0f;
 				font->GetGlyph( *word, nullptr, nullptr, &advance2, fontSize );
@@ -25013,11 +25055,13 @@ void SpriteRenderer::AddText( uint32_t group, const char* text, const SpriteFont
 
 void SpriteRenderer::SetParams( uint32_t group, const ae::Shader* shader, const ae::UniformList& uniforms )
 {
+	AE_ASSERT_MSG( m_params.Length(), "Sprite renderer is not initialized" );
 	m_params[ group ] = { shader, uniforms };
 }
 
 void SpriteRenderer::Render()
 {
+	AE_ASSERT_MSG( m_params.Length(), "Sprite renderer is not initialized" );
 	m_vertexArray.Upload();
 
 	const uint32_t spriteCount = m_spriteGroups.Length();
