@@ -64,6 +64,7 @@ public:
 	ae::TimeStep timeStep;
 	ae::FileSystem fs;
 	ae::DebugLines debugLines = TAG_SMALL_ENGINE;
+	ae::SpriteRenderer spriteRenderer = TAG_SMALL_ENGINE;
 
 	// Resources
 	struct MeshResource
@@ -74,16 +75,21 @@ public:
 	const struct MeshResource* GetMeshResource( const char* name );
 	ae::Map< ae::Str128, MeshResource* > meshResources = TAG_SMALL_ENGINE;
 	ae::Texture2D defaultTexture;
+	ae::Texture2D fontTexture;
+	ae::SpriteFont font;
 	ae::Shader meshShader;
+	ae::Shader fontShader;
 
 	// Rendering
 	void GetUniforms( ae::UniformList* uniformList );
+	ae::Rect GetUIRegion() const;
 	ae::Vec3 cameraPos = ae::Vec3( 10.0f );
 	ae::Vec3 cameraDir = ae::Vec3( -1.0f ).SafeNormalizeCopy();
 	ae::Color skyColor = ae::Color::PicoBlue();
 	ae::Matrix4 worldToView = ae::Matrix4::Identity();
 	ae::Matrix4 viewToProj = ae::Matrix4::Identity();
 	ae::Matrix4 worldToProj = ae::Matrix4::Identity();
+	ae::Matrix4 uiToNdc = ae::Matrix4::Identity();
 	// Lights
 	struct Light
 	{

@@ -75,6 +75,17 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// Dialog
+//------------------------------------------------------------------------------
+class Dialog : public ae::Inheritor< Component, Dialog >
+{
+public:
+	void Update( class SmallEngine* engine ) override;
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	ae::Str256 text;
+};
+
+//------------------------------------------------------------------------------
 // Player
 //------------------------------------------------------------------------------
 AE_REGISTER_CLASS( Player );
@@ -98,6 +109,8 @@ void Player::Update( SmallEngine* engine )
 	const float dt = engine->timeStep.GetDt();
 	ae::Input& input = engine->input;
 	ae::Window& window = engine->window;
+
+	engine->registry.SetEntityName( GetEntity(), "player" );
 
 	// Camera
 	const ae::Array< ae::Touch, ae::kMaxTouches > newTouches = input.GetNewTouches();
@@ -201,6 +214,34 @@ void PointLight::Update( SmallEngine* engine )
 	engine->light.position = transform.GetTranslation();
 	engine->light.color = ae::Color::RGB( r, g, b );
 	engine->light.intensity = intensity;
+}
+
+//------------------------------------------------------------------------------
+// Dialog
+//------------------------------------------------------------------------------
+AE_REGISTER_CLASS( Dialog );
+AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Dialog), (ae, EditorTypeAttribute), {} );
+AE_REGISTER_CLASS_VAR( Dialog, text );
+
+void Dialog::Update( SmallEngine* engine )
+{
+	engine->debugLines.AddSphere( transform.GetTranslation(), 1.0f, ae::Color::Yellow(), 32 );
+	if( Player* player = engine->registry.TryGetComponent< Player >( "player" ) )
+	{
+		const ae::Vec3 dialogPos = transform.GetTranslation();
+		const ae::Vec3 playerPos = player->position;
+		ae::Vec3 diff = ( dialogPos - playerPos );
+		const float distance = diff.Normalize();
+		if( distance < 2.0f && diff.GetAngleBetween( engine->cameraDir ) < ae::QuarterPi )
+		{
+			const float fontSize = 0.1f;
+			const float lineHeight = fontSize * 1.1f;
+			const ae::Rect uiRegion = engine->GetUIRegion();
+			const ae::Vec2 min = uiRegion.GetMin();
+			const ae::Vec2 max( uiRegion.GetMax().x, ( uiRegion.GetCenter().y + min.y ) * 0.5f );
+			engine->spriteRenderer.AddText( 0, text.c_str(), &engine->font, ae::Rect::FromPoints( min, max ), fontSize, lineHeight, ae::Color::PicoWhite() );
+		}
+	}
 }
 
 //------------------------------------------------------------------------------

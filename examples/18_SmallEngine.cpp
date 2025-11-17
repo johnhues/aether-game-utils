@@ -34,8 +34,10 @@ AE_REGISTER_CLASS( Component );
 //------------------------------------------------------------------------------
 // Resources
 //------------------------------------------------------------------------------
-extern const char* kVertShader;
-extern const char* kFragShader;
+extern const char* kMeshVertShader;
+extern const char* kMeshFragShader;
+extern const char* kFontVertShader;
+extern const char* kFontFragShader;
 bool LoadObj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut );
 void LoadTarga( const char* fileName, const ae::FileSystem* fs, ae::Texture2D* tex );
 
@@ -81,13 +83,18 @@ bool SmallEngine::Initialize( int argc, char* argv[] )
 	gfx.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	debugLines.Initialize( 10 * 1024 );
+	spriteRenderer.Initialize( 1, 2000 );
 
 	// @TODO: Move to Game.cpp
 	LoadTarga( "level.tga", &fs, &defaultTexture );
-	meshShader.Initialize( kVertShader, kFragShader, nullptr, 0 );
+	LoadTarga( "font.tga", &fs, &fontTexture );
+	font.SetGlyphsASCIISpriteSheet( fontTexture.GetWidth(), fontTexture.GetHeight(), 8, 8, ' ', '~', ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ) );
+	meshShader.Initialize( kMeshVertShader, kMeshFragShader, nullptr, 0 );
 	meshShader.SetDepthTest( true );
 	meshShader.SetDepthWrite( true );
 	meshShader.SetCulling( ae::Culling::CounterclockwiseFront );
+	fontShader.Initialize( kFontVertShader, kFontFragShader, nullptr, 0 );
+	fontShader.SetBlending( true );
 
 	return true;
 }
@@ -113,14 +120,23 @@ void SmallEngine::Run()
 		} );
 		registry.CallFn< Component >( [&]( Component* c ){ c->Update( this ); } );
 		
-		// Render
-		gfx.Activate();
-		gfx.Clear( skyColor );
 		worldToView = ae::Matrix4::WorldToView( cameraPos, cameraDir, ae::Vec3( 0.0f, 0.0f, 1.0f ) );
 		viewToProj = ae::Matrix4::ViewToProjection( 1.1f, gfx.GetAspectRatio(), 0.1f, 500.0f );
 		worldToProj = viewToProj * worldToView;
+		uiToNdc = ae::Matrix4::Scaling( 0.5f / gfx.GetAspectRatio(), 0.5f, 1.0f );
+		
+		gfx.Activate();
+		gfx.Clear( skyColor );
 		registry.CallFn< Component >( [&]( Component* c ){ c->Render( this ); } );
 		debugLines.Render( worldToProj );
+		
+		ae::UniformList spriteUniforms;
+		GetUniforms( &spriteUniforms );
+		spriteUniforms.Set( "u_tex", &fontTexture );
+		spriteUniforms.Set( "u_uiToNdc", uiToNdc );
+		spriteRenderer.SetParams( 0, &fontShader, spriteUniforms );
+		spriteRenderer.Render();
+		
 		gfx.Present();
 		timeStep.Tick();
 	}
@@ -156,6 +172,13 @@ void SmallEngine::GetUniforms( ae::UniformList* uniformList )
 	uniformList->Set( "u_cameraPos", cameraPos );
 }
 
+ae::Rect SmallEngine::GetUIRegion() const
+{
+	const float x = 1.0f / uiToNdc.GetAxis( 0 ).x;
+	const float y = 1.0f / uiToNdc.GetAxis( 1 ).y;
+	return ae::Rect::FromPoints( ae::Vec2( -x, -y ), ae::Vec2( x, y ) );
+}
+
 //------------------------------------------------------------------------------
 // SmallEngineEditorPlugin member functions
 //------------------------------------------------------------------------------
@@ -179,7 +202,7 @@ ae::Optional< ae::EditorMesh > SmallEngineEditorPlugin::TryLoad( const char* res
 //------------------------------------------------------------------------------
 // Resources
 //------------------------------------------------------------------------------
-const char* kVertShader = R"(
+const char* kMeshVertShader = R"(
 	AE_UNIFORM mat4 u_modelToProj;
 	AE_UNIFORM mat4 u_modelToWorld;
 	AE_UNIFORM mat4 u_normalToWorld;
@@ -201,7 +224,7 @@ const char* kVertShader = R"(
 		gl_Position = u_modelToProj * a_position;
 	})";
 
-const char* kFragShader = R"(
+const char* kMeshFragShader = R"(
 	// Fragment shader implementing a simple PBR-like lighting model with a single
 	// directional light and ambient term. Uses GGX microfacet BRDF (NDF + geometry +
 	// Fresnel) for specular, and a Lambertian diffuse term.
@@ -400,5 +423,42 @@ void LoadTarga( const char* fileName, const ae::FileSystem* fs, ae::Texture2D* t
 	ae::Scratch< uint8_t > fileBuffer( fileSize );
 	fs->Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileBuffer.Length() );
 	tgaFile.Load( fileBuffer.Data(), fileBuffer.Length() );
+	tgaFile.textureParams.filter = ae::Texture::Filter::Nearest;
+	AE_INFO( "first [#,#,#]",
+		(uint32_t)((uint8_t*)tgaFile.textureParams.data)[ 0 ],
+		(uint32_t)((uint8_t*)tgaFile.textureParams.data)[ 1 ],
+		(uint32_t)((uint8_t*)tgaFile.textureParams.data)[ 2 ] );
 	tex->Initialize( tgaFile.textureParams );
 }
+
+const char* kFontVertShader = R"(
+	AE_UNIFORM mat4 u_uiToNdc;
+
+	AE_IN_HIGHP vec4 a_position;
+	AE_IN_HIGHP vec4 a_color;
+	AE_IN_HIGHP vec2 a_uv;
+
+	AE_OUT_HIGHP vec4 v_color;
+	AE_OUT_HIGHP vec2 v_uv;
+
+	void main()
+	{
+		v_color = a_color;
+		v_uv = a_uv;
+		gl_Position = u_uiToNdc * a_position;
+	}
+)";
+
+const char* kFontFragShader = R"(
+	AE_UNIFORM sampler2D u_tex;
+
+	AE_IN_HIGHP vec4 v_color;
+	AE_IN_HIGHP vec2 v_uv;
+
+	void main()
+	{
+		AE_COLOR.rgb = v_color.rgb;
+		AE_COLOR.a = v_color.a * AE_TEXTURE2D( u_tex, v_uv ).r;
+		// AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );
+	}
+)";
