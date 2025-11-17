@@ -26810,7 +26810,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 	AE_ASSERT_MSG( !header.colorMapLength, "Targa color map is not supported" );
 	AE_ASSERT_MSG( !header.xOrigin && !header.yOrigin, "Targa non-zero origin is not supported" );
 	AE_ASSERT_MSG( header.bitsPerPixel == 8 || header.bitsPerPixel == 24 || header.bitsPerPixel == 32, "Targa bit depth is unsupported" );
-	AE_ASSERT_MSG( header.bitsPerPixel != 32 || ( header.imageDescriptor & 0b0001 ), "Alpha mode not supported" );
+	AE_ASSERT_MSG( header.bitsPerPixel != 32 || ( header.imageDescriptor & 0b1000 ), "Alpha mode not supported" );
 
 	rStream.DiscardReadData( header.idLength );
 	rStream.DiscardReadData( header.colorMapLength );
