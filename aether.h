@@ -22314,6 +22314,7 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
 	const uint32_t kPrependMax = 16;
 	ae::Array< const char*, kPrependMax + _kMaxShaderDefines * 2 + 1 > shaderSource;// x2 max defines to make room for newlines. Plus one for actual shader.
+	shaderSource.Append( "// System\n" );
 
 	// Version
 	ae::Str32 glVersionStr = "#version ";
@@ -22364,12 +22365,21 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
 	AE_ASSERT( shaderSource.Length() <= kPrependMax );
 
-	for( int32_t i = 0; i < defineCount; i++ )
+	if( defineCount )
 	{
-		shaderSource.Append( defines[ i ] );
-		shaderSource.Append( "\n" );
+		shaderSource.Append( "\n// User defines\n" );
+		for( int32_t i = 0; i < defineCount; i++ )
+		{
+			shaderSource.Append( defines[ i ] );
+			shaderSource.Append( "\n" );
+		}
 	}
 
+	shaderSource.Append( "\n// User shader\n" );
+	while( shaderStr[ 0 ] == '\n' )
+	{
+		shaderStr++; // Remove preceding newlines for error readability
+	}
 	shaderSource.Append( shaderStr );
 
 	GLuint shader = glCreateShader( glType );
@@ -22380,24 +22390,33 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 	glGetShaderiv( shader, GL_COMPILE_STATUS, &status );
 	if( status == GL_FALSE )
 	{
-		const char* typeStr = ( type == Type::Vertex ? "vertex" : "fragment" );
-		AE_ERR( "Failed to load # shader! #", typeStr, shaderStr );
-
+		// Error info
 		GLint logLength;
 		glGetShaderiv( shader, GL_INFO_LOG_LENGTH, &logLength );
-
+		// Combine shader string
+		std::stringstream shaderSourceStr;
+		for( const auto& source : shaderSource )
+		{
+			shaderSourceStr << source;
+		}
+		// Number lines
+		std::string line;
+		std::stringstream numbered;
+		uint32_t lineCount = 0;
+		while( std::getline( shaderSourceStr, line ) )
+		{
+			lineCount++;
+			numbered << std::setw( 3 ) << lineCount << "  " << line << '\n';
+		}
+		// Append errors
 		if( logLength > 0 )
 		{
 			unsigned char* log = new unsigned char[ logLength ];
 			glGetShaderInfoLog( shader, logLength, NULL, (GLchar*)log );
-			AE_ERR( "Error compiling # shader #", typeStr, log );
+			numbered << log;
 			delete[] log;
 		}
-		else
-		{
-			AE_ERR( "Error compiling # shader: unknown issue", typeStr );
-		}
-
+		AE_ERR( "Failed to load # shader:\n#", ( type == Type::Vertex ? "vertex" : "fragment" ), numbered.str().c_str() );
 		AE_CHECK_GL_ERROR();
 		return 0;
 	}
