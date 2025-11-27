@@ -5644,16 +5644,13 @@ private:
 
 //! \defgroup Meta
 //! @{
+// clang-format off
 
 //------------------------------------------------------------------------------
 // Macros to force module linking
 //------------------------------------------------------------------------------
-// clang-format off
 //! Call signature: AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
-#define AE_FORCE_LINK_CLASS(...) \
-	extern int AE_GLUE_UNDERSCORE(_ae_force_link, __VA_ARGS__); \
-	struct AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__) { AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__)() { AE_GLUE_UNDERSCORE(_ae_force_link, __VA_ARGS__) = 1; } }; \
-	AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__) AE_GLUE_UNDERSCORE(_ae_forceLink, __VA_ARGS__);
+#define AE_FORCE_LINK_CLASS( ... ) AE_FORCE_LINK_CLASS_IMPL( __VA_ARGS__ )
 
 //------------------------------------------------------------------------------
 // Meta class registration macros
@@ -5663,7 +5660,7 @@ private:
 //! global scope of any cpp file. The class must indirectly inherit from from
 //! ae::Inheritor< ae::Object, MyType >.
 #define AE_REGISTER_CLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE(_CLASS), AE_GLUE_TYPE(_CLASS) )
-//! Registers the class variable 'Namespace0::...::NamespaceN::MyType::classVar'
+//! Registers the class variable 'MyType::classVar'
 #define AE_REGISTER_CLASS_VAR( _CLASS, _V ) AE_REGISTER_NAMESPACECLASS_VAR( (_CLASS), _V )
 //! Registers an instance of an attribute with a class. The attribute type must
 //! be registered with AE_REGISTER_CLASS() before this is called.
@@ -5677,120 +5674,56 @@ private:
 //! global scope of any cpp file. The class must indirectly inherit from from
 //! ae::Inheritor< ae::Object, MyType >.
 //! Call signature: AE_REGISTER_NAMESPACECLASS( (Namespace0, ..., NameSpaceN, MyType) );
-#define AE_REGISTER_NAMESPACECLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS)
+#define AE_REGISTER_NAMESPACECLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS )
 //! Registers the class variable 'Namespace0::...::NamespaceN::MyType::classVar'
 //! Call signature: AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, ..., NameSpaceN, MyType), classVar );
-#define AE_REGISTER_NAMESPACECLASS_VAR( _CLASS, _V ) AE_REGISTER_CLASS_VAR_IMPL(AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS, _V)
+#define AE_REGISTER_NAMESPACECLASS_VAR( _CLASS, _V ) AE_REGISTER_CLASS_VAR_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS, _V )
 //! Registers an instance of an attribute with a class. The attribute type must
 //! be registered with AE_REGISTER_NAMESPACECLASS() before this is called.
+//! Call signature: AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Namespace0, ..., NameSpaceN, MyType), (Namespace0, ..., NameSpaceN, MyAttribute), AttributeArgs... );
 #define AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( _CLASS, _A, _ARGS ) AE_REGISTER_CLASS_ATTRIBUTE_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS, AE_GLUE_UNDERSCORE _A, AE_GLUE_TYPE _A, _ARGS )
 //! Registers an instance of an attribute with a class variable. The attribute
 //! must be registered with AE_REGISTER_NAMESPACECLASS() before this is called.
+//! Call signature: AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Namespace0, ..., NameSpaceN, MyType), classVar, (Namespace0, ..., NameSpaceN, MyAttribute), AttributeArgs... );
 #define AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( _CLASS, _V, _A, _ARGS ) AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS, _V, AE_GLUE_UNDERSCORE _A, AE_GLUE_TYPE _A, _ARGS )
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
 //------------------------------------------------------------------------------
 //! Define a new enum (must register with AE_REGISTER_ENUM_CLASS)
-#define AE_DEFINE_ENUM_CLASS( E, T, ... ) \
-	enum class E : T { \
-		__VA_ARGS__ \
-	}; \
-	template<> const ae::EnumType* ae::GetEnumType< E >(); \
-	template<> \
-	struct ae::TypeT< E > : public ae::EnumType { \
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< T > ) {}\
-		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; } \
-		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); } \
-	}; \
-	struct _EnumValues##E { _EnumValues##E( const char* values = #__VA_ARGS__ ) : values( values ) {} const char* values; };\
-	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnumType< E >()->GetNameByValue( (int32_t)e ); return os; } \
-	namespace ae { template<> inline std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } } \
-	namespace ae { template<> inline E FromString( const char* str, const E& e ) { return ae::GetEnumType< E >()->GetValueFromString( str, e ); } } \
-	namespace ae { template<> inline uint32_t GetHash32( const E& e ) { return (uint32_t)e; } }
+#define AE_DEFINE_ENUM_CLASS( E, T, ... ) AE_DEFINE_ENUM_CLASS_IMPL( E, T, ##__VA_ARGS__ )
 
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
-#define AE_REGISTER_ENUM_CLASS( E )\
-	ae::_RegisterEnum< E > ae_enum_creator_##E( #E, _EnumValues##E().values );\
-	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
-	template<> const ae::EnumType* ae::GetEnumType< E >(){\
-		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
-		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
-		return s_enum;\
-	}
+#define AE_REGISTER_ENUM_CLASS( E ) AE_REGISTER_ENUM_CLASS_IMPL( E )
+
 //------------------------------------------------------------------------------
 // External c-style enum registerer
 //------------------------------------------------------------------------------
 //! Register an already defined c-style enum type
-#define AE_REGISTER_ENUM( E ) \
-	template<> const ae::EnumType* ae::GetEnumType< E >() {\
-		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
-		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
-		return s_enum;\
-	}\
-	template<> \
-	struct ae::TypeT< E > : public ae::EnumType { \
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
-		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; } \
-		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); } \
-	}; \
-	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E; \
-	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
-	namespace ae { template<> std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } } \
-	namespace ae { template<> E FromString( const char* str, const E& e ) { return ae::GetEnumType< E >()->GetValueFromString( str, e ); } }
+#define AE_REGISTER_ENUM( E ) AE_REGISTER_ENUM_IMPL( E )
 
 //! Register an already defined c-style enum type where each value has a prefix
-#define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) \
-	template<> const ae::EnumType* ae::GetEnumType< E >() {\
-		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
-		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
-		return s_enum;\
-	} \
-	template<> \
-	struct ae::TypeT< E > : public ae::EnumType { \
-		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
-		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; } \
-		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); } \
-	}; \
-	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
-	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+#define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) AE_REGISTER_ENUM_PREFIX_IMPL( E, PREFIX )
 
 //! Register c-style enum value
-#define AE_REGISTER_ENUM_VALUE( E, V ) \
-	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #V, V );
+#define AE_REGISTER_ENUM_VALUE( E, V ) ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #V, V );
 
 //! Register c-style enum value with a manually specified name
-#define AE_REGISTER_ENUM_VALUE_NAME( E, V, N ) \
-	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #N, V );
+#define AE_REGISTER_ENUM_VALUE_NAME( E, V, N ) ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #N, V );
 
 //------------------------------------------------------------------------------
 // External enum class registerer
 //------------------------------------------------------------------------------
 //! Register an already defined enum class type
-#define AE_REGISTER_ENUM_CLASS2( E ) \
-	template<> const ae::EnumType* ae::GetEnumType< E >() {\
-		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
-		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
-		return s_enum;\
-	} \
-	template<> \
-	struct ae::TypeT< E > : public ae::EnumType { \
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
-		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; } \
-		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); } \
-	}; \
-	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
-	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }
-	// @NOTE: Nested namespace declaration requires C++17
+#define AE_REGISTER_ENUM_CLASS2( E ) AE_REGISTER_ENUM_CLASS2_IMPL( E )
 
 //! Register enum class value
-#define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) \
-	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##V( #V, E::V ); }
+#define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##V( #V, E::V ); }
 
 // clang-format on
 
 //------------------------------------------------------------------------------
-// Meta constants
+// Meta system
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
 using TypeName = ae::Str64;
@@ -6088,7 +6021,7 @@ public:
 		Vec2,
 		Vec3,
 		Vec4,
-		// @TODO: Quaternion
+		Quaternion,
 		Matrix4,
 		Color,
 
@@ -8660,6 +8593,17 @@ template<>
 inline ae::Vec4 FromString( const char* str, const ae::Vec4& defaultValue )
 {
 	ae::Vec4 r;
+	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	{
+		return r;
+	}
+	return defaultValue;
+}
+
+template<>
+inline ae::Quaternion FromString( const char* str, const ae::Quaternion& defaultValue )
+{
+	ae::Quaternion r;
 	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
 	{
 		return r;
@@ -12544,6 +12488,16 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 #define AE_DROP_LAST_10(_1,_2,_3,_4,_5,_6,_7,_8,_9,_10) _1,_2,_3,_4,_5,_6,_7,_8,_9
 
 //------------------------------------------------------------------------------
+// Macros to force module linking
+//------------------------------------------------------------------------------
+// clang-format off
+//! Call signature: AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
+#define AE_FORCE_LINK_CLASS_IMPL(...)\
+	extern int AE_GLUE_UNDERSCORE(_ae_force_link, __VA_ARGS__);\
+	struct AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__) { AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__)() { AE_GLUE_UNDERSCORE(_ae_force_link, __VA_ARGS__) = 1; } };\
+	AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__) AE_GLUE_UNDERSCORE(_ae_forceLink, __VA_ARGS__);
+
+//------------------------------------------------------------------------------
 // Deprecated meta class property registration macros
 //------------------------------------------------------------------------------
 //! Register a class property
@@ -12604,6 +12558,88 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 #define AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL( _N, _T, _V, _AN, _AT, _ARGS )\
 	static ::_AT AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, _AN, __LINE__) _ARGS;\
 	static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, _AN,__LINE__)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), &AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, _AN, __LINE__) )
+
+//------------------------------------------------------------------------------
+// External enum definer and registerer
+//------------------------------------------------------------------------------
+#define AE_DEFINE_ENUM_CLASS_IMPL( E, T, ... )\
+	enum class E : T {\
+		__VA_ARGS__\
+	};\
+	template<> const ae::EnumType* ae::GetEnumType< E >();\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< T > ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	struct _EnumValues##E { _EnumValues##E( const char* values = #__VA_ARGS__ ) : values( values ) {} const char* values; };\
+	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnumType< E >()->GetNameByValue( (int32_t)e ); return os; }\
+	namespace ae { template<> inline std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
+	namespace ae { template<> inline E FromString( const char* str, const E& e ) { return ae::GetEnumType< E >()->GetValueFromString( str, e ); } }\
+	namespace ae { template<> inline uint32_t GetHash32( const E& e ) { return (uint32_t)e; } }
+
+#define AE_REGISTER_ENUM_CLASS_IMPL( E )\
+	ae::_RegisterEnum< E > ae_enum_creator_##E( #E, _EnumValues##E().values );\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	template<> const ae::EnumType* ae::GetEnumType< E >(){\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}
+//------------------------------------------------------------------------------
+// External c-style enum registerer
+//------------------------------------------------------------------------------
+#define AE_REGISTER_ENUM_IMPL( E )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	namespace ae { template<> std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
+	namespace ae { template<> E FromString( const char* str, const E& e ) { return ae::GetEnumType< E >()->GetValueFromString( str, e ); } }
+
+#define AE_REGISTER_ENUM_PREFIX_IMPL( E, PREFIX )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+
+//------------------------------------------------------------------------------
+// External enum class registerer
+//------------------------------------------------------------------------------
+#define AE_REGISTER_ENUM_CLASS2_IMPL( E )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }
+	// @NOTE: Nested namespace declaration requires C++17
 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
@@ -12842,6 +12878,7 @@ _ae_DefineBasicVarType( double, Double );
 _ae_DefineBasicVarType( ae::Vec2, Vec2 );
 _ae_DefineBasicVarType( ae::Vec3, Vec3 );
 _ae_DefineBasicVarType( ae::Vec4, Vec4 );
+_ae_DefineBasicVarType( ae::Quaternion, Quaternion );
 _ae_DefineBasicVarType( ae::Color, Color );
 _ae_DefineBasicVarType( ae::Matrix4, Matrix4 );
 _ae_DefineBasicVarType( ae::Str16, String );
@@ -29434,6 +29471,7 @@ const char* ae::ClassVar::GetTypeName() const
 		case ae::BasicType::Vec2: return "ae::Vec2";
 		case ae::BasicType::Vec3: return "ae::Vec3";
 		case ae::BasicType::Vec4: return "ae::Vec4";
+		case ae::BasicType::Quaternion: return "ae::Quaternion";
 		case ae::BasicType::Color: return "ae::Color";
 		case ae::BasicType::Matrix4: return "ae::Matrix4";
 		case ae::BasicType::String: return "String";
@@ -29611,6 +29649,7 @@ std::string ae::BasicType::GetVarDataAsString( ae::ConstDataPointer _varData ) c
 		case BasicType::Vec2: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec2* >( varData ) ).c_str();
 		case BasicType::Vec3: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec3* >( varData ) ).c_str();
 		case BasicType::Vec4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec4* >( varData ) ).c_str();
+		case BasicType::Quaternion: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Quaternion* >( varData ) ).c_str();
 		case BasicType::Matrix4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
 		case BasicType::Color: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
 		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
@@ -29754,6 +29793,12 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Vec4) );
 			*(ae::Vec4*)varData = ae::FromString< ae::Vec4 >( value, ae::Vec4( 0.0f ) );
+			return true;
+		}
+		case BasicType::Quaternion:
+		{
+			AE_ASSERT( typeSize == sizeof(ae::Quaternion) );
+			*(ae::Quaternion*)varData = ae::FromString< ae::Quaternion >( value, ae::Quaternion::Identity() );
 			return true;
 		}
 		case BasicType::Matrix4:

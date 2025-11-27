@@ -139,6 +139,7 @@ function(add_ae_library NAME LIB_TYPE)
 			-Werror=narrowing
 			-Werror=uninitialized
 			-Werror=pointer-to-int-cast
+			-fmacro-backtrace-limit=0
 		)
 		if((CMAKE_CXX_COMPILER_ID MATCHES "AppleClang"))
 			target_compile_options(${NAME} PUBLIC
