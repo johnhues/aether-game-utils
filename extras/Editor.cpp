@@ -96,6 +96,30 @@ enum class PickingType
 	Logic
 };
 
+struct SpecialMemberVar
+{
+	ae::BasicType::Type type;
+	const char* name;
+	bool ( *SetObjectValue )( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var );
+};
+const SpecialMemberVar kSpecialMemberVars[] = {
+	{ ae::BasicType::Matrix4, "transform", []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform ); } },
+	{ ae::BasicType::Vec3, "position", []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetTranslation() ); } },
+	{ ae::BasicType::Quaternion, "rotation", []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetRotation() ); } },
+	{ ae::BasicType::Vec3, "scale", []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetScale() ); } },
+};
+const SpecialMemberVar* GetSpecialMemberVar( const ae::ClassVar* var )
+{
+	for( const auto& specialVar : kSpecialMemberVars )
+	{
+		if( var->GetType() == specialVar.type && strcmp( var->GetName(), specialVar.name ) == 0 )
+		{
+			return &specialVar;
+		}
+	}
+	return nullptr;
+}
+
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
@@ -105,6 +129,7 @@ void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const r
 void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
 bool ValidateLevel( const rapidjson::Value& jsonLevel );
 template< typename T > const T* TryGetClassOrVarAttribute( const ae::ClassType* type );
+ae::Array< const ae::ClassVar*, 8 > GetTypeVarsByName( const ae::ClassType* type, const char* name );
 void SendPluginEvent( EditorPluginArray& plugins, const EditorEvent& event );
 
 //------------------------------------------------------------------------------
@@ -2809,20 +2834,22 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 	const uint32_t typeCounts = m_registry.GetTypeCount();
 	for( uint32_t i = 0; i < typeCounts; i++ )
 	{
-		const ae::ClassType* type = m_registry.GetTypeByIndex( i );
-		if( ae::Component* component = m_registry.TryGetComponent( entity, type ) )
+		const ae::ClassType* componentType = m_registry.GetTypeByIndex( i );
+		if( ae::Component* component = m_registry.TryGetComponent( entity, componentType ) )
 		{
-			// @TODO: Update all transform, position, scale, rotation vars
-			if( const ae::ClassVar* var = type->GetVarByName( "transform", true ) )
+			for( const auto& specialVar : kSpecialMemberVars )
 			{
-				var->SetObjectValue( component, transform );
-				editorObject->HandleVarChange( program, component, type, var );
+				const auto vars = GetTypeVarsByName( componentType, specialVar.name );
+				for( const ae::ClassVar* var : vars )
+				{
+					if( specialVar.SetObjectValue( transform, component, var ) )
+					{
+						editorObject->HandleVarChange( program, component, componentType, var );
+					}
+				}
 			}
 		}
 	}
-
-	// @TODO: Broadcast transform change here?
-	//@TODO: Plugin event here?
 }
 
 void EditorServer::BroadcastVarChange( const ae::ClassVar* var, const ae::Component* component )
@@ -3320,13 +3347,9 @@ void EditorServer::m_SelectWithModifiers( EditorProgram* program, const ae::Enti
 
 bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, const ae::ClassVar* var )
 {
-	if( var->GetType() == ae::BasicType::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
+	if( GetSpecialMemberVar( var ) )
 	{
-		return false; // Handled by entity transform
-	}
-	else if( var->GetType() == ae::BasicType::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
-	{
-		return false; // Handled by entity transform
+		return false;
 	}
 	bool changed = false;
 	ImGui::PushID( var->GetName() );
@@ -3692,6 +3715,11 @@ void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& json
 	for( uint32_t i = 0; i < varCount; i++ )
 	{
 		const ae::ClassVar* var = type->GetVarByIndex( i, true );
+		if( const SpecialMemberVar* specialVar = GetSpecialMemberVar( var ) )
+		{
+			specialVar->SetObjectValue( transform, component, var );
+			continue;
+		}
 		if( !jsonComponent.HasMember( var->GetName() ) )
 		{
 			continue;
@@ -3708,19 +3736,6 @@ void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& json
 				var->SetObjectValueFromString( component, jsonVarArrayValue.GetString(), i );
 			}
 		}
-		else if( var->GetType() == ae::BasicType::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
-		{
-			var->SetObjectValue( component, transform );
-		}
-		else if( var->GetType() == ae::BasicType::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
-		{
-			var->SetObjectValue( component, transform.GetTranslation() );
-		}
-		else if( var->GetType() == ae::BasicType::Vec3 && strcmp( var->GetName(), "scale" ) == 0 )
-		{
-			var->SetObjectValue( component, transform.GetScale() );
-		}
-		// @TODO: Add 'rotation'
 		// @TODO: Handle patching references
 		else if( !jsonVar.IsObject() && !jsonVar.IsArray() )
 		{
@@ -3762,6 +3777,10 @@ void ComponentToJson( const Component* component, const Component* defaultCompon
 	for( uint32_t i = 0; i < varCount; i++ )
 	{
 		const ae::ClassVar* var = type->GetVarByIndex( i, true );
+		if( GetSpecialMemberVar( var ) )
+		{
+			continue;
+		}
 		const auto varName = rapidjson::StringRef( var->GetName() );
 		if( var->IsArray() )
 		{
@@ -3886,6 +3905,21 @@ const T* TryGetClassOrVarAttribute( const ae::ClassType* type )
 		currentType = currentType->GetParentType();
 	}
 	return nullptr;
+}
+
+ae::Array< const ae::ClassVar*, 8 > GetTypeVarsByName( const ae::ClassType* type, const char* name )
+{
+	ae::Array< const ae::ClassVar*, 8 > vars;
+	const ae::ClassType* currentType = type;
+	while( currentType && vars.Length() < vars.Size() )
+	{
+		if( const ae::ClassVar* var = currentType->GetVarByName( name, false ) )
+		{
+			vars.Append( var );
+		}
+		currentType = currentType->GetParentType();
+	}
+	return vars;
 }
 
 void SendPluginEvent( EditorPluginArray& plugins, const EditorEvent& event )
