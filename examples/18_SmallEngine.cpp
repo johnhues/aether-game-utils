@@ -36,8 +36,8 @@ AE_REGISTER_CLASS( Component );
 //------------------------------------------------------------------------------
 extern const char* kMeshVertShader;
 extern const char* kMeshFragShader;
-extern const char* kFontVertShader;
-extern const char* kFontFragShader;
+extern const char* kSpriteVertShader;
+extern const char* kSpriteFragShader;
 bool LoadObj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut );
 void LoadTarga( const char* fileName, const ae::FileSystem* fs, ae::Texture2D* tex );
 
@@ -83,7 +83,7 @@ bool SmallEngine::Initialize( int argc, char* argv[] )
 	gfx.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	debugLines.Initialize( 10 * 1024 );
-	spriteRenderer.Initialize( 1, 2000 );
+	spriteRenderer.Initialize( 2, 2000 );
 
 	// @TODO: Move to Game.cpp
 	LoadTarga( "level.tga", &fs, &defaultTexture );
@@ -93,8 +93,12 @@ bool SmallEngine::Initialize( int argc, char* argv[] )
 	meshShader.SetDepthTest( true );
 	meshShader.SetDepthWrite( true );
 	meshShader.SetCulling( ae::Culling::CounterclockwiseFront );
-	fontShader.Initialize( kFontVertShader, kFontFragShader, nullptr, 0 );
-	fontShader.SetBlending( true );
+	const char* kFontDefine = "#define FONT";
+	spriteFontShader.Initialize( kSpriteVertShader, kSpriteFragShader, &kFontDefine, 1 );
+	spriteFontShader.SetBlending( true );
+	const char* kFadeDefine = "#define FADE";
+	spriteFadeShader.Initialize( kSpriteVertShader, kSpriteFragShader, &kFadeDefine, 1 );
+	spriteFadeShader.SetBlending( true );
 
 	return true;
 }
@@ -130,11 +134,12 @@ void SmallEngine::Run()
 		registry.CallFn< Component >( [&]( Component* c ){ c->Render( this ); } );
 		debugLines.Render( worldToProj );
 		
-		ae::UniformList spriteUniforms;
-		GetUniforms( &spriteUniforms );
-		spriteUniforms.Set( "u_tex", &fontTexture );
-		spriteUniforms.Set( "u_uiToNdc", uiToNdc );
-		spriteRenderer.SetParams( 0, &fontShader, spriteUniforms );
+		ae::UniformList groupUniforms[ 2 ];
+		groupUniforms[ 0 ].Set( "u_tex", &fontTexture );
+		groupUniforms[ 0 ].Set( "u_uiToNdc", uiToNdc );
+		groupUniforms[ 1 ].Set( "u_uiToNdc", uiToNdc );
+		spriteRenderer.SetParams( 0, &spriteFontShader, groupUniforms[ 0 ] );
+		spriteRenderer.SetParams( 1, &spriteFadeShader, groupUniforms[ 1 ] );
 		spriteRenderer.Render();
 		
 		gfx.Present();
@@ -431,7 +436,7 @@ void LoadTarga( const char* fileName, const ae::FileSystem* fs, ae::Texture2D* t
 	tex->Initialize( tgaFile.textureParams );
 }
 
-const char* kFontVertShader = R"(
+const char* kSpriteVertShader = R"(
 	AE_UNIFORM mat4 u_uiToNdc;
 
 	AE_IN_HIGHP vec4 a_position;
@@ -449,8 +454,10 @@ const char* kFontVertShader = R"(
 	}
 )";
 
-const char* kFontFragShader = R"(
+const char* kSpriteFragShader = R"(
+#if defined(FONT)
 	AE_UNIFORM sampler2D u_tex;
+#endif
 
 	AE_IN_HIGHP vec4 v_color;
 	AE_IN_HIGHP vec2 v_uv;
@@ -458,7 +465,12 @@ const char* kFontFragShader = R"(
 	void main()
 	{
 		AE_COLOR.rgb = v_color.rgb;
+#if defined(FONT)
 		AE_COLOR.a = v_color.a * AE_TEXTURE2D( u_tex, v_uv ).r;
-		// AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );
+#elif defined(FADE)
+		AE_COLOR.a = v_color.a * v_uv.y;
+#else
+		AE_COLOR.a = v_color.a;
+#endif
 	}
 )";

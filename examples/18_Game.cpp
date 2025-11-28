@@ -222,6 +222,7 @@ void PointLight::Update( SmallEngine* engine )
 AE_REGISTER_CLASS( Dialog );
 AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Dialog), (ae, EditorTypeAttribute), {} );
 AE_REGISTER_CLASS_VAR( Dialog, text );
+AE_REGISTER_CLASS_VAR( Dialog, transform );
 
 void Dialog::Update( SmallEngine* engine )
 {
@@ -239,7 +240,9 @@ void Dialog::Update( SmallEngine* engine )
 			const ae::Rect uiRegion = engine->GetUIRegion();
 			const ae::Vec2 min = uiRegion.GetMin();
 			const ae::Vec2 max( uiRegion.GetMax().x, ( uiRegion.GetCenter().y + min.y ) * 0.5f );
-			engine->spriteRenderer.AddText( 0, text.c_str(), &engine->font, ae::Rect::FromPoints( min, max ), fontSize, lineHeight, ae::Color::PicoWhite() );
+			const ae::Rect textRegion = ae::Rect::FromPoints( min, max );
+			engine->spriteRenderer.AddSprite( 1, textRegion, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Black().SetA( 0.5f ) );
+			engine->spriteRenderer.AddText( 0, text.c_str(), &engine->font, textRegion, fontSize, lineHeight, ae::Color::PicoWhite() );
 		}
 	}
 }

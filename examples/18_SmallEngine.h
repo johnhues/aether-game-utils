@@ -78,7 +78,8 @@ public:
 	ae::Texture2D fontTexture;
 	ae::SpriteFont font;
 	ae::Shader meshShader;
-	ae::Shader fontShader;
+	ae::Shader spriteFontShader;
+	ae::Shader spriteFadeShader;
 
 	// Rendering
 	void GetUniforms( ae::UniformList* uniformList );
