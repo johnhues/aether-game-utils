@@ -2029,7 +2029,7 @@ template< typename T >
 class ListNode
 {
 public:
-	ListNode( T* owner );
+	ListNode( T* self );
 	~ListNode();
 
 	void Remove();
@@ -2059,7 +2059,7 @@ private:
 	List< T >* m_root;
 	ListNode* m_next;
 	ListNode* m_prev;
-	T* m_owner;
+	T* m_self;
 };
 
 //------------------------------------------------------------------------------
@@ -10545,12 +10545,12 @@ std::ostream& operator<<( std::ostream& os, const Dict< N >& dict )
 // ae::ListNode member functions
 //------------------------------------------------------------------------------
 template< typename T >
-ListNode< T >::ListNode( T* owner )
+ListNode< T >::ListNode( T* self )
 {
 	m_root = nullptr;
 	m_next = this;
 	m_prev = this;
-	m_owner = owner;
+	m_self = self;
 }
 
 template< typename T >
@@ -10627,7 +10627,7 @@ const T* ListNode< T >::GetNext() const
 	{
 		return nullptr;
 	}
-	return m_next->m_owner;
+	return m_next->m_self;
 }
 
 template< typename T >
@@ -10637,7 +10637,7 @@ const T* ListNode< T >::GetPrev() const
 	{
 		return nullptr;
 	}
-	return m_prev->m_owner;
+	return m_prev->m_self;
 }
 
 template< typename T >
@@ -10713,25 +10713,25 @@ void List< T >::Clear()
 template< typename T >
 T* List< T >::GetFirst()
 {
-	return m_first ? m_first->m_owner : nullptr;
+	return m_first ? m_first->m_self : nullptr;
 }
 
 template< typename T >
 T* List< T >::GetLast()
 {
-	return m_first ? m_first->m_prev->m_owner : nullptr;
+	return m_first ? m_first->m_prev->m_self : nullptr;
 }
 
 template< typename T >
 const T* List< T >::GetFirst() const
 {
-	return m_first ? m_first->m_owner : nullptr;
+	return m_first ? m_first->m_self : nullptr;
 }
 
 template< typename T >
 const T* List< T >::GetLast() const
 {
-	return m_first ? m_first->m_prev->m_owner : nullptr;
+	return m_first ? m_first->m_prev->m_self : nullptr;
 }
 
 template< typename T >
@@ -10760,9 +10760,9 @@ const T* List< T >::Find( const U& value ) const
 	const ListNode< T >* current = m_first;
 	do
 	{
-		if( *( current->m_owner ) == value )
+		if( *( current->m_self ) == value )
 		{
-			return current->m_owner;
+			return current->m_self;
 		}
 		current = current->m_next;
 	} while( current != m_first );
@@ -10782,9 +10782,9 @@ const T* List< T >::FindFn( Fn predicateFn ) const
 	const ListNode< T >* current = m_first;
 	do
 	{
-		if( predicateFn( current->m_owner ) )
+		if( predicateFn( current->m_self ) )
 		{
-			return current->m_owner;
+			return current->m_self;
 		}
 		current = current->m_next;
 	} while( current != m_first );
