@@ -285,7 +285,7 @@
 	#if _AE_WINDOWS_
 		#define AE_BREAK() __debugbreak()
 	#elif _AE_APPLE_
-		#define AE_BREAK() __builtin_trap()
+		#define AE_BREAK() __builtin_debugtrap()
 	#elif _AE_EMSCRIPTEN_
 		#define AE_BREAK() assert( 0 )
 	#elif defined( __aarch64__ )
@@ -2717,7 +2717,7 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 // Assertion functions
 //------------------------------------------------------------------------------
 #ifndef AE_ASSERT_IMPL
-	#define AE_ASSERT_IMPL( msgStr ) { if( (msgStr)[ 0 ] && !ae::IsDebuggerAttached() ) { ae::ShowMessage( msgStr ); } AE_BREAK(); }
+	#define AE_ASSERT_IMPL( msgStr ) { if( !ae::IsDebuggerAttached() ) { ae::ShowMessage( msgStr ? msgStr : "Unspecified Fatal Error" ); } else { AE_BREAK(); } }
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 #define AE_ASSERT( _x ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
