@@ -321,7 +321,34 @@
 //------------------------------------------------------------------------------
 template< typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 #define countof( _x ) ( (uint32_t)sizeof( countof_helper( _x ) ) ) // @TODO: AE_COUNT_OF
-#define AE_CALL_CONST( _tx, _x, _tfn, _fn ) const_cast< _tfn* >( const_cast< const _tx* >( _x )->_fn() );
+
+//! AE_CALL_CONST_MEMBER_FUNCTION usage:
+//!	const Value* DataStructure::Find( Key key ) const
+//!	{
+//!		// Complicated logic here that shouldn't be duplicated
+//!		return ...;
+//!	}
+//!
+//!	// Call the const version above to avoid duplicating logic
+//!	Value* DataStructure::Find( Key key )
+//!	{
+//!		return AE_CALL_CONST_MEMBER_FUNCTION( Find( key ) ); // <----HERE
+//!	}
+#define AE_CALL_CONST_MEMBER_FUNCTION( _mem_fn_call )\
+	[&]()\
+	{\
+		using _const_this_t = const ae::RemoveTypeQualifiers< decltype(*this) >*;\
+		using _return_t = decltype(_mem_fn_call);\
+		if constexpr( std::is_reference_v< _return_t > || std::is_pointer_v< _return_t > )\
+		{\
+			return const_cast< _return_t >( const_cast< _const_this_t >( this )->_mem_fn_call );\
+		}\
+		else\
+		{\
+			return const_cast< _const_this_t >( this )->_mem_fn_call;\
+		}\
+	}()
+
 #define _AE_STATIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
 #define _AE_DYNAMIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
@@ -10168,7 +10195,7 @@ V Map< K, V, N, H, M >::Get( const K& key, V2&& defaultValue ) const&
 template< typename K, typename V, uint32_t N, typename H, MapMode M >
 V* Map< K, V, N, H, M >::TryGet( const K& key )
 {
-	return const_cast< V* >( const_cast< const Map< K, V, N, H, M >* >( this )->TryGet( key ) );
+	return AE_CALL_CONST_MEMBER_FUNCTION( TryGet( key ) );
 }
 
 template< typename K, typename V, uint32_t N, typename H, MapMode M >
@@ -10188,7 +10215,7 @@ const V* Map< K, V, N, H, M >::TryGet( const K& key ) const
 template< typename K, typename V, uint32_t N, typename H, MapMode M >
 bool Map< K, V, N, H, M >::TryGet( const K& key, V* valueOut )
 {
-	return const_cast< const Map< K, V, N, H, M >* >( this )->TryGet( key, valueOut );
+	return AE_CALL_CONST_MEMBER_FUNCTION( TryGet( key, valueOut ) );
 }
 
 template< typename K, typename V, uint32_t N, typename H, MapMode M >
@@ -10564,6 +10591,8 @@ void ListNode< T >::Remove()
 {
 	if( !m_root )
 	{
+		AE_DEBUG_ASSERT( m_next == this );
+		AE_DEBUG_ASSERT( m_prev == this );
 		return;
 	}
 
@@ -10593,25 +10622,25 @@ void ListNode< T >::Remove()
 template< typename T >
 T* ListNode< T >::GetFirst()
 {
-	return const_cast< T* >( const_cast< const ListNode< T >* >( this )->GetFirst() );
+	return AE_CALL_CONST_MEMBER_FUNCTION( GetFirst() );
 }
 
 template< typename T >
 T* ListNode< T >::GetNext()
 {
-	return const_cast< T* >( const_cast< const ListNode< T >* >( this )->GetNext() );
+	return AE_CALL_CONST_MEMBER_FUNCTION( GetNext() );
 }
 
 template< typename T >
 T* ListNode< T >::GetPrev()
 {
-	return const_cast< T* >( const_cast< const ListNode< T >* >( this )->GetPrev() );
+	return AE_CALL_CONST_MEMBER_FUNCTION( GetPrev() );
 }
 
 template< typename T >
 T* ListNode< T >::GetLast()
 {
-	return const_cast<T*>( const_cast<const ListNode< T >*>( this )->GetLast() );
+	return AE_CALL_CONST_MEMBER_FUNCTION( GetLast() );
 }
 
 template< typename T >
@@ -10738,14 +10767,14 @@ template< typename T >
 template< typename U >
 T* List< T >::Find( const U& value )
 {
-	return const_cast< T* >( const_cast< const List< T >* >( this )->Find( value ) );
+	return AE_CALL_CONST_MEMBER_FUNCTION( Find( value ) );
 }
 
 template< typename T >
 template< typename Fn >
 T* List< T >::FindFn( Fn predicateFn )
 {
-	return const_cast< T* >( const_cast< const List< T >* >( this )->FindFn( predicateFn ) );
+	return AE_CALL_CONST_MEMBER_FUNCTION( FindFn( predicateFn ) );
 }
 
 template< typename T >
@@ -11169,13 +11198,13 @@ const T* ObjectPool< T, N, Paged >::GetNext( const T* obj ) const
 template< typename T, uint32_t N, bool Paged >
 T* ObjectPool< T, N, Paged >::GetFirst()
 {
-	return const_cast< T* >( const_cast< const ObjectPool< T, N, Paged >* >( this )->GetFirst() );
+	return AE_CALL_CONST_MEMBER_FUNCTION( GetFirst() );
 }
 
 template< typename T, uint32_t N, bool Paged >
 T* ObjectPool< T, N, Paged >::GetNext( T* obj )
 {
-	return const_cast< T* >( const_cast< const ObjectPool< T, N, Paged >* >( this )->GetNext( obj ) );
+	return AE_CALL_CONST_MEMBER_FUNCTION( GetNext( obj ) );
 }
 
 template< typename T, uint32_t N, bool Paged >
