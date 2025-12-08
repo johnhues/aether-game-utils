@@ -55,7 +55,7 @@ public:
 	void Render( class SmallEngine* engine ) override;
 	const SmallEngine::MeshResource* meshResource = nullptr; // Set in Initialize()
 
-	ae::Str128 name;
+	ae::Str128 name = "BlobCube.obj";
 	ae::Matrix4 transform = ae::Matrix4::Identity();
 };
 
@@ -226,7 +226,6 @@ AE_REGISTER_CLASS_VAR( Dialog, transform );
 
 void Dialog::Update( SmallEngine* engine )
 {
-	engine->debugLines.AddSphere( transform.GetTranslation(), 1.0f, ae::Color::Yellow(), 32 );
 	if( Player* player = engine->registry.TryGetComponent< Player >( "player" ) )
 	{
 		const ae::Vec3 dialogPos = transform.GetTranslation();
