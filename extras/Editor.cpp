@@ -204,6 +204,10 @@ public:
 	bool hidden = false;
 	bool renderDisabled = false;
 	
+	ae::Entity parent = ae::kInvalidEntity;
+	ae::List< EditorServerObject > children;
+	ae::ListNode< EditorServerObject > childNode = this;
+
 private:
 	ae::Matrix4 m_transform = ae::Matrix4::Identity();
 };
@@ -254,14 +258,19 @@ public:
 	
 	EditorServerObject* CreateObject( ae::Entity entity, const ae::Matrix4& transform, const char* name );
 	void DestroyObject( class EditorProgram* program, ae::Entity entity );
+	
 	ae::Component* AddComponent( class EditorProgram* program, EditorServerObject* obj, const ae::ClassType* type );
 	void RemoveComponent( class EditorProgram* program, EditorServerObject* obj, ae::Component* component );
-	ae::Component* GetComponent( EditorServerObject* obj, const ae::ClassType* type );
-	const ae::Component* GetComponent( const EditorServerObject* obj, const ae::ClassType* type );
+	ae::Component* GetComponent( EditorServerObject* obj, const ae::ClassType* type ) { return AE_CALL_CONST_MEMBER_FUNCTION( GetComponent( obj, type ) ); }
+	const ae::Component* GetComponent( const EditorServerObject* obj, const ae::ClassType* type ) const;
+	
 	uint32_t GetObjectCount() const { return m_objects.Length(); }
-	EditorServerObject* GetObject( ae::Entity entity ) { return m_objects.Get( entity, nullptr ); }
-	const EditorServerObject* GetObject( ae::Entity entity ) const { return m_objects.Get( entity, nullptr ); }
+	EditorServerObject* GetObjectAssert( ae::Entity entity ) { return AE_CALL_CONST_MEMBER_FUNCTION( GetObjectAssert( entity ) ); }
+	const EditorServerObject* GetObjectAssert( ae::Entity entity ) const;
+	EditorServerObject* TryGetObject( ae::Entity entity ) { return AE_CALL_CONST_MEMBER_FUNCTION( TryGetObject( entity ) ); }
+	const EditorServerObject* TryGetObject( ae::Entity entity ) const;
 	const EditorServerObject* GetObjectFromComponent( const ae::Component* component );
+	
 	bool GetRenderDisabled( ae::Entity entity ) const;
 	ae::AABB GetSelectedAABB( class EditorProgram* program ) const;
 
@@ -280,6 +289,8 @@ private:
 	void m_PasteFromClipboard( class EditorProgram* program );
 	void m_DeleteSelected( class EditorProgram* program );
 	void m_HideSelected();
+	void m_ParentSelected( class EditorProgram* program );
+	void m_UnparentSelected( class EditorProgram* program );
 	// Misc helpers
 	void m_SetLevelPath( class EditorProgram* program, const char* path );
 	void m_SelectWithModifiers( class EditorProgram* program, const ae::Entity* entities, uint32_t count );
@@ -1321,8 +1332,15 @@ void EditorServerObject::SetTransform( const ae::Matrix4& transform, EditorProgr
 	AE_ASSERT( entity != kInvalidEntity );
 	if( m_transform != transform )
 	{
+		const ae::Matrix4 relative = transform * m_transform.GetInverse();
 		m_transform = transform;
 		program->editor.HandleTransformChange( program, entity, transform );
+		EditorServerObject* child = children.GetFirst();
+		while( child )
+		{
+			child->SetTransform( relative * child->m_transform, program );
+			child = child->childNode.GetNext();
+		}
 	}
 }
 
@@ -1525,8 +1543,18 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 	{
 		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
 		const ae::Entity entity = entityMap.Get( jsonEntity, jsonEntity );
-		EditorServerObject* object = m_objects.Get( entity );
-		AE_ASSERT( object );
+		EditorServerObject* object = GetObjectAssert( entity );
+		if( jsonObject.HasMember( "parent" ) )
+		{
+			const ae::Entity jsonParent = jsonObject[ "parent" ].GetUint();
+			const ae::Entity parent = entityMap.Get( jsonParent, jsonParent );
+			EditorServerObject* parentObject = TryGetObject( parent );
+			if( parentObject )
+			{
+				object->parent = parentObject->entity;
+				parentObject->children.Append( object->childNode );
+			}
+		}
 		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
 			if( !componentIter.value.IsObject() )
@@ -1724,7 +1752,7 @@ void EditorServer::Render( EditorProgram* program )
 		{
 			if( instance->color.a > 0.01f && instance->m_mesh )
 			{
-				const EditorServerObject* obj = m_objects.Get( instance->m_selectEntity, nullptr );
+				const EditorServerObject* obj = TryGetObject( instance->m_selectEntity ); // m_selectEntity is allowed to be invalid if the mesh isn't used for object selection
 				if( obj && obj->hidden )
 				{
 					continue;
@@ -1961,7 +1989,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 						{
 							continue;
 						}
-						const EditorServerObject* editorObj = GetObject( instance->m_selectEntity ); // May be null
+						const EditorServerObject* editorObj = TryGetObject( instance->m_selectEntity ); // m_selectEntity is allowed to be invalid if the mesh isn't used for object selection
 						if( editorObj && editorObj->hidden )
 						{
 							continue;
@@ -2039,8 +2067,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		const ae::ClassType* refType = m_selectRef.componentVar->GetSubType();
 		ImGui::Text( "Select %s", refType->GetName() );
 		ImGui::Separator();
-		const EditorServerObject* pendingObj = GetObject( m_selectRef.pending );
-		AE_ASSERT( pendingObj );
+		const EditorServerObject* pendingObj = GetObjectAssert( m_selectRef.pending );
 		const uint32_t componentTypeCount = m_registry.GetTypeCount();
 		for( uint32_t i = 0; i < componentTypeCount; i++ )
 		{
@@ -2132,8 +2159,8 @@ void EditorServer::ShowUI( EditorProgram* program )
 	for( auto&[ entity, _ ] : m_objects )
 	{
 		const ae::Color color = m_GetColor( entity, true );
-		const EditorServerObject* editorObj = m_objects.Get( entity );
-		if( ( color.a >= 0.001f ) && editorObj )
+		const EditorServerObject* editorObj = GetObjectAssert( entity );
+		if( ( color.a >= 0.001f ) )
 		{
 			switch( m_framePickableEntities.Get( entity, PickingType::Disabled ) )
 			{
@@ -2240,6 +2267,8 @@ void EditorServer::ShowUI( EditorProgram* program )
 			/* Focus */ { {}, ae::Key::F, []( EditorProgram* program ) { program->editor.ActiveRefocus( program ); }, true },
 			/* Hide */ { {}, ae::Key::H, []( EditorProgram* program ) { program->editor.m_HideSelected(); } },
 			/* Select none */ { {}, ae::Key::Escape, []( EditorProgram* program ) { program->editor.m_selected.Clear(); } },
+				/* Parent */ { {}, ae::Key::P, []( EditorProgram* program ) { program->editor.m_ParentSelected( program ); } },
+				/* Unparent */ { { ae::Key::Shift }, ae::Key::P, []( EditorProgram* program ) { program->editor.m_UnparentSelected( program ); } },
 		};
 		// Longer combos first
 		std::sort( std::begin( commands ), std::end( commands ),
@@ -2295,7 +2324,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		ImGuizmo::BeginFrame();
 		ImGuizmo::SetRect( renderRect.GetMin().x, renderRect.GetMin().y, renderRect.GetSize().x, renderRect.GetSize().y );
 		
-		EditorServerObject* selectedObject = m_objects.Get( m_selected[ 0 ] );
+		EditorServerObject* selectedObject = GetObjectAssert( m_selected[ 0 ] );
 		ae::Matrix4 prevTransform = selectedObject->GetTransform();
 		ae::Matrix4 transform = prevTransform;
 		ImGuizmo::MODE mode = ( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : gizmoMode;
@@ -2315,7 +2344,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 				{
 					continue;
 				}
-				EditorServerObject* editorObject = m_objects.Get( entity );
+				EditorServerObject* editorObject = GetObjectAssert( entity );
 				if( mode == ImGuizmo::LOCAL )
 				{
 					editorObject->SetTransform( editorObject->GetTransform() * change, program );
@@ -2429,6 +2458,8 @@ void EditorServer::ShowUI( EditorProgram* program )
 			m_selected.Clear();
 			m_selected.Append( editorObject->entity );
 		}
+		
+		// Copy and paste
 		ImGui::BeginDisabled( !m_selected.Length() );
 		if( ImGui::Button( "Delete" ) )
 		{
@@ -2447,6 +2478,20 @@ void EditorServer::ShowUI( EditorProgram* program )
 		{
 			m_PasteFromClipboard( program );
 		}
+
+		// Parenting
+		ImGui::BeginDisabled( m_selected.Length() < 2 );
+		if( ImGui::Button( "Parent" ) )
+		{
+			m_ParentSelected( program );
+		}
+		ImGui::EndDisabled();
+		ImGui::BeginDisabled( !m_selected.Length() );
+		if( ImGui::Button( "Unparent" ) )
+		{
+			m_UnparentSelected( program );
+		}
+		ImGui::EndDisabled();
 		
 		if( ImGui::Button( "Reload Resources" ) )
 		{
@@ -2475,7 +2520,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 	{
 		if( m_selected.Length() == 1 )
 		{
-			EditorServerObject* selectedObject = m_objects.Get( m_selected[ 0 ] );
+			EditorServerObject* selectedObject = GetObjectAssert( m_selected[ 0 ] );
 			ImGui::Text( "Object %u", selectedObject->entity );
 		
 			char name[ ae::Str16::MaxLength() ];
@@ -2502,6 +2547,14 @@ void EditorServer::ShowUI( EditorProgram* program )
 				{
 					ImGui::OpenPopup( "add_component_popup" );
 				}
+				ImGui::SameLine();
+				ImGui::BeginDisabled( !selectedObject->parent );
+				if( ImGui::Button( "Select Parent" ) )
+				{
+					m_selected.Clear();
+					m_selected.Append( selectedObject->parent );
+				}
+				ImGui::EndDisabled();
 			}
 			
 			ae::Component* deleteComponent = nullptr;
@@ -2704,6 +2757,14 @@ void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity )
 	EditorServerObject* editorObject = m_objects.GetValue( idx );
 	AE_ASSERT( editorObject );
 
+	// @TODO: Delete children too
+	EditorServerObject* child = editorObject->children.GetFirst();
+	while( child )
+	{
+		child->parent = ae::kInvalidEntity;
+		child = child->childNode.GetNext();
+	}
+
 	const uint32_t componentTypesCount = m_registry.GetTypeCount();
 	for( uint32_t i = 0; i < componentTypesCount; i++ )
 	{
@@ -2771,19 +2832,31 @@ void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* 
 	}
 }
 
-ae::Component* EditorServer::GetComponent( EditorServerObject* obj, const ae::ClassType* type )
-{
-	return const_cast< ae::Component* >( GetComponent( const_cast< const EditorServerObject* >( obj ), type ) );
-}
-
-const ae::Component* EditorServer::GetComponent( const EditorServerObject* obj, const ae::ClassType* type )
+const ae::Component* EditorServer::GetComponent( const EditorServerObject* obj, const ae::ClassType* type ) const
 {
 	return obj ? m_registry.TryGetComponent( obj->entity, type ) : nullptr;
 }
 
+const EditorServerObject* EditorServer::GetObjectAssert( ae::Entity entity ) const
+{
+	AE_ASSERT_MSG( entity != ae::kInvalidEntity, "Invalid entity" );
+	const ae::EditorServerObject* obj = m_objects.Get( entity, nullptr );
+	AE_ASSERT_MSG( obj, "Could not find object #", entity );
+	return obj;
+}
+
+const EditorServerObject* EditorServer::TryGetObject( ae::Entity entity ) const
+{
+	if( entity == ae::kInvalidEntity )
+	{
+		return nullptr;
+	}
+	return GetObjectAssert( entity );
+}
+
 const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Component* component )
 {
-	return component ? GetObject( component->GetEntity() ) : nullptr;
+	return component ? GetObjectAssert( component->GetEntity() ) : nullptr;
 }
 
 bool EditorServer::GetRenderDisabled( ae::Entity entity ) const
@@ -2815,15 +2888,14 @@ ae::AABB EditorServer::GetSelectedAABB( EditorProgram* program ) const
 	ae::AABB aabb;
 	for( ae::Entity entity : m_selected )
 	{
-		aabb.Expand( m_objects.Get( entity )->GetAABB( program ) );
+		aabb.Expand( GetObjectAssert( entity )->GetAABB( program ) );
 	}
 	return aabb;
 }
 
 void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity entity, const ae::Matrix4& transform )
 {
-	EditorServerObject* editorObject = GetObject( entity );
-	AE_ASSERT( editorObject );
+	EditorServerObject* editorObject = GetObjectAssert( entity );
 
 	EditorEvent event;
 	event.type = EditorEventType::ComponentEdit;
@@ -3079,6 +3151,10 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 	const auto transformStr = ae::ToString( transform );
 	transformJson.SetString( transformStr.c_str(), allocator );
 	jsonEntity->AddMember( "transform", transformJson, allocator );
+	if( levelObject->parent )
+	{
+		jsonEntity->AddMember( "parent", (uint32_t)levelObject->parent, allocator );
+	}
 
 	// Components
 	rapidjson::Value jsonComponents( rapidjson::kObjectType );
@@ -3125,7 +3201,7 @@ void EditorServer::m_CopySelected() const
 		for( ae::Entity entity : selectedSorted )
 		{
 			rapidjson::Value jsonObject( rapidjson::kObjectType );
-			m_EntityToJson( GetObject( entity ), allocator, nullptr, &jsonObject );
+			m_EntityToJson( GetObjectAssert( entity ), allocator, nullptr, &jsonObject );
 			jsonObjects.PushBack( jsonObject, allocator );
 		}
 
@@ -3175,6 +3251,7 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 	{
 		const char* entityName = jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : "";
 		const ae::Matrix4 entityTransform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
+		// parent
 		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
 		EditorServerObject* editorObject = CreateObject( jsonEntity, entityTransform, entityName );
 		if( editorObject->entity != jsonEntity )
@@ -3200,8 +3277,7 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
 		const ae::Entity entity = entityMap.Get( jsonEntity, jsonEntity );
 		const ae::Matrix4 transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
-		EditorServerObject* object = m_objects.Get( entity );
-		AE_ASSERT( object );
+		EditorServerObject* object = GetObjectAssert( entity );
 		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
 			if( !componentIter.value.IsObject() )
@@ -3242,7 +3318,7 @@ void EditorServer::m_HideSelected()
 		bool anyVisible = false;
 		for( ae::Entity entity : m_selected )
 		{
-			EditorServerObject* editorObject = m_objects.Get( entity );
+			EditorServerObject* editorObject = GetObjectAssert( entity );
 			if( editorObject->hidden )
 			{
 				anyHidden = true;
@@ -3255,12 +3331,76 @@ void EditorServer::m_HideSelected()
 		const bool setHidden = !anyHidden || anyVisible;
 		for( ae::Entity entity : m_selected )
 		{
-			m_objects.Get( entity )->hidden = setHidden;
+			GetObjectAssert( entity )->hidden = setHidden;
 		}
 	}
 	else
 	{
 		AE_INFO( "No objects selected" );
+	}
+}
+
+void EditorServer::m_ParentSelected( EditorProgram* program )
+{
+	if( m_selected.Length() < 2 )
+	{
+		return;
+	}
+	const ae::Entity parentEntity = m_selected[ m_selected.Length() - 1 ];
+	ae::EditorServerObject* parentObject = GetObjectAssert( parentEntity );
+	if( !parentObject )
+	{
+		AE_FAIL_MSG( "Could not find parent object '#'" , parentEntity );
+		return;
+	}
+	auto isAncestorOf = [&]( const ae::EditorServerObject* obj ) -> bool
+	{
+		const ae::EditorServerObject* current = parentObject;
+		while( current )
+		{
+			if( obj == current )
+			{
+				return true;
+			}
+			current = current->parent ? TryGetObject( current->parent ) : nullptr;
+		}
+		return false;
+	};
+	for( uint32_t i = 0; i < m_selected.Length() - 1; i++ )
+	{
+		ae::EditorServerObject* childObject = GetObjectAssert( m_selected[ i ] );
+		if( !childObject )
+		{
+			AE_FAIL_MSG( "Could not find child object '#'", m_selected[ i ] );
+			continue;
+		}
+		if( isAncestorOf( childObject ) )
+		{
+			AE_WARN( "Cannot set '#' parent, it is a descendant of '#'", parentObject->entity, childObject->entity );
+			continue;
+		}
+		childObject->parent = parentObject->entity;
+		parentObject->children.Append( childObject->childNode );
+		AE_INFO( "Set '#' as the parent of '#'", parentObject->entity, childObject->entity );
+	}
+}
+
+void EditorServer::m_UnparentSelected( EditorProgram* program )
+{
+	for( uint32_t i = 0; i < m_selected.Length(); i++ )
+	{
+		ae::EditorServerObject* childObject = GetObjectAssert( m_selected[ i ] );
+		if( !childObject )
+		{
+			AE_FAIL_MSG( "Could not find child object #", m_selected[ i ] );
+			continue;
+		}
+		if( childObject->childNode.GetList() )
+		{
+			childObject->parent = ae::kInvalidEntity;
+			childObject->childNode.Remove();
+			AE_INFO( "Unparented #", childObject->entity );
+		}
 	}
 }
 
@@ -3498,7 +3638,6 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, 
 					ae::Component* selectComp = ae::Cast< ae::Component >( _selectComp );
 					AE_ASSERT( selectComp );
 					const EditorServerObject* selectObj = GetObjectFromComponent( selectComp );
-					AE_ASSERT( selectObj );
 					m_SelectWithModifiers( program, &selectObj->entity, 1 );
 				}
 			}
@@ -3523,7 +3662,6 @@ std::string EditorProgram::Serializer::ObjectPointerToString( const ae::Object* 
 	const ae::Component* component = ae::Cast< ae::Component >( obj );
 	AE_ASSERT( component );
 	const EditorServerObject* editorObj = program->editor.GetObjectFromComponent( component );
-	AE_ASSERT( editorObj );
 	std::ostringstream str;
 	str << editorObj->entity << " " << type->GetName();
 	return str.str();
@@ -3541,7 +3679,7 @@ bool EditorProgram::Serializer::StringToObjectPointer( const char* pointerVal, a
 	typeName[ 0 ] = 0;
 	if( sscanf( pointerVal, "%u %15s", &entity, typeName ) == 2 )
 	{
-		if( EditorServerObject* editorObj = program->editor.GetObject( entity ) )
+		if( EditorServerObject* editorObj = program->editor.GetObjectAssert( entity ) )
 		{
 			*objOut = program->editor.GetComponent( editorObj, ae::GetClassTypeByName( typeName ) );
 		}
@@ -3577,7 +3715,7 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 			{
 				continue;
 			}
-			const EditorServerObject* editorObj = GetObject( instance->m_selectEntity ); // May be null
+			const EditorServerObject* editorObj = TryGetObject( instance->m_selectEntity ); // m_selectEntity is allowed to be invalid if the mesh isn't used for object selection
 			if( editorObj && editorObj->hidden )
 			{
 				continue;
@@ -3623,10 +3761,23 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 
 ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) const
 {
-	const EditorServerObject* editorObj = GetObject( entity );
-	AE_ASSERT( editorObj );
+	const EditorServerObject* editorObj = GetObjectAssert( entity );
 	const bool isHovered = ( m_hoverEntities.Find( entity ) >= 0 );
 	const bool isSelected = ( m_selected.Find( entity ) >= 0 );
+	const bool isChildOfSelected = [&]() -> bool
+	{
+		ae::Entity current = editorObj->parent;
+		while( current )
+		{
+			if( m_selected.Find( current ) >= 0 )
+			{
+				return true;
+			}
+			const EditorServerObject* currentObj = TryGetObject( current );
+			current = currentObj ? currentObj->parent : ae::kInvalidEntity;
+		}
+		return false;
+	}();
 	uint64_t seed = entity * 43313;
 	// @TODO: This is isn't working properly when the range is two pi
 	const float hueMin = m_objectHue - m_objectHueRange * 0.5f;
@@ -3668,7 +3819,7 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) co
 		{
 			return baseColor.Lerp( m_selectionColor, 0.65f );
 		}
-		else if( isHovered )
+		else if( isHovered || isChildOfSelected ) // Okay that these are the same color, since hover also adds lines
 		{
 			return baseColor.Lerp( m_selectionColor, 0.35f );
 		}
