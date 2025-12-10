@@ -3466,10 +3466,11 @@ public:
 	//! does not have an extension then \p ext will be appended to the path.
 	//! \p ext must be only alphanumeric characters.
 	static bool SetExtension( Str256* path, const char* ext );
+	// @todo delete
 	//! Returns true if the given path is a directory. This function does not
 	//! access the underlying filesystem to see if the directory exists.
 	static bool IsDirectory( const char* path );
-	//! Returns true if the given path is a file. This function accesses the
+	//! Returns true if the given path is a file and the current user has write permissions. This function accesses the
 	//! underlying filesystem to see if the file exists and is not a directory.
 	static bool IsWritable( const char* path );
 	//! Removes redundant slashes and up-level references from the given path.
@@ -10601,7 +10602,7 @@ void ListNode< T >::Remove()
 	{
 		if( m_next == this )
 		{
-			// Last node in list
+			// Only node in list
 			m_root->m_first = nullptr;
 		}
 		else
@@ -10703,10 +10704,9 @@ List< T >::~List()
 template< typename T >
 void List< T >::Append( ListNode< T >& node )
 {
+	node.Remove();
 	if( m_first )
 	{
-		node.Remove();
-
 		node.m_root = this;
 
 		node.m_next = m_first;
@@ -20412,6 +20412,11 @@ bool ae::FileSystem::IsWritable( const char* path )
 	if( stat( path, &pathStat ) == 0 )
 	{
 		return ( pathStat.st_mode & S_IWUSR ) != 0;
+	}
+	else if( errno == ENOENT )
+	{
+		// @TODO: Return false if the user does not have write permission to the containing folder
+		return true;
 	}
 #endif
 	return false;
