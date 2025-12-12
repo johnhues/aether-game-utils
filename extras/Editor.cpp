@@ -29,6 +29,7 @@
 #include "ae/aeImGui.h"
 #include "ImGuizmo.h"
 // @TODO: Remove rapidjson dependency
+#include "imgui.h"
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/error/error.h"
@@ -44,6 +45,7 @@
 AE_REGISTER_NAMESPACECLASS( (ae, EditorTypeAttribute) );
 AE_REGISTER_NAMESPACECLASS( (ae, EditorRequiredAttribute) );
 AE_REGISTER_NAMESPACECLASS( (ae, EditorVisibilityAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorDisplayNameAttribute) );
 
 namespace ae {
 
@@ -245,7 +247,8 @@ public:
 	void Terminate( class EditorProgram* program );
 	void Update( class EditorProgram* program );
 	void Render( class EditorProgram* program );
-	void ShowUI( class EditorProgram* program );
+	void ShowMenuBar( class EditorProgram* program );
+	void ShowSideBar( class EditorProgram* program );
 	
 	bool SaveLevel( class EditorProgram* program, bool saveAs );
 	void OpenLevelDialog( class EditorProgram* program );
@@ -332,11 +335,11 @@ private:
 	ae::Color m_selectionColor = ae::Color::PicoOrange();
 	float m_objectHue = 3.7f;
 	float m_objectHueRange = 0.3f;
-	float m_objectSaturation = 1.0f;
+	float m_objectSaturation = 0.25f;
 	float m_objectSaturationRange = 0.0f;
-	float m_objectValue = 0.6f;
-	float m_objectValueRange = 0.3f;
-	ae::Color m_backgroundColor = ae::Color::AetherBlack();
+	float m_objectValue = 0.3f;
+	float m_objectValueRange = 0.5f;
+	ae::Color m_backgroundColor = ae::Color::AetherBlack().SetValue( 0.075f );
 
 	// Connection to client
 	double m_nextHeartbeat = 0.0;
@@ -365,9 +368,11 @@ private:
 	ae::Map< ae::Entity, PickingType > m_framePickableEntities;
 
 	// UI
+	uint32_t m_mode = 2;
 	uint32_t m_dialogNextId = 1;
 	ae::Array< EditorDialog* > m_dialogs;
 	uint32_t m_appBundleWarningDialogId = 0;
+	bool m_imGuiDemoOpen = false;
 };
 
 class EditorProgram
@@ -771,13 +776,9 @@ void EditorProgram::Run()
 		static bool s_once = true;
 		if( s_once )
 		{
-			const ImGuiID dockTopId = ImGui::DockBuilderSplitNode( mainDockSpace, ImGuiDir_Left, 0.2f, nullptr, nullptr );
-			ImGui::DockBuilderDockWindow( "Dev", dockTopId );
-			ImGui::DockBuilderGetNode( dockTopId )->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
-			const ImGuiID dockBottomId = ImGui::DockBuilderSplitNode( dockTopId, ImGuiDir_Down, 0.2f, nullptr, nullptr );
-			ImGui::DockBuilderDockWindow( "Settings", dockBottomId );
-			ImGui::DockBuilderGetNode( dockBottomId )->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
-			
+			const ImGuiID dockLeftId = ImGui::DockBuilderSplitNode( mainDockSpace, ImGuiDir_Left, 0.2f, nullptr, nullptr );
+			ImGui::DockBuilderDockWindow( "Dev", dockLeftId );
+			ImGui::DockBuilderGetNode( dockLeftId )->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
 			s_once = false;
 		}
 
@@ -827,11 +828,8 @@ void EditorProgram::Run()
 			m_mouseRay = ( worldPos.GetXYZ() - camera.GetPosition() ).SafeNormalizeCopy();
 		}
 
-		if( ImGui::Begin( "Dev" ) )
-		{
-			editor.ShowUI( this );
-			ImGui::End();
-		}
+		editor.ShowMenuBar( this );
+		editor.ShowSideBar( this );
 		if( const ImGuiWindow* imWin = ImGui::FindWindowByName( "Dev" ) )
 		{
 			m_barWidth = imWin->Size.x * ImGui::GetIO().DisplayFramebufferScale.x;
@@ -1858,12 +1856,159 @@ void EditorServer::Render( EditorProgram* program )
 	}
 }
 
-void EditorServer::ShowUI( EditorProgram* program )
+void EditorServer::ShowMenuBar( EditorProgram* program )
 {
-	const float dt = program->GetDt();
-
-	if( ImGui::Begin( "Settings" ) )
+	if( !ImGui::BeginMainMenuBar() )
 	{
+		return;
+	}
+
+	if( ImGui::BeginMenu( "File" ) )
+	{
+		if( ImGui::MenuItem( "New" ) )
+		{
+			AE_INFO( "New level" );
+			Unload( program );
+		}
+		if( ImGui::MenuItem( "Open" ) )
+		{
+			OpenLevelDialog( program );
+		}
+		if( ImGui::MenuItem( "Save" ) )
+		{
+			SaveLevel( program, false );
+		}
+		if( ImGui::MenuItem( "Save As" ) )
+		{
+			SaveLevel( program, true );
+		}
+		ImGui::Separator();
+		ImGui::BeginDisabled( m_levelPath.Empty() || !m_connections.Length() );
+		if( ImGui::MenuItem( "Game Load" ) && m_connections.Length() )
+		{
+			uint8_t buffer[ kMaxEditorMessageSize ];
+			ae::BinaryWriter wStream( buffer, sizeof( buffer ) );
+			wStream.SerializeEnum( EditorNetMsg::Load );
+			wStream.SerializeString( m_levelPath );
+			for( uint32_t i = 0; i < m_connections.Length(); i++ )
+			{
+				m_connections[ i ]->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
+			}
+		}
+		ImGui::EndDisabled();
+		if( ImGui::MenuItem( "Reload Resources" ) )
+		{
+			EditorEvent event;
+			event.type = EditorEventType::ReloadResources;
+			SendPluginEvent( program->plugins, event );
+		}
+		ImGui::Separator();
+		if( ImGui::MenuItem( "Quit" ) )
+		{
+			program->input.quit = true;
+		}
+		ImGui::EndMenu();
+	}
+
+	if( ImGui::BeginMenu( "Edit" ) )
+	{
+		if( ImGui::MenuItem( "Create" ) )
+		{
+			ae::Matrix4 transform = ae::Matrix4::Translation( program->camera.GetPivot() );
+			EditorServerObject* editorObject = CreateObject( kInvalidEntity, transform, "" );
+			m_selected.Clear();
+			m_selected.Append( editorObject->entity );
+		}
+		ImGui::BeginDisabled( !m_selected.Length() );
+		if( ImGui::MenuItem( "Delete" ) )
+		{
+			for( ae::Entity entity : m_selected )
+			{
+				DestroyObject( program, entity );
+			}
+			m_selected.Clear();
+		}
+		ImGui::EndDisabled();
+
+		// Copy and paste
+		ImGui::BeginDisabled( !m_selected.Length() );
+		if( ImGui::MenuItem( "Copy" ) )
+		{
+			m_CopySelected();
+		}
+		ImGui::EndDisabled();
+		if( ImGui::MenuItem( "Paste" ) )
+		{
+			m_PasteFromClipboard( program );
+		}
+
+		// Parenting
+		ImGui::BeginDisabled( m_selected.Length() < 2 );
+		if( ImGui::MenuItem( "Parent" ) )
+		{
+			m_ParentSelected( program );
+		}
+		ImGui::EndDisabled();
+		ImGui::BeginDisabled( !m_selected.Length() );
+		if( ImGui::MenuItem( "Unparent" ) )
+		{
+			m_UnparentSelected( program );
+		}
+		ImGui::EndDisabled();
+
+		ImGui::EndMenu();
+	}
+
+	if( ImGui::BeginMenu( "Select" ) )
+	{
+		ImGui::EndMenu();
+	}
+
+	if( ImGui::BeginMenu( "Tools" ) )
+	{
+		if( ImGui::RadioButton( "O", gizmoOperation == (ImGuizmo::OPERATION)0 ) )
+		{
+			gizmoOperation = (ImGuizmo::OPERATION)0;
+		}
+		ImGui::SameLine();
+		if( ImGui::RadioButton( "T", gizmoOperation == ImGuizmo::TRANSLATE ) )
+		{
+			gizmoOperation = ImGuizmo::TRANSLATE;
+		}
+		ImGui::SameLine();
+		if( ImGui::RadioButton( "R", gizmoOperation == ImGuizmo::ROTATE ) )
+		{
+			gizmoOperation = ImGuizmo::ROTATE;
+		}
+		ImGui::SameLine();
+		if( ImGui::RadioButton( "S", gizmoOperation == ImGuizmo::SCALE ) )
+		{
+			gizmoOperation = ImGuizmo::SCALE;
+		}
+		if( ImGui::RadioButton( "World", gizmoMode == ImGuizmo::WORLD ) )
+		{
+			gizmoMode = ImGuizmo::WORLD;
+		}
+		ImGui::SameLine();
+		if( ImGui::RadioButton( "Local", gizmoMode == ImGuizmo::LOCAL ) )
+		{
+			gizmoMode = ImGuizmo::LOCAL;
+		}
+
+		ImGui::EndMenu();
+	}
+	
+	if( ImGui::BeginMenu( "View" ) )
+	{
+		ImGui::Checkbox( "Show Transparent", &m_showTransparent );
+		ImGui::Checkbox( "ImGui Demo", &m_imGuiDemoOpen );
+		ImGui::Separator();
+		if( ImGui::RadioButton( "Zen", ( m_mode == 0 ) ) ){ m_mode = 0; }
+		if( ImGui::RadioButton( "Object Properties", ( m_mode == 1 ) ) ){ m_mode = 1; }
+		if( ImGui::RadioButton( "Scene Hierarchy", ( m_mode == 2 ) ) ){ m_mode = 2; }
+
+		ImGui::Separator();
+
 		ImGui::ColorEdit3( "Selection", m_selectionColor.data );
 		ImGui::SliderFloat( "Hue", &m_objectHue, 0.0f, ae::TwoPi );
 		ImGui::SliderFloat( "Hue Range", &m_objectHueRange, 0.0f, ae::TwoPi );
@@ -1872,8 +2017,19 @@ void EditorServer::ShowUI( EditorProgram* program )
 		ImGui::SliderFloat( "Value", &m_objectValue, 0.0f, 1.0f );
 		ImGui::SliderFloat( "Value Range", &m_objectValueRange, 0.0f, 1.0f );
 		ImGui::ColorEdit3( "Background", m_backgroundColor.data );
-		ImGui::End();
+
+		ImGui::EndMenu();
 	}
+
+	ImGui::EndMainMenuBar();
+}
+
+void EditorServer::ShowSideBar( EditorProgram* program )
+{
+	const float dt = program->GetDt();
+
+	// @TODO: This function has a lot of stuff mixed into it, it should only
+	// handle what's in the sidebar in case it is hidden or split.
 
 	if( m_dialogs.Length() )
 	{
@@ -1882,6 +2038,11 @@ void EditorServer::ShowUI( EditorProgram* program )
 		{
 			m_RemoveDialog( dialog->id );
 		}
+	}
+
+	if( m_imGuiDemoOpen )
+	{
+		ImGui::ShowDemoWindow( &m_imGuiDemoOpen );
 	}
 	
 	if( program->camera.GetMode() != ae::DebugCamera::Mode::None || ImGui::GetIO().WantCaptureMouse )
@@ -2194,7 +2355,6 @@ void EditorServer::ShowUI( EditorProgram* program )
 		}
 	}
 
-	
 	if( ImGui::GetIO().WantCaptureKeyboard )
 	{
 		// Keyboard captured
@@ -2216,68 +2376,29 @@ void EditorServer::ShowUI( EditorProgram* program )
 			/* Copy */ { { ae::Key::Meta }, ae::Key::C, []( EditorProgram* program ) { program->editor.m_CopySelected(); } },
 			/* Paste */ { { ae::Key::Meta }, ae::Key::V, []( EditorProgram* program ) { program->editor.m_PasteFromClipboard( program ); } },
 			/* Select */ { {}, ae::Key::Q, []( EditorProgram* program ) { program->editor.gizmoOperation = ImGuizmo::OPERATION( 0 ); } },
-			// Translate
-			{
-				{}, ae::Key::W,
-				[]( EditorProgram* program )
-				{
-					if( program->editor.gizmoOperation == ImGuizmo::TRANSLATE )
-					{
-						program->editor.gizmoMode = ( program->editor.gizmoMode == ImGuizmo::LOCAL ) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
-					}
-					else
-					{
-						program->editor.gizmoOperation = ImGuizmo::TRANSLATE;
-					}
-				}
-			},
-			// Rotate
-		{
-				{}, ae::Key::E,
-				[]( EditorProgram* program )
-				{
-					if( program->editor.gizmoOperation == ImGuizmo::ROTATE )
-					{
-						program->editor.gizmoMode = ( program->editor.gizmoMode == ImGuizmo::LOCAL ) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
-					}
-					else
-					{
-						program->editor.gizmoOperation = ImGuizmo::ROTATE;
-					}
-				}
-			},
-			// Scale
-		{
-				{}, ae::Key::R,
-				[]( EditorProgram* program )
-				{
-					if( program->editor.gizmoOperation == ImGuizmo::SCALE )
-					{
-						program->editor.gizmoMode = ( program->editor.gizmoMode == ImGuizmo::LOCAL ) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
-					}
-					else
-					{
-						program->editor.gizmoOperation = ImGuizmo::SCALE;
-					}
-				}
-			},
+			/* Translate */ { {}, ae::Key::W, []( EditorProgram* program ) { program->editor.gizmoOperation = ImGuizmo::TRANSLATE; } },
+			/* Rotate */ { {}, ae::Key::E, []( EditorProgram* program ) { program->editor.gizmoOperation = ImGuizmo::ROTATE; } },
+			/* Scale */ { {}, ae::Key::R, []( EditorProgram* program ) { program->editor.gizmoOperation = ImGuizmo::SCALE; } },
 			/* Toggle transparent */ { {}, ae::Key::I, []( EditorProgram* program ) { program->editor.m_showTransparent = !program->editor.m_showTransparent; } },
 			/* Delete */ { {}, ae::Key::Delete, []( EditorProgram* program ) { program->editor.m_DeleteSelected( program ); } },
 			/* Delete */ { {}, ae::Key::Backspace, []( EditorProgram* program ) { program->editor.m_DeleteSelected( program ); } },
 			/* Focus */ { {}, ae::Key::F, []( EditorProgram* program ) { program->editor.ActiveRefocus( program ); }, true },
 			/* Hide */ { {}, ae::Key::H, []( EditorProgram* program ) { program->editor.m_HideSelected(); } },
 			/* Select none */ { {}, ae::Key::Escape, []( EditorProgram* program ) { program->editor.m_selected.Clear(); } },
-				/* Parent */ { {}, ae::Key::P, []( EditorProgram* program ) { program->editor.m_ParentSelected( program ); } },
-				/* Unparent */ { { ae::Key::Shift }, ae::Key::P, []( EditorProgram* program ) { program->editor.m_UnparentSelected( program ); } },
+			/* Parent */ { {}, ae::Key::P, []( EditorProgram* program ) { program->editor.m_ParentSelected( program ); } },
+			/* Unparent */ { { ae::Key::Shift }, ae::Key::P, []( EditorProgram* program ) { program->editor.m_UnparentSelected( program ); } },
+			/* Zen */ { {}, ae::Key::Num0, []( EditorProgram* program ) { program->editor.m_mode = 0; } },
+			/* Object properties */ { {}, ae::Key::Num1, []( EditorProgram* program ) { program->editor.m_mode = 1; } },
+			/* Object list */ { {}, ae::Key::Num2, []( EditorProgram* program ) { program->editor.m_mode = 2; } },
+			/* Cycle modes */ { {}, ae::Key::Tab, []( EditorProgram* program ) { program->editor.m_mode++; program->editor.m_mode %= 3; } },
 		};
-		// Longer combos first
 		std::sort( std::begin( commands ), std::end( commands ),
 			[]( const Command& a, const Command& b )
 			{
+				// Check for commands with more keys first to handle potential conflicts
 				return a.modifiers.Length() > b.modifiers.Length();
 			}
 		);
-		// Check for commands with more keys first to handle potential conflicts
 		const uint32_t modifierCount =
 			(uint32_t)program->input.Get( ae::Key::Meta ) +
 			(uint32_t)program->input.Get( ae::Key::Shift ) +
@@ -2356,172 +2477,73 @@ void EditorServer::ShowUI( EditorProgram* program )
 			}
 		}
 	}
-	
-	if( m_first )
-	{
-		ImGui::SetNextItemOpen( true );
-	}
-	if( ImGui::TreeNode( "File" ) )
-	{
-		if( ImGui::Button( "Open" ) )
-		{
-			OpenLevelDialog( program );
-		}
-		ImGui::SameLine();
-		if( ImGui::Button( "Save" ) )
-		{
-			SaveLevel( program, false );
-		}
-		ImGui::SameLine();
-		if( ImGui::Button( "Save As" ) )
-		{
-			SaveLevel( program, true );
-		}
-		if( ImGui::Button( "New" ) )
-		{
-			AE_INFO( "New level" );
-			Unload( program );
-		}
-		ImGui::SameLine();
-		ImGui::BeginDisabled( m_levelPath.Empty() || !m_connections.Length() );
-		if( ImGui::Button( "Game Load" ) && m_connections.Length() )
-		{
-			uint8_t buffer[ kMaxEditorMessageSize ];
-			ae::BinaryWriter wStream( buffer, sizeof(buffer) );
-			wStream.SerializeEnum( EditorNetMsg::Load );
-			wStream.SerializeString( m_levelPath );
-			for( uint32_t i = 0; i < m_connections.Length(); i++ )
-			{
-				m_connections[ i ]->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
-			}
-		}
-		ImGui::EndDisabled();
-		ImGui::SameLine();
-		if( ImGui::Button( "Quit" ) )
-		{
-			program->input.quit = true;
-		}
-		ImGui::TreePop();
-	}
-	
-	ImGui::Separator();
-	ImGui::Separator();
-	
-	if( m_first )
-	{
-		ImGui::SetNextItemOpen( true );
-	}
-	if( ImGui::TreeNode( "Tools" ) )
-	{
-		if( ImGui::RadioButton( "O", gizmoOperation == (ImGuizmo::OPERATION)0 ) )
-		{
-			gizmoOperation = (ImGuizmo::OPERATION)0;
-		}
-		ImGui::SameLine();
-		if( ImGui::RadioButton( "T", gizmoOperation == ImGuizmo::TRANSLATE ) )
-		{
-			gizmoOperation = ImGuizmo::TRANSLATE;
-		}
-		ImGui::SameLine();
-		if( ImGui::RadioButton( "R", gizmoOperation == ImGuizmo::ROTATE ) )
-		{
-			gizmoOperation = ImGuizmo::ROTATE;
-		}
-		ImGui::SameLine();
-		if( ImGui::RadioButton( "S", gizmoOperation == ImGuizmo::SCALE ) )
-		{
-			gizmoOperation = ImGuizmo::SCALE;
-		}
-		if( ImGui::RadioButton( "World", gizmoMode == ImGuizmo::WORLD ) )
-		{
-			gizmoMode = ImGuizmo::WORLD;
-		}
-		ImGui::SameLine();
-		if( ImGui::RadioButton( "Local", gizmoMode == ImGuizmo::LOCAL ) )
-		{
-			gizmoMode = ImGuizmo::LOCAL;
-		}
-		ImGui::Checkbox( "Show Transparent", &m_showTransparent );
-		
-		ImGui::TreePop();
-	}
-	
-	ImGui::Separator();
-	ImGui::Separator();
-	
-	if( ImGui::TreeNode( "Operations" ) )
-	{
-		if( ImGui::Button( "Create" ) )
-		{
-			ae::Matrix4 transform = ae::Matrix4::Translation( program->camera.GetPivot() );
-			EditorServerObject* editorObject = CreateObject( kInvalidEntity, transform, "" );
-			m_selected.Clear();
-			m_selected.Append( editorObject->entity );
-		}
-		
-		// Copy and paste
-		ImGui::BeginDisabled( !m_selected.Length() );
-		if( ImGui::Button( "Delete" ) )
-		{
-			for( ae::Entity entity : m_selected )
-			{
-				DestroyObject( program, entity );
-			}
-			m_selected.Clear();
-		}
-		if( ImGui::Button( "Copy" ) )
-		{
-			m_CopySelected();
-		}
-		ImGui::EndDisabled();
-		if( ImGui::Button( "Paste" ) )
-		{
-			m_PasteFromClipboard( program );
-		}
 
-		// Parenting
-		ImGui::BeginDisabled( m_selected.Length() < 2 );
-		if( ImGui::Button( "Parent" ) )
-		{
-			m_ParentSelected( program );
-		}
-		ImGui::EndDisabled();
-		ImGui::BeginDisabled( !m_selected.Length() );
-		if( ImGui::Button( "Unparent" ) )
-		{
-			m_UnparentSelected( program );
-		}
-		ImGui::EndDisabled();
-		
-		if( ImGui::Button( "Reload Resources" ) )
-		{
-			EditorEvent event;
-			event.type = EditorEventType::ReloadResources;
-			SendPluginEvent( program->plugins, event );
-		}
-		
-		static bool s_imGuiDemo = false;
-		if( ImGui::Button( "Show ImGui Demo" ) )
-		{
-			s_imGuiDemo = !s_imGuiDemo;
-		}
-		if( s_imGuiDemo )
-		{
-			ImGui::ShowDemoWindow( &s_imGuiDemo );
-		}
-		
-		ImGui::TreePop();
-	}
-	
-	ImGui::Separator();
-	ImGui::Separator();
-	
-	if( ImGui::TreeNode( "Object properties" ) )
+	const bool zenMode = ( m_mode == 0 );
+	if( !zenMode && ImGui::Begin( "Dev" ) )
 	{
-		if( m_selected.Length() == 1 )
+		const float closedSectionHeight = 35.0f; // @TODO: Calculate this
+		int32_t currentModePanel = -1;
+		const ImVec4 textColor = ImGui::GetStyleColorVec4( ImGuiCol_Text );
+		const ImVec4 borderColor = ImGui::GetStyleColorVec4( ImGuiCol_Border );
+		auto BeginModePanel = [&]( int32_t mode, const char* title )
+		{
+			AE_ASSERT( currentModePanel < 0 );
+			ImVec2 size = ImVec2( 0, 0 );
+			if( mode == 1 )
+			{
+				size = ImVec2( 0, ( m_mode == mode ) ? -closedSectionHeight : closedSectionHeight );
+			}
+			ImGui::PushStyleColor( ImGuiCol_Border, ( m_mode == mode ) ? textColor : borderColor );
+			if( ImGui::BeginChild( title, size, true ) )
+			{
+				currentModePanel = mode;
+				ImGui::PushStyleColor( ImGuiCol_Text, ( m_mode == mode ) ? textColor : borderColor );
+				ImGui::PushStyleVar( ImGuiStyleVar_ButtonTextAlign, ImVec2( 0.0f, 0.5f ) ); // Left justify
+				ImGui::Text( "%s", title );
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor( 1 );
+				return ( m_mode == mode );
+			}
+			return false;
+		};
+		auto EndModePanel = [&]()
+		{
+			AE_ASSERT( currentModePanel > 0 );
+			ImGui::EndChild();
+			ImGui::PopStyleColor(); // Border color
+			if( ( m_mode != currentModePanel ) && ImGui::IsItemHovered() && ImGui::IsMouseClicked( ImGuiMouseButton_Left ) )
+			{
+				m_mode = currentModePanel;
+			}
+			currentModePanel = -1;
+		};
+	
+		const ae::Str64 objectPropertiesTitle = [&]() -> ae::Str64
+		{
+			if( m_selected.Length() == 1 )
+			{
+				const char* name = m_registry.GetNameByEntity( m_selected[ 0 ] );
+				if( name[ 0 ] )
+				{
+					return ae::Str64::Format( "[1] Entity # '#' Properties", m_selected[ 0 ], name );
+				}
+				else
+				{
+					return ae::Str64::Format( "[1] Entity # Properties", m_selected[ 0 ] );
+				}
+			}
+			else if( m_selected.Length() )
+			{
+				return "[1] Multiple Objects Selected";
+			}
+			else
+			{
+				return "[1] No Selection";
+			}
+		}();
+		if( BeginModePanel( 1, objectPropertiesTitle.c_str() ) && ( m_selected.Length() == 1 ) )
 		{
 			EditorServerObject* selectedObject = GetObjectAssert( m_selected[ 0 ] );
-			ImGui::Text( "Object %u", selectedObject->entity );
 		
 			char name[ ae::Str16::MaxLength() ];
 			strcpy( name, m_registry.GetNameByEntity( m_selected[ 0 ] ) );
@@ -2566,9 +2588,10 @@ void EditorServer::ShowUI( EditorProgram* program )
 				if( component )
 				{
 					ImGui::Separator();
-					if( ImGui::TreeNode( componentType->GetName() ) )
+					if( ImGui::TreeNodeEx( componentType->GetName(), ImGuiTreeNodeFlags_DefaultOpen ) )
 					{
-						auto fn = [&]( auto& fn, const ae::ClassType* type, ae::Component* component ) -> void
+						ImGui::Unindent( ImGui::GetTreeNodeToLabelSpacing() );
+						auto fn = [ & ]( auto& fn, const ae::ClassType* type, ae::Component* component ) -> void
 						{
 							uint32_t varCount = type->GetVarCount( false );
 							if( varCount )
@@ -2592,6 +2615,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 						{
 							deleteComponent = component;
 						}
+						ImGui::Indent( ImGui::GetTreeNodeToLabelSpacing() );
 						ImGui::TreePop();
 					}
 				}
@@ -2638,101 +2662,205 @@ void EditorServer::ShowUI( EditorProgram* program )
 				ImGui::EndPopup();
 			}
 		}
-		else if( m_selected.Length() )
-		{
-			ImGui::Text( "Multiple Objects Selected" );
-		}
-		else
-		{
-			ImGui::Text( "No Selection" );
-		}
-		ImGui::TreePop();
-	}
+		EndModePanel();
 	
-	ImGui::Separator();
-	ImGui::Separator();
-	
-	uiHoverEntity = kInvalidEntity;
-	if( ImGui::TreeNode( "Object List" ) )
-	{
-		const char* selectedTypeName = m_objectListType ? m_objectListType->GetName() : "All";
-		if( ImGui::BeginCombo( "Type", selectedTypeName, 0 ) )
+		uiHoverEntity = kInvalidEntity;
+		if( BeginModePanel( 2, "[2] Object List" ) )
 		{
-			if( ImGui::Selectable( "All", !m_objectListType ) )
+			const char* selectedTypeName = m_objectListType ? m_objectListType->GetName() : "All";
+			if( ImGui::BeginCombo( "Type", selectedTypeName, 0 ) )
 			{
-				m_objectListType = nullptr;
-			}
-			if( !m_objectListType )
-			{
-				ImGui::SetItemDefaultFocus();
-			}
-			const uint32_t componentTypesCount = m_registry.GetTypeCount();
-			for( uint32_t i = 0; i < componentTypesCount; i++ )
-			{
-				const ae::ClassType* type = m_registry.GetTypeByIndex( i );
-				const bool isSelected = ( m_objectListType == type );
-				if( ImGui::Selectable( type->GetName(), isSelected ) )
+				if( ImGui::Selectable( "All", !m_objectListType ) )
 				{
-					m_objectListType = type;
+					m_objectListType = nullptr;
 				}
-				if( isSelected )
+				if( !m_objectListType )
 				{
 					ImGui::SetItemDefaultFocus();
 				}
+				const uint32_t componentTypesCount = m_registry.GetTypeCount();
+				for( uint32_t i = 0; i < componentTypesCount; i++ )
+				{
+					const ae::ClassType* type = m_registry.GetTypeByIndex( i );
+					const bool isSelected = ( m_objectListType == type );
+					if( ImGui::Selectable( type->GetName(), isSelected ) )
+					{
+						m_objectListType = type;
+					}
+					if( isSelected )
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
 			}
-			ImGui::EndCombo();
-		}
+			if( ImGui::BeginListBox( "##listbox", ImVec2( -FLT_MIN, -FLT_MIN ) ) )
+			{
+				auto showObj = [&]( auto& showObj, const EditorServerObject* editorObj ) -> void
+				{
+					auto hasDescendantWithType = [&]( auto& hasDescendantWithType, const EditorServerObject* obj ) -> bool
+					{
+						const EditorServerObject* childObj = obj->children.GetFirst();
+						while( childObj )
+						{
+							if( m_registry.TryGetComponent( childObj->entity, m_objectListType ) ||
+								hasDescendantWithType( hasDescendantWithType, childObj ) )
+							{
+								return true;
+							}
+							childObj = childObj->childNode.GetNext();
+						}
+						return false;
+					};
+					auto hasSelectedDescendant = [&]( auto& hasSelectedDescendant, const EditorServerObject* obj ) -> bool
+					{
+						const EditorServerObject* childObj = obj->children.GetFirst();
+						while( childObj )
+						{
+							if( m_selected.Find( childObj->entity ) >= 0 ||
+								hasSelectedDescendant( hasSelectedDescendant, childObj ) )
+							{
+								return true;
+							}
+							childObj = childObj->childNode.GetNext();
+						}
+						return false;
+					};
 
-		if( ImGui::BeginListBox("##listbox", ImVec2( -FLT_MIN, 16 * ImGui::GetTextLineHeightWithSpacing() ) ) )
-		{
-			auto showObjInList = [&]( int idx, ae::Entity entity, const char* entityName )
-			{
-				ImGui::PushID( idx );
-				const bool isSelected = ( m_selected.Find( entity ) >= 0 );
-				ae::Str16 name = entityName;
-				if( !name.Length() )
-				{
-					name = ae::Str16::Format( "#", entity );
-				}
-				if( ImGui::Selectable( name.c_str(), isSelected ) )
-				{
-					m_SelectWithModifiers( program, &entity, 1 );
-				}
-				if( ImGui::IsItemHovered() )
-				{
-					uiHoverEntity = entity;
-				}
-				if( isSelected )
-				{
-					ImGui::SetItemDefaultFocus();
-				}
-				ImGui::PopID();
-			};
-			
-			if( m_objectListType )
-			{
-				const int32_t typeIndex = m_registry.GetTypeIndexByType( m_objectListType );
-				AE_ASSERT( typeIndex >= 0 );
-				const uint32_t componentCount = m_registry.GetComponentCountByIndex( typeIndex );
-				for( uint32_t i = 0; i < componentCount; i++ )
-				{
-					const ae::Component* component = &m_registry.GetComponentByIndex( typeIndex, i );
-					showObjInList( i, component->GetEntity(), component->GetEntityName() );
-				}
-			}
-			else
-			{
-				uint32_t editorObjectCount = m_objects.Length();
+					const ae::Component* typeComponent = m_objectListType ? m_registry.TryGetComponent( editorObj->entity, m_objectListType ) : nullptr;
+					const bool hasChildren = editorObj->children.Length();
+					bool isLeaf = !hasChildren;
+					if( m_objectListType && !typeComponent && !hasDescendantWithType( hasDescendantWithType, editorObj ) )
+					{
+						return;
+					}
+
+					ae::Str64 name = m_registry.GetNameByEntity( editorObj->entity );
+					if( !name.Length() )
+					{
+						uint32_t entityComponentCount = 0;
+						const ae::ClassType* onlyComponentType = nullptr;
+						const uint32_t componentTypeCount = m_registry.GetTypeCount();
+						for( uint32_t i = 0; i < componentTypeCount; i++ )
+						{
+							const ae::ClassType* componentType = m_registry.GetTypeByIndex( i );
+							if( const ae::Component* component = m_registry.TryGetComponent( editorObj->entity, componentType ) )
+							{
+								onlyComponentType = !entityComponentCount ? componentType : nullptr;
+								entityComponentCount++;
+								const uint32_t typeVarCount = componentType->GetVarCount( true );
+								for( uint32_t j = 0; j < typeVarCount; j++ )
+								{
+									const ae::ClassVar* var = componentType->GetVarByIndex( j, true );
+									const ae::BasicType* varType = var->GetOuterVarType().AsVarType< ae::BasicType >();
+									if( varType && var->attributes.Has< EditorDisplayNameAttribute >() )
+									{
+										ae::ConstDataPointer varPtr( var, component );
+										if( varPtr )
+										{
+											name = varType->GetVarDataAsString( varPtr ).c_str();
+											i = (uint32_t)-2;
+											j = (uint32_t)-2;
+											break; // Break both loops
+										}
+									}
+								}
+							}
+						}
+						if( !name.Length() )
+						{
+							if( onlyComponentType )
+							{
+								name = onlyComponentType->GetName();
+							}
+							else
+							{
+								name = ae::Str64::Format( "Entity #", editorObj->entity );
+							}
+						}
+					}
+					if( hasSelectedDescendant( hasSelectedDescendant, editorObj ) )
+					{
+						name += "*";
+					}
+					const bool isSelected = ( m_selected.Find( editorObj->entity ) >= 0 );
+					const ImGuiTreeNodeFlags flags =
+						( hasChildren ? 0 : ImGuiTreeNodeFlags_Leaf ) |
+						( isSelected ? ImGuiTreeNodeFlags_Selected : 0 ) |
+						ImGuiTreeNodeFlags_SpanFullWidth |
+						ImGuiTreeNodeFlags_OpenOnArrow;
+					const bool isExpanded = ImGui::TreeNodeEx( name.c_str(), flags );
+					if( ImGui::IsItemHovered() )
+					{
+						uiHoverEntity = editorObj->entity;
+					}
+					if( ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked( ImGuiMouseButton_Left ) )
+					{
+						ActiveRefocus( program );
+					}
+					else if( ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen() ) // Ignore clicks that open/close the tree node
+					{
+						m_SelectWithModifiers( program, &editorObj->entity, 1 );
+					}
+					if( ImGui::BeginPopupContextItem() )
+					{
+						ImGui::BeginDisabled( !hasChildren );
+						if( ImGui::MenuItem( "Select Children" ) )
+						{
+							ae::Array< ae::Entity > toSelect = m_tag;
+							const EditorServerObject* childObj = editorObj->children.GetFirst();
+							while( childObj )
+							{
+								toSelect.Append( childObj->entity );
+								childObj = childObj->childNode.GetNext();
+							}
+							m_SelectWithModifiers( program, toSelect.Data(), toSelect.Length() );
+						}
+						if( ImGui::MenuItem( "Select Tree" ) )
+						{
+							ae::Array< ae::Entity > toSelect = m_tag;
+							auto collectChildren = [&]( auto& collectChildren, const EditorServerObject* obj ) -> void
+							{
+								toSelect.Append( obj->entity );
+								const EditorServerObject* childObj = obj->children.GetFirst();
+								while( childObj )
+								{
+									collectChildren( collectChildren, childObj );
+									childObj = childObj->childNode.GetNext();
+								}
+							};
+							collectChildren( collectChildren, editorObj );
+							m_SelectWithModifiers( program, toSelect.Data(), toSelect.Length() );
+						}
+						ImGui::EndDisabled();
+						ImGui::EndPopup();
+					}
+					
+					if( isExpanded )
+					{
+						const EditorServerObject* childObj = editorObj->children.GetFirst();
+						while( childObj )
+						{
+							showObj( showObj, childObj );
+							childObj = childObj->childNode.GetNext();
+						}
+						ImGui::TreePop();
+					}
+				};
+				const uint32_t editorObjectCount = m_objects.Length();
 				for( uint32_t i = 0; i < editorObjectCount; i++ )
 				{
 					const EditorServerObject* editorObj = m_objects.GetValue( i );
-					showObjInList( i, editorObj->entity, m_registry.GetNameByEntity( editorObj->entity ) );
+					if( !editorObj->parent )
+					{
+						showObj( showObj, editorObj );
+					}
 				}
+				ImGui::EndListBox();
 			}
-			ImGui::EndListBox();
 		}
-
-		ImGui::TreePop();
+		EndModePanel();
+		ImGui::End();
 	}
 	
 	m_first = false;
@@ -3420,8 +3548,8 @@ void EditorServer::m_SetLevelPath( EditorProgram* program, const char* filePath 
 
 void EditorServer::m_SelectWithModifiers( EditorProgram* program, const ae::Entity* entities, uint32_t count )
 {
-	bool shift = program->input.Get( ae::Key::LeftShift );
-	bool ctrl = program->input.Get( ae::Key::LeftControl );
+	const bool shift = program->input.Get( ae::Key::LeftShift );
+	const bool ctrl = program->input.Get( ae::Key::LeftControl );
 	if( shift && ctrl )
 	{
 		// Add
@@ -3762,7 +3890,7 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) const
 {
 	const EditorServerObject* editorObj = GetObjectAssert( entity );
-	const bool isHovered = ( m_hoverEntities.Find( entity ) >= 0 );
+	const bool isHovered = ( uiHoverEntity == entity || m_hoverEntities.Find( entity ) >= 0 );
 	const bool isSelected = ( m_selected.Find( entity ) >= 0 );
 	const bool isChildOfSelected = [&]() -> bool
 	{

@@ -104,6 +104,17 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::EditorDisplayNameAttribute class
+//------------------------------------------------------------------------------
+//! This attribute is used to flag a variable for use as the display name for
+//! a component in the editor.
+//------------------------------------------------------------------------------
+class EditorDisplayNameAttribute final : public ae::Inheritor< ae::Attribute, EditorDisplayNameAttribute >
+{
+public:
+};
+
+//------------------------------------------------------------------------------
 // ae::EditorEventType
 //------------------------------------------------------------------------------
 enum class EditorEventType

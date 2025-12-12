@@ -175,6 +175,7 @@ AE_REGISTER_CLASS( Mesh );
 AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Mesh), (ae, EditorTypeAttribute), {} );
 AE_REGISTER_CLASS_VAR( Mesh, name );
 AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (Mesh), name, (ae, EditorMeshResourceAttribute), {} );
+AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (Mesh), name, (ae, EditorDisplayNameAttribute), {} );
 AE_REGISTER_CLASS_VAR( Mesh, transform );
 
 void Mesh::Initialize( SmallEngine* engine )
