@@ -297,6 +297,47 @@ TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 	}
 }
 
+TEST_CASE( "Null DataPointer", "[aeMeta]" )
+{
+	const ae::ClassType* type = ae::GetClassType< ArrayClass >();
+	REQUIRE( type );
+	REQUIRE( type->GetVarCount( false ) == 6 );
+	const ae::ClassVar* classVar = type->GetVarByIndex( 0, false );
+	ArrayClass c;
+
+	ae::DataPointer dataDefault;
+	ae::DataPointer dataTemplate( (ArrayClass*)nullptr );
+	ae::DataPointer dataVarType( *type, nullptr );
+	ae::DataPointer dataClassVar0( classVar, nullptr );
+	ae::DataPointer dataClassVar1( nullptr, &c );
+	REQUIRE( !dataDefault );
+	REQUIRE( !dataTemplate );
+	REQUIRE( !dataVarType );
+	REQUIRE( !dataClassVar0 );
+	REQUIRE( !dataClassVar1 );
+	REQUIRE_THROWS( dataDefault.GetVarType() );
+	REQUIRE_THROWS( dataTemplate.GetVarType() );
+	REQUIRE_THROWS( dataVarType.GetVarType() );
+	REQUIRE_THROWS( dataClassVar0.GetVarType() );
+	REQUIRE_THROWS( dataClassVar1.GetVarType() );
+	
+	ae::ConstDataPointer constDataDefault;
+	ae::ConstDataPointer constDataTemplate( (ArrayClass*)nullptr );
+	ae::ConstDataPointer constDataVarType( *type, nullptr );
+	ae::ConstDataPointer constDataClassVar0( classVar, nullptr );
+	ae::ConstDataPointer constDataClassVar1( nullptr, &c );
+	REQUIRE( !constDataDefault );
+	REQUIRE( !constDataTemplate );
+	REQUIRE( !constDataVarType );
+	REQUIRE( !constDataClassVar0 );
+	REQUIRE( !constDataClassVar1 );
+	REQUIRE_THROWS( constDataDefault.GetVarType() );
+	REQUIRE_THROWS( constDataTemplate.GetVarType() );
+	REQUIRE_THROWS( constDataVarType.GetVarType() );
+	REQUIRE_THROWS( constDataClassVar0.GetVarType() );
+	REQUIRE_THROWS( constDataClassVar1.GetVarType() );
+}
+
 TEST_CASE( "Array vars", "[aeMeta]" )
 {
 	const ae::ClassType* type = ae::GetClassType< ArrayClass >();

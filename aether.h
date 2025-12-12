@@ -5934,7 +5934,7 @@ private:
 class DataPointer
 {
 public:
-	DataPointer() = default;
+	DataPointer();
 	template< typename T > explicit DataPointer( T* data );
 	DataPointer( const ae::Type& varType, void* data );
 	DataPointer( const ae::ClassVar* var, ae::Object* object );
@@ -5952,8 +5952,8 @@ public:
 
 private:
 	friend class ConstDataPointer;
-	const ae::Type* m_varType = nullptr;
-	void* m_data = nullptr;
+	const ae::Type* m_varType;
+	void* m_data;
 };
 
 //------------------------------------------------------------------------------
@@ -5962,7 +5962,7 @@ private:
 class ConstDataPointer
 {
 public:
-	ConstDataPointer() = default;
+	ConstDataPointer();
 	ConstDataPointer( DataPointer varData );
 	template< typename T > explicit ConstDataPointer( const T* data );
 	ConstDataPointer( const ae::Type& varType, const void* data );
@@ -5980,8 +5980,8 @@ public:
 	bool operator != ( const ae::ConstDataPointer& other ) const;
 
 private:
-	const ae::Type* m_varType = nullptr;
-	const void* m_data = nullptr;
+	const ae::Type* m_varType;
+	const void* m_data;
 };
 
 //------------------------------------------------------------------------------
@@ -13383,8 +13383,7 @@ template< typename T >
 ae::DataPointer::DataPointer( T* data )
 {
 	m_data = data;
-	m_varType = ae::TypeT< T >::Get();
-	AE_ASSERT( m_varType );
+	m_varType = data ? ae::TypeT< T >::Get() : nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -13394,8 +13393,7 @@ template< typename T >
 ae::ConstDataPointer::ConstDataPointer( const T* data )
 {
 	m_data = data;
-	m_varType = ae::TypeT< T >::Get();
-	AE_ASSERT( m_varType );
+	m_varType = data ? ae::TypeT< T >::Get() : nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -29115,19 +29113,32 @@ const ae::ClassType* ae::GetClassTypeFromObject( const ae::Object* obj )
 //------------------------------------------------------------------------------
 // ae::DataPointer member functions
 //------------------------------------------------------------------------------
+ae::DataPointer::DataPointer()
+{
+	m_data = nullptr;
+	m_varType = nullptr;
+}
 ae::DataPointer::DataPointer( const ae::Type& varType, void* data )
 {
-	m_varType = &varType;
+	m_varType = data ? &varType : nullptr;
 	m_data = data;
 }
 ae::DataPointer::DataPointer( const ae::ClassVar* var, ae::Object* object )
 {
-	m_varType = &var->GetOuterVarType();
-	m_data = (uint8_t*)object + var->GetOffset();
-	if constexpr( _AE_DEBUG_ )
+	if( var && object )
 	{
-		const ae::ClassType* type = ae::GetClassTypeFromObject( object );
-		AE_ASSERT_MSG( type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
+		m_varType = &var->GetOuterVarType();
+		m_data = ( (uint8_t*)object + var->GetOffset() );
+		if constexpr( _AE_DEBUG_ )
+		{
+			const ae::ClassType* type = ae::GetClassTypeFromObject( object );
+			AE_ASSERT_MSG( !object || type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
+		}
+	}
+	else
+	{
+		m_varType = nullptr;
+		m_data = nullptr;
 	}
 }
 ae::DataPointer::operator bool() const
@@ -29170,9 +29181,14 @@ bool ae::DataPointer::operator != ( const ae::DataPointer& other ) const
 //------------------------------------------------------------------------------
 // ae::ConstDataPointer member functions
 //------------------------------------------------------------------------------
+ae::ConstDataPointer::ConstDataPointer()
+{
+	m_data = nullptr;
+	m_varType = nullptr;
+}
 ae::ConstDataPointer::ConstDataPointer( const ae::Type& varType, const void* data )
 {
-	m_varType = &varType;
+	m_varType = data ? &varType : nullptr;
 	m_data = data;
 }
 ae::ConstDataPointer::ConstDataPointer( DataPointer varData )
@@ -29182,12 +29198,20 @@ ae::ConstDataPointer::ConstDataPointer( DataPointer varData )
 }
 ae::ConstDataPointer::ConstDataPointer( const ae::ClassVar* var, const ae::Object* object )
 {
-	m_varType = &var->GetOuterVarType();
-	m_data = (uint8_t*)object + var->GetOffset();
-	if constexpr( _AE_DEBUG_ )
+	if( var && object )
 	{
-		const ae::ClassType* type = ae::GetClassTypeFromObject( object );
-		AE_ASSERT_MSG( type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
+		m_varType = &var->GetOuterVarType();
+		m_data = (uint8_t*)object + var->GetOffset();
+		if constexpr( _AE_DEBUG_ )
+		{
+			const ae::ClassType* type = ae::GetClassTypeFromObject( object );
+			AE_ASSERT_MSG( type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
+		}
+	}
+	else
+	{
+		m_varType = nullptr;
+		m_data = nullptr;
 	}
 }
 ae::ConstDataPointer::operator bool() const
