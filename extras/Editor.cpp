@@ -98,6 +98,14 @@ enum class PickingType
 	Logic
 };
 
+enum class SelectionModifier
+{
+	New,
+	Add,
+	Toggle,
+	Remove
+};
+
 struct SpecialMemberVar
 {
 	ae::BasicType::Type type;
@@ -296,7 +304,9 @@ private:
 	void m_UnparentSelected( class EditorProgram* program );
 	// Misc helpers
 	void m_SetLevelPath( class EditorProgram* program, const char* path );
-	void m_SelectWithModifiers( class EditorProgram* program, const ae::Entity* entities, uint32_t count );
+	SelectionModifier m_GetSelectionModifier( class EditorProgram* program ) const;
+	ae::Str64 m_GetSelectionModifierFormatString( SelectionModifier modifier ) const;
+	void m_SelectWithModifier( SelectionModifier modifier, const ae::Entity* entities, uint32_t count );
 	bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var );
 	bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
 	bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
@@ -2122,7 +2132,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 			}
 			else
 			{
-				m_SelectWithModifiers( program, m_hoverEntities.Data(), m_hoverEntities.Length() );
+				m_SelectWithModifier( m_GetSelectionModifier( program ), m_hoverEntities.Data(), m_hoverEntities.Length() );
 			}
 		}
 
@@ -2812,10 +2822,13 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 					}
 					const bool isSelected = ( m_selected.Find( editorObj->entity ) >= 0 );
 					const ImGuiTreeNodeFlags flags =
-						( hasChildren ? 0 : ImGuiTreeNodeFlags_Leaf ) |
-						( isSelected ? ImGuiTreeNodeFlags_Selected : 0 ) |
-						ImGuiTreeNodeFlags_SpanFullWidth |
-						ImGuiTreeNodeFlags_OpenOnArrow;
+					( hasChildren ? 0 : ImGuiTreeNodeFlags_Leaf ) |
+					( isSelected ? ImGuiTreeNodeFlags_Selected : 0 ) |
+					ImGuiTreeNodeFlags_SpanFullWidth |
+					ImGuiTreeNodeFlags_OpenOnArrow;
+					name += "###";
+					name += ae::ToString( editorObj->entity ).c_str();
+					const SelectionModifier selectionModifier = m_GetSelectionModifier( program );
 					const bool isExpanded = ImGui::TreeNodeEx( name.c_str(), flags );
 					if( ImGui::IsItemHovered() )
 					{
@@ -2827,12 +2840,20 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 					}
 					else if( ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen() ) // Ignore clicks that open/close the tree node
 					{
-						m_SelectWithModifiers( program, &editorObj->entity, 1 );
+						m_SelectWithModifier( selectionModifier, &editorObj->entity, 1 );
+					}
+					if( ( selectionModifier != SelectionModifier::New ) &&  ImGui::IsItemHovered( ImGuiHoveredFlags_DelayShort ) )
+					{
+						const auto modifierFormat = m_GetSelectionModifierFormatString( selectionModifier );
+						const ae::Str128 selectLabel = ae::Str128::Format( modifierFormat.c_str(), "entity" );
+						ImGui::SetTooltip( "%s", selectLabel.c_str() );
 					}
 					if( ImGui::BeginPopupContextItem() )
 					{
+						const auto modifierFormat = m_GetSelectionModifierFormatString( selectionModifier );
 						ImGui::BeginDisabled( !hasChildren );
-						if( ImGui::MenuItem( "Select Children" ) )
+						const ae::Str128 selectChildrenLabel = ae::Str128::Format( modifierFormat.c_str(), "children" );
+						if( ImGui::MenuItem( selectChildrenLabel.c_str() ) )
 						{
 							ae::Array< ae::Entity > toSelect = m_tag;
 							const EditorServerObject* childObj = editorObj->children.GetFirst();
@@ -2841,9 +2862,10 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 								toSelect.Append( childObj->entity );
 								childObj = childObj->childNode.GetNext();
 							}
-							m_SelectWithModifiers( program, toSelect.Data(), toSelect.Length() );
+							m_SelectWithModifier( selectionModifier, toSelect.Data(), toSelect.Length() );
 						}
-						if( ImGui::MenuItem( "Select Tree" ) )
+						const ae::Str128 selectTreeLabel = ae::Str128::Format( modifierFormat.c_str(), "tree" );
+						if( ImGui::MenuItem( selectTreeLabel.c_str() ) )
 						{
 							ae::Array< ae::Entity > toSelect = m_tag;
 							auto collectChildren = [&]( auto& collectChildren, const EditorServerObject* obj ) -> void
@@ -2857,7 +2879,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 								}
 							};
 							collectChildren( collectChildren, editorObj );
-							m_SelectWithModifiers( program, toSelect.Data(), toSelect.Length() );
+							m_SelectWithModifier( selectionModifier, toSelect.Data(), toSelect.Length() );
 						}
 						ImGui::EndDisabled();
 						ImGui::EndPopup();
@@ -3573,13 +3595,48 @@ void EditorServer::m_SetLevelPath( EditorProgram* program, const char* filePath 
 	}
 }
 
-void EditorServer::m_SelectWithModifiers( EditorProgram* program, const ae::Entity* entities, uint32_t count )
+SelectionModifier EditorServer::m_GetSelectionModifier( class EditorProgram* program ) const
 {
 	const bool shift = program->input.Get( ae::Key::LeftShift );
 	const bool ctrl = program->input.Get( ae::Key::LeftControl );
 	if( shift && ctrl )
 	{
-		// Add
+		return SelectionModifier::Add;
+	}
+	else if( shift )
+	{
+		return SelectionModifier::Toggle;
+	}
+	else if( ctrl )
+	{
+		return SelectionModifier::Remove;
+	}
+	else
+	{
+		return SelectionModifier::New;
+	}
+}
+
+ae::Str64 EditorServer::m_GetSelectionModifierFormatString( SelectionModifier modifier ) const
+{
+	switch( modifier )
+	{
+		case SelectionModifier::Add:
+			return "Add # to selection (Shift + Ctrl)";
+		case SelectionModifier::Toggle:
+			return "Toggle # selection (Shift)";
+		case SelectionModifier::Remove:
+			return "Remove # from selection (Ctrl)";
+		case SelectionModifier::New:
+		default:
+			return "Select #";
+	}
+}
+
+void EditorServer::m_SelectWithModifier( SelectionModifier modifier, const ae::Entity* entities, uint32_t count )
+{
+	if( modifier == SelectionModifier::Add )
+	{
 		for( uint32_t i = 0; i < count; i++ )
 		{
 			ae::Entity entity = entities[ i ];
@@ -3589,9 +3646,8 @@ void EditorServer::m_SelectWithModifiers( EditorProgram* program, const ae::Enti
 			}
 		}
 	}
-	else if( shift )
+	else if( modifier == SelectionModifier::Toggle )
 	{
-		// Toggle
 		for( uint32_t i = 0; i < count; i++ )
 		{
 			ae::Entity entity = entities[ i ];
@@ -3609,9 +3665,8 @@ void EditorServer::m_SelectWithModifiers( EditorProgram* program, const ae::Enti
 			}
 		}
 	}
-	else if( ctrl )
+	else if( modifier == SelectionModifier::Remove )
 	{
-		// Remove
 		for( uint32_t i = 0; i < count; i++ )
 		{
 			ae::Entity entity = entities[ i ];
@@ -3625,9 +3680,8 @@ void EditorServer::m_SelectWithModifiers( EditorProgram* program, const ae::Enti
 			}
 		}
 	}
-	else
+	else if( modifier == SelectionModifier::New )
 	{
-		// New selection
 		m_selected.Clear();
 		for( uint32_t i = 0; i < count; i++ )
 		{
@@ -3793,7 +3847,7 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, 
 					ae::Component* selectComp = ae::Cast< ae::Component >( _selectComp );
 					AE_ASSERT( selectComp );
 					const EditorServerObject* selectObj = GetObjectFromComponent( selectComp );
-					m_SelectWithModifiers( program, &selectObj->entity, 1 );
+					m_SelectWithModifier( m_GetSelectionModifier( program ), &selectObj->entity, 1 );
 				}
 			}
 			ImGui::SameLine();
