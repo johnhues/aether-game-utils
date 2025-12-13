@@ -1418,6 +1418,33 @@ EditorServer::~EditorServer()
 
 void EditorServer::Initialize( EditorProgram* program )
 {
+	ImGuiStyle* style = &ImGui::GetStyle();
+	for( ImVec4& imColor : style->Colors )
+	{
+		const ae::Vec3 hsv = ae::Color::RGB( imColor.x, imColor.y, imColor.z ).GetHSV();
+		bool isText = false;
+		switch( &imColor - &style->Colors[ 0 ] )
+		{
+		case ImGuiCol_Text:
+		case ImGuiCol_TextDisabled:
+		case ImGuiCol_ScrollbarGrab:
+		case ImGuiCol_CheckMark:
+		case ImGuiCol_SliderGrab:
+		case ImGuiCol_SliderGrabActive:
+		case ImGuiCol_SeparatorActive:
+		case ImGuiCol_ResizeGripActive:
+			isText = true;
+			break;
+		default:
+			break;
+		}
+		const float value = isText ? hsv.z : ae::Min( hsv.z * 0.5f, 0.1f );
+		const ae::Vec3 c = ae::Color::HSV( 0.0f, 0.0f, value ).GetLinearRGB();
+		imColor.x = c.x;
+		imColor.y = c.y;
+		imColor.z = c.z;
+	}
+
 	uint32_t typeCount = ae::GetClassTypeCount();
 	for( uint32_t i = 0; i < typeCount; i++ )
 	{

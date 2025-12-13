@@ -1345,12 +1345,22 @@ struct Color
 	Vec4 GetLinearRGBA() const;
 	Vec3 GetSRGB() const;
 	Vec4 GetSRGBA() const;
+	Vec3 GetHSV() const;
 
 	Color Lerp( const Color& end, float t ) const;
 	Color DtLerp( float snappiness, float dt, const Color& target ) const;
 	Color ScaleRGB( float s ) const;
 	Color ScaleA( float s ) const;
 	Color SetA( float alpha ) const;
+	//! The color's type or shade: red, blue, green, magenta, etc. \p hue range:
+	//! 0-1 (circular, wrapped internally).
+	Color SetHue( float hue ) const;
+	//! How pure or vivid the color is. \p saturation range: 0-1 (clipped
+	//! internally).
+	Color SetSaturation( float saturation ) const;
+	//! How bright or dark the color is. \p value range: 0-1 (clipped
+	//! internally).
+	Color SetValue( float value ) const;
 
 	static float SRGBToRGB( float x );
 	static float RGBToSRGB( float x );
@@ -8229,6 +8239,33 @@ inline Vec3 Color::GetLinearRGB() const { return Vec3( r, g, b ); }
 inline Vec4 Color::GetLinearRGBA() const { return Vec4( r, g, b, a ); }
 inline Vec3 Color::GetSRGB() const { return Vec3( RGBToSRGB( r ), RGBToSRGB( g ), RGBToSRGB( b ) ); }
 inline Vec4 Color::GetSRGBA() const { return Vec4( GetSRGB(), a ); }
+inline Vec3 Color::GetHSV() const
+{
+	const float max = ae::Max( r, g, b );
+	const float min = ae::Min( r, g, b );
+	const float delta = max - min;
+	float h = 0.0f;
+	if( delta > 1e-4f ) // Minimum delta to avoid numerical instability (~1/10000 color difference)
+	{
+		if( r >= g && r >= b )
+		{
+			h = ( g - b ) / delta;
+			if( h < 0.0f ) h += 6.0f; // 360/60 degrees per sector
+		}
+		else if( g >= r && g >= b )
+		{
+			h = ( b - r ) / delta + 2.0f; // 120/60 degrees per sector
+		}
+		else
+		{
+			h = ( r - g ) / delta + 4.0f; // 240/60 degrees per sector
+		}
+		h /= 6.0f; // Convert from 0-6 range to 0-1 range
+	}
+	const float s = ae::Clip01( ( max > 0.0f ) ? delta / max : 0.0f );
+	const float v = ae::Clip01( max );
+	return Vec3( ae::Clip01( h ), s, v );
+}
 inline Color Color::Lerp( const Color& end, float t ) const
 {
 	return Color(
@@ -8249,6 +8286,22 @@ inline Color Color::DtLerp( float snappiness, float dt, const Color& target ) co
 inline Color Color::ScaleRGB( float s ) const { return Color( r * s, g * s, b * s, a ); }
 inline Color Color::ScaleA( float s ) const { return Color( r, g, b, a * s ); }
 inline Color Color::SetA( float alpha ) const { return Color( r, g, b, alpha ); }
+inline Color Color::SetHue( float hue ) const
+{
+	const Vec3 hsv = GetHSV();
+	const float wrappedHue = hue - ae::Floor( hue ); // Wrap hue to [0,1) range
+	return HSV( wrappedHue, hsv.y, hsv.z ).SetA( a );
+}
+inline Color Color::SetSaturation( float saturation ) const
+{
+	const Vec3 hsv = GetHSV();
+	return HSV( hsv.x, ae::Clip01( saturation ), hsv.z ).SetA( a );
+}
+inline Color Color::SetValue( float value ) const
+{
+	const Vec3 hsv = GetHSV();
+	return HSV( hsv.x, hsv.y, ae::Clip01( value ) ).SetA( a );
+}
 inline float Color::SRGBToRGB( float x ) { return powf( x , 2.2f ); }
 inline float Color::RGBToSRGB( float x ) { return powf( x, 1.0f / 2.2f ); }
 
