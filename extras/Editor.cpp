@@ -210,11 +210,11 @@ public:
 	ae::OBB GetOBB( class EditorProgram* program ) const;
 	ae::AABB GetAABB( class EditorProgram* program ) const;
 	
-	ae::Entity entity = ae::kInvalidEntity;
+	ae::Entity entity = ae::kNullEntity;
 	bool hidden = false;
 	bool renderDisabled = false;
 	
-	ae::Entity parent = ae::kInvalidEntity;
+	ae::Entity parent = ae::kNullEntity;
 	ae::List< EditorServerObject > children;
 	ae::ListNode< EditorServerObject > childNode = this;
 
@@ -330,7 +330,7 @@ private:
 	const ae::ClassType* m_objectListType = nullptr;
 	ae::Array< ae::Entity > m_selected;
 	ae::Array< ae::Entity > m_hoverEntities;
-	ae::Entity uiHoverEntity = kInvalidEntity;
+	ae::Entity uiHoverEntity = kNullEntity;
 	ae::Vec3 m_mouseHover = ae::Vec3( 0.0f );
 	ae::Vec3 m_mouseHoverNormal = ae::Vec3( 0, 1, 0 );
 	std::optional< ae::Vec2 > m_boxSelectStart;
@@ -364,7 +364,7 @@ private:
 		const ae::ClassVar* componentVar = nullptr;
 		int32_t varIdx = -1;
 		
-		ae::Entity pending = kInvalidEntity;
+		ae::Entity pending = kNullEntity;
 	};
 	SelectRef m_selectRef;
 
@@ -1337,7 +1337,7 @@ void EditorServerObject::Terminate()
 
 void EditorServerObject::SetTransform( const ae::Matrix4& transform, EditorProgram* program )
 {
-	AE_ASSERT( entity != kInvalidEntity );
+	AE_ASSERT( entity != kNullEntity );
 	if( m_transform != transform )
 	{
 		const ae::Matrix4 relative = transform * m_transform.GetInverse();
@@ -1952,7 +1952,7 @@ void EditorServer::ShowMenuBar( EditorProgram* program )
 		if( ImGui::MenuItem( "Create" ) )
 		{
 			ae::Matrix4 transform = ae::Matrix4::Translation( program->camera.GetPivot() );
-			EditorServerObject* editorObject = CreateObject( kInvalidEntity, transform, "" );
+			EditorServerObject* editorObject = CreateObject( kNullEntity, transform, "" );
 			m_selected.Clear();
 			m_selected.Append( editorObject->entity );
 		}
@@ -2095,7 +2095,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 		{
 			m_boxSelectStart = std::nullopt;
 
-			ae::Entity hoverEntity = m_hoverEntities.Length() ? m_hoverEntities[ 0 ] : kInvalidEntity;
+			ae::Entity hoverEntity = m_hoverEntities.Length() ? m_hoverEntities[ 0 ] : kNullEntity;
 			if( m_selectRef.enabled )
 			{
 				uint32_t matchCount = 0;
@@ -2701,7 +2701,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 		}
 		EndModePanel();
 	
-		uiHoverEntity = kInvalidEntity;
+		uiHoverEntity = kNullEntity;
 		if( BeginModePanel( 2, "[2] Object List" ) )
 		{
 			const char* selectedTypeName = m_objectListType ? m_objectListType->GetName() : "All";
@@ -2938,7 +2938,7 @@ void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity )
 	EditorServerObject* child = editorObject->children.GetFirst();
 	while( child )
 	{
-		child->parent = ae::kInvalidEntity;
+		child->parent = ae::kNullEntity;
 		child = child->childNode.GetNext();
 	}
 
@@ -3016,7 +3016,7 @@ const ae::Component* EditorServer::GetComponent( const EditorServerObject* obj, 
 
 const EditorServerObject* EditorServer::GetObjectAssert( ae::Entity entity ) const
 {
-	AE_ASSERT_MSG( entity != ae::kInvalidEntity, "Invalid entity" );
+	AE_ASSERT_MSG( entity != ae::kNullEntity, "Invalid entity" );
 	const ae::EditorServerObject* obj = m_objects.Get( entity, nullptr );
 	AE_ASSERT_MSG( obj, "Could not find object #", entity );
 	return obj;
@@ -3024,7 +3024,7 @@ const EditorServerObject* EditorServer::GetObjectAssert( ae::Entity entity ) con
 
 const EditorServerObject* EditorServer::TryGetObject( ae::Entity entity ) const
 {
-	if( entity == ae::kInvalidEntity )
+	if( entity == ae::kNullEntity )
 	{
 		return nullptr;
 	}
@@ -3281,7 +3281,7 @@ void EditorServer::Unload( EditorProgram* program )
 	m_objectListType = nullptr;
 	m_selected.Clear();
 	m_hoverEntities.Clear();
-	uiHoverEntity = kInvalidEntity;
+	uiHoverEntity = kNullEntity;
 	m_selectRef = SelectRef();
 	m_framePickableEntities.Clear();
 
@@ -3574,7 +3574,7 @@ void EditorServer::m_UnparentSelected( EditorProgram* program )
 		}
 		if( childObject->childNode.GetList() )
 		{
-			childObject->parent = ae::kInvalidEntity;
+			childObject->parent = ae::kNullEntity;
 			childObject->childNode.Remove();
 			AE_INFO( "Unparented #", childObject->entity );
 		}
@@ -3640,7 +3640,7 @@ void EditorServer::m_SelectWithModifier( SelectionModifier modifier, const ae::E
 		for( uint32_t i = 0; i < count; i++ )
 		{
 			ae::Entity entity = entities[ i ];
-			if( entity != kInvalidEntity && m_selected.Find( entity ) < 0 )
+			if( entity != kNullEntity && m_selected.Find( entity ) < 0 )
 			{
 				m_selected.Append( entity );
 			}
@@ -3651,7 +3651,7 @@ void EditorServer::m_SelectWithModifier( SelectionModifier modifier, const ae::E
 		for( uint32_t i = 0; i < count; i++ )
 		{
 			ae::Entity entity = entities[ i ];
-			if( entity != kInvalidEntity )
+			if( entity != kNullEntity )
 			{
 				int32_t idx = m_selected.Find( entity );
 				if( idx < 0 )
@@ -3670,7 +3670,7 @@ void EditorServer::m_SelectWithModifier( SelectionModifier modifier, const ae::E
 		for( uint32_t i = 0; i < count; i++ )
 		{
 			ae::Entity entity = entities[ i ];
-			if( entity != kInvalidEntity )
+			if( entity != kNullEntity )
 			{
 				int32_t idx = m_selected.Find( entity );
 				if( idx >= 0 )
@@ -3686,7 +3686,7 @@ void EditorServer::m_SelectWithModifier( SelectionModifier modifier, const ae::E
 		for( uint32_t i = 0; i < count; i++ )
 		{
 			ae::Entity entity = entities[ i ];
-			if( entity != kInvalidEntity )
+			if( entity != kNullEntity )
 			{
 				m_selected.Append( entity );
 			}
@@ -3962,10 +3962,10 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 		*hitOut = result.hits[ 0 ].position;
 		*normalOut = result.hits[ 0 ].normal;
 		const EditorServerObject* editorObj = (const EditorServerObject*)result.hits[ 0 ].userData;
-		return editorObj ? editorObj->entity : kInvalidEntity;
+		return editorObj ? editorObj->entity : kNullEntity;
 	}
 
-	return kInvalidEntity;
+	return kNullEntity;
 }
 
 ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) const
@@ -3983,7 +3983,7 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) co
 				return true;
 			}
 			const EditorServerObject* currentObj = TryGetObject( current );
-			current = currentObj ? currentObj->parent : ae::kInvalidEntity;
+			current = currentObj ? currentObj->parent : ae::kNullEntity;
 		}
 		return false;
 	}();

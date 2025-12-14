@@ -205,12 +205,12 @@ Component* Registry::TryGetComponent( const char* name, const ae::ClassType* typ
 	{
 		return nullptr;
 	}
-	return TryGetComponent( m_entityNames.Get( name, kInvalidEntity ), type );
+	return TryGetComponent( m_entityNames.Get( name, kNullEntity ), type );
 }
 
 const Component& Registry::GetComponent( Entity entity, const ae::ClassType* type ) const
 {
-	AE_ASSERT_MSG( entity != kInvalidEntity, "Invalid entity" );
+	AE_ASSERT_MSG( entity != kNullEntity, "Invalid entity" );
 	AE_ASSERT_MSG( type, "No type specified" );
 	const Component* component = TryGetComponent( entity, type );
 	AE_ASSERT_MSG( component, "Entity '#' has no component '#'", entity, type->GetName() );
@@ -219,7 +219,7 @@ const Component& Registry::GetComponent( Entity entity, const ae::ClassType* typ
 
 const Component* Registry::TryGetComponent( Entity entity, const ae::ClassType* type ) const
 {
-	if( entity == kInvalidEntity || !type )
+	if( entity == kNullEntity || !type )
 	{
 		return nullptr;
 	}
@@ -247,12 +247,12 @@ const Component* Registry::TryGetComponent( const char* name, const ae::ClassTyp
 	{
 		return nullptr;
 	}
-	return TryGetComponent( m_entityNames.Get( name, kInvalidEntity ), type );
+	return TryGetComponent( m_entityNames.Get( name, kNullEntity ), type );
 }
 
 Entity Registry::GetEntityByName( const char* name ) const
 {
-	return m_entityNames.Get( name, kInvalidEntity );
+	return m_entityNames.Get( name, kNullEntity );
 }
 
 const char* Registry::GetNameByEntity( Entity entity ) const
@@ -300,7 +300,7 @@ const ae::ClassType* Registry::GetTypeByIndex( uint32_t index ) const
 	return ae::GetClassTypeById( m_components.GetKey( index ) );
 }
 
-int32_t Registry::GetTypeIndexByType( const ae::ClassType* type ) const
+int32_t Registry::GetIndexOfType( const ae::ClassType* type ) const
 {
 	if( !type )
 	{
@@ -394,7 +394,7 @@ void Registry::Clear()
 		}
 	}
 	m_components.Clear();
-	m_lastEntity = kInvalidEntity;
+	m_lastEntity = kNullEntity;
 	m_entityNames.Clear();
 
 	m_destroying = false;

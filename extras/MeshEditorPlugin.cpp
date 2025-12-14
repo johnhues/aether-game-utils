@@ -118,7 +118,7 @@ void MeshEditorPlugin::OnEvent( const ae::EditorEvent& event )
 				if( !resource )
 				{
 					const ae::Optional< ae::EditorMesh > mesh = TryLoad( resourceId.c_str() );
-					resource = mesh.TryGet() ? CreateMesh( *mesh.TryGet(), kInvalidEntity ) : nullptr;
+					resource = mesh.TryGet() ? CreateMesh( *mesh.TryGet(), kNullEntity ) : nullptr;
 					if( resource )
 					{
 						//AE_DEBUG( "Create mesh resource-># id:#", resource, resourceId );

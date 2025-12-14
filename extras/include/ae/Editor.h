@@ -63,7 +63,7 @@ private:
 	friend class EditorServer;
 	friend class EditorServerObject;
 	class EditorServerMesh* m_mesh = nullptr;
-	ae::Entity m_selectEntity = kInvalidEntity;
+	ae::Entity m_selectEntity = kNullEntity;
 	ae::ListNode< EditorMeshInstance > m_entityInstance = this;
 };
 
@@ -143,7 +143,7 @@ struct EditorEvent
 {
 	ae::EditorEventType type = ae::EditorEventType::None;
 	const char* path = "";
-	ae::Entity entity = kInvalidEntity;
+	ae::Entity entity = kNullEntity;
 	ae::Matrix4 transform = ae::Matrix4::Identity();
 	const ae::Component* component = nullptr;
 	const ae::ClassVar* var = nullptr;
@@ -169,8 +169,8 @@ public:
 	virtual EditorPluginConfig GetConfig() = 0;
 	virtual void OnEvent( const ae::EditorEvent& event ) = 0; // @TODO: Should this return an enum code?
 
-	EditorMeshInstance* CreateMesh( const EditorMesh& mesh, ae::Entity selectEntity = kInvalidEntity );
-	EditorMeshInstance* CloneMesh( const EditorMeshInstance* mesh, ae::Entity selectEntity = kInvalidEntity );
+	EditorMeshInstance* CreateMesh( const EditorMesh& mesh, ae::Entity selectEntity = kNullEntity );
+	EditorMeshInstance* CloneMesh( const EditorMeshInstance* mesh, ae::Entity selectEntity = kNullEntity );
 	void DestroyMesh( EditorMeshInstance* mesh );
 
 private:
