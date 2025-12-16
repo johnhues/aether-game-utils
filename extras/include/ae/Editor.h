@@ -249,7 +249,7 @@ private:
 	ae::Socket m_sock;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 	ae::Array< std::pair< EditorPluginConfig, EditorPlugin* > > m_plugins;
-	ae::Map< ae::Entity, bool > m_editorEntities;
+	ae::Map< ae::Entity, bool > m_editorEntities; // Filter out entities created since last level load
 };
 
 //------------------------------------------------------------------------------

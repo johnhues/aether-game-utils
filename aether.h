@@ -278,6 +278,8 @@
 	#endif
 #endif
 
+namespace ae {
+
 //------------------------------------------------------------------------------
 // Platform Utils
 //------------------------------------------------------------------------------
@@ -322,6 +324,10 @@
 template< typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 #define countof( _x ) ( (uint32_t)sizeof( countof_helper( _x ) ) ) // @TODO: AE_COUNT_OF
 
+//! Removes const, pointer, and reference qualifiers from a type. Usage:
+//! using U = typename ae::RemoveTypeQualifiers< T >;
+template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< T > > > >;
+
 //! AE_CALL_CONST_MEMBER_FUNCTION usage:
 //!	const Value* DataStructure::Find( Key key ) const
 //!	{
@@ -361,8 +367,6 @@ template< typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 	#define AE_ENABLE_INVALID_OFFSET_WARNING
 #endif
 #define AE_DISABLE_COPY_ASSIGNMENT( _t ) _t( const _t& ) = delete; _t& operator=( const _t& ) = delete
-
-namespace ae {
 
 //------------------------------------------------------------------------------
 //! \defgroup Platform
@@ -5881,9 +5885,6 @@ ae::TypeId GetObjectTypeId( const ae::Object* obj );
 //! Get a registered ae::TypeId from a type name
 //@TODO: Constexpr
 ae::TypeId GetTypeIdFromName( const char* name );
-//! Removes const, pointer, and reference qualifiers from a type. Usage:
-//! using U = typename ae::RemoveTypeQualifiers< T >;
-template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< T > > > >;
 //! Returns an integer id for the given type, which ignores const, pointer, and
 //! reference qualifiers.
 template< typename T > ae::TypeId GetTypeIdWithoutQualifiers();

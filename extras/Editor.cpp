@@ -91,6 +91,16 @@ const uint8_t kCogTextureData[] =
 
 const float kEditorViewDistance = 25000.0f;
 
+#define JSON_SCENE_NAME "scene"
+#define JSON_ENTITY_ID_NAME "id"
+#define JSON_ENTITY_NAME_NAME "name"
+#define JSON_PARENT_ID_NAME "parent"
+#define JSON_TRANSFORM_NAME "transform"
+#define JSON_POSITION_NAME "position"
+#define JSON_ROTATION_NAME "rotation"
+#define JSON_SCALE_NAME "scale"
+#define JSON_ENTITY_COMPONENTS_NAME "components"
+
 enum class PickingType
 {
 	Disabled,
@@ -113,10 +123,10 @@ struct SpecialMemberVar
 	bool ( *SetObjectValue )( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var );
 };
 const SpecialMemberVar kSpecialMemberVars[] = {
-	{ ae::BasicType::Matrix4, "transform", []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform ); } },
-	{ ae::BasicType::Vec3, "position", []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetTranslation() ); } },
-	{ ae::BasicType::Quaternion, "rotation", []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetRotation() ); } },
-	{ ae::BasicType::Vec3, "scale", []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetScale() ); } },
+	{ ae::BasicType::Matrix4, JSON_TRANSFORM_NAME, []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform ); } },
+	{ ae::BasicType::Vec3, JSON_POSITION_NAME, []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetTranslation() ); } },
+	{ ae::BasicType::Quaternion, JSON_ROTATION_NAME, []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetRotation() ); } },
+	{ ae::BasicType::Vec3, JSON_SCALE_NAME, []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetScale() ); } },
 };
 const SpecialMemberVar* GetSpecialMemberVar( const ae::ClassVar* var )
 {
@@ -141,6 +151,44 @@ bool ValidateLevel( const rapidjson::Value& jsonLevel );
 template< typename T > const T* TryGetClassOrVarAttribute( const ae::ClassType* type );
 ae::Array< const ae::ClassVar*, 8 > GetTypeVarsByName( const ae::ClassType* type, const char* name );
 void SendPluginEvent( EditorPluginArray& plugins, const EditorEvent& event );
+
+//------------------------------------------------------------------------------
+// JsonComponent helper
+//------------------------------------------------------------------------------
+struct JsonComponent
+{
+	const ae::ClassType* type;
+	const rapidjson::Value& json;
+};
+
+//------------------------------------------------------------------------------
+// JsonEntity helper
+//------------------------------------------------------------------------------
+struct JsonEntity
+{
+	ae::Entity id;
+	std::string name;
+	ae::Matrix4 transform;
+	ae::Entity parentId;
+	const JsonEntity* parent;
+	ae::Array< const JsonEntity* > children;
+	ae::Array< const JsonComponent* > components;
+	const rapidjson::Value& json;
+};
+
+//------------------------------------------------------------------------------
+// JsonScene helper
+//------------------------------------------------------------------------------
+struct JsonScene
+{
+	JsonScene( const ae::Tag& tag, rapidjson::Value& scene, bool allowMissingParents );
+	~JsonScene();
+	ae::Map< ae::Entity, JsonEntity* > entityLookup;
+	ae::ObjectPool< JsonEntity, 64, true > entities;
+	ae::ObjectPool< JsonComponent, 128, true > components;
+	bool success;
+	const rapidjson::Value& json;
+};
 
 //------------------------------------------------------------------------------
 // EditorNetMsg
@@ -170,7 +218,13 @@ struct AppBundleWarningDialog : public EditorDialog
 {
 	bool ShowUIAndWaitForButton() override;
 	class EditorProgram* program = nullptr;
-	std::string path;
+	std::string levelPath;
+};
+
+struct InvalidSceneDialog : public EditorDialog
+{
+	bool ShowUIAndWaitForButton() override;
+	std::string levelPath;
 };
 
 //------------------------------------------------------------------------------
@@ -478,7 +532,7 @@ bool AppBundleWarningDialog::ShowUIAndWaitForButton()
 			press = true;
 			ImGui::CloseCurrentPopup();
 
-			program->editor.OpenLevel( program, path.c_str() );
+			program->editor.OpenLevel( program, levelPath.c_str() );
 		}
 		if( buttonCancel[ 0 ] )
 		{
@@ -488,6 +542,31 @@ bool AppBundleWarningDialog::ShowUIAndWaitForButton()
 				press = true;
 				ImGui::CloseCurrentPopup();
 			}
+		}
+		ImGui::EndPopup();
+	}
+	return press;
+}
+
+//------------------------------------------------------------------------------
+// InvalidSceneDialog
+//------------------------------------------------------------------------------
+bool InvalidSceneDialog::ShowUIAndWaitForButton()
+{
+	const char* title = "Error";
+	const char* message = "The level data format is invalid. '%s' was not loaded.";
+	const char* buttonConfirm = "Confirm";
+
+	bool press = false;
+	ImGui::OpenPopup( title );
+	if( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_AlwaysAutoResize ) )
+	{
+		ImGui::TextWrapped( message, ae::FileSystem::GetFileNameFromPath( levelPath.c_str() ) );
+		ImGui::Separator();
+		if( ImGui::Button( buttonConfirm ) )
+		{
+			press = true;
+			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
 	}
@@ -1246,10 +1325,10 @@ void Editor::m_Read()
 		);
 		return;
 	}
-
-	if( !ValidateLevel( document ) )
+	const JsonScene scene( m_tag, document, false );
+	if( !scene.success )
 	{
-		AE_ERR( "Invalid level data format '#'", m_pendingLevel->GetUrl() );
+		AE_ERR( "Level '#' is not a valid scene", m_pendingLevel->GetUrl() );
 		return;
 	}
 
@@ -1269,39 +1348,28 @@ void Editor::m_Read()
 	// State for loading
 	ae::Array< const ae::ClassType* > requirements = m_tag;
 	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
-	const auto& jsonObjects = document[ "objects" ];
-
-	// Create all components
-	for( const auto& jsonObject : jsonObjects.GetArray() )
+	
+	for( const JsonEntity& sceneEntity : scene.entities )
 	{
-		const char* entityName = jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : "";
-		const ae::Matrix4 entityTransform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
-		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
-		const ae::Entity entity = m_params->registry->CreateEntity( jsonEntity, entityName );
-		
-		// Record which entities have been created by the editor
-		m_editorEntities.Set( entity, true );
-		
-		if( entity != jsonEntity )
+		const ae::Entity newId = m_params->registry->CreateEntity( sceneEntity.id, sceneEntity.name.c_str() );
+		m_editorEntities.Set( newId, true ); // Record which entities have been created by the editor
+		if( sceneEntity.id != newId )
 		{
-			entityMap.Set( jsonEntity, entity );
+			entityMap.Set( sceneEntity.id, newId ); // Record which ids have been remapped
 		}
-		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		for( const JsonComponent* sceneComponent : sceneEntity.components )
 		{
-			AE_ASSERT( componentIter.value.IsObject() );
-			const ae::ClassType* type = ae::GetClassTypeByName( componentIter.name.GetString() );
-			AE_ASSERT_MSG( type, "Type '#' not found. Register with AE_REGISTER_CLASS(), or if the class isn't directly referenced you may need to use AE_FORCE_LINK().", componentIter.name.GetString() );
-			GetComponentTypeRequirements( type, &requirements );
+			GetComponentTypeRequirements( sceneComponent->type, &requirements );
 			for( const ae::ClassType* requirement : requirements )
 			{
-				m_params->registry->AddComponent( entity, requirement );
+				m_params->registry->AddComponent( newId, requirement );
 			}
-			m_params->registry->AddComponent( entity, type );
+			m_params->registry->AddComponent( newId, sceneComponent->type );
 		}
 	}
 
 	// Serialize all components (second phase to handle references)
-	JsonToRegistry( entityMap, jsonObjects, m_params->registry );
+	JsonToRegistry( entityMap, document[ JSON_SCENE_NAME ], m_params->registry );
 
 	AE_INFO( "Loaded level '#'", m_pendingLevel->GetUrl() );
 
@@ -1536,8 +1604,12 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		return;
 	}
 
-	if( !ValidateLevel( document ) )
+	const JsonScene scene( m_tag, document, false );
+	if( !scene.success )
 	{
+		InvalidSceneDialog dialog;
+		dialog.levelPath = m_pendingLevel->GetUrl();
+		m_PushDialog( dialog );
 		AE_ERR( "Invalid level data format '#'", m_pendingLevel->GetUrl() );
 		return;
 	}
@@ -1547,61 +1619,36 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 
 	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
 	
-	const auto& jsonObjects = document[ "objects" ];
-	AE_ASSERT( jsonObjects.IsArray() );
-	// Create all components
-	for( const auto& jsonObject : jsonObjects.GetArray() )
+	for( const JsonEntity& sceneEntity : scene.entities )
 	{
-		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
-		EditorServerObject* object = CreateObject(
-			jsonEntity,
-			ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() ),
-			jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : ""
-		);
-		if( object->entity != jsonEntity )
+		EditorServerObject* object = CreateObject( sceneEntity.id, sceneEntity.transform, sceneEntity.name.c_str() );
+		if( object->entity != sceneEntity.id )
 		{
-			entityMap.Set( jsonEntity, object->entity );
+			entityMap.Set( sceneEntity.id, object->entity );
 		}
-		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		for( const JsonComponent* component : sceneEntity.components )
 		{
-			if( !componentIter.value.IsObject() )
-			{
-				continue;
-			}
-			AddComponent( program, object, ae::GetClassTypeByName( componentIter.name.GetString() ) );
+			AddComponent( program, object, component->type );
 		}
 	}
 	// Serialize all components (second phase to handle references)
-	JsonToRegistry( entityMap, jsonObjects, &m_registry );
+	JsonToRegistry( entityMap, document[ JSON_SCENE_NAME ], &m_registry );
 	// Refresh editor objects
-	for( const auto& jsonObject : jsonObjects.GetArray() )
+	for( const JsonEntity& sceneEntity : scene.entities )
 	{
-		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
-		const ae::Entity entity = entityMap.Get( jsonEntity, jsonEntity );
-		EditorServerObject* object = GetObjectAssert( entity );
-		if( jsonObject.HasMember( "parent" ) )
+		const ae::Entity entityId = entityMap.Get( sceneEntity.id, sceneEntity.id );
+		EditorServerObject* object = GetObjectAssert( entityId );
+		if( sceneEntity.parentId )
 		{
-			const ae::Entity jsonParent = jsonObject[ "parent" ].GetUint();
-			const ae::Entity parent = entityMap.Get( jsonParent, jsonParent );
-			EditorServerObject* parentObject = TryGetObject( parent );
-			if( parentObject )
-			{
-				object->parent = parentObject->entity;
-				parentObject->children.Append( object->childNode );
-			}
+			const ae::Entity parent = entityMap.Get( sceneEntity.parentId, sceneEntity.parentId );
+			EditorServerObject* parentObject = GetObjectAssert( parent );
+			object->parent = parentObject->entity;
+			parentObject->children.Append( object->childNode );
 		}
-		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		for( const JsonComponent* sceneComponent : sceneEntity.components )
 		{
-			if( !componentIter.value.IsObject() )
-			{
-				continue;
-			}
-			const ae::ClassType* type = ae::GetClassTypeByName( componentIter.name.GetString() );
-			if( !type )
-			{
-				continue;
-			}
-			ae::Component* component = &m_registry.GetComponent( entity, type );
+			const ae::ClassType* type = sceneComponent->type;
+			ae::Component* component = &m_registry.GetComponent( entityId, type );
 			const uint32_t varCount = type->GetVarCount( true );
 			for( uint32_t j = 0; j < varCount; j++ )
 			{
@@ -1981,7 +2028,7 @@ void EditorServer::ShowMenuBar( EditorProgram* program )
 
 		// Parenting
 		ImGui::BeginDisabled( m_selected.Length() < 2 );
-		if( ImGui::MenuItem( "Parent" ) )
+		if( ImGui::MenuItem( JSON_PARENT_ID_NAME ) )
 		{
 			m_ParentSelected( program );
 		}
@@ -3196,7 +3243,7 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 			jsonObjects.PushBack( jsonObject, allocator );
 		}
 
-		document.AddMember( "objects", jsonObjects, allocator );
+		document.AddMember( JSON_SCENE_NAME, jsonObjects, allocator );
 	}
 
 	rapidjson::StringBuffer buffer;
@@ -3248,7 +3295,7 @@ void EditorServer::OpenLevelWithPrompts( EditorProgram* program, const char* fil
 	{
 		AppBundleWarningDialog dialog;
 		dialog.program = program;
-		dialog.path = filePath;
+		dialog.levelPath = filePath;
 		m_appBundleWarningDialogId = m_PushDialog( dialog );
 	}
 	else
@@ -3313,13 +3360,13 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 
 	// Id
 	const ae::Entity entity = levelObject->entity;
-	jsonEntity->AddMember( "id", entity, allocator );
+	jsonEntity->AddMember( JSON_ENTITY_ID_NAME, entity, allocator );
 
 	// Name
 	const char* objectName = m_registry.GetNameByEntity( entity );
 	if( objectName[ 0 ] )
 	{
-		jsonEntity->AddMember( "name", rapidjson::StringRef( objectName ), allocator );
+		jsonEntity->AddMember( JSON_ENTITY_NAME_NAME, rapidjson::StringRef( objectName ), allocator );
 	}
 
 	// Transform
@@ -3327,10 +3374,10 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 	const ae::Matrix4 transform = levelObject->GetTransform();
 	const auto transformStr = ae::ToString( transform );
 	transformJson.SetString( transformStr.c_str(), allocator );
-	jsonEntity->AddMember( "transform", transformJson, allocator );
+	jsonEntity->AddMember( JSON_TRANSFORM_NAME, transformJson, allocator );
 	if( levelObject->parent )
 	{
-		jsonEntity->AddMember( "parent", (uint32_t)levelObject->parent, allocator );
+		jsonEntity->AddMember( JSON_PARENT_ID_NAME, (uint32_t)levelObject->parent, allocator );
 	}
 
 	// Components
@@ -3353,7 +3400,7 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 			jsonComponents.AddMember( rapidjson::StringRef( type->GetName() ), jsonComponent, allocator );
 		}
 	}
-	jsonEntity->AddMember( "components", jsonComponents, allocator );
+	jsonEntity->AddMember( JSON_ENTITY_COMPONENTS_NAME, jsonComponents, allocator );
 }
 
 void EditorServer::m_CopySelected() const
@@ -3382,7 +3429,7 @@ void EditorServer::m_CopySelected() const
 			jsonObjects.PushBack( jsonObject, allocator );
 		}
 
-		document.AddMember( "objects", jsonObjects, allocator );
+		document.AddMember( JSON_SCENE_NAME, jsonObjects, allocator );
 	}
 
 	rapidjson::StringBuffer buffer;
@@ -3412,8 +3459,11 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 		return;
 	}
 
-	if( !ValidateLevel( document ) )
+	const JsonScene scene( m_tag, document, true );
+	if( !scene.success )
 	{
+		InvalidSceneDialog dialog;
+		m_PushDialog( dialog );
 		AE_WARN( "Unexpected clipboard data format" );
 		return;
 	}
@@ -3421,52 +3471,50 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 	// State for loading
 	m_selected.Clear();
 	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
-	const auto& jsonObjects = document[ "objects" ];
 
 	// Create all components
-	for( const auto& jsonObject : jsonObjects.GetArray() )
+	for( const JsonEntity& sceneEntity : scene.entities )
 	{
-		const char* entityName = jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : "";
-		const ae::Matrix4 entityTransform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
-		// parent
-		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
-		EditorServerObject* editorObject = CreateObject( jsonEntity, entityTransform, entityName );
-		if( editorObject->entity != jsonEntity )
+		const char* name = ""; // @TODO: sceneEntity.name.c_str() handle duplicate names
+		EditorServerObject* editorObject = CreateObject( sceneEntity.id, sceneEntity.transform, name );
+		if( editorObject->entity != sceneEntity.id )
 		{
-			entityMap.Set( jsonEntity, editorObject->entity );
+			entityMap.Set( sceneEntity.id, editorObject->entity );
 		}
-		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		for( const JsonComponent* sceneComponent : sceneEntity.components )
 		{
-			AE_ASSERT( componentIter.value.IsObject() );
-			AddComponent( program, editorObject, ae::GetClassTypeByName( componentIter.name.GetString() ) );
+			AddComponent( program, editorObject, sceneComponent->type );
 		}
 
-		// Select entity
-		m_selected.Append( editorObject->entity );
+		// Select pasted 'root' entities only, translating them separately from
+		// their parents would be unexpected behavior.
+		if( !sceneEntity.parent )
+		{
+			m_selected.Append( editorObject->entity );
+		}
 	}
 
 	// Serialize all components (second phase to handle references)
-	JsonToRegistry( entityMap, jsonObjects, &m_registry );
+	JsonToRegistry( entityMap, document[ JSON_SCENE_NAME ], &m_registry );
 
 	// Refresh editor objects
-	for( const auto& jsonObject : jsonObjects.GetArray() )
+	for( const JsonEntity& sceneEntity : scene.entities )
 	{
-		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
-		const ae::Entity entity = entityMap.Get( jsonEntity, jsonEntity );
-		const ae::Matrix4 transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
-		EditorServerObject* object = GetObjectAssert( entity );
-		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		const ae::Entity entityId = entityMap.Get( sceneEntity.id, sceneEntity.id );
+		EditorServerObject* object = GetObjectAssert( entityId );
+
+		if( sceneEntity.parentId )
 		{
-			if( !componentIter.value.IsObject() )
-			{
-				continue;
-			}
-			const ae::ClassType* type = ae::GetClassTypeByName( componentIter.name.GetString() );
-			if( !type )
-			{
-				continue;
-			}
-			ae::Component* component = &m_registry.GetComponent( entity, type );
+			const ae::Entity parent = entityMap.Get( sceneEntity.parentId, sceneEntity.parentId );
+			EditorServerObject* parentObject = GetObjectAssert( parent );
+			object->parent = parentObject->entity;
+			parentObject->children.Append( object->childNode );
+		}
+
+		for( const JsonComponent* sceneComponent : sceneEntity.components )
+		{
+			const ae::ClassType* type = sceneComponent->type;
+			ae::Component* component = &m_registry.GetComponent( entityId, type );
 			const uint32_t varCount = type->GetVarCount( true );
 			for( uint32_t j = 0; j < varCount; j++ )
 			{
@@ -4060,6 +4108,7 @@ void GetComponentTypeRequirements( const ae::ClassType* type, ae::Array< const a
 				requiredType->attributes.Has< ae::EditorTypeAttribute >() &&
 				requirementsOut->Find( requiredType ) < 0 )
 			{
+				// @TODO: GetComponentTypeRequirements() to handle transitive requirements
 				requirementsOut->Append( requiredType );
 			}
 			// @TODO: Log missing types
@@ -4109,10 +4158,10 @@ void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const r
 	// Serialize all components (second phase to handle references)
 	for( const auto& jsonObject : jsonObjects.GetArray() )
 	{
-		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
+		const ae::Entity jsonEntity = jsonObject[ JSON_ENTITY_ID_NAME ].GetUint();
 		const ae::Entity entity = entityMap.Get( jsonEntity, jsonEntity );
-		const ae::Matrix4 transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
-		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		const ae::Matrix4 transform = ae::FromString< ae::Matrix4 >( jsonObject[ JSON_TRANSFORM_NAME ].GetString(), ae::Matrix4::Identity() );
+		for( const auto& componentIter : jsonObject[ JSON_ENTITY_COMPONENTS_NAME ].GetObject() )
 		{
 			if( !componentIter.value.IsObject() )
 			{
@@ -4179,15 +4228,16 @@ void ComponentToJson( const Component* component, const Component* defaultCompon
 	}
 }
 
+// @TODO: Fold this into JsonScene
 bool ValidateLevel( const rapidjson::Value& jsonLevel )
 {
-	if( !jsonLevel.IsObject() || !jsonLevel.HasMember( "objects" ) )
+	if( !jsonLevel.IsObject() || !jsonLevel.HasMember( JSON_SCENE_NAME ) )
 	{
 		AE_ERR( "Invalid 'objects' array" );
 		return false;
 	}
 	
-	const auto& jsonObjects = jsonLevel[ "objects" ];
+	const auto& jsonObjects = jsonLevel[ JSON_SCENE_NAME ];
 	if( !jsonObjects.IsArray() )
 	{
 		return false;
@@ -4196,12 +4246,12 @@ bool ValidateLevel( const rapidjson::Value& jsonLevel )
 	uint32_t prevId = 0;
 	for( const auto& jsonObject : jsonObjects.GetArray() )
 	{
-		if( !jsonObject.HasMember( "id" ) )
+		if( !jsonObject.HasMember( JSON_ENTITY_ID_NAME ) )
 		{
 			// @TODO
 			return false;
 		}
-		const uint32_t id = jsonObject[ "id" ].GetUint();
+		const uint32_t id = jsonObject[ JSON_ENTITY_ID_NAME ].GetUint();
 		if( id == prevId )
 		{
 			AE_ERR( "Duplicate entity id '#'", id );
@@ -4214,18 +4264,18 @@ bool ValidateLevel( const rapidjson::Value& jsonLevel )
 		}
 		prevId = id;
 
-		if( !jsonObject.HasMember( "transform" ) )
+		if( !jsonObject.HasMember( JSON_TRANSFORM_NAME ) )
 		{
 			AE_ERR( "Entity '#' has no transform data", id );
 			return false;
 		}
 
-		if( !jsonObject.HasMember( "components" ) )
+		if( !jsonObject.HasMember( JSON_ENTITY_COMPONENTS_NAME ) )
 		{
 			AE_ERR( "Entity '#' has no components", id );
 			return false;
 		}
-		const auto& jsonComponents = jsonObject[ "components" ];
+		const auto& jsonComponents = jsonObject[ JSON_ENTITY_COMPONENTS_NAME ];
 		if( !jsonComponents.IsObject() )
 		{
 			AE_ERR( "Unexpected data when reading entity '#' 'components'", id );
@@ -4288,6 +4338,84 @@ void SendPluginEvent( EditorPluginArray& plugins, const EditorEvent& event )
 	{
 		plugin->OnEvent( event );
 	}
+}
+
+//------------------------------------------------------------------------------
+// JsonScene helper
+//------------------------------------------------------------------------------
+JsonScene::JsonScene( const ae::Tag& tag, rapidjson::Value& scene, bool allowMissingParents ) : entityLookup( tag ), entities( tag ), components( tag ), json( scene ), success( false )
+{
+	if( !ValidateLevel( scene ) )
+	{
+		return;
+	}
+	auto Clear = [ & ]()
+	{
+		entityLookup.Clear();
+		entities.DeleteAll();
+		components.DeleteAll();
+	};
+	const rapidjson::Value& jsonEntities = scene[ JSON_SCENE_NAME ];
+	// Create all entities first
+	for( rapidjson::SizeType i = 0; i < jsonEntities.Size(); i++ )
+	{
+		const rapidjson::Value& jsonEntity = jsonEntities[ i ];
+		const char* transformString = ( jsonEntity.HasMember( JSON_TRANSFORM_NAME ) ? jsonEntity[ JSON_TRANSFORM_NAME ].GetString() : "" );
+		JsonEntity* entity = entities.New( JsonEntity{ .id = static_cast< ae::Entity >( jsonEntity[ JSON_ENTITY_ID_NAME ].GetUint() ),
+			.name = ( jsonEntity.HasMember( JSON_ENTITY_NAME_NAME ) ? jsonEntity[ JSON_ENTITY_NAME_NAME ].GetString() : "" ),
+			.transform = ae::FromString( transformString, ae::Matrix4::Identity() ),
+			.parentId = ( jsonEntity.HasMember( JSON_PARENT_ID_NAME ) ? jsonEntity[ JSON_PARENT_ID_NAME ].GetUint() : ae::kNullEntity ),
+			.parent = nullptr,
+			.children = tag,
+			.components = tag,
+			.json = jsonEntity } );
+		if( !entity->id )
+		{
+			AE_ERROR( "Entity ID cannot be zero" );
+			Clear();
+			return;
+		}
+		entityLookup.Set( entity->id, entity );
+
+		// Allocate entity components
+		for( const auto& [ jsonTypeStr, jsonComponent ] : jsonEntity[ JSON_ENTITY_COMPONENTS_NAME ].GetObject() )
+		{
+			const ae::ClassType* componentType = ae::GetClassTypeByName( jsonTypeStr.GetString() );
+			if( !componentType )
+			{
+				AE_ERROR( "Unknown component type '#'", jsonTypeStr.GetString() );
+				Clear();
+				return;
+			}
+			entity->components.Append( components.New( JsonComponent{ .type = componentType, .json = jsonComponent } ) );
+		}
+	}
+	// All entities created, link parents and children
+	for( const auto& [ _, entity ] : entityLookup )
+	{
+		if( entity->parentId )
+		{
+			entity->parent = entityLookup.Get( entity->parentId, nullptr );
+			if( entity->parent )
+			{
+				const_cast< JsonEntity* >( entity->parent )->children.Append( entity );
+			}
+			else if( !allowMissingParents )
+			{
+				Clear();
+				return;
+			}
+		}
+	}
+	// @TODO: Validate that there are no cycles in parent/child relationships
+	success = true;
+}
+
+JsonScene::~JsonScene()
+{
+	components.DeleteAll();
+	entities.DeleteAll();
+	entityLookup.Clear();
 }
 
 } // End ae namespace
