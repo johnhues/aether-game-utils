@@ -5570,7 +5570,7 @@ struct IsosurfaceValue
 	//! applied. Eg. Noise applied to the surface of a sphere.
 	float distanceErrorMargin = 0.0f;
 };
-struct IsosurfaceStats
+struct IsosurfaceStatus
 {
 	double elapsedTime = 0.0; //!< The time it took to generate the mesh so far in seconds
 	double voxelTime = 0.0; //!< The time it took to locate surface voxels so far in seconds
@@ -5589,11 +5589,20 @@ struct IsosurfaceStats
 	uint64_t voxelAABBSize = 0; //!< The total number of voxels that could have been processed given the input bounds
 };
 using IsosurfaceSampleFn = ae::IsosurfaceValue(*)( const void* userData, ae::Vec3 position );
-using IsosurfaceStatsFn = void(*)( const void* userData, const ae::IsosurfaceStats& stats );
+using IsosurfaceStatusFn = bool(*)( const void* userData, const ae::IsosurfaceStatus& status );
 struct IsosurfaceParams
 {
+	//! This function defines the SDF that the generation process attempts
+	//! to construct a mesh from. See ae::IsosurfaceValue for more information.
+	//! \p userData will be provided to this callback.
 	IsosurfaceSampleFn sampleFn = nullptr;
-	IsosurfaceStatsFn statsFn = nullptr;
+	//! Optional: If set, this will be called intermittently throughout the
+	//! generation process with up to date timings and counts. A false return
+	//! value will cause generation to abort immediately, causing generation
+	//! to fail gracefully. \p userData will be provided to this callback.
+	IsosurfaceStatusFn statusFn = nullptr;
+	//! This opaque user data value will be provided to both \p sampleFn and
+	//! \p statusFn on each call.
 	const void* userData = nullptr;
 	
 	//! The bounds for sampling the sdf function and mesh generation
@@ -5615,8 +5624,17 @@ struct IsosurfaceParams
 	//! nearly identical.
 	bool dualContouring = false;
 
+	//! Optional: If set this will be populated with the internal octree used
+	//! for accelerating mesh generation, by minimizing calls to \p sampleFn.
 	ae::Array< ae::AABB >* octree = nullptr;
+	//! Optional: If set this will be populated with problematic points in the
+	//! SDF that may result in unwanted visual noise in the final mesh.
 	ae::Array< ae::Vec3 >* errors = nullptr;
+	//! Optional: Set this value along with breakpoint(s) on ae::IsosurfaceExtractor
+	//! lines 'int breakPointHere = 0;' to diagnose any SDF issues. It could be
+	//! useful to provide a value from the result of \p errors, or the position
+	//! of a cursor in your world/editor. This only has an effect when _AE_DEBUG_
+	//! is enabled and a debugger is attached.
 	std::optional< ae::Vec3 > debugPos;
 };
 
@@ -5636,14 +5654,17 @@ struct IsosurfaceExtractor
 	//! and ae::IsosurfaceExtractor::indices. Returns true on completion, unless
 	//! ae::IsosurfaceParams::maxVerts or ae::IsosurfaceParams::maxIndices are
 	//! set and a limit is reached. Partial mesh data will not be available on
-	//! failure, but ae::IsosurfaceStats can be retrieved with ae::IsosurfaceExtractor::GetStats().
+	//! failure, but ae::IsosurfaceStatus can be retrieved with ae::IsosurfaceExtractor::GetStatus()
+	//! until this is called again. Subsequent calls to this function on the
+	//! same instance can be significantly faster, see ae::IsosurfaceExtractor::Reserve()
+	//! for more info.
 	bool Generate( const ae::IsosurfaceParams& params );
 	//! Clears all results from ae::IsosurfaceExtractor::Generate(), including
-	//! from ae::IsosurfaceStats. Note that buffer sizes will be maintained even
+	//! from ae::IsosurfaceStatus. Note that buffer sizes will be maintained even
 	//! if this is called.
 	void Reset();
-	//! Returns stats from the previous call to ae::IsosurfaceExtractor::Generate()
-	const IsosurfaceStats& GetStats() const { return m_stats; }
+	//! Returns information from the previous call to ae::IsosurfaceExtractor::Generate()
+	const IsosurfaceStatus& GetStatus() const { return m_status; }
 	
 	ae::Array< IsosurfaceVertex > vertices;
 	ae::Array< IsosurfaceIndex > indices;
@@ -5668,18 +5689,19 @@ private:
 		IsosurfaceIndex index = kInvalidIsosurfaceIndex;
 		uint16_t edgeBits = 0;
 	};
-	bool m_Generate( ae::Int3 center, uint32_t halfSize );
+	bool m_GenerateVerts( ae::Int3 center, uint32_t halfSize );
 	bool m_DoVoxel( int32_t x, int32_t y, int32_t z );
 	inline IsosurfaceValue m_DualSample( ae::Int3 pos );
 	inline IsosurfaceValue m_Sample( ae::Vec3 pos );
-	void m_UpdateStats();
+	bool m_UpdateStatus();
 	IsosurfaceParams m_params;
+	bool m_cancel = false;
 	ae::Int3 m_minInclusive = ae::Int3( 0 );
 	ae::Int3 m_maxInclusive = ae::Int3( 0 );
 	double m_startVoxelTime = 0.0;
 	double m_startMeshTime = 0.0;
-	IsosurfaceStats m_stats;
-	IsosurfaceStats m_statsPrev;
+	IsosurfaceStatus m_status;
+	IsosurfaceStatus m_statusPrev;
 	ae::Map< VoxelIndex, Voxel > m_voxels;
 	ae::Map< VoxelIndex, IsosurfaceValue > m_dualSamples;
 };
@@ -28409,13 +28431,14 @@ void IsosurfaceExtractor::Reset()
 	vertices.Clear();
 	indices.Clear();
 	m_params = {};
-	m_stats = {};
-	m_statsPrev = {};
+	m_cancel = false;
+	m_status = {};
+	m_statusPrev = {};
 	m_voxels.Clear();
 	m_dualSamples.Clear();
 }
 
-bool IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
+bool IsosurfaceExtractor::m_GenerateVerts( ae::Int3 center, uint32_t halfSize )
 {
 	AE_DEBUG_ASSERT( halfSize % 2 == 0 || halfSize == 1 );
 
@@ -28433,9 +28456,8 @@ bool IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 	const float surfaceDistance = ae::Abs( sample.distance ) - sample.distanceErrorMargin;
 	if( diagonalHalfSize < surfaceDistance )
 	{
-		m_stats.voxelSearchProgress += ( (uint64_t)halfSize * halfSize * halfSize * 8 );
-		m_UpdateStats();
- 		return true; // No intersection, no need to split further
+		m_status.voxelSearchProgress += ( (uint64_t)halfSize * halfSize * halfSize * 8 );
+ 		return m_UpdateStatus(); // No intersection, no need to split further
 	}
 	
 	// Check if octant is outside of the given AABB
@@ -28452,15 +28474,18 @@ bool IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 				m_minInclusive.y < maxExclusive.y && minInclusive.y <= m_maxInclusive.y &&
 				m_minInclusive.z < maxExclusive.z && minInclusive.z <= m_maxInclusive.z )
 			{
-				if( !m_Generate( nextCenter, nextHalfSize ) )
+				if( !m_GenerateVerts( nextCenter, nextHalfSize ) ) // Return value meaning?
 				{
 					return false;
 				}
 			}
 			else
 			{
-				m_stats.voxelSearchProgress += ( (uint64_t)nextHalfSize * nextHalfSize * nextHalfSize * 8 );
-				m_UpdateStats();
+				m_status.voxelSearchProgress += ( (uint64_t)nextHalfSize * nextHalfSize * nextHalfSize * 8 );
+				if( !m_UpdateStatus() )
+				{
+					return false;
+				}
 			}
 		}
 	}
@@ -28490,8 +28515,11 @@ bool IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 				}
 			}
 		}
-		m_stats.voxelSearchProgress += 8;
-		m_UpdateStats();
+		m_status.voxelSearchProgress += 8;
+		if( !m_UpdateStatus() )
+		{
+			return false;
+		}
 	}
 
 	if( m_params.octree )
@@ -28517,7 +28545,7 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 		}
 	}
 
-	m_stats.voxelCheckCount++;
+	m_status.voxelCheckCount++;
 
 	const ae::Int3 sharedCornerOffset( 1 );
 	const ae::IsosurfaceValue sharedCornerSample = m_DualSample( voxelPos + sharedCornerOffset );
@@ -28527,7 +28555,7 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 	{
 		// Early out of additional edge intersections if voxel doesn't overlap
 		// the surface
-		m_stats.voxelMissCount++;
+		m_status.voxelMissCount++;
 		return true;
 	}
 
@@ -28764,19 +28792,19 @@ IsosurfaceValue IsosurfaceExtractor::m_DualSample( ae::Int3 pos )
 	IsosurfaceValue* sample = m_dualSamples.TryGet( v );
 	if( sample )
 	{
-		m_stats.sampleCacheCount++;
+		m_status.sampleCacheCount++;
 		return *sample;
 	}
 	else
 	{
-		m_stats.sampleRawCount++;
+		m_status.sampleRawCount++;
 		return m_dualSamples.Set( v, m_Sample( ae::Vec3( pos ) ) );
 	}
 }
 
 IsosurfaceValue IsosurfaceExtractor::m_Sample( ae::Vec3 pos )
 {
-	m_stats.sampleRawCount++;
+	m_status.sampleRawCount++;
 	IsosurfaceValue v = m_params.sampleFn( m_params.userData, ( pos ) );
 	// This nudge is needed to prevent the SDF from ever being exactly on
 	// the voxel grid boundaries (imagine a plane at the origin with a
@@ -28788,26 +28816,30 @@ IsosurfaceValue IsosurfaceExtractor::m_Sample( ae::Vec3 pos )
 	return v;
 }
 
-void IsosurfaceExtractor::m_UpdateStats()
+bool IsosurfaceExtractor::m_UpdateStatus()
 {
-	if( m_params.statsFn )
+	if( m_params.statusFn )
 	{
-		m_stats.voxelProgress01 = ( m_stats.voxelSearchProgress / (float)m_stats.voxelAABBSize );
-		const bool voxelProgressChanged = int32_t( m_statsPrev.voxelProgress01 * 100.0f ) != int32_t( m_stats.voxelProgress01 * 100.0f );
-		const bool meshProgressChanged = int32_t( m_statsPrev.meshProgress01 * 100.0f ) != int32_t( m_stats.meshProgress01 * 100.0f );
+		m_status.voxelProgress01 = ( m_status.voxelSearchProgress / (float)m_status.voxelAABBSize );
+		const bool voxelProgressChanged = int32_t( m_statusPrev.voxelProgress01 * 100.0f ) != int32_t( m_status.voxelProgress01 * 100.0f );
+		const bool meshProgressChanged = int32_t( m_statusPrev.meshProgress01 * 100.0f ) != int32_t( m_status.meshProgress01 * 100.0f );
 		if( voxelProgressChanged || meshProgressChanged )
 		{
 			const double currentTime = ae::GetTime();
 			const double voxelEndTime = m_startMeshTime ? ae::Min( currentTime, m_startMeshTime ) : currentTime;
-			m_stats.voxelProgress01 = ae::Min( m_stats.voxelProgress01, 1.0f );
-			m_stats.meshProgress01 = ae::Min( m_stats.meshProgress01, 1.0f );
-			m_stats.elapsedTime = ( currentTime - m_startVoxelTime );
-			m_stats.voxelTime = ( voxelEndTime - m_startVoxelTime );
-			m_stats.meshTime = m_startMeshTime ? ( currentTime - m_startMeshTime ) : 0.0;
-			m_params.statsFn( m_params.userData, m_stats );
-			m_statsPrev = m_stats;
+			m_status.voxelProgress01 = ae::Min( m_status.voxelProgress01, 1.0f );
+			m_status.meshProgress01 = ae::Min( m_status.meshProgress01, 1.0f );
+			m_status.elapsedTime = ( currentTime - m_startVoxelTime );
+			m_status.voxelTime = ( voxelEndTime - m_startVoxelTime );
+			m_status.meshTime = m_startMeshTime ? ( currentTime - m_startMeshTime ) : 0.0;
+			if( !m_params.statusFn( m_params.userData, m_status ) )
+			{
+				m_cancel = true;
+			}
+			m_statusPrev = m_status;
 		}
 	}
+	return !m_cancel;
 }
 
 bool IsosurfaceExtractor::Generate( const ae::IsosurfaceParams& _params )
@@ -28818,8 +28850,8 @@ bool IsosurfaceExtractor::Generate( const ae::IsosurfaceParams& _params )
 	}
 	Reset();
 	m_params = _params;
-	m_stats = {};
-	m_statsPrev = {};
+	m_status = {};
+	m_statusPrev = {};
 	m_startVoxelTime = ae::GetTime();
 	m_startMeshTime = 0.0;
 	if( m_params.maxVerts == 0 )
@@ -28830,21 +28862,25 @@ bool IsosurfaceExtractor::Generate( const ae::IsosurfaceParams& _params )
 	{
 		m_params.maxIndices = ae::MaxValue< uint32_t >();
 	}
+	if( !ae::IsDebuggerAttached() )
+	{
+		m_params.debugPos = {};
+	}
 	m_minInclusive = m_params.aabb.GetMin().FloorCopy();
 	m_maxInclusive = m_params.aabb.GetMax().CeilCopy();
 
 	const ae::Vec3 paramHalfSize = m_params.aabb.GetHalfSize();
 	const float maxHalfSize = ae::Max( paramHalfSize.x, paramHalfSize.y, paramHalfSize.z );
 	const uint32_t halfSize = ae::NextPowerOfTwo( maxHalfSize * 2.0f + 0.5f ) / 2;
-	m_stats.voxelAABBSize = (uint64_t)halfSize * halfSize * halfSize * 8;
-	m_Generate( m_params.aabb.GetCenter().FloorCopy(), halfSize );
-	m_stats.vertexCount = vertices.Length();
-	m_stats.indexCount = indices.Length();
-	m_stats.voxelWorkingSize = m_voxels.Length();
-	m_UpdateStats();
-	if( indices.Length() == 0 )
+	m_status.voxelAABBSize = (uint64_t)halfSize * halfSize * halfSize * 8;
+	m_GenerateVerts( m_params.aabb.GetCenter().FloorCopy(), halfSize );
+	m_status.vertexCount = vertices.Length();
+	m_status.indexCount = indices.Length();
+	m_status.voxelWorkingSize = m_voxels.Length();
+	if( !m_UpdateStatus() || indices.Length() == 0 )
 	{
 		vertices.Clear();
+		indices.Clear();
 		return false;
 	}
 
@@ -29111,14 +29147,24 @@ bool IsosurfaceExtractor::Generate( const ae::IsosurfaceParams& _params )
 		position.z = z + position.z;
 		vertex.position = ae::Vec4( position, 1.0f );
 
-		m_stats.meshProgress01 += 1.0f / (float)vertices.Length();
-		m_UpdateStats();
+		m_status.meshProgress01 += 1.0f / (float)vertices.Length();
+		if( !m_UpdateStatus() )
+		{
+			vertices.Clear();
+			indices.Clear();
+			return false;
+		}
 	}
 
 	AE_DEBUG_ASSERT( vertices.Length() <= m_params.maxVerts );
 	AE_DEBUG_ASSERT( indices.Length() <= m_params.maxIndices );
-	m_stats.meshProgress01 = 1.0f;
-	m_UpdateStats();
+	m_status.meshProgress01 = 1.0f;
+	if( !m_UpdateStatus() )
+	{
+		vertices.Clear();
+		indices.Clear();
+		return false;
+	}
 	return true;
 }
 

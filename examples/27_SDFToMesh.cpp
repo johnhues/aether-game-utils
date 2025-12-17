@@ -128,21 +128,21 @@ void main()
 }
 )";
 
-void LogStats( const ae::IsosurfaceStats& stats )
+void LogStatus( const ae::IsosurfaceStatus& status )
 {
-	float vertCount = stats.vertexCount;
-	double elapsedTime = stats.elapsedTime;
-	double voxelTime = stats.voxelTime;
-	double meshTime = stats.meshTime;
-	float triCount = stats.indexCount / 3.0f;
-	float voxelWorkingSize = stats.voxelWorkingSize;
-	float sampleRawCount = stats.sampleRawCount;
-	float sampleCacheCount = stats.sampleCacheCount;
-	float voxelMissCount = stats.voxelMissCount;
-	float voxelCheckCount = stats.voxelCheckCount;
+	float vertCount = status.vertexCount;
+	double elapsedTime = status.elapsedTime;
+	double voxelTime = status.voxelTime;
+	double meshTime = status.meshTime;
+	float triCount = status.indexCount / 3.0f;
+	float voxelWorkingSize = status.voxelWorkingSize;
+	float sampleRawCount = status.sampleRawCount;
+	float sampleCacheCount = status.sampleCacheCount;
+	float voxelMissCount = status.voxelMissCount;
+	float voxelCheckCount = status.voxelCheckCount;
 	const float samplesPerVert = vertCount ? ( sampleRawCount / vertCount ) : 0.0f;
 
-	// Timing stats
+	// Timing
 	const char* timeUnits[] = { "s", "ms", "us", "ns" };
 	double maxTime = ae::Max(
 		elapsedTime,
@@ -160,7 +160,7 @@ void LogStats( const ae::IsosurfaceStats& stats )
 		timeIndex++;
 	}
 	
-	// Count stats
+	// Counts
 	const char* counts[] = { "", "K", "M", "B" };
 	float maxCount = ae::Max(
 		triCount,
@@ -396,19 +396,20 @@ int main()
 				r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.25f, 0.5f ) * scale, smooth ), smooth );
 				return r;
 			};
-			extractor->Generate( {
+			const bool success = extractor->Generate( {
 				.sampleFn=[]( const void* userData, ae::Vec3 position ) -> ae::IsosurfaceValue
 				{
 					return { (*(decltype(surfaceFn)*)userData)( position ), 0.0f };
 				},
-				.statsFn=[]( const void*, const ae::IsosurfaceStats& stats )
+				.statusFn=[]( const void*, const ae::IsosurfaceStatus& status )
 				{
 					AE_INFO( "Voxel: #%(#ms) Mesh: #%(#ms)",
-						(int32_t)( stats.voxelProgress01 * 100.0f ),
-						(int32_t)( stats.voxelTime * 1000.0 ),
-						(int32_t)( stats.meshProgress01 * 100.0f ),
-						(int32_t)( stats.meshTime * 1000.0 )
+						(int32_t)( status.voxelProgress01 * 100.0f ),
+						(int32_t)( status.voxelTime * 1000.0 ),
+						(int32_t)( status.meshProgress01 * 100.0f ),
+						(int32_t)( status.meshTime * 1000.0 )
 					);
+					return true;
 				},
 				.userData=&surfaceFn,
 				.aabb=region,
@@ -420,6 +421,7 @@ int main()
 			} );
 			if( extractor->vertices.Length() )
 			{
+				AE_ASSERT( success );
 				// (Re)Initialize ae::VertexArray here only when needed
 				if( !sdfVertexBuffer.GetMaxVertexCount() // Not initialized
 					|| sdfVertexBuffer.GetMaxVertexCount() < extractor->vertices.Length() // Too little storage for verts
@@ -443,7 +445,7 @@ int main()
 				sdfVertexBuffer.UploadIndices( 0, extractor->indices.Data(), extractor->indices.Length() );
 			}
 
-			LogStats( extractor->GetStats() );
+			LogStatus( extractor->GetStatus() );
 		}
 		else if( collisionMeshDirty )
 		{
