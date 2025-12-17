@@ -321,8 +321,8 @@ namespace ae {
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-template< typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
-#define countof( _x ) ( (uint32_t)sizeof( countof_helper( _x ) ) ) // @TODO: AE_COUNT_OF
+template< typename T, int N > char( &_CountOfHelper( T(&)[ N ] ) )[ N ];
+#define countof( _x ) ( (uint32_t)sizeof( ae::_CountOfHelper( _x ) ) ) // @TODO AE_COUNT_OF
 
 //! Removes const, pointer, and reference qualifiers from a type. Usage:
 //! using U = typename ae::RemoveTypeQualifiers< T >;
@@ -1529,7 +1529,7 @@ public:
 	bool operator >=( const char* str ) const;
 
 	char& operator[]( uint32_t i );
-	const char operator[]( uint32_t i ) const;
+	char operator[]( uint32_t i ) const;
 	const char* c_str() const;
 
 	template< uint32_t N2 >
@@ -6072,7 +6072,11 @@ public:
 	};
 
 	virtual ae::BasicType::Type GetType() const = 0;
+	//! The size of the type in bytes
 	virtual uint32_t GetSize() const = 0;
+	//! The max length of a string type, with uint max for no hard limit.
+	//! Returns 0 for all other types.
+	virtual uint32_t GetMaxLength() const { return 0; }
 
 	std::string GetVarDataAsString( ae::ConstDataPointer varData ) const;
 	bool SetVarDataFromString( ae::DataPointer varData, const char* value ) const;
@@ -8989,7 +8993,7 @@ char& Str< N >::operator[]( uint32_t i )
 }
 
 template< uint32_t N >
-const char Str< N >::operator[]( uint32_t i ) const
+char Str< N >::operator[]( uint32_t i ) const
 {
 	AE_ASSERT_MSG( i <= m_length, "'#'[ # ]", m_str, i ); // @NOTE: Allow indexing null (length + 1)
 	return m_str[ i ];
@@ -12935,13 +12939,14 @@ public:
 //------------------------------------------------------------------------------
 // Internal meta var registration
 //------------------------------------------------------------------------------
-#define _ae_DefineBasicVarType( T, e )\
+#define _ae_DefineBasicVarType( T, e, ... )\
 template<>\
 struct ae::TypeT< T > : public ae::BasicType {\
 	ae::BasicType::Type GetType() const override { return ae::BasicType::e; }\
 	uint32_t GetSize() const override { return sizeof(T); }\
 	static ae::Type* Get() { static ae::TypeT< T > s_type; return &s_type; }\
 	ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< T >(); }\
+	__VA_ARGS__\
 };
 
 // @TODO: Split into C++ basic types and aether basic types?
@@ -12964,12 +12969,12 @@ _ae_DefineBasicVarType( ae::Vec4, Vec4 );
 _ae_DefineBasicVarType( ae::Quaternion, Quaternion );
 _ae_DefineBasicVarType( ae::Color, Color );
 _ae_DefineBasicVarType( ae::Matrix4, Matrix4 );
-_ae_DefineBasicVarType( ae::Str16, String );
-_ae_DefineBasicVarType( ae::Str32, String );
-_ae_DefineBasicVarType( ae::Str64, String );
-_ae_DefineBasicVarType( ae::Str128, String );
-_ae_DefineBasicVarType( ae::Str256, String );
-_ae_DefineBasicVarType( ae::Str512, String );
+_ae_DefineBasicVarType( ae::Str16, String, uint32_t GetMaxLength() const override { return ae::Str16::MaxLength(); } );
+_ae_DefineBasicVarType( ae::Str32, String, uint32_t GetMaxLength() const override { return ae::Str32::MaxLength(); } );
+_ae_DefineBasicVarType( ae::Str64, String, uint32_t GetMaxLength() const override { return ae::Str64::MaxLength(); } );
+_ae_DefineBasicVarType( ae::Str128, String, uint32_t GetMaxLength() const override { return ae::Str128::MaxLength(); } );
+_ae_DefineBasicVarType( ae::Str256, String, uint32_t GetMaxLength() const override { return ae::Str256::MaxLength(); } );
+_ae_DefineBasicVarType( ae::Str512, String, uint32_t GetMaxLength() const override { return ae::Str512::MaxLength(); } );
 
 namespace ae {
 
