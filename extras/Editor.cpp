@@ -91,7 +91,7 @@ const uint8_t kCogTextureData[] =
 
 const float kEditorViewDistance = 25000.0f;
 
-#define JSON_SCENE_NAME "scene"
+#define JSON_SCENE_OBJECTS_NAME "objects"
 #define JSON_ENTITY_ID_NAME "id"
 #define JSON_ENTITY_NAME_NAME "name"
 #define JSON_PARENT_ID_NAME "parent"
@@ -361,6 +361,7 @@ private:
 	SelectionModifier m_GetSelectionModifier( class EditorProgram* program ) const;
 	ae::Str64 m_GetSelectionModifierFormatString( SelectionModifier modifier ) const;
 	void m_SelectWithModifier( SelectionModifier modifier, const ae::Entity* entities, uint32_t count );
+	ae::Array< ae::Entity > m_GetTreeFromEntities( const ae::Entity* entities, uint32_t count ) const;
 	bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var );
 	bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
 	bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
@@ -1369,7 +1370,7 @@ void Editor::m_Read()
 	}
 
 	// Serialize all components (second phase to handle references)
-	JsonToRegistry( entityMap, document[ JSON_SCENE_NAME ], m_params->registry );
+	JsonToRegistry( entityMap, document[ JSON_SCENE_OBJECTS_NAME ], m_params->registry );
 
 	AE_INFO( "Loaded level '#'", m_pendingLevel->GetUrl() );
 
@@ -1632,7 +1633,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		}
 	}
 	// Serialize all components (second phase to handle references)
-	JsonToRegistry( entityMap, document[ JSON_SCENE_NAME ], &m_registry );
+	JsonToRegistry( entityMap, document[ JSON_SCENE_OBJECTS_NAME ], &m_registry );
 	// Refresh editor objects
 	for( const JsonEntity& sceneEntity : scene.entities )
 	{
@@ -2914,18 +2915,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 						const ae::Str128 selectTreeLabel = ae::Str128::Format( modifierFormat.c_str(), "tree" );
 						if( ImGui::MenuItem( selectTreeLabel.c_str() ) )
 						{
-							ae::Array< ae::Entity > toSelect = m_tag;
-							auto collectChildren = [&]( auto& collectChildren, const EditorServerObject* obj ) -> void
-							{
-								toSelect.Append( obj->entity );
-								const EditorServerObject* childObj = obj->children.GetFirst();
-								while( childObj )
-								{
-									collectChildren( collectChildren, childObj );
-									childObj = childObj->childNode.GetNext();
-								}
-							};
-							collectChildren( collectChildren, editorObj );
+							const ae::Array< ae::Entity > toSelect = m_GetTreeFromEntities( &editorObj->entity, 1 );
 							m_SelectWithModifier( selectionModifier, toSelect.Data(), toSelect.Length() );
 						}
 						ImGui::EndDisabled();
@@ -3243,7 +3233,7 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 			jsonObjects.PushBack( jsonObject, allocator );
 		}
 
-		document.AddMember( JSON_SCENE_NAME, jsonObjects, allocator );
+		document.AddMember( JSON_SCENE_OBJECTS_NAME, jsonObjects, allocator );
 	}
 
 	rapidjson::StringBuffer buffer;
@@ -3410,28 +3400,27 @@ void EditorServer::m_CopySelected() const
 		ae::SetClipboardText( "" );
 		return;
 	}
-
+	// Copy all selected entities and their entire tree
+	ae::Array< ae::Entity > toCopy = m_GetTreeFromEntities( m_selected.Data(), m_selected.Length() );
 	// Sort entities so they are pasted in the order they were created, not the
 	// order they were selected. ValidateLevel() expects this order.
-	ae::Array< ae::Entity > selectedSorted = m_selected;
-	std::sort( std::begin( selectedSorted ), std::end( selectedSorted ) );
-
+	std::sort( std::begin( toCopy ), std::end( toCopy ) );
+	// Create json scene
 	rapidjson::Document document( rapidjson::kObjectType );
 	rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
 	{
 		rapidjson::Value jsonObjects( rapidjson::kArrayType );
-		jsonObjects.Reserve( selectedSorted.Length(), allocator );
+		jsonObjects.Reserve( toCopy.Length(), allocator );
 
-		for( ae::Entity entity : selectedSorted )
+		for( ae::Entity entity : toCopy )
 		{
 			rapidjson::Value jsonObject( rapidjson::kObjectType );
 			m_EntityToJson( GetObjectAssert( entity ), allocator, nullptr, &jsonObject );
 			jsonObjects.PushBack( jsonObject, allocator );
 		}
 
-		document.AddMember( JSON_SCENE_NAME, jsonObjects, allocator );
+		document.AddMember( JSON_SCENE_OBJECTS_NAME, jsonObjects, allocator );
 	}
-
 	rapidjson::StringBuffer buffer;
 	rapidjson::PrettyWriter< rapidjson::StringBuffer > writer( buffer );
 	document.Accept( writer );
@@ -3495,7 +3484,7 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 	}
 
 	// Serialize all components (second phase to handle references)
-	JsonToRegistry( entityMap, document[ JSON_SCENE_NAME ], &m_registry );
+	JsonToRegistry( entityMap, document[ JSON_SCENE_OBJECTS_NAME ], &m_registry );
 
 	// Refresh editor objects
 	for( const JsonEntity& sceneEntity : scene.entities )
@@ -3740,6 +3729,37 @@ void EditorServer::m_SelectWithModifier( SelectionModifier modifier, const ae::E
 			}
 		}
 	}
+}
+
+ae::Array< ae::Entity > EditorServer::m_GetTreeFromEntities( const ae::Entity* entities, uint32_t count ) const
+{
+	ae::Map< ae::Entity, bool > visited = m_tag;
+	ae::Array< ae::Entity > result = m_tag;
+	auto collectChildren = [&]( auto& collectChildren, const EditorServerObject* obj ) -> void
+	{
+		const ae::Entity entity = obj->entity;
+		if( visited.GetIndex( entity ) >= 0 )
+		{
+			return;
+		}
+		visited.Set( entity, true );
+		result.Append( entity );
+		const EditorServerObject* childObj = obj->children.GetFirst();
+		while( childObj )
+		{
+			collectChildren( collectChildren, childObj );
+			childObj = childObj->childNode.GetNext();
+		}
+	};
+	for( uint32_t i = 0; i < count; i++ )
+	{
+		const EditorServerObject* editorObj = TryGetObject( entities[ i ] );
+		if( editorObj )
+		{
+			collectChildren( collectChildren, editorObj );
+		}
+	}
+	return result;
 }
 
 bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, const ae::ClassVar* var )
@@ -4231,13 +4251,13 @@ void ComponentToJson( const Component* component, const Component* defaultCompon
 // @TODO: Fold this into JsonScene
 bool ValidateLevel( const rapidjson::Value& jsonLevel )
 {
-	if( !jsonLevel.IsObject() || !jsonLevel.HasMember( JSON_SCENE_NAME ) )
+	if( !jsonLevel.IsObject() || !jsonLevel.HasMember( JSON_SCENE_OBJECTS_NAME ) )
 	{
 		AE_ERR( "Invalid 'objects' array" );
 		return false;
 	}
 	
-	const auto& jsonObjects = jsonLevel[ JSON_SCENE_NAME ];
+	const auto& jsonObjects = jsonLevel[ JSON_SCENE_OBJECTS_NAME ];
 	if( !jsonObjects.IsArray() )
 	{
 		return false;
@@ -4355,7 +4375,7 @@ JsonScene::JsonScene( const ae::Tag& tag, rapidjson::Value& scene, bool allowMis
 		entities.DeleteAll();
 		components.DeleteAll();
 	};
-	const rapidjson::Value& jsonEntities = scene[ JSON_SCENE_NAME ];
+	const rapidjson::Value& jsonEntities = scene[ JSON_SCENE_OBJECTS_NAME ];
 	// Create all entities first
 	for( rapidjson::SizeType i = 0; i < jsonEntities.Size(); i++ )
 	{
