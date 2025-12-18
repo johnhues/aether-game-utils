@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 02_Sprites.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "ae/SpriteRenderer.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -75,7 +74,7 @@ int main()
 	ae::Shader spriteShader;
 
 	fileSystem.Initialize( "data", "ae", "sprites" );
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "sprites" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -93,7 +92,7 @@ int main()
 		spriteTex.Initialize( targa.textureParams );
 	}
 	
-	while ( !input.quit )
+	while( !input.quit )
 	{
 		input.Pump();
 		render.Activate();

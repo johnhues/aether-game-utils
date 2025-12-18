@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // SerializeTest.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2023 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -82,10 +82,10 @@ AE_PACK( struct TestStruct
 
 	void DoSerialize( ae::BinaryStream* stream )
 	{
-		stream->SerializeUint8( uint8 );
-		stream->SerializeUint16( uint16 );
-		stream->SerializeUint32( uint32 );
-		stream->SerializeUint64( uint64 );
+		stream->SerializeUInt8( uint8 );
+		stream->SerializeUInt16( uint16 );
+		stream->SerializeUInt32( uint32 );
+		stream->SerializeUInt64( uint64 );
 		stream->SerializeInt8( int8 );
 		stream->SerializeInt16( int16 );
 		stream->SerializeInt32( int32 );
@@ -99,10 +99,10 @@ AE_PACK( struct TestStruct
 
 	void DoSerialize( ae::BinaryWriter* stream ) const
 	{
-		stream->SerializeUint8( uint8 );
-		stream->SerializeUint16( uint16 );
-		stream->SerializeUint32( uint32 );
-		stream->SerializeUint64( uint64 );
+		stream->SerializeUInt8( uint8 );
+		stream->SerializeUInt16( uint16 );
+		stream->SerializeUInt32( uint32 );
+		stream->SerializeUInt64( uint64 );
 		stream->SerializeInt8( int8 );
 		stream->SerializeInt16( int16 );
 		stream->SerializeInt32( int32 );
@@ -123,11 +123,11 @@ class MemberSerializeClass
 public:
 	void Serialize( ae::BinaryStream* stream )
 	{
-		stream->SerializeUint32( data );
+		stream->SerializeUInt32( data );
 	}
 	void Serialize( ae::BinaryWriter* stream ) const
 	{
-		stream->SerializeUint32( data );
+		stream->SerializeUInt32( data );
 	}
 
 	uint32_t data = 1;
@@ -143,11 +143,11 @@ public:
 };
 void Serialize( ae::BinaryStream* stream, StaticSerializeClass* obj )
 {
-	stream->SerializeUint32( obj->data );
+	stream->SerializeUInt32( obj->data );
 }
 void Serialize( ae::BinaryWriter* stream, const StaticSerializeClass* obj )
 {
-	stream->SerializeUint32( obj->data );
+	stream->SerializeUInt32( obj->data );
 }
 
 //------------------------------------------------------------------------------
@@ -158,7 +158,7 @@ class ConstMemberSerializeClass
 public:
 	void Serialize( ae::BinaryWriter* stream ) const
 	{
-		stream->SerializeUint32( data );
+		stream->SerializeUInt32( data );
 	}
 
 	uint32_t data = 3;
@@ -381,13 +381,13 @@ TEST_CASE( "Try to write past end of data buffer", "ae::BinaryStream" )
 	ae::BinaryWriter wStream( buffer, sizeof(buffer) );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == 0 );
-	wStream.SerializeUint32( 0x12345678u );
+	wStream.SerializeUInt32( 0x12345678u );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) );
-	wStream.SerializeUint32( 0x12345678u );
+	wStream.SerializeUInt32( 0x12345678u );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) * 2 );
-	wStream.SerializeUint32( 0x12345678u );
+	wStream.SerializeUInt32( 0x12345678u );
 	REQUIRE( !wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) * 2 );
 
@@ -412,19 +412,19 @@ TEST_CASE( "Try to read past end of data buffer", "ae::BinaryStream" )
 	REQUIRE( rStream.GetOffset() == 0 );
 
 	uint32_t check = 0xEFEFEFEF;
-	rStream.SerializeUint32( check );
+	rStream.SerializeUInt32( check );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) );
 	REQUIRE( check == 0x22222222 );
 
 	check = 0xEFEFEFEF;
-	rStream.SerializeUint32( check );
+	rStream.SerializeUInt32( check );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) * 2 );
 	REQUIRE( check == 0x22222222 );
 
 	check = 0xEFEFEFEF;
-	rStream.SerializeUint32( check );
+	rStream.SerializeUInt32( check );
 	REQUIRE( !rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) * 2 );
 	REQUIRE( check == 0xEFEFEFEF );
@@ -447,7 +447,7 @@ TEST_CASE( "C string test", "ae::BinaryStream" )
 	REQUIRE( rStream.GetRemainingBytes() == buffer.Length() );
 	char str[ sizeof("Hello, World!") ];
 	memset( str, 0xAB, sizeof(str) );
-	rStream.SerializeString( str, sizeof(str) );
+	rStream.SerializeString( str, sizeof(str) ); // Test reading into buffer with exact required size
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof("Hello, World!") );
 	REQUIRE( strcmp( str, "Hello, World!" ) == 0 );
@@ -559,6 +559,31 @@ TEST_CASE( "BinaryStream ae::Str serialization", "ae::BinaryStream" )
 	REQUIRE( check == str );
 }
 
+TEST_CASE( "BinaryStream ae::Str serialization (max length)", "ae::BinaryStream" )
+{
+	const ae::Str16 check = "Hello, World!";
+	ae::Str16 str = check;
+	REQUIRE( str.Length() == str.MaxLength() );
+	ae::Array< uint8_t > buffer = TAG_TEST;
+
+	{
+		ae::BinaryWriter wStream( &buffer );
+		wStream.BinaryStream::SerializeString( str );
+		REQUIRE( wStream.IsValid() );
+		REQUIRE( wStream.GetOffset() == ( str.Length() + 1 ) );
+	}
+
+	str = "";
+
+	{
+		ae::BinaryReader rStream( buffer );
+		rStream.SerializeString( str );
+		REQUIRE( rStream.IsValid() );
+		REQUIRE( rStream.GetOffset() == ( str.Length() + 1 ) );
+		REQUIRE( check == str );
+	}
+}
+
 TEST_CASE( "Member serialize function should be successfully detected", "[ae::BinaryStream]" )
 {
 	REQUIRE( ae::HasSerializeMethod< MemberSerializeClass >::value );
@@ -596,12 +621,12 @@ TEST_CASE( "Writer: Member and static function Serialize() should be called by S
 	REQUIRE( rStream.GetOffset() == 0 );
 
 	uint32_t check = 0;
-	rStream.SerializeUint32( check );
+	rStream.SerializeUInt32( check );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) );
 	REQUIRE( check == 1 );
 	check = 0;
-	rStream.SerializeUint32( check );
+	rStream.SerializeUInt32( check );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) * 2 );
 	REQUIRE( check == 2 );
@@ -634,12 +659,12 @@ TEST_CASE( "Writer: Const member and static function Serialize() should be calle
 	REQUIRE( rStream.GetOffset() == 0 );
 
 	uint32_t check = 0;
-	rStream.SerializeUint32( check );
+	rStream.SerializeUInt32( check );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) );
 	REQUIRE( check == 1 );
 	check = 0;
-	rStream.SerializeUint32( check );
+	rStream.SerializeUInt32( check );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) * 2 );
 	REQUIRE( check == 2 );
@@ -671,12 +696,12 @@ TEST_CASE( "Writer: Support only having a const Serialize() that is called by Se
 	REQUIRE( rStream.GetOffset() == 0 );
 
 	uint32_t check = 0;
-	rStream.SerializeUint32( check );
+	rStream.SerializeUInt32( check );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) );
 	REQUIRE( check == 3 );
 	check = 0;
-	rStream.SerializeUint32( check );
+	rStream.SerializeUInt32( check );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) * 2 );
 	REQUIRE( check == 3 );
@@ -698,11 +723,11 @@ TEST_CASE( "Reader: Member and static function Serialize() should be called by S
 	REQUIRE( wStream.GetSize() == sizeof(buffer) );
 
 	uint32_t check = 666;
-	wStream.SerializeUint32( check );
+	wStream.SerializeUInt32( check );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) );
 	check = 777;
-	wStream.SerializeUint32( check );
+	wStream.SerializeUInt32( check );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) * 2 );
 

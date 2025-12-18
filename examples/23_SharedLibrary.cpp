@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 23_SharedLibrary.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2023 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -36,13 +36,13 @@ int Run()
 	ae::Input input;
 	ae::TimeStep timeStep;
 	
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "Shared Library" );
 	graphicsDevice.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	while ( !input.quit )
+	while( !input.quit )
 	{
 		input.Pump();
 		graphicsDevice.Activate();

@@ -170,13 +170,13 @@ Guid::Guid(const unsigned char *bytes)
 // converts a single hex char to a number (0 - 15)
 unsigned char hexDigitToChar(char ch)
 {
-	if (ch > 47 && ch < 58)
+	if(ch > 47 && ch < 58)
 		return ch - 48;
 
-	if (ch > 96 && ch < 103)
+	if(ch > 96 && ch < 103)
 		return ch - 87;
 
-	if (ch > 64 && ch < 71)
+	if(ch > 64 && ch < 71)
 		return ch - 55;
 
 	return 0;
@@ -196,12 +196,12 @@ Guid::Guid(const std::string &fromString)
 	char charOne, charTwo;
 	bool lookingForFirstChar = true;
 
-	for (const char &ch : fromString)
+	for(const char &ch : fromString)
 	{
-		if (ch == '-')
+		if(ch == '-')
 			continue;
 
-		if (lookingForFirstChar)
+		if(lookingForFirstChar)
 		{
 			charOne = ch;
 			lookingForFirstChar = false;
@@ -376,7 +376,7 @@ Guid GuidGenerator::newGuid()
 #endif
 
 //------------------------------------------------------------------------------
-// Copyright (c) 2022 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal

@@ -1,10 +1,28 @@
+//------------------------------------------------------------------------------
+// EmSocket.cpp
+//------------------------------------------------------------------------------
+// Copyright (c) 2025 John Hughes
 //
-//  EmSocket.cpp
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files( the "Software" ), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and /or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions :
 //
-//  Created by John Hughes on 07/25/16.
-//  Copyright (c) 2016 John Hughes. All rights reserved.
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
 //
-
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//------------------------------------------------------------------------------
+// Headers
+//------------------------------------------------------------------------------
 #include "ae/EmSocket.h"
 
 #ifdef __EMSCRIPTEN__
@@ -67,19 +85,19 @@ void EmSocket::Connect( const char* address, uint16_t port )
   addr.sin_port = htons( port );
   int result = inet_pton( AF_INET, address, &addr.sin_addr );
   printf( "%d\n", result );
-  if ( result == -1 )
+  if( result == -1 )
   {
     printf( "Error converting address %s:%hu %d\n", address, port, errno );
     return;
   }
-  else if ( result == 0 )
+  else if( result == 0 )
   {
     printf( "Invalid address %s:%hu\n", address, port );
     return;
   }
 
   m_socket = socket( PF_INET, SOCK_STREAM, IPPROTO_TCP );
-  if ( m_socket == -1 )
+  if( m_socket == -1 )
   {
     printf( "Connect 1\n" );
     Close();
@@ -88,7 +106,7 @@ void EmSocket::Connect( const char* address, uint16_t port )
   fcntl( m_socket, F_SETFL, O_NONBLOCK );
 
   int res = connect( m_socket, (struct sockaddr*)&addr, sizeof(addr) );
-  if ( res == -1 && errno != EINPROGRESS )
+  if( res == -1 && errno != EINPROGRESS )
   {
     printf( "Connect 2\n" );
     Close();
@@ -109,29 +127,29 @@ bool EmSocket::Service( float dt )
   FD_SET( m_socket, &fdr );
   FD_SET( m_socket, &fdw );
   
-  if ( select( 64, &fdr, &fdw, NULL, NULL ) == -1 )
+  if( select( 64, &fdr, &fdw, NULL, NULL ) == -1 )
   {
     Close();
     return false;
   }
 
   bool ready = FD_ISSET( m_socket, &fdw );
-  if ( ready && !m_connected )
+  if( ready && !m_connected )
   {
     printf( "ready\n" );
     m_connected = true;
   }
-  else if ( !ready && m_connected )
+  else if( !ready && m_connected )
   {
     printf( "disconnected\n" );
     Close();
     return false;
   }
 
-  if ( !m_connected )
+  if( !m_connected )
   {
     m_connectRetry -= dt;
-    if ( m_connectRetry <= 0.0f )
+    if( m_connectRetry <= 0.0f )
     {
       Close();
       return false;
@@ -150,7 +168,7 @@ void EmSocket::Close()
 {
   printf( "close\n" );
 
-  if ( m_socket >= 0 )
+  if( m_socket >= 0 )
   {
     close( m_socket );
   }
@@ -165,7 +183,7 @@ void EmSocket::Close()
 void EmSocket::Send( const void* data, uint32_t length )
 {
   const uint16_t msgLen = htons( (uint16_t)length );
-  if ( m_sendCurrent + sizeof(msgLen) + length > m_sendLength )
+  if( m_sendCurrent + sizeof(msgLen) + length > m_sendLength )
   {
     Close();
     return;
@@ -177,9 +195,9 @@ void EmSocket::Send( const void* data, uint32_t length )
   m_sendCurrent += length;
 
   int res = send( m_socket, m_sendBuffer, m_sendCurrent, 0 );
-  if ( res == -1 )
+  if( res == -1 )
   {
-    if ( errno != EAGAIN )
+    if( errno != EAGAIN )
     {
       Close();
     }
@@ -193,36 +211,36 @@ void EmSocket::Send( const void* data, uint32_t length )
 uint32_t EmSocket::Recv( void* data, uint32_t maxLength )
 {
   int res = recvfrom( m_socket, m_recvBuffer + m_recvCurrent, m_recvLength - m_recvCurrent, 0, nullptr, nullptr );
-  if ( res > 0 )
+  if( res > 0 )
   {
     m_recvCurrent += res;
   }
-  else if ( res == -1 && errno != EAGAIN )
+  else if( res == -1 && errno != EAGAIN )
   {
     Close();
     return 0;
   }
-  else if ( res == 0 )
+  else if( res == 0 )
   {
     Close();
     return 0;
   }
 
   uint16_t msgLen;
-  if ( m_recvCurrent <= sizeof(msgLen) )
+  if( m_recvCurrent <= sizeof(msgLen) )
   {
     return 0;
   }
 
   msgLen = *(uint16_t*)m_recvBuffer;
   msgLen = ntohs( msgLen );
-  if ( msgLen > maxLength )
+  if( msgLen > maxLength )
   {
     Close();
     return 0;
   }
 
-  if ( m_recvCurrent >= sizeof(msgLen) + msgLen )
+  if( m_recvCurrent >= sizeof(msgLen) + msgLen )
   {
     memcpy( data, m_recvBuffer + sizeof(msgLen), msgLen );
     m_recvCurrent -= sizeof(msgLen) + msgLen;

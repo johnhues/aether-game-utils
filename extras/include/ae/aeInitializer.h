@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // aeInitializer.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -32,7 +32,7 @@
 //------------------------------------------------------------------------------
 // aeInitInfo class
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 class aeInitInfo
 {
 public:
@@ -40,8 +40,8 @@ public:
   aeInitInfo( std::function< void( T* ) > i, std::function< void( T* ) > t ) : m_init( i ), m_term( t ) {}
   aeInitInfo( const aeInitInfo& i ) : m_init( i.m_init ), m_term( i.m_term ) {}
   
-  void Initialize( T* obj ) { if ( m_init ) { m_init( obj ); } }
-  void Terminate( T* obj ) { if ( m_term ) { m_term( obj ); } }
+  void Initialize( T* obj ) { if( m_init ) { m_init( obj ); } }
+  void Terminate( T* obj ) { if( m_term ) { m_term( obj ); } }
 
 private:
   std::function< void( T* ) > m_init;
@@ -51,7 +51,7 @@ private:
 //------------------------------------------------------------------------------
 // aeInitializer class
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 class aeInitializer
 {
 public:

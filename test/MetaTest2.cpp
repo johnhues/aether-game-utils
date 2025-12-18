@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // MetaTest2.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -41,11 +41,32 @@ AE_REGISTER_ENUM_CLASS( PlayerState );
 AE_REGISTER_ENUM_CLASS( TestEnumClass );
 
 //------------------------------------------------------------------------------
-// NamespaceClass
+// Namespace0::Namespace1::NamespaceClass registration
 //------------------------------------------------------------------------------
 AE_FORCE_LINK_CLASS( Namespace0, Namespace1, NamespaceClass );
-AE_REGISTER_CLASS( Namespace0, Namespace1, NamespaceClass );
-// AE_REGISTER_CLASS_VAR( Namespace0, Namespace1, NamespaceClass, boolMember ); // @TODO
+AE_REGISTER_NAMESPACECLASS( (Namespace0, Namespace1, NamespaceClass) );
+
+AE_REGISTER_NAMESPACECLASS_PROPERTY( (Namespace0, Namespace1, NamespaceClass), someProp0 );
+
+AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp1, v0 );
+AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp1, v1 );
+
+AE_REGISTER_NAMESPACECLASS_PROPERTY( (Namespace0, Namespace1, NamespaceClass), someProp2 );
+AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp2, v0 );
+AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp2, v1 );
+AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp2, v2 );
+
+AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, Namespace1, NamespaceClass), intMember );
+AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( (Namespace0, Namespace1, NamespaceClass), intMember, intProp );
+
+AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, Namespace1, NamespaceClass), boolMember );
+AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( (Namespace0, Namespace1, NamespaceClass), boolMember, boolProp );
+AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), boolMember, boolProp, val );
+
+AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, Namespace1, NamespaceClass), enumTest );
+AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop0, val0 );
+AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop1, val0 );
+AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop1, val1 );
 
 //------------------------------------------------------------------------------
 // AggregateClass
@@ -64,6 +85,15 @@ AE_REGISTER_CLASS_VAR( ArrayClass, intArray3 );
 AE_REGISTER_CLASS_VAR( ArrayClass, someClassArray );
 AE_REGISTER_CLASS_VAR( ArrayClass, someClassArray2 );
 AE_REGISTER_CLASS_VAR( ArrayClass, someClassArray3 );
+
+//------------------------------------------------------------------------------
+// OptionalClass
+//------------------------------------------------------------------------------
+AE_REGISTER_CLASS( OptionalClass );
+AE_REGISTER_CLASS_VAR( OptionalClass, intOptional );
+AE_REGISTER_CLASS_VAR( OptionalClass, someClassOptional );
+AE_REGISTER_CLASS_VAR( OptionalClass, intStdOptional );
+AE_REGISTER_CLASS_VAR( OptionalClass, someClassStdOptional );
 
 //------------------------------------------------------------------------------
 // SomeOldEnum
@@ -121,4 +151,4 @@ AE_REGISTER_CLASS_VAR( RefTesterA, refA );
 AE_REGISTER_CLASS_VAR( RefTesterA, refB ); // @NOTE: RefTesterB is registered after this, but it has to still work
 
 AE_REGISTER_CLASS( RefTesterB );
-AE_REGISTER_CLASS_VAR( RefTesterB, refA );
+AE_REGISTER_CLASS_VAR( RefTesterB, ref );

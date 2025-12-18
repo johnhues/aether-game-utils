@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 15_ObjViewer.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -89,7 +89,7 @@ int main()
 	ae::DebugCamera camera = ae::Axis::Y;
 	ae::DebugLines debugLines = kObjAllocTag;
 	
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "OBJ Viewer" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -119,13 +119,15 @@ int main()
 	AE_INFO( "Start loading '#'", file->GetUrl() );
 
 	float spin = 0.0f;
+	float spinVelocity = 0.0f;
 
 	AE_INFO( "Run" );
 	auto Update = [&]()
 	{
 		input.Pump();
 		camera.Update( &input, timeStep.GetDt() );
-		spin += timeStep.GetDt() * 0.75f;
+		spinVelocity = input.Get( ae::Key::Space ) ? ( spinVelocity + timeStep.GetDt() ) : ae::Max( 0.0f, spinVelocity - timeStep.GetDt() * 2.0f );
+		spin += timeStep.GetDt() * spinVelocity;
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
 		
@@ -136,10 +138,10 @@ int main()
 		if( file && file->GetStatus() != ae::File::Status::Pending )
 		{
 			AE_INFO( "Load obj" );
-			ae::OBJFile objFile = kObjAllocTag;
+			ae::OBJLoader objFile = kObjAllocTag;
 			if( const uint32_t fileSize = file->GetLength() )
 			{
-				objFile.Load( file->GetData(), fileSize );
+				objFile.Load( { file->GetData(), fileSize, ae::Matrix4::Scaling( 10.0f ) } );
 				if( objFile.vertices.Length() )
 				{
 					aabb = objFile.aabb;
@@ -149,9 +151,9 @@ int main()
 						ae::Vertex::Primitive::Triangle,
 						ae::Vertex::Usage::Static, ae::Vertex::Usage::Static
 					);
-					vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
-					vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
-					vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
+					vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, position ) );
+					vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, normal ) );
+					vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, color ) );
 					vertexData.UploadVertices( 0, objFile.vertices.Data(), objFile.vertices.Length() );
 					vertexData.UploadIndices( 0, objFile.indices.Data(), objFile.indices.Length() );
 					
@@ -195,6 +197,9 @@ int main()
 			// Debug
 			debugLines.AddOBB( modelToWorld * aabb.GetTransform(), ae::Color::PicoPink() );
 		}
+		debugLines.AddLine( ae::Vec3( 10.0f, 0.0f, 0.0f ), ae::Vec3( -10.0f, 0.0f, 0.0f ), ae::Color::PicoRed() );
+		debugLines.AddLine( ae::Vec3( 0.0f, 10.0f, 0.0f ), ae::Vec3( 0.0f, 0.0f, 0.0f ), ae::Color::PicoGreen() );
+		debugLines.AddLine( ae::Vec3( 0.0f, 0.0f, 10.0f ), ae::Vec3( 0.0f, 0.0f, -10.0f ), ae::Color::PicoBlue() );
 		debugLines.Render( viewToProj * worldToView );
 		
 		render.Present();
@@ -205,7 +210,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
 #else
-	while ( Update() ) {}
+	while( Update() ) {}
 #endif
 
 	AE_INFO( "Terminate" );

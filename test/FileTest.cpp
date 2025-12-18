@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // FileTest.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2023 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -123,5 +123,24 @@ TEST_CASE( "Replace extension", "[ae::FileSystem]" )
 		REQUIRE( ext2Dots == "something/1.1.1999/test..cpp" );
 		REQUIRE( !ae::FileSystem::SetExtension( &dir, "cpp" ) );
 		REQUIRE( dir == "something/1.1.1999/test/" );
+	}
+
+	SECTION( "Traversal" )
+	{
+		auto require = []( std::pair< const char*, const char* > _result, const char* expected )
+		{
+			ae::Str256 result( _result.first, _result.second );
+			REQUIRE( result == expected );
+		};
+		require( ae::FileSystem::TraversePath( "Something/Else/level.obj" ), "Something" );
+		require( ae::FileSystem::TraversePath( "/Something/Else/level.obj" ), "Something" );
+		require( ae::FileSystem::TraversePath( "///Something///Else/level.obj" ), "Something" );
+		require( ae::FileSystem::TraversePath( "/Something" ), "Something" );
+		require( ae::FileSystem::TraversePath( "///Something" ), "Something" );
+		require( ae::FileSystem::TraversePath( "/Something/" ), "Something" );
+		require( ae::FileSystem::TraversePath( "/level.obj" ), "level.obj" );
+		require( ae::FileSystem::TraversePath( "level.obj" ), "level.obj" );
+		require( ae::FileSystem::TraversePath( "/" ), "" );
+		require( ae::FileSystem::TraversePath( "" ), "" );
 	}
 }

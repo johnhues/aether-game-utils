@@ -3,7 +3,7 @@
 // Utilities for allocating objects. Provides functionality to track current and
 // past allocations.
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -73,7 +73,7 @@ public:
 
 	void Discard();
 
-	template < uint32_t N >
+	template< uint32_t N >
 	static bool InputText( const char* label, ae::Str< N >* str, ImGuiInputTextFlags flags = 0 );
 
 	static void BeginGroupPanel( const char* name, const ImVec2& size = ImVec2( -1.0f, 0.0f ) );
@@ -84,10 +84,10 @@ private:
 
 	static ImVector<ImRect>& m_GetGroupPanelLabelStack();
 
-	template < uint32_t N >
+	template< uint32_t N >
 	static int m_StringCallback( ImGuiInputTextCallbackData* data )
 	{
-		if ( data->EventFlag == ImGuiInputTextFlags_CallbackEdit )
+		if( data->EventFlag == ImGuiInputTextFlags_CallbackEdit )
 		{
 			ae::Str< N >* str = ( ae::Str< N >* )data->UserData;
 			*str = ae::Str< N >( data->BufTextLen, 'x' ); // Set Length() of string
@@ -108,24 +108,24 @@ private:
 //------------------------------------------------------------------------------
 // Var helpers
 //------------------------------------------------------------------------------
-static ae::Str32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, const char* currentValue, uint32_t showSearchCount = 16 )
+static ae::Str32 aeImGui_Enum( const ae::EnumType* enumType, const char* varName, const char* currentValue, uint32_t showSearchCount = 16 )
 {
 	ae::Str32 result = currentValue;
-	if ( ImGui::BeginCombo( varName, currentValue ) )
+	if( ImGui::BeginCombo( varName, currentValue ) )
 	{
 		uint32_t count = enumType->Length();
 		static ImGuiTextFilter filter;
 		bool search = ( count >= showSearchCount );
-		if ( search )
+		if( search )
 		{
 			filter.Draw( "##filter" );
 		}
 
-		for ( uint32_t i = 0; i < count; i++ )
+		for( uint32_t i = 0; i < count; i++ )
 		{
 			auto indexName = enumType->GetNameByIndex( i );
 			bool show = !search || filter.PassFilter( indexName.c_str() );
-			if ( show && ImGui::Selectable( indexName.c_str(), indexName == currentValue ) )
+			if( show && ImGui::Selectable( indexName.c_str(), indexName == currentValue ) )
 			{
 			result = indexName.c_str();
 			}
@@ -135,15 +135,15 @@ static ae::Str32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, co
 	return result;
 }
 
-template < typename T >
+template< typename T >
 bool aeImGui_Enum( const char* varName, T* valueOut, uint32_t showSearchCount = 16 )
 {
-	const ae::Enum* enumType = ae::GetEnum< T >();
+	const ae::EnumType* enumType = ae::GetEnumType< T >();
 	auto currentValue = enumType->GetNameByValue( *valueOut );
 	auto resultName = aeImGui_Enum( enumType, varName, currentValue.c_str(), showSearchCount );
 	
 	T prev = *valueOut;
-	if ( enumType->GetValueFromString( resultName.c_str(), valueOut ) )
+	if( enumType->GetValueFromString( resultName.c_str(), valueOut ) )
 	{
 		return prev != *valueOut;
 	}
@@ -153,7 +153,7 @@ bool aeImGui_Enum( const char* varName, T* valueOut, uint32_t showSearchCount = 
 	}
 }
 
-template < uint32_t N >
+template< uint32_t N >
 bool aeImGui::InputText( const char* label, ae::Str< N >* str, ImGuiInputTextFlags flags )
 {
 	IM_ASSERT( ( flags & ImGuiInputTextFlags_CallbackEdit ) == 0 );

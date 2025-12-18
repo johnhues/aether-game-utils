@@ -1,18 +1,34 @@
 //------------------------------------------------------------------------------
 // Entity.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
-// Created by John Hughes on 3/13/21.
+// Copyright (c) 2025 John Hughes
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files( the "Software" ), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and /or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions :
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/Entity.h"
-#include "ae/Editor.h"
 
 //------------------------------------------------------------------------------
 // Registration
 //------------------------------------------------------------------------------
-AE_REGISTER_CLASS( ae, Component );
+AE_REGISTER_NAMESPACECLASS( (ae, Component) );
 
 namespace ae {
 
@@ -24,25 +40,25 @@ const char* Component::GetEntityName() const
 	return m_reg->GetNameByEntity( m_entity );
 }
 
-Component& Component::GetComponent( const ae::Type* type )
+Component& Component::GetComponent( const ae::ClassType* type )
 {
 	AE_ASSERT( m_reg );
 	return m_reg->GetComponent( m_entity, type );
 }
 
-Component* Component::TryGetComponent( const ae::Type* type )
+Component* Component::TryGetComponent( const ae::ClassType* type )
 {
 	AE_ASSERT( m_reg );
 	return m_reg->TryGetComponent( m_entity, type );
 }
 
-const Component& Component::GetComponent( const ae::Type* type ) const
+const Component& Component::GetComponent( const ae::ClassType* type ) const
 {
 	AE_ASSERT( m_reg );
 	return m_reg->GetComponent( m_entity, type );
 }
 
-const Component* Component::TryGetComponent( const ae::Type* type ) const
+const Component* Component::TryGetComponent( const ae::ClassType* type ) const
 {
 	AE_ASSERT( m_reg );
 	return m_reg->TryGetComponent( m_entity, type );
@@ -57,10 +73,28 @@ Registry::Registry( const ae::Tag& tag ) :
 	m_components( tag )
 {}
 
+Registry::~Registry()
+{
+	bool error = false;
+	for( const auto& componentMap : m_components )
+	{
+		if( componentMap.value.Length() )
+		{
+			AE_ERR( "Component type '#' not properly cleaned up. Some allocations remain.", ae::GetClassTypeById( componentMap.key )->GetName() );
+		}
+	}
+}
+
 void Registry::SetOnCreateFn( void* userData, void(*fn)(void*, Component*) )
 {
 	m_onCreateFn = fn;
 	m_onCreateUserData = userData;
+}
+
+void Registry::SetOnDestroyFn( void* userData, void(*fn)(void*, Component*) )
+{
+	m_onDestroyFn = fn;
+	m_onDestroyUserData = userData;
 }
 
 Entity Registry::CreateEntity( const char* name )
@@ -69,7 +103,7 @@ Entity Registry::CreateEntity( const char* name )
 	m_lastEntity++;
 	Entity entity = m_lastEntity;
 	
-	if ( name && name[ 0 ] )
+	if( name && name[ 0 ] )
 	{
 		AE_ASSERT_MSG( !m_entityNames.TryGet( name ), "Entity with name '#' already exists", name );
 		m_entityNames.Set( name, entity );
@@ -92,7 +126,7 @@ Entity Registry::CreateEntity( Entity entity, const char* name )
 		entity = m_lastEntity;
 	}
 
-	if ( name && name[ 0 ] )
+	if( name && name[ 0 ] )
 	{
 		// @TODO: Allow multiple entities to have the same name
 		AE_ASSERT_MSG( !m_entityNames.TryGet( name ), "Entity with name '#' already exists", name );
@@ -104,10 +138,10 @@ Entity Registry::CreateEntity( Entity entity, const char* name )
 
 Component* Registry::AddComponent( Entity entity, const char* typeName )
 {
-	return AddComponent( entity, ae::GetTypeByName( typeName ) );
+	return AddComponent( entity, ae::GetClassTypeByName( typeName ) );
 }
 
-Component* Registry::AddComponent( Entity entity, const ae::Type* type )
+Component* Registry::AddComponent( Entity entity, const ae::ClassType* type )
 {
 	AE_ASSERT_MSG( !m_destroying, "Cannot add a component while destroying" );
 	if( !type )
@@ -142,7 +176,7 @@ Component* Registry::AddComponent( Entity entity, const ae::Type* type )
 	return component;
 }
 
-Component& Registry::GetComponent( Entity entity, const ae::Type* type )
+Component& Registry::GetComponent( Entity entity, const ae::ClassType* type )
 {
 	AE_ASSERT_MSG( type, "No type specified" );
 	Component* component = TryGetComponent( entity, type );
@@ -150,12 +184,12 @@ Component& Registry::GetComponent( Entity entity, const ae::Type* type )
 	return *component;
 }
 
-Component* Registry::TryGetComponent( Entity entity, const ae::Type* type )
+Component* Registry::TryGetComponent( Entity entity, const ae::ClassType* type )
 {
 	return const_cast< Component* >( const_cast< const Registry* >( this )->TryGetComponent( entity, type ) );
 }
 
-Component& Registry::GetComponent( const char* name, const ae::Type* type )
+Component& Registry::GetComponent( const char* name, const ae::ClassType* type )
 {
 	AE_ASSERT_MSG( name && name[ 0 ], "No name specified" );
 	AE_ASSERT_MSG( type, "No type specified" );
@@ -164,33 +198,33 @@ Component& Registry::GetComponent( const char* name, const ae::Type* type )
 	return *component;
 }
 
-Component* Registry::TryGetComponent( const char* name, const ae::Type* type )
+Component* Registry::TryGetComponent( const char* name, const ae::ClassType* type )
 {
 	AE_ASSERT( name );
 	if( !name[ 0 ] )
 	{
 		return nullptr;
 	}
-	return TryGetComponent( m_entityNames.Get( name, kInvalidEntity ), type );
+	return TryGetComponent( m_entityNames.Get( name, kNullEntity ), type );
 }
 
-const Component& Registry::GetComponent( Entity entity, const ae::Type* type ) const
+const Component& Registry::GetComponent( Entity entity, const ae::ClassType* type ) const
 {
-	AE_ASSERT_MSG( entity != kInvalidEntity, "Invalid entity" );
+	AE_ASSERT_MSG( entity != kNullEntity, "Invalid entity" );
 	AE_ASSERT_MSG( type, "No type specified" );
 	const Component* component = TryGetComponent( entity, type );
 	AE_ASSERT_MSG( component, "Entity '#' has no component '#'", entity, type->GetName() );
 	return *component;
 }
 
-const Component* Registry::TryGetComponent( Entity entity, const ae::Type* type ) const
+const Component* Registry::TryGetComponent( Entity entity, const ae::ClassType* type ) const
 {
-	if ( entity == kInvalidEntity || !type )
+	if( entity == kNullEntity || !type )
 	{
 		return nullptr;
 	}
 	
-	if ( const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
+	if( const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
 	{
 		return components->Get( entity, nullptr );
 	}
@@ -198,7 +232,7 @@ const Component* Registry::TryGetComponent( Entity entity, const ae::Type* type 
 	return nullptr;
 }
 
-const Component& Registry::GetComponent( const char* name, const ae::Type* type ) const
+const Component& Registry::GetComponent( const char* name, const ae::ClassType* type ) const
 {
 	AE_ASSERT_MSG( name && name[ 0 ], "No name specified" );
 	const Component* component = TryGetComponent( name, type );
@@ -206,26 +240,26 @@ const Component& Registry::GetComponent( const char* name, const ae::Type* type 
 	return *component;
 }
 
-const Component* Registry::TryGetComponent( const char* name, const ae::Type* type ) const
+const Component* Registry::TryGetComponent( const char* name, const ae::ClassType* type ) const
 {
 	AE_ASSERT( name );
 	if( !name[ 0 ] )
 	{
 		return nullptr;
 	}
-	return TryGetComponent( m_entityNames.Get( name, kInvalidEntity ), type );
+	return TryGetComponent( m_entityNames.Get( name, kNullEntity ), type );
 }
 
 Entity Registry::GetEntityByName( const char* name ) const
 {
-	return m_entityNames.Get( name, kInvalidEntity );
+	return m_entityNames.Get( name, kNullEntity );
 }
 
 const char* Registry::GetNameByEntity( Entity entity ) const
 {
-	for ( uint32_t i = 0; i < m_entityNames.Length(); i++ )
+	for( uint32_t i = 0; i < m_entityNames.Length(); i++ )
 	{
-		if ( m_entityNames.GetValue( i ) == entity )
+		if( m_entityNames.GetValue( i ) == entity )
 		{
 			return m_entityNames.GetKey( i ).c_str();
 		}
@@ -235,22 +269,22 @@ const char* Registry::GetNameByEntity( Entity entity ) const
 
 void Registry::SetEntityName( Entity entity, const char* name )
 {
-	if ( !entity )
+	if( !entity )
 	{
 		return;
 	}
 
 	AE_ASSERT_MSG( !m_destroying, "Cannot set an entities name while destroying" );
 	
-	for ( uint32_t i = 0; i < m_entityNames.Length(); i++ )
+	for( uint32_t i = 0; i < m_entityNames.Length(); i++ )
 	{
-		if ( m_entityNames.GetValue( i ) == entity )
+		if( m_entityNames.GetValue( i ) == entity )
 		{
 			m_entityNames.Remove( m_entityNames.GetKey( i ) );
 		}
 	}
 	
-	if ( name[ 0 ] )
+	if( name[ 0 ] )
 	{
 		m_entityNames.Set( name, entity );
 	}
@@ -261,14 +295,14 @@ uint32_t Registry::GetTypeCount() const
 	return m_components.Length();
 }
 
-const ae::Type* Registry::GetTypeByIndex( uint32_t index ) const
+const ae::ClassType* Registry::GetTypeByIndex( uint32_t index ) const
 {
-	return ae::GetTypeById( m_components.GetKey( index ) );
+	return ae::GetClassTypeById( m_components.GetKey( index ) );
 }
 
-int32_t Registry::GetTypeIndexByType( const ae::Type* type ) const
+int32_t Registry::GetIndexOfType( const ae::ClassType* type ) const
 {
-	if ( !type )
+	if( !type )
 	{
 		return -1;
 	}
@@ -277,7 +311,7 @@ int32_t Registry::GetTypeIndexByType( const ae::Type* type ) const
 
 uint32_t Registry::GetComponentCountByIndex( int32_t typeIndex ) const
 {
-	if ( typeIndex < 0 || typeIndex >= m_components.Length() )
+	if( typeIndex < 0 || typeIndex >= m_components.Length() )
 	{
 		return 0;
 	}
@@ -301,21 +335,25 @@ void Registry::Destroy( Entity entity )
 	AE_ASSERT_MSG( !m_destroying, "Recursive destruction of objects or components is not supported" );
 	m_destroying = true;
 
-	const char* name = GetNameByEntity( entity );
-	if ( name && name[ 0 ] )
-	{
-		m_entityNames.Remove( name );
-	}
 	// Get components each loop because m_components could grow at any iteration
-	for ( uint32_t i = 0; i < m_components.Length(); i++ )
+	for( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
 		Component* c;
 		ae::Map< Entity, Component* >* components = &m_components.GetValue( i );
-		if ( components->Remove( entity, &c ) )
+		if( components->Remove( entity, &c ) )
 		{
+			if( m_onDestroyFn )
+			{
+				m_onDestroyFn( m_onDestroyUserData, c );
+			}
 			c->~Component();
 			ae::Free( c );
 		}
+	}
+	const char* name = GetNameByEntity( entity );
+	if( name && name[ 0 ] )
+	{
+		m_entityNames.Remove( name );
 	}
 
 	m_destroying = false;
@@ -346,9 +384,9 @@ void Registry::Clear()
 	m_destroying = true;
 
 	// Get components each loop because m_components could grow at any iteration
-	for ( uint32_t i = 0; i < m_components.Length(); i++ )
+	for( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
-		for ( uint32_t j = 0; j < m_components.GetValue( i ).Length(); j++ )
+		for( uint32_t j = 0; j < m_components.GetValue( i ).Length(); j++ )
 		{
 			Component* c = m_components.GetValue( i ).GetValue( j );
 			c->~Component();
@@ -356,7 +394,7 @@ void Registry::Clear()
 		}
 	}
 	m_components.Clear();
-	m_lastEntity = kInvalidEntity;
+	m_lastEntity = kNullEntity;
 	m_entityNames.Clear();
 
 	m_destroying = false;

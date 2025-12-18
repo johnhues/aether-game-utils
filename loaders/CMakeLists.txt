@@ -21,12 +21,17 @@ if(AE_LOADERS_OFBX)
 		openfbx
 		GIT_REPOSITORY https://github.com/nem0/OpenFBX.git
 		GIT_TAG b2e720c8f6d5979fc4ed346262e6270084b15836
+		SOURCE_SUBDIR "NO-SUBDIRECTORY" # Use a non-existent subdirectory name to skip add_subdirectory()
 	)
-	FetchContent_Populate(openfbx) # Download but don't build
+	FetchContent_MakeAvailable(openfbx)
 	FetchContent_GetProperties(openfbx SOURCE_DIR OPENFBX_SOURCE_DIR)
 	file(GLOB_RECURSE openfbx_SOURCES CONFIGURE_DEPENDS "${openfbx_SOURCE_DIR}/src/*")
 	add_library(openfbx ${openfbx_SOURCES})
 	target_include_directories(openfbx INTERFACE "${openfbx_SOURCE_DIR}/src")
+	target_compile_options(openfbx PRIVATE
+		-Wno-switch
+		-Wno-\#pragma-messages
+	)
 
 	target_link_libraries(ae_loaders openfbx)
 	target_sources(ae_loaders PRIVATE ofbx.cpp)

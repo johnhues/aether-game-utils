@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // aeNetClient.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -72,10 +72,10 @@ namespace
 AetherPlayer* AetherServer_GetPlayer( AetherServerInternal* as, AetherUuid uuid )
 {
   int32_t playerCount = as->pub.playerCount;
-  for ( int32_t i = 0; i < playerCount; i++ )
+  for( int32_t i = 0; i < playerCount; i++ )
   {
     AetherPlayer* p = as->pub.allPlayers[ i ];
-    if ( memcmp( &p->uuid, &uuid, sizeof(uuid) ) == 0 ) { return p; }
+    if( memcmp( &p->uuid, &uuid, sizeof(uuid) ) == 0 ) { return p; }
   }
   
   AE_FAIL();
@@ -102,14 +102,20 @@ AetherPlayer* AetherServer_AddPlayer( AetherServerInternal* as, AetherUuid uuid 
 AetherServer* AetherServer_New( uint16_t port, uint16_t webPort, uint32_t maxPlayers )
 {
   enet_initialize();
-  AetherServerInternal* as = new AetherServerInternal();
   
   ENetAddress hostAddress;
   hostAddress.host = ENET_HOST_ANY;
   hostAddress.port = port;
-  as->priv.host = enet_host_create( &hostAddress, maxPlayers, 2, 0, 0 );
-  AE_ASSERT( as->priv.host );
   
+  ENetHost* host = enet_host_create( &hostAddress, maxPlayers, 2, 0, 0 );
+  if( !host )
+  {
+    enet_deinitialize();
+    return nullptr;
+  }
+  
+  AetherServerInternal* as = new AetherServerInternal();
+  as->priv.host = host;
   as->pub.playerCount = 0;
   as->pub.allPlayers = as->priv.players.data();
 
@@ -149,7 +155,7 @@ void AetherServer_Delete( AetherServer* _as )
 
   ENetPeer* peers = as->priv.host->peers;
   int32_t peerCount = (int32_t)as->priv.host->peerCount;
-  for ( int32_t i = 0; i < peerCount; i++ )
+  for( int32_t i = 0; i < peerCount; i++ )
   {
     enet_peer_disconnect( &peers[ i ], 0 );
   }
@@ -167,7 +173,7 @@ static int ws_service_callback( lws *wsi, lws_callback_reasons reason, void *use
   WebConnectionManager* manager = proto ? (WebConnectionManager*)proto->user : nullptr;
   SessionData* session = (SessionData*)userdata;
   
-  switch (reason)
+  switch(reason)
   {
     case LWS_CALLBACK_ESTABLISHED:
     {
@@ -204,16 +210,16 @@ static int ws_service_callback( lws *wsi, lws_callback_reasons reason, void *use
     case LWS_CALLBACK_SERVER_WRITEABLE:
     {
       WebConnection* conn = manager->GetConnection( session->id );
-      if ( !conn )
+      if( !conn )
       {
         break;
       }
       uint8_t* data;
       uint32_t length;
-      if ( conn->SendBufferPeek( &data, &length ) )
+      if( conn->SendBufferPeek( &data, &length ) )
       {
         int result = lws_write( wsi, data, length, LWS_WRITE_BINARY );
-        if ( result > 0 )
+        if( result > 0 )
         {
           conn->SendBufferPop( result );
         }
@@ -224,7 +230,7 @@ static int ws_service_callback( lws *wsi, lws_callback_reasons reason, void *use
     case LWS_CALLBACK_CLOSED:
     {
       WebConnection* conn = manager->GetConnection( session->id );
-      if ( conn )
+      if( conn )
       {
         WebConnEvent e;
         e.type = kWebConn_Disconnect;
@@ -247,7 +253,7 @@ static int ws_service_callback( lws *wsi, lws_callback_reasons reason, void *use
 
 void AetherServer_Disconnect( AetherServer* _as, AetherPlayer* player )
 {
-	if ( !_as || !player )
+	if( !_as || !player )
 	{
 		return;
 	}
@@ -257,16 +263,16 @@ void AetherServer_Disconnect( AetherServer* _as, AetherPlayer* player )
 	int32_t peerCount = (int32_t)as->priv.host->peerCount;
 	
 	ENetPeer* peer = nullptr;
-	for ( uint32_t i = 0; i < peerCount; i++ )
+	for( uint32_t i = 0; i < peerCount; i++ )
 	{
-		if ( player == (AetherPlayer*)peers[ i ].data )
+		if( player == (AetherPlayer*)peers[ i ].data )
 		{
 			peer = &peers[ i ];
 			break;
 		}
 	}
 
-	if ( peer )
+	if( peer )
 	{
 		enet_peer_disconnect_later( peer, 0 );
 	}
@@ -282,7 +288,7 @@ void AetherServer_Update( AetherServer* _as )
 
   auto removePlayers = [&]( AetherPlayer* player ) -> bool
   {
-    if ( !player->alive )
+    if( !player->alive )
     {
       char uuidStr[ 64 ];
       player->uuid.ToString( uuidStr, sizeof(uuidStr) );
@@ -303,7 +309,7 @@ void AetherServer_Update( AetherServer* _as )
 
 bool AetherServer_SystemReceive( AetherServerInternal* as, void** userdata, AetherClientHeader header, const uint8_t* data, int32_t length, ServerReceiveInfo* infoOut )
 {
-  switch ( header.msgId )
+  switch( header.msgId )
   {
     case kSysMsgPlayerConnect:
     {
@@ -336,7 +342,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
   
   ENetEvent e;
   memset( &e, 0, sizeof(e) );
-  while ( enet_host_service( as->priv.host, &e, 0 ) > 0 )
+  while( enet_host_service( as->priv.host, &e, 0 ) > 0 )
   {
     switch( e.type )
     {
@@ -356,9 +362,9 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
         uint32_t length = (uint32_t)( e.packet->dataLength - sizeof(header) );
         
         bool success = false;
-        if ( header.msgId & kSysMsgMask )
+        if( header.msgId & kSysMsgMask )
         {
-          if ( AetherServer_SystemReceive( as, &e.peer->data, header, data, length, infoOut ) )
+          if( AetherServer_SystemReceive( as, &e.peer->data, header, data, length, infoOut ) )
           {
             success = true;
           }
@@ -373,7 +379,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
         }
 
         enet_packet_destroy( e.packet );
-        if ( success )
+        if( success )
         {
           return true;
         }
@@ -384,7 +390,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
       {
 
         AetherPlayer* player = (AetherPlayer*)e.peer->data;
-        if ( player )
+        if( player )
         {
           char uuidStr[ 64 ];
           player->uuid.ToString( uuidStr, sizeof(uuidStr) );
@@ -411,7 +417,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
 
 #ifdef USE_WEBWOCKETS
   WebConnEvent event;
-  while ( as->priv.webConnManager.Service( &event ) )
+  while( as->priv.webConnManager.Service( &event ) )
   {
     switch( event.type )
     {
@@ -424,16 +430,16 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
       {
         uint8_t buf[ 2048 ];
         uint32_t bufLen = event.conn->Recv( buf, sizeof(buf) );
-        if ( bufLen )
+        if( bufLen )
         {
           AE_ASSERT( bufLen >= sizeof(AetherClientHeader) );
           AetherClientHeader header = *(AetherClientHeader*)buf;
           uint8_t* data = buf + sizeof(header);
           int32_t length = bufLen - sizeof(header);
           
-          if ( header.msgId & kSysMsgMask )
+          if( header.msgId & kSysMsgMask )
           {
-            if ( AetherServer_SystemReceive( as, &event.conn->userdata, header, data, length, infoOut ) )
+            if( AetherServer_SystemReceive( as, &event.conn->userdata, header, data, length, infoOut ) )
             {
               return true;
             }
@@ -454,7 +460,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
         // AE_LOG( "WEBCONN Disconnect" );
         
         AetherPlayer* player = (AetherPlayer*)event.userdata;
-        if ( player )
+        if( player )
         {
           player->alive = false;
           
@@ -498,41 +504,41 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
 #endif
 
   ENetPacket* enetPacket = nullptr;
-  for ( int32_t i = 0; i < peerCount; i++ )
+  for( int32_t i = 0; i < peerCount; i++ )
   {
     AetherPlayer* player = (AetherPlayer*)peers[ i ].data;
-    if ( !player )
+    if( !player )
     {
       continue;
     }
 
     // Only send to players in connected state
-    if ( peers[ i ].state != ENET_PEER_STATE_CONNECTED )
+    if( peers[ i ].state != ENET_PEER_STATE_CONNECTED )
     {
       continue;
     }
     // Only send to player
-    if ( info->player && info->player != player )
+    if( info->player && info->player != player )
     {
       continue;
     }
     // Only send to group
-    if ( info->group && ( info->group != player->userData || !player->userData ) )
+    if( info->group && ( info->group != player->userData || !player->userData ) )
     {
       continue;
     }
     // Don't send to player
-    if ( info->playerFilter && info->playerFilter == player )
+    if( info->playerFilter && info->playerFilter == player )
     {
       continue;
     }
     // Don't send to group
-    if ( info->groupFilter && info->groupFilter == player->userData )
+    if( info->groupFilter && info->groupFilter == player->userData )
     {
       continue;
     }
 
-    if ( !enetPacket )
+    if( !enetPacket )
     {
       enetPacket = enet_packet_create( nullptr, dataLength, flags );
       AE_ASSERT( enetPacket );
@@ -541,7 +547,7 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
     }
     enet_peer_send( peers + i , (uint8_t)channel, enetPacket );
 
-    if ( info->player )
+    if( info->player )
     {
       // Send only to specified player
       return;
@@ -555,38 +561,38 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
   memcpy( data, &header, sizeof( header ) );
   memcpy( data + sizeof( header ), info->data, info->length );
 
-  for ( uint32_t i = 0; i < webConnCount; i++ )
+  for( uint32_t i = 0; i < webConnCount; i++ )
   {
     AetherPlayer* player = (AetherPlayer*)connections[ i ]->userdata;
-    if ( !player )
+    if( !player )
     {
       continue;
     }
 
     // Only send to player
-    if ( info->player && info->player != player )
+    if( info->player && info->player != player )
     {
       continue;
     }
     // Only send to group
-    if ( info->group && ( info->group != player->userData || !player->userData ) )
+    if( info->group && ( info->group != player->userData || !player->userData ) )
     {
       continue;
     }
     // Don't send to player
-    if ( info->playerFilter && info->playerFilter == player )
+    if( info->playerFilter && info->playerFilter == player )
     {
       continue;
     }
     // Don't send to group
-    if ( info->groupFilter && info->groupFilter == player->userData )
+    if( info->groupFilter && info->groupFilter == player->userData )
     {
       continue;
     }
 
     connections[ i ]->Send( data, dataLength );
     
-    if ( info->player )
+    if( info->player )
     {
       // Send only to specified player
       return;
@@ -610,10 +616,10 @@ uint32_t AetherServer_GetPlayerByUserData( AetherServer* as, const void* userDat
   uint32_t count = 0;
   
   uint32_t playerCount = as->playerCount;
-  for ( uint32_t i = 0; i < playerCount && count < 32; i++ )
+  for( uint32_t i = 0; i < playerCount && count < 32; i++ )
   {
     AetherPlayer* player = as->allPlayers[ i ];
-    if (  player->userData == userData && player->alive )
+    if(  player->userData == userData && player->alive )
     {
       playersOut[ count ] = player;
       count++;

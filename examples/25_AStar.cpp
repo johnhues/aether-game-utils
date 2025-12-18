@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 25_AStar.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2024 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -96,8 +96,8 @@ int main()
 	ae::Input input;
 	ae::DebugLines debugLines = TAG_EXAMPLE;
 	ae::TimeStep timeStep;
-	window.Initialize( 1280, 1280, false, true );
-	window.SetTitle( "A*" );
+	window.Initialize( 1280, 1280, false, true, true );
+	window.SetTitle( "A*: Press arrow keys to move, space to randomize." );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	debugLines.Initialize( 2048 );
@@ -187,7 +187,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
 #else
-	while ( Update() ) {}
+	while( Update() ) {}
 #endif
 	return 0;
 }

@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 16_SkinnedMesh.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -95,7 +95,7 @@ int main()
 	ae::DebugCamera camera = ae::Axis::Y;
 	ae::DebugLines debugLines = TAG_ALL;
 
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "16_SkinnedMesh" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -131,14 +131,14 @@ int main()
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
 		AE_ASSERT_MSG( fileSize, "Could not load '#'", fileName );
 		ae::Scratch< uint8_t > fileData( fileSize );
-		if ( !fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() ) )
+		if( !fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() ) )
 		{
 			AE_ERR( "Error reading fbx file: '#'", fileName );
 			return -1;
 		}
 		
 		ae::FbxLoader fbxLoader = TAG_ALL;
-		if ( !fbxLoader.Initialize( fileData.Data(), fileData.Length() ) )
+		if( !fbxLoader.Initialize( fileData.Data(), fileData.Length() ) )
 		{
 			AE_ERR( "Error parsing fbx file: '#'", fileName );
 			return -1;
@@ -157,7 +157,7 @@ int main()
 		params.maxVerts = fbxLoader.GetMeshVertexCount( 0u );
 		vertices = ae::NewArray< Vertex >( TAG_ALL, params.maxVerts );
 		params.vertexOut = vertices;
-		if ( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
+		if( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
 		{
 			AE_ERR( "Error loading fbx file data: '#'", fileName );
 			return -1;
@@ -168,7 +168,7 @@ int main()
 	double animTime = 0.0;
 	
 	AE_INFO( "Run" );
-	while ( !input.quit )
+	while( !input.quit )
 	{
 		input.Pump();
 		camera.Update( &input, timeStep.GetDt() );
@@ -181,16 +181,16 @@ int main()
 		
 		// Settings update
 		static int32_t s_strength10 = 10;
-		if ( input.Get( ae::Key::Minus ) && !input.GetPrev( ae::Key::Minus ) )
+		if( input.Get( ae::Key::Minus ) && !input.GetPrev( ae::Key::Minus ) )
 		{
 			s_strength10--;
 		}
-		if ( input.Get( ae::Key::Equals ) && !input.GetPrev( ae::Key::Equals ) )
+		if( input.Get( ae::Key::Equals ) && !input.GetPrev( ae::Key::Equals ) )
 		{
 			s_strength10++;
 		}
 		static int32_t s_strength10Prev = -1;
-		if ( s_strength10Prev != s_strength10 )
+		if( s_strength10Prev != s_strength10 )
 		{
 			s_strength10 = ae::Clip( s_strength10, 0, 10 );
 			AE_INFO( "Anim blend strength: #", s_strength10 / 10.0f );
@@ -198,14 +198,14 @@ int main()
 		}
 		ae::Array< const ae::Bone* > mask = TAG_ALL;
 		static int32_t s_maskCountPrev = -1;
-		if ( input.Get( ae::Key::Space ) )
+		if( input.Get( ae::Key::Space ) )
 		{
 			std::function< void( const ae::Bone* ) > maskFn = [&]( const ae::Bone* bone )
 			{
-				if ( bone )
+				if( bone )
 				{
 					mask.Append( bone );
-					for ( bone = bone->firstChild; bone; bone = bone->nextSibling )
+					for( bone = bone->firstChild; bone; bone = bone->nextSibling )
 					{
 						maskFn( bone );
 					}
@@ -215,14 +215,14 @@ int main()
 			maskFn( currentPose.GetBoneByName( "QuickRigCharacter_LeftUpLeg" ) );
 			maskFn( currentPose.GetBoneByName( "QuickRigCharacter_RightUpLeg" ) );
 		}
-		if ( s_maskCountPrev != mask.Length() )
+		if( s_maskCountPrev != mask.Length() )
 		{
 			AE_INFO( "Animation Mask" );
-			for ( const ae::Bone* b : mask )
+			for( const ae::Bone* b : mask )
 			{
 				AE_INFO( "\t#", b->name );
 			}
-			if ( !mask.Length() )
+			if( !mask.Length() )
 			{
 				AE_INFO( "\tNone" );
 			}
@@ -235,14 +235,14 @@ int main()
 		vertexData.UploadVertices( 0, vertices, vertexData.GetMaxVertexCount() );
 		
 		// Debug
-		for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+		for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 		{
 			const ae::Bone* bone = currentPose.GetBoneByIndex( i );
 			const ae::Bone* parent = bone->parent;
-			if ( parent )
+			if( parent )
 			{
-				debugLines.AddLine( parent->transform.GetTranslation(), bone->transform.GetTranslation(), ae::Color::Red() );
-				debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.05f ), ae::Color::Red() );
+				debugLines.AddLine( parent->modelToBone.GetTranslation(), bone->modelToBone.GetTranslation(), ae::Color::Red() );
+				debugLines.AddOBB( bone->modelToBone * ae::Matrix4::Scaling( 0.05f ), ae::Color::Red() );
 			}
 		}
 		

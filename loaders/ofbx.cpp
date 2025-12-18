@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // ofbx.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -34,7 +34,7 @@ namespace ae {
 static ae::Matrix4 ofbxToAe( const ofbx::Matrix& m )
 {
 	ae::Matrix4 result;
-	for ( uint32_t i = 0; i < 16; i++ )
+	for( uint32_t i = 0; i < 16; i++ )
 	{
 		result.data[ i ] = m.m[ i ];
 	}
@@ -43,12 +43,12 @@ static ae::Matrix4 ofbxToAe( const ofbx::Matrix& m )
 
 static ae::Matrix4 getBindPoseMatrix( const ofbx::Skin* skin, const ofbx::Object* node )
 {
-	if (!skin) return ofbxToAe( node->getGlobalTransform() );
+	if(!skin) return ofbxToAe( node->getGlobalTransform() );
 
-	for (int i = 0, c = skin->getClusterCount(); i < c; ++i)
+	for(int i = 0, c = skin->getClusterCount(); i < c; ++i)
 	{
 		const ofbx::Cluster* cluster = skin->getCluster(i);
-		if (cluster->getLink() == node)
+		if(cluster->getLink() == node)
 		{
 			return ofbxToAe( cluster->getTransformLinkMatrix() );
 		}
@@ -87,28 +87,28 @@ bool FbxLoader::Initialize( const void* fileData, uint32_t fileDataLen )
 	Terminate();
 	m_state = ae::New< FbxLoaderImpl >( m_tag, m_tag );
 	m_state->scene = ofbx::load( (ofbx::u8*)fileData, fileDataLen, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE );
-	if ( !m_state->scene )
+	if( !m_state->scene )
 	{
 		Terminate();
 		return false;
 	}
 	
 	const uint32_t meshCount = m_state->scene->getMeshCount();
-	for ( uint32_t i = 0; i < meshCount; i++ )
+	for( uint32_t i = 0; i < meshCount; i++ )
 	{
 		const ofbx::Mesh* ofbxMesh = m_state->scene->getMesh( i );
 		FbxLoaderMeshInfo* info = &m_state->meshes.Set( ofbxMesh->name, {} );
 		info->mesh = ofbxMesh;
-		if ( const ofbx::Skin* ofbxSkin = ofbxMesh->getGeometry()->getSkin() )
+		if( const ofbx::Skin* ofbxSkin = ofbxMesh->getGeometry()->getSkin() )
 		{
 			AE_ASSERT( ofbxSkin->getClusterCount() );
 			const ofbx::Object* ofbxSkeletonRoot = ofbxSkin->getCluster( 0 )->getLink();
 			AE_ASSERT( ofbxSkeletonRoot );
 			AE_ASSERT( ofbxSkeletonRoot->getType() == ofbx::Object::Type::LIMB_NODE );
-			while ( true )
+			while( true )
 			{
 				const ofbx::Object* ofbxParent = ofbxSkeletonRoot->getParent();
-				if ( ofbxParent && ofbxParent->getType() == ofbx::Object::Type::LIMB_NODE )
+				if( ofbxParent && ofbxParent->getType() == ofbx::Object::Type::LIMB_NODE )
 				{
 					ofbxSkeletonRoot = ofbxParent;
 					continue;
@@ -121,9 +121,9 @@ bool FbxLoader::Initialize( const void* fileData, uint32_t fileDataLen )
 			auto countBonesFn = [&]( auto&& countBonesFn, const ofbx::Object* ofbxParent ) -> uint32_t
 			{
 				uint32_t result = 1;
-				for ( int32_t i = 0; const ofbx::Object* ofbxBone = ofbxParent->resolveObjectLink( i ); i++ )
+				for( int32_t i = 0; const ofbx::Object* ofbxBone = ofbxParent->resolveObjectLink( i ); i++ )
 				{
-					if ( ofbxBone->getType() == ofbx::Object::Type::LIMB_NODE )
+					if( ofbxBone->getType() == ofbx::Object::Type::LIMB_NODE )
 					{
 						result += countBonesFn( countBonesFn, ofbxBone );
 					}
@@ -140,9 +140,9 @@ bool FbxLoader::Initialize( const void* fileData, uint32_t fileDataLen )
 
 void FbxLoader::Terminate()
 {
-	if ( m_state )
+	if( m_state )
 	{
-		if ( m_state->scene )
+		if( m_state->scene )
 		{
 			m_state->scene->destroy();
 		}
@@ -178,9 +178,9 @@ uint32_t FbxLoader::GetMeshBoneCount( uint32_t idx ) const
 
 uint32_t FbxLoader::GetMeshVertexCount( const char* name ) const
 {
-	if ( m_state )
+	if( m_state )
 	{
-		if ( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
+		if( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
 		{
 			return info->mesh->getGeometry()->getVertexCount();
 		}
@@ -190,9 +190,9 @@ uint32_t FbxLoader::GetMeshVertexCount( const char* name ) const
 
 uint32_t FbxLoader::GetMeshIndexCount( const char* name ) const
 {
-	if ( m_state )
+	if( m_state )
 	{
-		if ( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
+		if( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
 		{
 			return info->mesh->getGeometry()->getIndexCount();
 		}
@@ -202,9 +202,9 @@ uint32_t FbxLoader::GetMeshIndexCount( const char* name ) const
 
 uint32_t FbxLoader::GetMeshBoneCount( const char* name ) const
 {
-	if ( m_state )
+	if( m_state )
 	{
-		if ( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
+		if( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
 		{
 			return info->boneCount;
 		}
@@ -214,9 +214,9 @@ uint32_t FbxLoader::GetMeshBoneCount( const char* name ) const
 
 bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) const
 {
-	if ( !m_state ) { return false; }
+	if( !m_state ) { return false; }
 	const FbxLoaderMeshInfo* info = m_state->meshes.TryGet( meshName );
-	if ( !info ) { return false; }
+	if( !info ) { return false; }
 	
 	AE_ASSERT_MSG( params.descriptor.indexSize, "Must define index type size" );
 	AE_ASSERT_MSG( params.descriptor.indexSize == sizeof(uint32_t), "TODO" );
@@ -238,11 +238,11 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	const ofbx::Vec4* meshColors = geo->getColors();
 	const ofbx::Vec2* meshUvs = geo->getUVs();
 	const int32_t* meshIndices = geo->getFaceIndices();
-	if ( params.vertexOut && params.maxVerts < vertexCount ) { return false; }
-	if ( params.indexOut && params.maxIndex < indexCount ) { return false; }
+	if( params.vertexOut && params.maxVerts < vertexCount ) { return false; }
+	if( params.indexOut && params.maxIndex < indexCount ) { return false; }
 	const ofbx::Skin* ofbxSkin = info->mesh->getGeometry()->getSkin();
 	const ofbx::Object* ofbxSkeletonRoot = info->rootJoint;
-	if ( ofbxSkeletonRoot )
+	if( ofbxSkeletonRoot )
 	{
 		// Find the root node of the skinned meshes skeleton (the parent of root bone)
 		// Not an actual bone, scene root or something
@@ -254,7 +254,7 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	
 	ae::Skeleton bindPose = m_tag;
 	ae::Array< const ofbx::Object* > sceneBones = m_tag;
-	if ( ofbxSkeletonRoot )
+	if( ofbxSkeletonRoot )
 	{
 		bindPose.Initialize( boneCount );
 		sceneBones.Append( ofbxSkeletonRoot );
@@ -262,9 +262,9 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 		{
 			int32_t i = 0;
 			ae::Matrix4 parentInverseWorldTransform = getBindPoseMatrix( ofbxSkin, ofbxParent ).GetInverse();
-			while ( const ofbx::Object* ofbxBone = ofbxParent->resolveObjectLink( i ) )
+			while( const ofbx::Object* ofbxBone = ofbxParent->resolveObjectLink( i ) )
 			{
-				if ( ofbxBone->getType() == ofbx::Object::Type::LIMB_NODE )
+				if( ofbxBone->getType() == ofbx::Object::Type::LIMB_NODE )
 				{
 					ae::Matrix4 worldTransform = getBindPoseMatrix( ofbxSkin, ofbxBone );
 					ae::Matrix4 transform = parentInverseWorldTransform * worldTransform;
@@ -284,7 +284,7 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	ae::Array< uint32_t > indices( m_tag, indexCount );
 	ae::Array< ae::Skin::Vertex > skinVerts( m_tag, {}, vertexCount );
 	
-	for ( uint32_t j = 0; j < vertexCount; j++ )
+	for( uint32_t j = 0; j < vertexCount; j++ )
 	{
 		ofbx::Vec3 p0 = meshVerts[ j ];
 		ae::Vec4 p = localToWorld * ae::Vec4( p0.x, p0.y, p0.z, 1.0f );
@@ -302,7 +302,7 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 		skinVerts[ j ].position = p.GetXYZ();
 	}
 	
-	for ( uint32_t j = 0; j < indexCount; j++ )
+	for( uint32_t j = 0; j < indexCount; j++ )
 	{
 		int32_t index = ( meshIndices[ j ] < 0 ) ? ( -meshIndices[ j ] - 1 ) : meshIndices[ j ];
 		AE_ASSERT( index < vertexCount );
@@ -316,11 +316,11 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	}
 	
 	// Skin
-	for ( uint32_t i = 0; i < clusterCount; i++ )
+	for( uint32_t i = 0; i < clusterCount; i++ )
 	{
 		const ofbx::Cluster* cluster = ofbxSkin->getCluster( i );
 		uint32_t indexCount = cluster->getIndicesCount();
-		if ( !indexCount )
+		if( !indexCount )
 		{
 			continue;
 		}
@@ -335,21 +335,21 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 
 		const int* clusterIndices = cluster->getIndices();
 		const double* clusterWeights = cluster->getWeights();
-		for ( uint32_t j = 0; j < indexCount; j++ )
+		for( uint32_t j = 0; j < indexCount; j++ )
 		{
 			ae::Skin::Vertex* vertex = &skinVerts[ clusterIndices[ j ] ];
 			const uint8_t clusterWeight = (uint8_t)ae::Clip( (int)( clusterWeights[ j ] * 256.5 ), 0, 255 );
-			const uint32_t weightCount = [&](){ uint32_t c = 0; while ( c < kMaxSkinWeights && vertex->weights[ c ] ) { c++; } return c; }();
+			const uint32_t weightCount = [&](){ uint32_t c = 0; while( c < kMaxSkinWeights && vertex->weights[ c ] ) { c++; } return c; }();
 			
-			if ( weightCount == kMaxSkinWeights )
+			if( weightCount == kMaxSkinWeights )
 			{
 				// Replace the influence with the smallest contribution
 				int32_t lowestIdx = 0;
 				uint8_t lowestWeight = vertex->weights[ 0 ];
-				for ( uint32_t i = 1; i < kMaxSkinWeights; i++ )
+				for( uint32_t i = 1; i < kMaxSkinWeights; i++ )
 				{
 					const uint8_t weight = vertex->weights[ i ];
-					if ( lowestWeight > weight )
+					if( lowestWeight > weight )
 					{
 						lowestIdx = i;
 						lowestWeight = weight;
@@ -366,26 +366,26 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 		}
 	}
 	// Fix up weights so they total 255
-	for ( ae::Skin::Vertex& vertex : skinVerts )
+	for( ae::Skin::Vertex& vertex : skinVerts )
 	{
 		int32_t total = 0;
 		uint8_t* greatest = nullptr;
-		for ( uint32_t i = 0; i < kMaxSkinWeights; i++ )
+		for( uint32_t i = 0; i < kMaxSkinWeights; i++ )
 		{
 			total += vertex.weights[ i ];
-			if ( !greatest || *greatest < vertex.weights[ i ] )
+			if( !greatest || *greatest < vertex.weights[ i ] )
 			{
 				greatest = &vertex.weights[ i ];
 			}
 		}
-		if ( total != 255 )
+		if( total != 255 )
 		{
 			// Bump up the contribution of the strongest influence to total uint8 max
 			*greatest += ( 255 - total );
 		}
 #if _AE_DEBUG_
 		total = 0;
-		for ( uint32_t i = 0; i < kMaxSkinWeights; i++ )
+		for( uint32_t i = 0; i < kMaxSkinWeights; i++ )
 		{
 			total += vertex.weights[ i ];
 		}
@@ -394,19 +394,19 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	}
 	
 	// Finalize skin
-	if ( params.skin )
+	if( params.skin )
 	{
 		params.skin->Initialize( bindPose, skinVerts.Data(), skinVerts.Length() );
 	}
 	
 	// Animations
-	if ( params.anim && ofbxScene->getAnimationStackCount() )
+	if( params.anim && ofbxScene->getAnimationStackCount() )
 	{
 		const ofbx::AnimationStack* animStack = ofbxScene->getAnimationStack( 0 );
 		const ofbx::AnimationLayer* animLayer = animStack->getLayer( 0 );
-		if ( animLayer )
+		if( animLayer )
 		{
-			for ( uint32_t i = 1; i < bindPose.GetBoneCount(); i++ )
+			for( uint32_t i = 1; i < bindPose.GetBoneCount(); i++ )
 			{
 				const ae::Bone* bone = bindPose.GetBoneByIndex( i );
 				const ofbx::Object* ofbxBone = sceneBones[ i ];
@@ -424,21 +424,21 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 				};
 
 				bool hasKeyframes = false;
-				for ( uint32_t j = 0; j < countof( curves ); j++ )
+				for( uint32_t j = 0; j < countof( curves ); j++ )
 				{
 					const ofbx::AnimationCurve* curve = curves[ j ];
-					if ( !curve )
+					if( !curve )
 					{
 						continue;
 					}
-					if ( curve->getKeyCount() )
+					if( curve->getKeyCount() )
 					{
 						hasKeyframes = true;
 						break;
 					}
 				}
 
-				if ( hasKeyframes )
+				if( hasKeyframes )
 				{
 					params.anim->duration = ( endTime - startTime );
 
@@ -449,7 +449,7 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 					sampleCount++; // If an animation has one keyframe at frame 0 and the last one at 48, it actually has 49 frames
 					boneKeyframes.Clear();
 					boneKeyframes.Reserve( sampleCount );
-					for ( uint32_t j = 0; j < sampleCount; j++ )
+					for( uint32_t j = 0; j < sampleCount; j++ )
 					{
 						// Subtract 1 from sample count so last frame doesn't count towards final length
 						// ie. A 2 second animation playing at 2 frames per second should have 5 frames, at times: 0, 0.5, 1.0, 1.5, 2
@@ -457,18 +457,18 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 						ofbx::Vec3 posFrame = { 0.0, 0.0, 0.0 };
 						ofbx::Vec3 rotFrame = { 0.0, 0.0, 0.0 };
 						ofbx::Vec3 scaleFrame = { 1.0, 1.0, 1.0 };
-						if ( tCurveNode ) { posFrame = tCurveNode->getNodeLocalTransform( t ); }
-						if ( rCurveNode ) { rotFrame = rCurveNode->getNodeLocalTransform( t ); }
-						if ( sCurveNode ) { scaleFrame = sCurveNode->getNodeLocalTransform( t ); }
+						if( tCurveNode ) { posFrame = tCurveNode->getNodeLocalTransform( t ); }
+						if( rCurveNode ) { rotFrame = rCurveNode->getNodeLocalTransform( t ); }
+						if( sCurveNode ) { scaleFrame = sCurveNode->getNodeLocalTransform( t ); }
 
 						ae::Keyframe keyframe;
 						ae::Matrix4 animTransform = ofbxToAe( ofbxBone->evalLocal( posFrame, rotFrame, scaleFrame ) );
-						if ( j == 0 )
+						if( j == 0 )
 						{
 							// @HACK: Should have this bind pose skeleton in advance
-							ae::Matrix4 parentTransform = bone->parent ? bone->parent->transform : ae::Matrix4::Identity();
-							((ae::Bone*)bone)->localTransform = animTransform;
-							((ae::Bone*)bone)->transform = parentTransform * animTransform;
+							ae::Matrix4 parentTransform = bone->parent ? bone->parent->modelToBone : ae::Matrix4::Identity();
+							((ae::Bone*)bone)->parentToChild = animTransform;
+							((ae::Bone*)bone)->modelToBone = parentTransform * animTransform;
 						}
 						ae::Matrix4 offsetTransform = animTransform;
 						keyframe.translation = offsetTransform.GetTranslation();
@@ -481,30 +481,30 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 		}
 	}
 	
-	if ( params.vertexOut )
+	if( params.vertexOut )
 	{
 		memcpy( params.vertexOut, vertexBuffer.Data(), vertexCount * params.descriptor.vertexSize );
 	}
-	if ( params.indexOut )
+	if( params.indexOut )
 	{
 		memcpy( params.indexOut, indices.Data(), indexCount * params.descriptor.indexSize );
 	}
 	
-	if ( params.vertexData )
+	if( params.vertexData )
 	{
 		params.vertexData->Initialize( params.descriptor.vertexSize, sizeof(uint32_t),
 			vertexCount, indices.Length(),
 			ae::Vertex::Primitive::Triangle,
 			ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static );
-		if ( params.descriptor.posOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.posAttrib, params.descriptor.posComponents, ae::Vertex::Type::Float, params.descriptor.posOffset ); }
-		if ( params.descriptor.normalOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.normalAttrib, params.descriptor.normalComponents, ae::Vertex::Type::Float, params.descriptor.normalOffset ); }
-		if ( params.descriptor.colorOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.colorAttrib, params.descriptor.colorComponents, ae::Vertex::Type::Float, params.descriptor.colorOffset ); }
-		if ( params.descriptor.uvOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.uvAttrib, params.descriptor.uvComponents, ae::Vertex::Type::Float, params.descriptor.uvOffset ); }
+		if( params.descriptor.posOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.posAttrib, params.descriptor.posComponents, ae::Vertex::Type::Float, params.descriptor.posOffset ); }
+		if( params.descriptor.normalOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.normalAttrib, params.descriptor.normalComponents, ae::Vertex::Type::Float, params.descriptor.normalOffset ); }
+		if( params.descriptor.colorOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.colorAttrib, params.descriptor.colorComponents, ae::Vertex::Type::Float, params.descriptor.colorOffset ); }
+		if( params.descriptor.uvOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.uvAttrib, params.descriptor.uvComponents, ae::Vertex::Type::Float, params.descriptor.uvOffset ); }
 		params.vertexData->UploadVertices( 0, vertexBuffer.Data(), vertexCount );
 		params.vertexData->UploadIndices( 0, indices.Data(), indices.Length() );
 	}
 
-	if ( params.collisionMesh )
+	if( params.collisionMesh )
 	{
 		params.collisionMesh->AddIndexed(
 			ae::Matrix4::Identity(),

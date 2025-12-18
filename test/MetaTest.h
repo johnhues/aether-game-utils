@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // MetaTest.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -67,6 +67,7 @@ public:
 	TestEnumClass enumTest;
 };
 
+
 //------------------------------------------------------------------------------
 // NamespaceClass
 //------------------------------------------------------------------------------
@@ -75,7 +76,9 @@ namespace Namespace0 {
 		class NamespaceClass : public ae::Inheritor< SomeClass, NamespaceClass >
 		{
 		public:
+			int32_t intMember;
 			bool boolMember;
+			TestEnumClass enumTest;
 		};
 	}
 }
@@ -103,6 +106,69 @@ public:
 	SomeClass someClassArray[ 3 ];
 	ae::Array< SomeClass, 4 > someClassArray2;
 	ae::Array< SomeClass > someClassArray3 = AE_ALLOC_TAG_META_TEST;
+};
+
+template< typename T >
+class ae::TypeT< ae::Optional< T > > : public ae::OptionalType
+{
+public:
+	const ae::Type& GetInnerVarType() const override { return *ae::TypeT< T >::Get(); }
+	static ae::Type* Get() { static ae::TypeT< ae::Optional< T > > s_type; return &s_type; }
+	ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< ae::Optional< T > >(); }
+
+	ae::DataPointer TryGet( ae::DataPointer optional ) const override { return ae::DataPointer(); }
+	ae::ConstDataPointer TryGet( ae::ConstDataPointer optional ) const override { return ae::ConstDataPointer(); }
+	ae::DataPointer GetOrInsert( ae::DataPointer optional ) const override { return ae::DataPointer(); }
+	void Clear( ae::DataPointer optional ) const override {}
+};
+
+template< typename T >
+class ae::TypeT< std::optional< T > > : public ae::OptionalType
+{
+public:
+	const ae::Type& GetInnerVarType() const override { return *ae::TypeT< T >::Get(); }
+	static ae::Type* Get() { static ae::TypeT< std::optional< T > > s_type; return &s_type; }
+	ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< std::optional< T > >(); }
+
+	ae::DataPointer TryGet( ae::DataPointer _opt ) const override
+	{
+		std::optional< T >* opt = static_cast< std::optional< T >* >( _opt.Get( this ) );
+		return { GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
+	}
+	ae::ConstDataPointer TryGet( ae::ConstDataPointer _opt ) const override
+	{
+		const std::optional< T >* opt = static_cast< const std::optional< T >* >( _opt.Get( this ) );
+		return { GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
+	}
+	ae::DataPointer GetOrInsert( ae::DataPointer _optional ) const override
+	{
+		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
+		{
+			optional->emplace();
+			return { GetInnerVarType(), &optional->value() };
+		}
+		return {};
+	}
+	void Clear( ae::DataPointer _optional ) const override
+	{
+		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
+		{
+			optional->reset();
+		}
+	}
+};
+
+//------------------------------------------------------------------------------
+// OptionalClass
+//------------------------------------------------------------------------------
+class OptionalClass : public ae::Inheritor< ae::Object, OptionalClass >
+{
+public:
+	ae::Optional< int32_t > intOptional;
+	ae::Optional < SomeClass > someClassOptional;
+
+	std::optional< int32_t > intStdOptional;
+	std::optional< SomeClass > someClassStdOptional;
 };
 
 //------------------------------------------------------------------------------
@@ -222,14 +288,14 @@ public:
 class RefTesterB : public ae::Inheritor< RefTester, RefTesterB >
 {
 public:
-	class RefTesterA* refA = nullptr;
+	class RefTester* ref = nullptr;
 };
 
 // RefTesterManager
 class RefTesterManager
 {
 public:
-	template < typename T >
+	template< typename T >
 	T* Create() { T* o = (T*)m_objectMap.Set( m_nextId, ae::New< T >( AE_ALLOC_TAG_META_TEST ) ); o->id = m_nextId; m_nextId++; return o; }
 	void Destroy( RefTester* object );
 	

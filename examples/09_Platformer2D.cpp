@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 09_Platformer2D.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -25,7 +25,6 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 #include "ae/aeHotSpot.h"
-#include "ae/SpriteRenderer.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -128,6 +127,7 @@ public:
 	bool CanJump() const { return m_canJumpTimer > 0.0f; }
 
 private:
+	static void s_OnCollision( const HotSpotObject::CollisionInfo& info, void* userData ) { ((Player*)userData)->OnCollision( &info ); }
 	HotSpotObject* m_body = nullptr;
 	float m_canJumpTimer = 0.0f;
 	float m_jumpHoldTimer = 0.0f;
@@ -141,13 +141,13 @@ void Player::Initialize( HotSpotWorld* world, ae::Vec2 startPos )
 	m_body = world->CreateObject();
 	m_body->SetMass( kPlayerMass );
 	m_body->SetVolume( kPlayerMass / kPlayerDensity );
-	m_body->onCollision.Add( this, &Player::OnCollision );
+	m_body->SetOnCollisionCallback( s_OnCollision, this );
 	m_body->Warp( startPos );
 }
 
 void Player::OnCollision( const HotSpotObject::CollisionInfo* info )
 {
-	if ( info->normal.y > 0 )
+	if( info->normal.y > 0 )
 	{
 		// Reset jump when touching ground
 		m_canJumpTimer = kJumpMaxAirTime;
@@ -157,24 +157,24 @@ void Player::OnCollision( const HotSpotObject::CollisionInfo* info )
 
 void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 {
-	uint32_t tile = world->GetTile( HotSpotWorld::_GetTilePos( m_body->GetPosition() ) );
+	const uint32_t tile = world->GetTile( HotSpotWorld::_GetTilePos( m_body->GetPosition() ) );
 	
-	bool up = input->Get( ae::Key::Up ) || input->gamepads[ 0 ].leftAnalog.y > 0.1f || input->gamepads[ 0 ].dpad.y > 0;
-	bool down = input->Get( ae::Key::Down ) || input->gamepads[ 0 ].leftAnalog.y < -0.1f || input->gamepads[ 0 ].dpad.y < 0;
-	bool left = input->Get( ae::Key::Left ) || input->gamepads[ 0 ].leftAnalog.x < -0.1f || input->gamepads[ 0 ].dpad.x < 0;
-	bool right = input->Get( ae::Key::Right ) || input->gamepads[ 0 ].leftAnalog.x > 0.1f || input->gamepads[ 0 ].dpad.x > 0;
-	bool jumpButton = ( up || input->Get( ae::Key::Space ) || input->Get( ae::Key::A ) );
+	const bool up = input->Get( ae::Key::Up ) || input->gamepads[ 0 ].leftAnalog.y > 0.1f || input->gamepads[ 0 ].dpad.y > 0;
+	const bool down = input->Get( ae::Key::Down ) || input->gamepads[ 0 ].leftAnalog.y < -0.1f || input->gamepads[ 0 ].dpad.y < 0;
+	const bool left = input->Get( ae::Key::Left ) || input->gamepads[ 0 ].leftAnalog.x < -0.1f || input->gamepads[ 0 ].dpad.x < 0;
+	const bool right = input->Get( ae::Key::Right ) || input->gamepads[ 0 ].leftAnalog.x > 0.1f || input->gamepads[ 0 ].dpad.x > 0;
+	const bool jumpButton = ( input->Get( ae::Key::Up ) || input->Get( ae::Key::Space ) || input->gamepads[ 0 ].a );
 
 	m_canJumpTimer -= dt;
 
 	// Water
-	if ( tile == kTile_Water )
+	if( tile == kTile_Water )
 	{
-		if ( up || jumpButton ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kSwimUp ) ); }
-		if ( down ) { m_body->AddForce( ae::Vec2( 0.0f, -kPlayerMass * kSwimDown ) ); }
+		if( jumpButton || up ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kSwimUp ) ); }
+		if( down ) { m_body->AddForce( ae::Vec2( 0.0f, -kPlayerMass * kSwimDown ) ); }
 
-		if ( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
-		if ( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kSwimHorizontal, 0.0f ) );  }
+		if( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
+		if( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kSwimHorizontal, 0.0f ) );  }
 
 		// Always reset jump so a jump is possible immediately after leaving water
 		m_canJumpTimer = kJumpMaxAirTime;
@@ -182,10 +182,10 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 	}
 	else // Air / ground
 	{
-		if ( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kMoveHorizontal, 0.0f ) ); }
-		if ( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kMoveHorizontal, 0.0f ) ); }
+		if( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kMoveHorizontal, 0.0f ) ); }
+		if( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kMoveHorizontal, 0.0f ) ); }
 
-		if ( CanJump() && jumpButton )
+		if( CanJump() && jumpButton )
 		{
 			// Cancel previous downward velocity for last kJumpMaxAirTime seconds
 			// to get full jump height
@@ -198,7 +198,7 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 			m_body->AddImpulse( ae::Vec2( 0.0f, kPlayerMass * kJumpInitial ) );
 		}
 
-		if ( m_jumpHoldTimer > 0.0f && jumpButton )
+		if( m_jumpHoldTimer > 0.0f && jumpButton )
 		{
 			m_jumpHoldTimer -= dt;
 			m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kJumpHold ) );
@@ -231,7 +231,7 @@ struct Game
 	void Initialize()
 	{
 		AE_LOG( "Initialize" );
-		window.Initialize( 800, 600, false, true );
+		window.Initialize( 800, 600, false, true, true );
 		window.SetTitle( "Platformer 2D" );
 		render.Initialize( &window );
 		input.Initialize( &window );
@@ -262,11 +262,11 @@ struct Game
 		render.Clear( ae::Color::PicoDarkBlue() );
 		spriteRender.Clear();
 
-		for ( uint32_t y = 0; y < world.GetHeight(); y++ )
-		for ( uint32_t x = 0; x < world.GetWidth(); x++ )
+		for( uint32_t y = 0; y < world.GetHeight(); y++ )
+		for( uint32_t x = 0; x < world.GetWidth(); x++ )
 		{
 			ae::Color color;
-			switch ( world.GetTile( ae::Int2( x, y ) ) )
+			switch( world.GetTile( ae::Int2( x, y ) ) )
 			{
 				case kTile_Air: color = ae::Color::PicoPeach(); break;
 				case kTile_Water: color = ae::Color::PicoPink(); break;
@@ -311,7 +311,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* game ) { ((Game*)game)->Tick(); }, &game, 0, 1 );
 #else
-	while ( game.Tick() ) {}
+	while( game.Tick() ) {}
 #endif
 	game.Terminate();
 	return 0;

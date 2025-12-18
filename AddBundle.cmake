@@ -1,5 +1,38 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 
+# Meta property info for targets
+if(NOT AE_CMAKE_PROPERTY_LIST)
+	execute_process(COMMAND cmake --help-property-list OUTPUT_VARIABLE AE_CMAKE_PROPERTY_LIST)
+	
+	# Convert command output into a CMake list
+	string(REGEX REPLACE ";" "\\\\;" AE_CMAKE_PROPERTY_LIST "${AE_CMAKE_PROPERTY_LIST}")
+	string(REGEX REPLACE "\n" ";" AE_CMAKE_PROPERTY_LIST "${AE_CMAKE_PROPERTY_LIST}")
+	list(REMOVE_DUPLICATES AE_CMAKE_PROPERTY_LIST)
+endif()
+
+function(ae_print_target_properties target)
+	cmake_parse_arguments(AEPTP "" "PREFIX" "" ${ARGN})
+	if(NOT TARGET ${target})
+		message("There is no target named '${target}'")
+		return()
+	endif()
+
+	foreach(property ${AE_CMAKE_PROPERTY_LIST})
+		string(REPLACE "<CONFIG>" "${CMAKE_BUILD_TYPE}" property ${property})
+
+		# Fix https://stackoverflow.com/questions/32197663/how-can-i-remove-the-the-location-property-may-not-be-read-from-target-error-i
+		if(property STREQUAL "LOCATION" OR property MATCHES "^LOCATION_" OR property MATCHES "_LOCATION$")
+			continue()
+		endif()
+
+		get_property(was_set TARGET ${target} PROPERTY ${property} SET)
+		if(was_set)
+			get_target_property(value ${target} ${property})
+			message("${AEPTP_PREFIX}${property} = ${value}")
+		endif()
+	endforeach()
+endfunction()
+
 function(ae_add_shared_library)
 	cmake_parse_arguments(
 		ADD_SHARED_LIB
@@ -8,15 +41,16 @@ function(ae_add_shared_library)
 		"SRC_FILES;HEADER_FILES;LIBS;PUBLIC_INCLUDE_DIRS;PRIVATE_INCLUDE_DIRS"
 		${ARGN}
 	)
-	message(STATUS "NAME \"${ADD_SHARED_LIB_NAME}\" \(${CMAKE_BUILD_TYPE}\)")
-	message(STATUS "APPLE_DEVELOPMENT_TEAM \"${ADD_SHARED_LIB_APPLE_DEVELOPMENT_TEAM}\"")
-	message(STATUS "MAJOR_MINOR_PATCH_VERSION \"${ADD_SHARED_LIB_MAJOR_MINOR_PATCH_VERSION}\"")
-	message(STATUS "SRC_FILES \"${ADD_SHARED_LIB_SRC_FILES}\"")
-	message(STATUS "HEADER_FILES \"${ADD_SHARED_LIB_HEADER_FILES}\"")
-	message(STATUS "LIBS \"${ADD_SHARED_LIB_LIBS}\"")
-	message(STATUS "PUBLIC_INCLUDE_DIRS \"${ADD_SHARED_LIB_PUBLIC_INCLUDE_DIRS}\"")
-	message(STATUS "PRIVATE_INCLUDE_DIRS \"${ADD_SHARED_LIB_PRIVATE_INCLUDE_DIRS}\"")
-	message(STATUS "")
+	message("  Added shared library \"${ADD_SHARED_LIB_NAME}\"")
+	message("    NAME \"${ADD_SHARED_LIB_NAME}\" \(${CMAKE_BUILD_TYPE}\)")
+	message("    APPLE_DEVELOPMENT_TEAM \"${ADD_SHARED_LIB_APPLE_DEVELOPMENT_TEAM}\"")
+	message("    MAJOR_MINOR_PATCH_VERSION \"${ADD_SHARED_LIB_MAJOR_MINOR_PATCH_VERSION}\"")
+	message("    SRC_FILES \"${ADD_SHARED_LIB_SRC_FILES}\"")
+	message("    HEADER_FILES \"${ADD_SHARED_LIB_HEADER_FILES}\"")
+	message("    LIBS \"${ADD_SHARED_LIB_LIBS}\"")
+	message("    PUBLIC_INCLUDE_DIRS \"${ADD_SHARED_LIB_PUBLIC_INCLUDE_DIRS}\"")
+	message("    PRIVATE_INCLUDE_DIRS \"${ADD_SHARED_LIB_PRIVATE_INCLUDE_DIRS}\"")
+	message("")
 
 	add_library(${ADD_SHARED_LIB_NAME} SHARED ${ADD_SHARED_LIB_SRC_FILES})
 	if(ADD_SHARED_LIB_LIBS)
@@ -47,58 +81,72 @@ function(ae_add_shared_library)
 			INSTALL_RPATH @loader_path/../../..
 		)
 	endif()
+
+	message("  ${ADD_SHARED_LIB_NAME} properties:")
+	ae_print_target_properties(${ADD_SHARED_LIB_NAME} PREFIX "    ")
+	message("")
 endfunction()
 
 # Bundle helper
-function(ae_add_bundle)
+function(ae_add_bundle BUNDLE_NAME)
 	cmake_parse_arguments(
-		ADD_BUNDLE
+		AEAB
 		""
-		"BUNDLE_NAME;EXECUTABLE_NAME;BUNDLE_ID;APPLE_DEVELOPMENT_TEAM;MAJOR_MINOR_PATCH_VERSION;ICNS_FILE"
+		"TARGET_NAME;BUNDLE_ID;APPLE_DEVELOPMENT_TEAM;MAJOR_MINOR_PATCH_VERSION;ICON_FILE"
 		"SRC_FILES;RESOURCES;LIBS;PACKAGE_LIBS;INCLUDE_DIRS"
 		${ARGN}
 	)
-	message(STATUS "BUNDLE_NAME \"${ADD_BUNDLE_BUNDLE_NAME}\" \(${CMAKE_BUILD_TYPE})")
-	message(STATUS "EXECUTABLE_NAME \"${ADD_BUNDLE_EXECUTABLE_NAME}\"")
-	message(STATUS "BUNDLE_ID \"${ADD_BUNDLE_BUNDLE_ID}\"")
-	message(STATUS "APPLE_DEVELOPMENT_TEAM \"${ADD_BUNDLE_APPLE_DEVELOPMENT_TEAM}\"")
-	message(STATUS "MAJOR_MINOR_PATCH_VERSION \"${ADD_BUNDLE_MAJOR_MINOR_PATCH_VERSION}\"")
-	message(STATUS "ICNS_FILE \"${ADD_BUNDLE_ICNS_FILE}\"")
-	message(STATUS "SRC_FILES \"${ADD_BUNDLE_SRC_FILES}\"")
-	message(STATUS "RESOURCES \"${ADD_BUNDLE_RESOURCES}\"")
-	message(STATUS "LIBS \"${ADD_BUNDLE_LIBS}\"")
-	message(STATUS "PACKAGE_LIBS \"${ADD_BUNDLE_PACKAGE_LIBS}\"")
-	message(STATUS "INCLUDE_DIRS \"${ADD_BUNDLE_INCLUDE_DIRS}\"")
-	message(STATUS "")
+	set(AEAB_BUNDLE_NAME "${BUNDLE_NAME}")
+	if(NOT AEAB_TARGET_NAME)
+		set(AEAB_TARGET_NAME "${BUNDLE_NAME}")
+	endif()
+	if(NOT AEAB_MAJOR_MINOR_PATCH_VERSION)
+		set(AEAB_MAJOR_MINOR_PATCH_VERSION "0.0.0")
+	endif()
+	if(CMAKE_CONFIGURATION_TYPES)
+		set(AEAB_BUILD_TYPE "Multi-Config")
+	else()
+		set(AEAB_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
+	endif()
+
+	message("Added ${AEAB_TARGET_NAME} \(${AEAB_BUILD_TYPE})")
+	
+	message("  ${AEAB_TARGET_NAME} parameters:")
+	message("    BUNDLE_NAME = ${AEAB_BUNDLE_NAME}")
+	message("    TARGET_NAME = ${AEAB_TARGET_NAME}")
+	message("    BUNDLE_ID = ${AEAB_BUNDLE_ID}")
+	message("    APPLE_DEVELOPMENT_TEAM = ${AEAB_APPLE_DEVELOPMENT_TEAM}")
+	message("    MAJOR_MINOR_PATCH_VERSION = ${AEAB_MAJOR_MINOR_PATCH_VERSION}")
+	message("    ICON_FILE = ${AEAB_ICON_FILE}")
+	message("    SRC_FILES = ${AEAB_SRC_FILES}")
+	message("    RESOURCES = ${AEAB_RESOURCES}")
+	message("    LIBS = ${AEAB_LIBS}")
+	message("    PACKAGE_LIBS = ${AEAB_PACKAGE_LIBS}")
+	message("    INCLUDE_DIRS = ${AEAB_INCLUDE_DIRS}")
 
 	if(WIN32)
 		# Create a regular windowed application instead of the default console subsystem target
-		set(ADD_BUNDLE_EXE_TYPE WIN32)
+		set(AEAB_EXE_TYPE WIN32)
 	elseif(APPLE)
-		set(ADD_BUNDLE_EXE_TYPE MACOSX_BUNDLE)
+		set(AEAB_EXE_TYPE MACOSX_BUNDLE)
 	endif()
 
-	add_executable(${ADD_BUNDLE_EXECUTABLE_NAME} ${ADD_BUNDLE_EXE_TYPE} ${ADD_BUNDLE_SRC_FILES})
-	if(ADD_BUNDLE_LIBS)
-		target_link_libraries(${ADD_BUNDLE_EXECUTABLE_NAME} PUBLIC ${ADD_BUNDLE_LIBS})
-	endif()
-	if(ADD_BUNDLE_PACKAGE_LIBS)
-		target_link_libraries(${ADD_BUNDLE_EXECUTABLE_NAME} PUBLIC ${ADD_BUNDLE_PACKAGE_LIBS})
-	endif()
-	if(ADD_BUNDLE_INCLUDE_DIRS)
-		target_include_directories(${ADD_BUNDLE_EXECUTABLE_NAME} PRIVATE ${ADD_BUNDLE_INCLUDE_DIRS})
-	endif()
+	add_executable(${AEAB_TARGET_NAME} ${AEAB_EXE_TYPE} "${AEAB_SRC_FILES}")
+	target_link_libraries(${AEAB_TARGET_NAME} PRIVATE "${AEAB_LIBS};${AEAB_PACKAGE_LIBS}")
+	target_include_directories(${AEAB_TARGET_NAME} PRIVATE "${AEAB_INCLUDE_DIRS}")
 
 	if(WIN32)
-		set_target_properties(${ADD_BUNDLE_EXECUTABLE_NAME} PROPERTIES
+		set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
 			LINK_FLAGS "/ENTRY:mainCRTStartup" # Use main instead of WinMain
 		)
 	elseif(APPLE)
 		# Only add resource files to Apple bundles
 		# Adding resources on Windows causes an issue where files are copied only once on configure
-		target_sources(${ADD_BUNDLE_EXECUTABLE_NAME} PRIVATE "${ADD_BUNDLE_RESOURCES}")
-		set_source_files_properties(${ADD_BUNDLE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
-		foreach(resource ${ADD_BUNDLE_RESOURCES})
+		if(AEAB_RESOURCES)
+			target_sources(${AEAB_TARGET_NAME} PRIVATE "${AEAB_RESOURCES}")
+		endif()
+		set_source_files_properties(${AEAB_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
+		foreach(resource ${AEAB_RESOURCES})
 			get_filename_component(resource_path ${resource} ABSOLUTE) # First get absolute path to resource
 			file(RELATIVE_PATH resource_path ${CMAKE_CURRENT_SOURCE_DIR} ${resource_path}) # Get the relative path to the resource from the root of the resource
 			cmake_path(GET resource_path PARENT_PATH resource_path) # Remove file name from path
@@ -106,51 +154,55 @@ function(ae_add_bundle)
 		endforeach()
 
 		if ("${CMAKE_GENERATOR}" STREQUAL "Xcode")
-			if (ADD_BUNDLE_APPLE_DEVELOPMENT_TEAM)
-				set(ADD_BUNDLE_APPLE_CODE_SIGN_IDENTITY "Apple Development") # See Professional CMake 24.6.1. Signing Identity And Development Team
+			if (AEAB_APPLE_DEVELOPMENT_TEAM)
+				set(AEAB_APPLE_CODE_SIGN_IDENTITY "Apple Development") # See Professional CMake 24.6.1. Signing Identity And Development Team
 			endif()
-			set(ADD_BUNDLE_APPLE_INSTALL_PATH "$(LOCAL_APPS_DIR)") # See Professional CMake 24.7. Creating And Exporting Archives
-			set(ADD_BUNDLE_APPLE_SKIP_INSTALL "NO") # See Professional CMake 24.7. Creating And Exporting Archives
+			set(AEAB_APPLE_INSTALL_PATH "$(LOCAL_APPS_DIR)") # See Professional CMake 24.7. Creating And Exporting Archives
+			set(AEAB_APPLE_SKIP_INSTALL "NO") # See Professional CMake 24.7. Creating And Exporting Archives
 		endif()
 
-		set_target_properties(${ADD_BUNDLE_EXECUTABLE_NAME} PROPERTIES
-			XCODE_ATTRIBUTE_PRODUCT_NAME "${ADD_BUNDLE_BUNDLE_NAME}" # CFBundleName
-			XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${ADD_BUNDLE_BUNDLE_ID}" # CFBundleIdentifier
-			XCODE_ATTRIBUTE_MARKETING_VERSION "${ADD_BUNDLE_MAJOR_MINOR_PATCH_VERSION}"
-			XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION "${ADD_BUNDLE_MAJOR_MINOR_PATCH_VERSION}"
+		set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
+			# Xcode only
+			XCODE_ATTRIBUTE_PRODUCT_NAME "${AEAB_BUNDLE_NAME}" # CFBundleName
+			XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${AEAB_BUNDLE_ID}" # CFBundleIdentifier
+			XCODE_ATTRIBUTE_MARKETING_VERSION "${AEAB_MAJOR_MINOR_PATCH_VERSION}"
+			XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION "${AEAB_MAJOR_MINOR_PATCH_VERSION}"
 			XCODE_ATTRIBUTE_GENERATE_INFOPLIST_FILE YES
 			XCODE_ATTRIBUTE_INFOPLIST_FILE ""
 
-			XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleDisplayName "${ADD_BUNDLE_BUNDLE_NAME}"
+			XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleDisplayName "${AEAB_BUNDLE_NAME}"
 			XCODE_ATTRIBUTE_INFOPLIST_KEY_LSApplicationCategoryType "public.app-category.games"
-			# XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleIconFile "${ADD_BUNDLE_ICNS_FILE}"
+			# XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleIconFile "${AEAB_ICON_FILE}"
 			XCODE_ATTRIBUTE_INFOPLIST_KEY_NSPrincipalClass "NSApplication"
 			# XCODE_ATTRIBUTE_INFOPLIST_KEY_NSHumanReadable @TODO
 
-			XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${ADD_BUNDLE_APPLE_DEVELOPMENT_TEAM}"
-			XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "${ADD_BUNDLE_APPLE_CODE_SIGN_IDENTITY}"
+			XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${AEAB_APPLE_DEVELOPMENT_TEAM}"
+			XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "${AEAB_APPLE_CODE_SIGN_IDENTITY}"
 
-			XCODE_ATTRIBUTE_INSTALL_PATH "${ADD_BUNDLE_APPLE_INSTALL_PATH}" # See Professional CMake 24.7. Creating And Exporting Archives
-			XCODE_ATTRIBUTE_SKIP_INSTALL "${ADD_BUNDLE_APPLE_SKIP_INSTALL}" # See Professional CMake 24.7. Creating And Exporting Archives
+			XCODE_ATTRIBUTE_INSTALL_PATH "${AEAB_APPLE_INSTALL_PATH}" # See Professional CMake 24.7. Creating And Exporting Archives
+			XCODE_ATTRIBUTE_SKIP_INSTALL "${AEAB_APPLE_SKIP_INSTALL}" # See Professional CMake 24.7. Creating And Exporting Archives
 
 			XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
 			XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH NO
 
-			MACOSX_BUNDLE_ICON_FILE "${ADD_BUNDLE_ICNS_FILE}" # CFBundleIconFile (*.icns file path)
+			# All builds
+			MACOSX_BUNDLE TRUE
+			MACOSX_BUNDLE_GUI_IDENTIFIER "${AEAB_BUNDLE_ID}" # CFBundleIdentifier needed for NSOpenPanel etc
+			MACOSX_BUNDLE_ICON_FILE "${AEAB_ICON_FILE}" # CFBundleIconFile (*.icns file path)
 
-			OUTPUT_NAME "${ADD_BUNDLE_BUNDLE_NAME}"
+			OUTPUT_NAME "${AEAB_BUNDLE_NAME}"
 
 			MACOSX_RPATH TRUE
 			BUILD_RPATH @executable_path/../Frameworks
 			INSTALL_RPATH @executable_path/../Frameworks
 		)
 
-		if(ADD_BUNDLE_PACKAGE_LIBS)
-			set_target_properties(${ADD_BUNDLE_EXECUTABLE_NAME} PROPERTIES XCODE_EMBED_FRAMEWORKS "${ADD_BUNDLE_PACKAGE_LIBS}") # 24.10. Embedding Frameworks, Plugins And Extensions
+		if(AEAB_PACKAGE_LIBS)
+			set_target_properties(${AEAB_TARGET_NAME} PROPERTIES XCODE_EMBED_FRAMEWORKS "${AEAB_PACKAGE_LIBS}") # 24.10. Embedding Frameworks, Plugins And Extensions
 
-			install(TARGETS ${ADD_BUNDLE_PACKAGE_LIBS} ${ADD_BUNDLE_EXECUTABLE_NAME}
+			install(TARGETS ${AEAB_PACKAGE_LIBS} ${AEAB_TARGET_NAME}
 				BUNDLE DESTINATION .
-				FRAMEWORK DESTINATION "${ADD_BUNDLE_BUNDLE_NAME}.app/Contents/Frameworks"
+				FRAMEWORK DESTINATION "${AEAB_BUNDLE_NAME}.app/Contents/Frameworks"
 			)
 		endif()
 	elseif(EMSCRIPTEN)
@@ -202,19 +254,19 @@ function(ae_add_bundle)
 		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
 		string (REPLACE ";" " " _AE_EM_COMPILER_FLAGS "${_AE_EM_COMPILER_FLAGS}")
 
-		set_target_properties(${ADD_BUNDLE_EXECUTABLE_NAME} PROPERTIES
-			ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${ADD_BUNDLE_EXECUTABLE_NAME}"
-			LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${ADD_BUNDLE_EXECUTABLE_NAME}"
-			RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${ADD_BUNDLE_EXECUTABLE_NAME}"
+		set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
+			ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${AEAB_TARGET_NAME}"
+			LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${AEAB_TARGET_NAME}"
+			RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${AEAB_TARGET_NAME}"
 		)
 		
 		set(_AE_EM_OUT_SUFFIX ".html")
-		string(FIND "${ADD_BUNDLE_RESOURCES}" ".html" _AE_FOUND_HTML)
+		string(FIND "${AEAB_RESOURCES}" ".html" _AE_FOUND_HTML)
 		if(NOT _AE_FOUND_HTML EQUAL -1)
 			set(_AE_EM_OUT_SUFFIX ".js") # Export js if an html file is specified
 		endif()
 
-		set_target_properties(${ADD_BUNDLE_EXECUTABLE_NAME} PROPERTIES
+		set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
 			LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
 			COMPILE_FLAGS "${_AE_EM_COMPILER_FLAGS}"
 			OUTPUT_NAME "index"
@@ -223,15 +275,18 @@ function(ae_add_bundle)
 	endif()
 	
 	if(NOT APPLE)
-		foreach(RESOURCE ${ADD_BUNDLE_RESOURCES})
+		foreach(RESOURCE ${AEAB_RESOURCES})
 			get_filename_component(RESOURCE_PATH ${RESOURCE} ABSOLUTE)
 			cmake_path(RELATIVE_PATH RESOURCE_PATH OUTPUT_VARIABLE RESOURCE_RELATIVE)
-			add_custom_command(TARGET ${ADD_BUNDLE_EXECUTABLE_NAME} POST_BUILD
+			add_custom_command(TARGET ${AEAB_TARGET_NAME} POST_BUILD
 				COMMAND ${CMAKE_COMMAND} -E copy_if_different
 					${RESOURCE_PATH}
-					$<TARGET_FILE_DIR:${ADD_BUNDLE_EXECUTABLE_NAME}>/${RESOURCE_RELATIVE}
+					$<TARGET_FILE_DIR:${AEAB_TARGET_NAME}>/${RESOURCE_RELATIVE}
 			)
 		endforeach()
 	endif()
 	
+	message("  ${AEAB_TARGET_NAME} properties:")
+	ae_print_target_properties(${AEAB_TARGET_NAME} PREFIX "    ")
+	message("")
 endfunction()

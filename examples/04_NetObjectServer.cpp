@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 04_NetObjectServer.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -36,13 +36,18 @@ int main()
   Game game;
   game.Initialize();
   AetherServer* server = AetherServer_New( 3500, 0, 16 );
+  if( !server )
+  {
+    AE_LOG( "Failed to create server. The port may already be in use." );
+    return 1;
+  }
   ae::NetObjectServer netObjectServer;
   ae::Map< AetherUuid, ae::NetObjectConnection* > netObjectConnections = TAG_EXAMPLE;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
   double nextSend = 0.0;
 
   // Update
-  while ( !game.input.quit )
+  while( !game.input.quit )
   {
     // Poll input and net modules
     game.input.Pump();
@@ -51,13 +56,13 @@ int main()
     AetherServer_Update( server );
     
     ServerReceiveInfo receiveInfo;
-    while ( AetherServer_Receive( server, &receiveInfo ) )
+    while( AetherServer_Receive( server, &receiveInfo ) )
     {
       AetherUuid playerId = receiveInfo.player->uuid;
       int32_t objIdx = gameObjects.FindFn( [ playerId ]( const GameObject& o ){ return o.playerId == playerId; } );
       GameObject* obj = ( objIdx >= 0 ) ? &gameObjects[ objIdx ] : nullptr;
       
-      switch ( receiveInfo.msgId )
+      switch( receiveInfo.msgId )
       {
         case kSysMsgPlayerConnect:
         {
@@ -75,14 +80,14 @@ int main()
           AE_LOG( "Player # disconnected", playerId );
 
           // Kill player gameobject
-          if ( obj )
+          if( obj )
           {
             obj->alive = false;
           }
 
           // Remove player from replica db
           ae::NetObjectConnection* conn = nullptr;
-          if ( netObjectConnections.TryGet( playerId, &conn ) )
+          if( netObjectConnections.TryGet( playerId, &conn ) )
           {
             netObjectConnections.Remove( playerId );
             netObjectServer.DestroyConnection( conn );
@@ -92,7 +97,7 @@ int main()
         }
         case kInputInfoMsg:
         {
-          if ( obj )
+          if( obj )
           {
             ae::BinaryReader stream( receiveInfo.data );
             stream.SerializeObject( obj->input );
@@ -106,13 +111,13 @@ int main()
 
     
     // Game Update
-    for ( uint32_t i = 0; i < gameObjects.Length(); i++ )
+    for( uint32_t i = 0; i < gameObjects.Length(); i++ )
     {
       gameObjects[ i ].Update( &game );
     }
     // Destroy dead objects
     auto findDeadFn = []( const GameObject& object ){ return !object.alive; };
-    for ( int32_t index = gameObjects.FindFn( findDeadFn ); index >= 0; index = gameObjects.FindFn( findDeadFn ) )
+    for( int32_t index = gameObjects.FindFn( findDeadFn ); index >= 0; index = gameObjects.FindFn( findDeadFn ) )
     {
       netObjectServer.DestroyNetObject( gameObjects[ index ].netObject );
       gameObjects.Remove( index );
@@ -120,14 +125,14 @@ int main()
     
     // Send replication data
     double time = ae::GetTime();
-    if ( nextSend < time )
+    if( nextSend < time )
     {
       netObjectServer.UpdateSendData();
-      for ( int32_t i = 0; i < server->playerCount; i++ )
+      for( int32_t i = 0; i < server->playerCount; i++ )
       {
         AetherPlayer* player = server->allPlayers[ i ];
         ae::NetObjectConnection* conn = nullptr;
-        if ( netObjectConnections.TryGet( player->uuid, &conn ) )
+        if( netObjectConnections.TryGet( player->uuid, &conn ) )
         {
           AetherServer_QueueSendToPlayer( server, player, kObjectInfoMsg, true, conn->GetSendData(), conn->GetSendLength() );
         }

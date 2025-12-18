@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // aeCompactingAllocator.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -42,13 +42,13 @@ public:
   void Expand( uint32_t totalBytes );
   ~aeCompactingAllocator();
 
-  template < typename T >
+  template< typename T >
   void Allocate( T** p, uint32_t size );
   
-  //template < typename T >
+  //template< typename T >
   //void Reallocate( T** p, uint32_t size );
   
-  template < typename T >
+  template< typename T >
   void Free( T** p );
   
 private:
@@ -79,7 +79,7 @@ private:
 //------------------------------------------------------------------------------
 // aeCompactingAllocator templated member functions
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
 {
   AE_ASSERT( m_data );
@@ -91,14 +91,14 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
   m_Compact();
 
   // Always append newest allocation to end
-  if ( m_tail )
+  if( m_tail )
   {
     Header* next = (Header*)( (uint8_t*)m_tail + sizeof( Header ) + m_tail->size );
     AE_ASSERT( (uint8_t*)next - m_data + size + sizeof( Header ) < m_size ); // @TODO: Should return null
     next->size = (uint16_t)size;
     next->next = nullptr;
     next->external = p;
-    next->dbgTypeId = ae::Hash().HashString( ae::GetTypeName< T >() ).Get();
+    next->dbgTypeId = ae::Hash32().HashString( ae::GetTypeName< T >() ).Get();
     next->check = 0xABABABAB;
     *p = (uint8_t*)next + sizeof( Header );
     next->prev = m_tail;
@@ -112,7 +112,7 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
     m_tail->next = nullptr;
     m_tail->prev = nullptr;
     m_tail->external = p;
-    m_tail->dbgTypeId = ae::Hash().HashString( ae::GetTypeName< T >() ).Get();
+    m_tail->dbgTypeId = ae::Hash32().HashString( ae::GetTypeName< T >() ).Get();
     m_tail->check = 0xABABABAB;
     *p = (uint8_t*)m_tail + sizeof( Header );
   }
@@ -132,11 +132,11 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
 //  m_Compact();
 //
 //  Header* oldHeader = m_GetHeader( p );
-//  if ( oldHeader->size > size )
+//  if( oldHeader->size > size )
 //  {
 //    oldHeader->size = size;
 //  }
-//  else if ( oldHeader->size < size )
+//  else if( oldHeader->size < size )
 //  {
 //    Header* newHeader = (Header*)( (uint8_t*)m_tail + sizeof( Header ) + m_tail->size );
 //    AE_ASSERT( (uint8_t*)newHeader - m_data + size + sizeof( Header ) < m_size );
@@ -150,11 +150,11 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
 //  }
 //}
 
-template < typename T >
+template< typename T >
 void aeCompactingAllocator::Free( T** p )
 {
   AE_ASSERT( p );
-  if ( *p == nullptr )
+  if( *p == nullptr )
   {
     return;
   }
@@ -166,7 +166,7 @@ void aeCompactingAllocator::Free( T** p )
   AE_ASSERT( (uint8_t*)*p < m_data + m_size );
 
   Header* header = m_GetHeader( (void*)*p );
-  uint32_t typeHash = ae::Hash().HashString( ae::GetTypeName< T >() ).Get();
+  uint32_t typeHash = ae::Hash32().HashString( ae::GetTypeName< T >() ).Get();
   AE_ASSERT_MSG( header->dbgTypeId == typeHash, "Type mismatch between allocation and free" );
   *(header->external) = nullptr;
   header->external = nullptr;

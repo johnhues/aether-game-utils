@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 24_HotLoad.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2023 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -39,7 +39,7 @@ int main()
 	fileSystem.GetAbsolutePath( ae::FileSystem::Root::Data, fileName.c_str(), &libResourcePath );
 
 	ae::Str256 buildCmd;
-	if ( ae::IsDebuggerAttached() )
+	if( ae::IsDebuggerAttached() )
 	{
 		ae::Str256 cmakeBuildDir;
 		fileSystem.GetAbsolutePath( ae::FileSystem::Root::Bundle, "..", &cmakeBuildDir ); // Root of CMake build dir
@@ -50,9 +50,9 @@ int main()
 	ae::HotLoader hotLoader;
 	hotLoader.Initialize( buildCmd.c_str(), "", libResourcePath.c_str() );
 	hotLoader.CallFn< GameFn >( "Game_Initialize", &game );
-	while ( hotLoader.CallFn< GameFn >( "Game_Update", &game ) )
+	while( hotLoader.CallFn< GameFn >( "Game_Update", &game ) )
 	{
-		if ( game.input.GetPress( ae::Key::R ) )
+		if( game.input.GetPress( ae::Key::R ) )
 		{
 			AE_INFO( "Reloading" );
 			hotLoader.Reload();

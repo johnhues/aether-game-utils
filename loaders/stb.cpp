@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // stb.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -55,7 +55,7 @@ void stbLoadPng( ae::Texture2D* texture, const uint8_t* data, uint32_t dataLen, 
   AE_ASSERT( image );
 
   ae::Texture::Format format;
-  auto type = ae::Texture::Type::Uint8;
+  auto type = ae::Texture::Type::UInt8;
   switch ( channels )
   {
     case STBI_grey:
@@ -65,7 +65,7 @@ void stbLoadPng( ae::Texture2D* texture, const uint8_t* data, uint32_t dataLen, 
       if (is16BitImage)
       {
         format = ae::Texture::Format::R16_UNORM;
-        type = ae::Texture::Type::Uint16;
+        type = ae::Texture::Type::UInt16;
       }
       break;
     case STBI_grey_alpha:

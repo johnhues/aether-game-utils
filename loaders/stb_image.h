@@ -48,8 +48,8 @@ LICENSE
 
 RECENT REVISION HISTORY:
 
-      2.25  (2020-02-02) fix warnings
-      2.24  (2020-02-02) fix warnings; thread-local failure_reason and flip_vertically
+      2.25  (2024-02-02) fix warnings
+      2.24  (2024-02-02) fix warnings; thread-local failure_reason and flip_vertically
       2.23  (2019-08-11) fix clang static analysis warning
       2.22  (2019-03-04) gif fixes, fix warnings
       2.21  (2019-02-25) fix typo in comment

@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
-// 05_TextInput.cpp
+// 05_Text.cpp
 //------------------------------------------------------------------------------
-// Copyright(c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -32,6 +32,35 @@ const ae::Tag TAG_EXAMPLE = "example";
 #ifndef DATA_DIR
 	#define DATA_DIR "data"
 #endif
+const uint32_t kCharWidth = 8;
+const uint32_t kCharHeight = 8;
+const uint32_t kCharScale = 4;
+const char* kVertShader =
+R"(
+	AE_UNIFORM mat4 u_textToNdc;
+	AE_IN_HIGHP vec4 a_position;
+	AE_IN_HIGHP vec4 a_color;
+	AE_IN_HIGHP vec2 a_uv;
+	AE_OUT_HIGHP vec4 v_color;
+	AE_OUT_HIGHP vec2 v_uv;
+	void main()
+	{
+		v_color = a_color;
+		v_uv = a_uv;
+		gl_Position = u_textToNdc * a_position;
+	}
+)";
+const char* kFragShader =
+R"(
+	AE_UNIFORM sampler2D u_tex;
+	AE_IN_HIGHP vec4 v_color;
+	AE_IN_HIGHP vec2 v_uv;
+	void main()
+	{
+		AE_COLOR.rgb = v_color.rgb;
+		AE_COLOR.a = v_color.a * AE_TEXTURE2D( u_tex, v_uv ).r;
+	}
+)";
 
 //------------------------------------------------------------------------------
 // Main
@@ -39,32 +68,32 @@ const ae::Tag TAG_EXAMPLE = "example";
 int main()
 {
 	AE_LOG( "Initialize" );
-
 	ae::FileSystem fileSystem;
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
-	ae::TextRender textRender = TAG_EXAMPLE;
 	ae::TimeStep timeStep;
-	
+	ae::SpriteRenderer textRender = TAG_EXAMPLE;
+	ae::Texture2D fontTexture;
+	ae::SpriteFont font;
+	ae::Shader fontShader;
 	fileSystem.Initialize( DATA_DIR, "ae", "text_input" );
-	window.Initialize( 1280, 720, false, true );
+	window.Initialize( 1280, 720, false, true, true );
 	window.SetTitle( "example" );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	input.SetTextMode( true );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	
+	textRender.Initialize( 1, 1024 * 8 );
+	fontShader.Initialize( kVertShader, kFragShader );
+	fontShader.SetBlending( true );
+
 	const ae::File* fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
-	ae::Texture2D fontTexture;
-
-	float textZoom = 4.0f;
-	const char* defaultText = "Try typing.\nCopy and paste should also work.\nYou can zoom by scrolling.\nPress 'ESC' to reset.";
-	input.SetText( defaultText );
-
+	std::string displayText;
+	input.SetText( "Try typing.\nCopy and paste should also work.\nResizing the window will rearrange the text.\n" );
 	auto Update = [&]()
 	{
-		input.Pump();
+		// File loading
 		if( fontFile && fontFile->GetStatus() != ae::File::Status::Pending )
 		{
 			AE_ASSERT_MSG( fontFile->GetLength(), "Could not load #", fontFile->GetUrl() );
@@ -72,61 +101,38 @@ int main()
 			targa.Load( fontFile->GetData(), fontFile->GetLength() );
 			targa.textureParams.filter = ae::Texture::Filter::Nearest;
 			fontTexture.Initialize( targa.textureParams );
-			textRender.Initialize( 1, 512, &fontTexture, 8, 1.0f );
+			font.SetGlyphsASCIISpriteSheet( fontTexture.GetWidth(), fontTexture.GetHeight(), kCharWidth, kCharHeight, ' ', '~', ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ) );
 			fileSystem.Destroy( fontFile );
 			fontFile = nullptr;
 		}
-		
-		if( input.Get( ae::Key::Escape ) && !input.GetPrev( ae::Key::Escape ) )
-		{
-			textZoom = 4.0f;
-			input.SetText( defaultText );
-		}
-		textZoom += input.mouse.scroll.y * 0.01f;
 
-		// UI units in pixels, origin in bottom left
-		ae::Matrix4 textToNdc = ae::Matrix4::Scaling( ae::Vec3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
-		textToNdc *= ae::Matrix4::Translation( ae::Vec3( render.GetWidth() / -2.0f, render.GetHeight() / 2.0f, 0.0f ) );
-		textToNdc *= ae::Matrix4::Scaling( ae::Vec3( textZoom, textZoom, 1.0f ) );
-
-		// Format input text buffer
-		ae::Str512 displayText( ">" );
-		displayText.Append( input.GetText() );
+		// Input
+		input.Pump();
 		if( input.Get( ae::Key::Meta ) && input.GetPress( ae::Key::C ) )
 		{
 			ae::SetClipboardText( input.GetText() );
 		}
 		if( input.Get( ae::Key::Meta ) && input.GetPress( ae::Key::V ) )
 		{
-			std::string inputText = input.GetText();
-			inputText.append( ae::GetClipboardText() );
-			input.SetText( inputText.c_str() );
+			input.AppendText( ae::GetClipboardText().c_str() );
 		}
+		displayText = input.GetText();
+		displayText += '_';
 		
-		static int s_blink = 0;
-		static int s_prevLen = 0;
-		if( s_prevLen != displayText.Length() )
-		{
-			s_prevLen = displayText.Length();
-			s_blink = 0;
-		}
-		else if( s_blink >= 60 )
-		{
-			s_blink -= 60;
-		}
-		displayText.Append( s_blink < 30 ? "_" : " " );
-		s_blink++;
-		
+		// Render
+		ae::Matrix4 textToNdc = ae::Matrix4::Translation( -1.0f, -1.0f, 0.0f ) * ae::Matrix4::Scaling( ae::Vec3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
 		render.Activate();
 		render.Clear( ae::Color::Green().ScaleRGB( 0.01f ) );
-		if( textRender.GetFontSize() )
+		if( fontTexture.GetTexture() )
 		{
-			// Render text in top left corner
-			int maxLineLength = render.GetWidth() / textRender.GetFontSize() - 2;
-			ae::Vec3 textPos( textRender.GetFontSize() / 2.0f, textRender.GetFontSize() / -2.0f, 0.0f );
-			textRender.Add( textPos, ae::Vec2( (float)textRender.GetFontSize() ), displayText.c_str(), ae::Color::Green(), maxLineLength, 0 );
-			textRender.Render( textToNdc );
+			const ae::Rect region = ae::Rect::FromPoints( ae::Vec2( kCharWidth * kCharScale ), ae::Vec2( render.GetWidth() - kCharWidth * kCharScale, render.GetHeight() - kCharWidth * kCharScale ) );
+			textRender.AddText( 0, displayText.c_str(), &font, region, kCharHeight * kCharScale, ( kCharHeight + 1 ) * kCharScale, ae::Color::Green() );
 		}
+		ae::UniformList uniforms;
+		uniforms.Set( "u_textToNdc", textToNdc );
+		uniforms.Set( "u_tex", &fontTexture );
+		textRender.SetParams( 0, &fontShader, uniforms );
+		textRender.Render();
 		render.Present();
 
 		timeStep.Tick();
@@ -135,17 +141,15 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
 #else
-	while ( Update() ) {}
+	while( Update() ) {}
 #endif
 
 	AE_LOG( "Terminate" );
-
 	textRender.Terminate();
 	fontTexture.Terminate();
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();
 	fileSystem.DestroyAll();
-
 	return 0;
 }

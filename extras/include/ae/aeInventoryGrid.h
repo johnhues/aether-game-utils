@@ -2,7 +2,7 @@
 // aeInventoryGrid.h
 // 2D sparse grid which stores elements that occupy an arbitrary number of cells
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -33,7 +33,7 @@
 //------------------------------------------------------------------------------
 // aeInventoryGrid class
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 class aeInventoryGrid
 {
 public:
@@ -66,27 +66,27 @@ private:
   ae::List< Shape > m_shapeList;
 };
 
-template < typename T >
+template< typename T >
 aeInventoryGrid< T >::aeInventoryGrid( ae::Tag pool ) :
   m_pool( pool )
 {}
 
-template < typename T >
+template< typename T >
 aeInventoryGrid< T >::~aeInventoryGrid()
 {
-  while ( m_shapeList.GetLast() )
+  while( m_shapeList.GetLast() )
   {
     ae::Delete( m_shapeList.GetLast() );
   }
 }
 
-template < typename T >
+template< typename T >
 void aeInventoryGrid< T >::Set( T& value, ae::RectInt rect )
 {
   ae::Array< ae::Int2 > cells( m_pool, rect.w * rect.h );
-  for ( uint32_t y = 0; y < rect.h; y++ )
+  for( uint32_t y = 0; y < rect.h; y++ )
   {
-    for ( uint32_t x = 0; x < rect.w; x++ )
+    for( uint32_t x = 0; x < rect.w; x++ )
     {
       cells.Append( ae::Int2( rect.x + x, rect.y + y ) );
     }
@@ -94,10 +94,10 @@ void aeInventoryGrid< T >::Set( T& value, ae::RectInt rect )
   Set( value, &( cells[ 0 ] ), cells.Length() );
 }
 
-template < typename T >
+template< typename T >
 void aeInventoryGrid< T >::Set( T& value, ae::Int2* cells, uint32_t cellCount )
 {
-  for ( uint32_t i = 0; i < cellCount; i++ )
+  for( uint32_t i = 0; i < cellCount; i++ )
   {
     T* other = TryGet( cells[ i ] );
     AE_ASSERT_MSG( !other, "Cell # already occupied by #", cells[ i ], other );
@@ -111,17 +111,17 @@ void aeInventoryGrid< T >::Set( T& value, ae::Int2* cells, uint32_t cellCount )
   m_shapeList.Append( shape->node );
 }
 
-template < typename T >
+template< typename T >
 T* aeInventoryGrid< T >::TryGet( ae::Int2 pos )
 {
   return const_cast<T*>( const_cast<const aeInventoryGrid< T >*>( this )->TryGet( pos ) );
 }
 
-template < typename T >
+template< typename T >
 bool aeInventoryGrid< T >::TryGet( ae::Int2 pos, T* valueOut )
 {
   const T* result = TryGet( pos );
-  if ( result )
+  if( result )
   {
     *valueOut = *result;
     return true;
@@ -129,13 +129,13 @@ bool aeInventoryGrid< T >::TryGet( ae::Int2 pos, T* valueOut )
   return false;
 }
 
-template < typename T >
+template< typename T >
 const T* aeInventoryGrid< T >::TryGet( ae::Int2 pos ) const
 {
   const Shape* shape = m_shapeList.GetFirst();
-  while ( shape )
+  while( shape )
   {
-    if ( shape->cells.Find( pos ) >= 0 )
+    if( shape->cells.Find( pos ) >= 0 )
     {
       return &shape->value;
     }
@@ -145,10 +145,10 @@ const T* aeInventoryGrid< T >::TryGet( ae::Int2 pos ) const
   return nullptr;
 }
 
-template < typename T >
+template< typename T >
 void aeInventoryGrid< T >::Remove( ae::Int2 pos )
 {
-  if ( m_shapeList.Length() == 0 )
+  if( m_shapeList.Length() == 0 )
   {
     return;
   }
@@ -158,13 +158,13 @@ void aeInventoryGrid< T >::Remove( ae::Int2 pos )
     return ( shape->cells.Find( pos ) >= 0 );
   };
   Shape* shape = m_shapeList.FindFn( fn );
-  if ( shape )
+  if( shape )
   {
     ae::Delete( shape );
   }
 }
 
-template < typename T >
+template< typename T >
 void aeInventoryGrid< T >::Remove( const T& value )
 {
   AE_ASSERT( m_shapeList.Length() );
@@ -178,7 +178,7 @@ void aeInventoryGrid< T >::Remove( const T& value )
   ae::Delete( shape );
 }
 
-template < typename T >
+template< typename T >
 uint32_t aeInventoryGrid< T >::Length() const
 {
   return m_shapeList.Length();

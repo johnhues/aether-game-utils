@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 04_NetObjectCommon.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -46,7 +46,7 @@ class Game
 public:
   void Initialize()
   {
-    window.Initialize( 800, 600, false, true );
+    window.Initialize( 800, 600, false, true, true );
     render.Initialize( &window );
     debugLines.Initialize( 32 );
     input.Initialize( &window );
@@ -111,11 +111,11 @@ public:
     const float dt = game->timeStep.GetDt();
     
     // Client - read net data
-    if ( !netObject->IsAuthority() )
+    if( !netObject->IsAuthority() )
     {
       ae::BinaryReader rStream( netObject->GetSyncData(), netObject->SyncDataLength() );
       Serialize( &rStream );
-      if ( ( m_pos - m_netPos ).Length() > 2.5f )
+      if( ( m_pos - m_netPos ).Length() > 2.5f )
       {
         m_pos = m_netPos;
       }
@@ -135,7 +135,7 @@ public:
     m_rotation += m_rotationVel * game->timeStep.GetDt();
 
     // Server - write net data
-    if ( netObject->IsAuthority() )
+    if( netObject->IsAuthority() )
     {
       m_netPos = m_pos;
       m_netRotation = m_rotation;

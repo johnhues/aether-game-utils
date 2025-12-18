@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // aeImage.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -40,15 +40,15 @@ void ae::Image::Load( const uint8_t* data, uint32_t width, uint32_t height, Form
   m_data.Reserve( length * m_channels );
 
   uint32_t formatChannels = (uint32_t)format; // @NOTE: See static assert above
-  if ( formatChannels == m_channels )
+  if( formatChannels == m_channels )
   {
     // @NOTE: Direct copy
     m_data.AppendArray( data, length * m_channels );
   }
-  else if ( formatChannels > m_channels )
+  else if( formatChannels > m_channels )
   {
     // @NOTE: More channels provided than needed
-    for ( uint32_t i = 0; i < length; i++ )
+    for( uint32_t i = 0; i < length; i++ )
     {
       m_data.AppendArray( &data[ i * formatChannels ], m_channels );
     }
@@ -59,7 +59,7 @@ void ae::Image::Load( const uint8_t* data, uint32_t width, uint32_t height, Form
     // Copy last color value into remaining channels, and set alpha to opaque
     uint8_t p[ 4 ];
     p[ 3 ] = 255;
-    for ( uint32_t i = 0; i < length; i++ )
+    for( uint32_t i = 0; i < length; i++ )
     {
       uint32_t index = i * formatChannels;
       memcpy( p, &data[ index ], formatChannels );
@@ -72,13 +72,13 @@ void ae::Image::Load( const uint8_t* data, uint32_t width, uint32_t height, Form
 
 ae::Color ae::Image::Get( ae::Int2 pixel ) const
 {
-  if ( pixel.x < 0 || pixel.y < 0 || pixel.x >= m_width || pixel.y >= m_height )
+  if( pixel.x < 0 || pixel.y < 0 || pixel.x >= m_width || pixel.y >= m_height )
   {
     return ae::Color::Black();
   }
 
   uint32_t index = ( pixel.y * m_width + pixel.x ) * m_channels;
-  switch ( m_channels )
+  switch( m_channels )
   {
     case 1:
     {
@@ -105,7 +105,7 @@ ae::Color ae::Image::Get( ae::Vec2 pixel, Interpolation interpolation ) const
 {
   ae::Int2 pi = pixel.FloorCopy();
 
-  switch ( interpolation )
+  switch( interpolation )
   {
     case Interpolation::Nearest:
     {

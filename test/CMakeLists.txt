@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 include(FetchContent)
 
+message("")
+message("aether-game-utils test")
+message("")
+
 # Catch2
+set(CMAKE_CATCH_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 FetchContent_Declare(
 	Catch2
 	GIT_REPOSITORY "https://github.com/catchorg/Catch2.git"
@@ -10,10 +15,12 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Catch2)
 FetchContent_GetProperties(Catch2 SOURCE_DIR Catch2_SOURCE_DIR)
 
+message("")
+
 # test library (asserts throw exceptions for unit tests)
 add_ae_library(ae_test STATIC)
 target_compile_options(ae_test PUBLIC "-Wno-exceptions") # All asserts throw exceptions for unit tests
-target_compile_definitions(ae_test PUBLIC AE_USER_CONFIG="TestConfig.h") # All asserts throw exceptions for unit tests
+target_compile_definitions(ae_test PUBLIC AE_CONFIG_FILE="TestConfig.h") # All asserts throw exceptions for unit tests
 target_include_directories(ae_test PUBLIC
 	"${AE_ROOT_DIR}/extras/include"
 	"${CURRENT_SOURCE_DIR}"
@@ -33,7 +40,7 @@ if(EMSCRIPTEN)
 endif()
 
 # unit test executable
-file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
+file(GLOB TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
 add_executable(test ${TEST_SOURCES})
 if(CMAKE_GENERATOR STREQUAL Xcode)
 	add_custom_command(TARGET test

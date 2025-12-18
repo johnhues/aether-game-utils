@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // MetaTest.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -31,24 +31,50 @@
 //------------------------------------------------------------------------------
 TEST_CASE( "Can get base type by name", "[aeMeta]" )
 {
-	REQUIRE( ae::GetTypeByName( "ae::Object" ) );
+	const ae::ClassType* objType = ae::GetClassType< ae::Object >();
+	const ae::Str32 objTypeName = objType->GetName();
+	REQUIRE( objType );
+	REQUIRE( objTypeName == "ae::Object" );
+	REQUIRE( ae::GetClassTypeByName( "ae::Object" ) == objType );
+
+	REQUIRE( ae::GetTypeName< ae::Object >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::Object* >() == ae::Str32( "ae::Object *" ) );
+	REQUIRE( ae::GetTypeName< ae::Object& >() == ae::Str32( "ae::Object &" ) );
+	REQUIRE( ae::GetTypeName< ae::Object[ 3 ] >() == ae::Str32( "ae::Object[3]" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object >() == ae::Str32( "const ae::Object" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object* >() == ae::Str32( "const ae::Object *" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object& >() == ae::Str32( "const ae::Object &" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object[ 3 ] >() == ae::Str32( "const ae::Object[3]" ) );
+
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< ae::Object > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< ae::Object* > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< ae::Object& > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< ae::Object[ 3 ] > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object* > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object& > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object[ 3 ] > >() == ae::Str32( "ae::Object" ) );
 }
 
 TEST_CASE( "Can get base type with templates", "[aeMeta]" )
 {
-	REQUIRE( ae::GetType< ae::Object >() );
+	REQUIRE( ae::GetClassType< ae::Object >() );
 }
 
 TEST_CASE( "Class registration", "[aeMeta]" )
 {
-	REQUIRE( ae::GetType< SomeClass >() );
-	REQUIRE( ae::GetTypeByName( "SomeClass" ) );
-	REQUIRE( ae::GetType< SomeClass >() == ae::GetTypeByName( "SomeClass" ) );
+	REQUIRE( ae::GetClassType< SomeClass >() );
+	REQUIRE( ae::GetClassTypeByName( "SomeClass" ) );
+	REQUIRE( ae::GetClassType< SomeClass >() == ae::GetClassTypeByName( "SomeClass" ) );
+	REQUIRE( ae::GetClassType< const SomeClass >() );
+	REQUIRE( ae::GetClassType< const SomeClass >() == ae::GetClassType< SomeClass >() );
+	REQUIRE( ae::GetClassType< SomeClass* >() );
+	REQUIRE( ae::GetClassType< SomeClass* >() == ae::GetClassType< SomeClass >() );
 }
 
 TEST_CASE( "Class properties", "[aeMeta]" )
 {
-	const ae::Type* type = ae::GetType< SomeClass >();
+	const ae::ClassType* type = ae::GetClassType< SomeClass >();
 	REQUIRE( type );
 	REQUIRE( type->GetPropertyCount() == 3 );
 	
@@ -94,14 +120,14 @@ TEST_CASE( "Class properties", "[aeMeta]" )
 
 TEST_CASE( "Class vars", "[aeMeta]" )
 {
-	const ae::Type* type = ae::GetType< SomeClass >();
+	const ae::ClassType* type = ae::GetClassType< SomeClass >();
 	REQUIRE( type );
 	REQUIRE( type->GetVarCount( false ) );
 
 	REQUIRE( type->GetVarByName( "intMember", false ) );
 	REQUIRE( type->GetVarByIndex( 0, false ) );
 	REQUIRE( type->GetVarByName( "intMember", false ) == type->GetVarByIndex( 0, false ) );
-	const ae::Var* intVar = type->GetVarByName( "intMember", false );
+	const ae::ClassVar* intVar = type->GetVarByName( "intMember", false );
 	REQUIRE( intVar->HasProperty( "intProp" ) );
 	REQUIRE( intVar->GetPropertyIndex( "intProp" ) == 0 );
 	REQUIRE( intVar->GetPropertyCount() == 1 );
@@ -112,7 +138,7 @@ TEST_CASE( "Class vars", "[aeMeta]" )
 	REQUIRE( type->GetVarByName( "boolMember", false ) );
 	REQUIRE( type->GetVarByIndex( 1, false ) );
 	REQUIRE( type->GetVarByName( "boolMember", false ) == type->GetVarByIndex( 1, false ) );
-	const ae::Var* boolVar = type->GetVarByName( "boolMember", false );
+	const ae::ClassVar* boolVar = type->GetVarByName( "boolMember", false );
 	REQUIRE( boolVar->HasProperty( "boolProp" ) );
 	REQUIRE( boolVar->GetPropertyIndex( "boolProp" ) == 0 );
 	REQUIRE( boolVar->GetPropertyCount() == 1 );
@@ -125,7 +151,7 @@ TEST_CASE( "Class vars", "[aeMeta]" )
 	REQUIRE( type->GetVarByName( "enumTest", false ) );
 	REQUIRE( type->GetVarByIndex( 2, false ) );
 	REQUIRE( type->GetVarByName( "enumTest", false ) == type->GetVarByIndex( 2, false ) );
-	const ae::Var* enumVar = type->GetVarByName( "enumTest", false );
+	const ae::ClassVar* enumVar = type->GetVarByName( "enumTest", false );
 	REQUIRE( enumVar->GetPropertyCount() == 2 );
 	
 	// prop0
@@ -157,9 +183,9 @@ TEST_CASE( "Class vars", "[aeMeta]" )
 //------------------------------------------------------------------------------
 TEST_CASE( "Class registration in namespaces", "[aeMeta]" )
 {
-	REQUIRE( ae::GetType< Namespace0::Namespace1::NamespaceClass >() );
-	REQUIRE( ae::GetTypeByName( "Namespace0::Namespace1::NamespaceClass" ) );
-	REQUIRE( ae::GetType< Namespace0::Namespace1::NamespaceClass >() == ae::GetTypeByName( "Namespace0::Namespace1::NamespaceClass" ) );
+	REQUIRE( ae::GetClassType< Namespace0::Namespace1::NamespaceClass >() );
+	REQUIRE( ae::GetClassTypeByName( "Namespace0::Namespace1::NamespaceClass" ) );
+	REQUIRE( ae::GetClassType< Namespace0::Namespace1::NamespaceClass >() == ae::GetClassTypeByName( "Namespace0::Namespace1::NamespaceClass" ) );
 }
 
 //------------------------------------------------------------------------------
@@ -167,7 +193,8 @@ TEST_CASE( "Class registration in namespaces", "[aeMeta]" )
 //------------------------------------------------------------------------------
 TEST_CASE( "enum registration", "[aeMeta]" )
 {
-	const ae::Enum* playerStateEnum = ae::GetEnum( "PlayerState" );
+	const ae::EnumType* playerStateEnum = ae::GetEnumType( "PlayerState" );
+	REQUIRE( playerStateEnum );
 	REQUIRE( playerStateEnum->GetName() == ae::Str32( "PlayerState" ) );
 	
 	REQUIRE( playerStateEnum->TypeSize() == 2 );
@@ -187,41 +214,43 @@ TEST_CASE( "enum registration", "[aeMeta]" )
 
 TEST_CASE( "Aggregate vars", "[aeMeta]" )
 {
-	const ae::Type* type = ae::GetType< AggregateClass >();
+	const ae::ClassType* type = ae::GetClassType< AggregateClass >();
 	REQUIRE( type );
 	REQUIRE( type->GetVarCount( false ) == 2 );
 
 	AggregateClass c;
 
 	{
-		const ae::Var* someClass = type->GetVarByName( "someClass", false );
-		REQUIRE( someClass );
-		REQUIRE( someClass->GetType() == ae::BasicType::Class );
-		REQUIRE( someClass->GetTypeName() == ae::Str32( "SomeClass" ) );
-		REQUIRE( someClass->GetSize() == sizeof(SomeClass) );
-		REQUIRE( someClass->GetSubType() == ae::GetType< SomeClass >() );
-		SomeClass* someClassPtr = someClass->GetPointer< SomeClass >( &c );
+		const ae::ClassVar* someClassVar = type->GetVarByName( "someClass", false );
+		REQUIRE( someClassVar );
+		const ae::ClassType* someClassType = someClassVar->GetOuterVarType().AsVarType< ae::ClassType >();
+		REQUIRE( someClassType );
+		REQUIRE( someClassType->GetName() == ae::Str32( "SomeClass" ) );
+		REQUIRE( someClassType->GetSize() == sizeof(SomeClass) );
+		REQUIRE( someClassVar->GetSubType() == ae::GetClassType< SomeClass >() );
+		SomeClass* someClassPtr = someClassVar->GetPointer< SomeClass >( &c );
 		REQUIRE( someClassPtr == &c.someClass );
-		REQUIRE( someClass->GetPointer< SomeClass >( &c, 0 ) == nullptr );
-		REQUIRE( someClass->GetPointer< SomeClass >( &c, 1 ) == nullptr );
-		const ae::Type* varType = ae::GetTypeFromObject( someClassPtr );
+		REQUIRE( someClassVar->GetPointer< SomeClass >( &c, 0 ) == nullptr );
+		REQUIRE( someClassVar->GetPointer< SomeClass >( &c, 1 ) == nullptr );
+		const ae::ClassType* varType = ae::GetClassTypeFromObject( someClassPtr );
 		REQUIRE( varType );
-		REQUIRE( varType == ae::GetType< SomeClass >() );
+		REQUIRE( varType == ae::GetClassType< SomeClass >() );
 	}
 	{
-		const ae::Var* someClass1 = type->GetVarByName( "someClass1", false );
+		const ae::ClassVar* someClass1 = type->GetVarByName( "someClass1", false );
 		REQUIRE( someClass1 );
-		REQUIRE( someClass1->GetType() == ae::BasicType::Class );
-		REQUIRE( someClass1->GetTypeName() == ae::Str32( "SomeClass" ) );
-		REQUIRE( someClass1->GetSize() == sizeof(SomeClass) );
-		REQUIRE( someClass1->GetSubType() == ae::GetType< SomeClass >() );
+		const ae::ClassType* someClass1Type = someClass1->GetOuterVarType().AsVarType< ae::ClassType >();
+		REQUIRE( someClass1Type );
+		REQUIRE( someClass1Type->GetName() == ae::Str32( "SomeClass" ) );
+		REQUIRE( someClass1Type->GetSize() == sizeof(SomeClass) );
+		REQUIRE( someClass1->GetSubType() == ae::GetClassType< SomeClass >() );
 		SomeClass* someClass1Ptr = someClass1->GetPointer< SomeClass >( &c );
 		REQUIRE( someClass1Ptr == &c.someClass1 );
 		REQUIRE( someClass1->GetPointer< SomeClass >( &c, 0 ) == nullptr );
 		REQUIRE( someClass1->GetPointer< SomeClass >( &c, 1 ) == nullptr );
-		const ae::Type* varType = ae::GetTypeFromObject( someClass1Ptr );
+		const ae::ClassType* varType = ae::GetClassTypeFromObject( someClass1Ptr );
 		REQUIRE( varType );
-		REQUIRE( varType == ae::GetType< SomeClass >() );
+		REQUIRE( varType == ae::GetClassType< SomeClass >() );
 	}
 }
 
@@ -232,174 +261,481 @@ TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 	_c.boolMember = true;
 	_c.enumTest = TestEnumClass::Five;
 	const SomeClass& c = _c;
-	const ae::Type* type = ae::GetTypeFromObject( &c );
+	const ae::ClassType* type = ae::GetClassTypeFromObject( &c );
 	REQUIRE( type );
 	REQUIRE( type->GetVarCount( false ) == 3 );
 
 	{
 		int32_t intMember = 0;
-		const ae::Var* intVar = type->GetVarByName( "intMember", false );
+		const ae::ClassVar* intVar = type->GetVarByName( "intMember", false );
 		REQUIRE( intVar );
-		REQUIRE( intVar->GetType() == ae::BasicType::Int32 );
+		const ae::BasicType* intVarType = intVar->GetOuterVarType().AsVarType< ae::BasicType >();
+		REQUIRE( intVarType );
+		REQUIRE( intVarType->GetType() == ae::BasicType::Int32 );
 		REQUIRE( intVar->GetObjectValue< int32_t >( &c, &intMember ) );
 		REQUIRE( intMember == 123 );
 	}
 	{
 		bool boolMember = false;
-		const ae::Var* boolVar = type->GetVarByName( "boolMember", false );
+		const ae::ClassVar* boolVar = type->GetVarByName( "boolMember", false );
 		REQUIRE( boolVar );
-		REQUIRE( boolVar->GetType() == ae::BasicType::Bool );
+		const ae::BasicType* boolVarType = boolVar->GetOuterVarType().AsVarType< ae::BasicType >();
+		REQUIRE( boolVarType );
+		REQUIRE( boolVarType->GetType() == ae::BasicType::Bool );
 		REQUIRE( boolVar->GetObjectValue< bool >( &c, &boolMember ) );
 		REQUIRE( boolMember == true );
 	}
 	{
 		TestEnumClass enumTest = TestEnumClass::Zero;
-		const ae::Var* enumVar = type->GetVarByName( "enumTest", false );
+		const ae::ClassVar* enumVar = type->GetVarByName( "enumTest", false );
 		REQUIRE( enumVar );
-		REQUIRE( enumVar->GetType() == ae::BasicType::Enum );
+		const ae::EnumType* enumVarType = enumVar->GetOuterVarType().AsVarType< ae::EnumType >();
+		REQUIRE( enumVarType );
+		REQUIRE( ae::Str32( "TestEnumClass" ) == enumVarType->GetName() );
 		REQUIRE( enumVar->GetObjectValue< TestEnumClass >( &c, &enumTest ) );
 		REQUIRE( enumTest == TestEnumClass::Five );
 	}
 }
 
+TEST_CASE( "Null DataPointer", "[aeMeta]" )
+{
+	const ae::ClassType* type = ae::GetClassType< ArrayClass >();
+	REQUIRE( type );
+	REQUIRE( type->GetVarCount( false ) == 6 );
+	const ae::ClassVar* classVar = type->GetVarByIndex( 0, false );
+	ArrayClass c;
+
+	ae::DataPointer dataDefault;
+	ae::DataPointer dataTemplate( (ArrayClass*)nullptr );
+	ae::DataPointer dataVarType( *type, nullptr );
+	ae::DataPointer dataClassVar0( classVar, nullptr );
+	ae::DataPointer dataClassVar1( nullptr, &c );
+	REQUIRE( !dataDefault );
+	REQUIRE( !dataTemplate );
+	REQUIRE( !dataVarType );
+	REQUIRE( !dataClassVar0 );
+	REQUIRE( !dataClassVar1 );
+	REQUIRE_THROWS( dataDefault.GetVarType() );
+	REQUIRE_THROWS( dataTemplate.GetVarType() );
+	REQUIRE_THROWS( dataVarType.GetVarType() );
+	REQUIRE_THROWS( dataClassVar0.GetVarType() );
+	REQUIRE_THROWS( dataClassVar1.GetVarType() );
+	
+	ae::ConstDataPointer constDataDefault;
+	ae::ConstDataPointer constDataTemplate( (ArrayClass*)nullptr );
+	ae::ConstDataPointer constDataVarType( *type, nullptr );
+	ae::ConstDataPointer constDataClassVar0( classVar, nullptr );
+	ae::ConstDataPointer constDataClassVar1( nullptr, &c );
+	REQUIRE( !constDataDefault );
+	REQUIRE( !constDataTemplate );
+	REQUIRE( !constDataVarType );
+	REQUIRE( !constDataClassVar0 );
+	REQUIRE( !constDataClassVar1 );
+	REQUIRE_THROWS( constDataDefault.GetVarType() );
+	REQUIRE_THROWS( constDataTemplate.GetVarType() );
+	REQUIRE_THROWS( constDataVarType.GetVarType() );
+	REQUIRE_THROWS( constDataClassVar0.GetVarType() );
+	REQUIRE_THROWS( constDataClassVar1.GetVarType() );
+}
+
 TEST_CASE( "Array vars", "[aeMeta]" )
 {
-	const ae::Type* type = ae::GetType< ArrayClass >();
+	const ae::ClassType* type = ae::GetClassType< ArrayClass >();
 	REQUIRE( type );
 	REQUIRE( type->GetVarCount( false ) == 6 );
 
 	ArrayClass c;
+	ae::DataPointer varData( &c );
 
+	// int32_t intArray[ 3 ];
 	{
-		const ae::Var* intArray = type->GetVarByName( "intArray", false );
+		const ae::ClassVar* intArrayVar = type->GetVarByName( "intArray", false );
+		REQUIRE( intArrayVar );
+
+		ae::DataPointer intArray( intArrayVar, &c );
+		ae::DataPointer _intArray( &c.intArray );
 		REQUIRE( intArray );
-		REQUIRE( intArray->IsArray() );
-		REQUIRE( intArray->GetType() == ae::BasicType::Int32 );
-		REQUIRE( intArray->GetSize() == sizeof(int32_t) );
-		REQUIRE( intArray->IsArrayFixedLength() );
-		REQUIRE( intArray->GetArrayLength( &c ) == 3 );
-		REQUIRE( intArray->GetArrayMaxLength() == 3 );
-		REQUIRE( intArray->SetArrayLength( &c, 0 ) == 3 );
-		REQUIRE( intArray->SetArrayLength( &c, 3 ) == 3 );
-		REQUIRE( intArray->SetArrayLength( &c, 4 ) == 3 );
-		REQUIRE( intArray->SetArrayLength( &c, 5 ) == 3 );
+		REQUIRE( _intArray );
+		REQUIRE( intArray == _intArray );
+		REQUIRE( &intArray.GetVarType() == &intArrayVar->GetOuterVarType() );
+		const ae::ArrayType* arrayVarType = intArrayVar->GetOuterVarType().AsVarType< ae::ArrayType >();
+		REQUIRE( arrayVarType );
+		REQUIRE( arrayVarType->IsFixedLength() );
+		REQUIRE( arrayVarType->GetLength( intArray ) == 3 );
+		REQUIRE( arrayVarType->GetMaxLength() == 3 );
+
+		const ae::BasicType* basicVarType = arrayVarType->GetInnerVarType().AsVarType< ae::BasicType >();
+		REQUIRE( basicVarType );
+		REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
+		REQUIRE( basicVarType->GetSize() == sizeof(int32_t) );
+		
+		// @TODO: Old, replace with Type functions
+		REQUIRE( intArrayVar->IsArray() );
+		REQUIRE( intArrayVar->IsArrayFixedLength() );
+		REQUIRE( intArrayVar->GetArrayLength( &c ) == 3 );
+		REQUIRE( intArrayVar->GetArrayMaxLength() == 3 );
+		REQUIRE( intArrayVar->SetArrayLength( &c, 0 ) == 3 );
+		REQUIRE( intArrayVar->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( intArrayVar->SetArrayLength( &c, 4 ) == 3 );
+		REQUIRE( intArrayVar->SetArrayLength( &c, 5 ) == 3 );
 	}
+	// ae::Array< int32_t, 4 > intArray2;
 	{
-		const ae::Var* intArray2 = type->GetVarByName( "intArray2", false );
+		const ae::ClassVar* intArray2Var = type->GetVarByName( "intArray2", false );
+		REQUIRE( intArray2Var );
+
+		ae::DataPointer intArray2( intArray2Var, &c );
+		ae::DataPointer _intArray2( &c.intArray2 );
 		REQUIRE( intArray2 );
-		REQUIRE( intArray2->IsArray() );
-		REQUIRE( intArray2->GetType() == ae::BasicType::Int32 );
-		REQUIRE( intArray2->GetSize() == sizeof(int32_t) );
-		REQUIRE( !intArray2->IsArrayFixedLength() );
-		REQUIRE( intArray2->GetArrayLength( &c ) == 0 );
-		REQUIRE( intArray2->GetArrayMaxLength() == 4 );
-		REQUIRE( intArray2->SetArrayLength( &c, 4 ) == 4 );
+		REQUIRE( _intArray2 );
+		REQUIRE( intArray2 == _intArray2 );
+		REQUIRE( &intArray2.GetVarType() == &intArray2Var->GetOuterVarType() );
+		const ae::ArrayType* arrayVarType = intArray2Var->GetOuterVarType().AsVarType< ae::ArrayType >();
+		REQUIRE( arrayVarType );
+
+		REQUIRE( !arrayVarType->IsFixedLength() );
+		REQUIRE( arrayVarType->GetLength( intArray2 ) == 0 );
+		REQUIRE( arrayVarType->GetMaxLength() == 4 );
+		const ae::BasicType* basicVarType = arrayVarType->GetInnerVarType().AsVarType< ae::BasicType >();
+		REQUIRE( basicVarType );
+		REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
+		REQUIRE( basicVarType->GetSize() == sizeof(int32_t) );
+
+		// @TODO: Old, replace with Type functions
+		REQUIRE( intArray2Var->IsArray() );
+		REQUIRE( !intArray2Var->IsArrayFixedLength() );
+		REQUIRE( intArray2Var->GetArrayLength( &c ) == 0 );
+		REQUIRE( intArray2Var->GetArrayMaxLength() == 4 );
+		REQUIRE( intArray2Var->SetArrayLength( &c, 4 ) == 4 );
 		REQUIRE( c.intArray2.Length() == 4 );
-		REQUIRE( intArray2->SetArrayLength( &c, 2 ) == 2 );
+		REQUIRE( intArray2Var->SetArrayLength( &c, 2 ) == 2 );
 		REQUIRE( c.intArray2.Length() == 2 );
-		REQUIRE( intArray2->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( intArray2Var->SetArrayLength( &c, 3 ) == 3 );
 		REQUIRE( c.intArray2.Length() == 3 );
-		REQUIRE( intArray2->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( intArray2Var->SetArrayLength( &c, 0 ) == 0 );
 		REQUIRE( c.intArray2.Length() == 0 );
-		REQUIRE( intArray2->SetArrayLength( &c, 1 ) == 1 );
+		REQUIRE( intArray2Var->SetArrayLength( &c, 1 ) == 1 );
 		REQUIRE( c.intArray2.Length() == 1 );
 	}
+	// ae::Array< int32_t > intArray3 = AE_ALLOC_TAG_META_TEST;
 	{
-		const ae::Var* intArray3 = type->GetVarByName( "intArray3", false );
+		const ae::ClassVar* intArray3Var = type->GetVarByName( "intArray3", false );
+		REQUIRE( intArray3Var );
+		
+		ae::DataPointer intArray3( intArray3Var, &c );
+		ae::DataPointer _intArray3( &c.intArray3 );
 		REQUIRE( intArray3 );
-		REQUIRE( intArray3->IsArray() );
-		REQUIRE( intArray3->GetType() == ae::BasicType::Int32 );
-		REQUIRE( intArray3->GetSize() == sizeof(int32_t) );
-		REQUIRE( !intArray3->IsArrayFixedLength() );
-		REQUIRE( intArray3->GetArrayLength( &c ) == 0 );
-		REQUIRE( intArray3->GetArrayMaxLength() == ae::MaxValue< uint32_t >() );
-		REQUIRE( intArray3->SetArrayLength( &c, 4 ) == 4 );
+		REQUIRE( _intArray3 );
+		REQUIRE( intArray3 == _intArray3 );
+		REQUIRE( &intArray3.GetVarType() == &intArray3Var->GetOuterVarType() );
+		const ae::ArrayType* arrayVarType = intArray3Var->GetOuterVarType().AsVarType< ae::ArrayType >();
+		REQUIRE( arrayVarType );
+
+		REQUIRE( !arrayVarType->IsFixedLength() );
+		REQUIRE( arrayVarType->GetLength( intArray3 ) == 0 );
+		REQUIRE( arrayVarType->GetMaxLength() == ae::MaxValue< uint32_t >() );
+		const ae::BasicType* basicVarType = arrayVarType->GetInnerVarType().AsVarType< ae::BasicType >();
+		REQUIRE( basicVarType );
+		REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
+		REQUIRE( basicVarType->GetSize() == sizeof(int32_t) );
+
+		// @TODO: Old, replace with Type functions
+		REQUIRE( intArray3Var->IsArray() );
+		REQUIRE( !intArray3Var->IsArrayFixedLength() );
+		REQUIRE( intArray3Var->GetArrayLength( &c ) == 0 );
+		REQUIRE( intArray3Var->GetArrayMaxLength() == ae::MaxValue< uint32_t >() );
+		REQUIRE( intArray3Var->SetArrayLength( &c, 4 ) == 4 );
 		REQUIRE( c.intArray3.Length() == 4 );
-		REQUIRE( intArray3->SetArrayLength( &c, 2 ) == 2 );
+		REQUIRE( intArray3Var->SetArrayLength( &c, 2 ) == 2 );
 		REQUIRE( c.intArray3.Length() == 2 );
-		REQUIRE( intArray3->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( intArray3Var->SetArrayLength( &c, 3 ) == 3 );
 		REQUIRE( c.intArray3.Length() == 3 );
-		REQUIRE( intArray3->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( intArray3Var->SetArrayLength( &c, 0 ) == 0 );
 		REQUIRE( c.intArray3.Length() == 0 );
-		REQUIRE( intArray3->SetArrayLength( &c, 1 ) == 1 );
+		REQUIRE( intArray3Var->SetArrayLength( &c, 1 ) == 1 );
 		REQUIRE( c.intArray3.Length() == 1 );
-		REQUIRE( intArray3->SetArrayLength( &c, 10020 ) == 10020 );
+		REQUIRE( intArray3Var->SetArrayLength( &c, 10020 ) == 10020 );
 		REQUIRE( c.intArray3.Length() == 10020 );
-		REQUIRE( intArray3->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( intArray3Var->SetArrayLength( &c, 0 ) == 0 );
 		REQUIRE( c.intArray3.Length() == 0 );
 	}
+	// SomeClass someClassArray[ 3 ];
 	{
-		const ae::Var* someClassArray = type->GetVarByName( "someClassArray", false );
+		const ae::ClassVar* someClassArrayVar = type->GetVarByName( "someClassArray", false );
+		REQUIRE( someClassArrayVar );
+
+		ae::DataPointer someClassArray( someClassArrayVar, &c );
+		ae::DataPointer _someClassArray( &c.someClassArray );
 		REQUIRE( someClassArray );
-		REQUIRE( someClassArray->IsArray() );
-		REQUIRE( someClassArray->GetType() == ae::BasicType::Class );
-		REQUIRE( someClassArray->GetSize() == sizeof(SomeClass) );
-		REQUIRE( someClassArray->GetSubType() == ae::GetType< SomeClass >() );
-		REQUIRE( someClassArray->IsArrayFixedLength() );
-		REQUIRE( someClassArray->GetArrayLength( &c ) == 3 );
-		REQUIRE( someClassArray->GetArrayMaxLength() == 3 );
-		REQUIRE( someClassArray->SetArrayLength( &c, 0 ) == 3 );
-		REQUIRE( someClassArray->SetArrayLength( &c, 3 ) == 3 );
-		REQUIRE( someClassArray->SetArrayLength( &c, 4 ) == 3 );
-		REQUIRE( someClassArray->SetArrayLength( &c, 5 ) == 3 );
+		REQUIRE( _someClassArray );
+		REQUIRE( someClassArray == _someClassArray );
+		REQUIRE( &someClassArray.GetVarType() == &someClassArrayVar->GetOuterVarType() );
+		const ae::ArrayType* arrayVarType = someClassArrayVar->GetOuterVarType().AsVarType< ae::ArrayType >();
+		REQUIRE( arrayVarType );
+
+		REQUIRE( arrayVarType->IsFixedLength() );
+		REQUIRE( arrayVarType->GetLength( someClassArray ) == 3 );
+		REQUIRE( arrayVarType->GetMaxLength() == 3 );
+		const ae::ClassType* classVarType = arrayVarType->GetInnerVarType().AsVarType< ae::ClassType >();
+		REQUIRE( classVarType );
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
+		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
+		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
+
+		// @TODO: Old, replace with Type functions
+		REQUIRE( someClassArrayVar->GetSubType() == ae::GetClassType< SomeClass >() );
+		REQUIRE( someClassArrayVar->IsArrayFixedLength() );
+		REQUIRE( someClassArrayVar->GetArrayLength( &c ) == 3 );
+		REQUIRE( someClassArrayVar->GetArrayMaxLength() == 3 );
+		REQUIRE( someClassArrayVar->SetArrayLength( &c, 0 ) == 3 );
+		REQUIRE( someClassArrayVar->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( someClassArrayVar->SetArrayLength( &c, 4 ) == 3 );
+		REQUIRE( someClassArrayVar->SetArrayLength( &c, 5 ) == 3 );
 	}
+	// ae::Array< SomeClass, 4 > someClassArray2;
 	{
-		const ae::Var* someClassArray2 = type->GetVarByName( "someClassArray2", false );
+		const ae::ClassVar* someClassArray2Var = type->GetVarByName( "someClassArray2", false );
+		REQUIRE( someClassArray2Var );
+
+		ae::DataPointer someClassArray2( someClassArray2Var, &c );
+		ae::DataPointer _someClassArray2( &c.someClassArray2 );
 		REQUIRE( someClassArray2 );
-		REQUIRE( someClassArray2->IsArray() );
-		REQUIRE( someClassArray2->GetType() == ae::BasicType::Class );
-		REQUIRE( someClassArray2->GetSize() == sizeof(SomeClass) );
-		REQUIRE( someClassArray2->GetSubType() == ae::GetType< SomeClass >() );
-		REQUIRE( !someClassArray2->IsArrayFixedLength() );
-		REQUIRE( someClassArray2->GetArrayLength( &c ) == 0 );
-		REQUIRE( someClassArray2->GetArrayMaxLength() == 4 );
-		REQUIRE( someClassArray2->SetArrayLength( &c, 4 ) == 4 );
+		REQUIRE( _someClassArray2 );
+		REQUIRE( someClassArray2 == _someClassArray2 );
+		REQUIRE( &someClassArray2.GetVarType() == &someClassArray2Var->GetOuterVarType() );
+		const ae::ArrayType* arrayVarType = someClassArray2Var->GetOuterVarType().AsVarType< ae::ArrayType >();
+		REQUIRE( arrayVarType );
+
+		REQUIRE( !arrayVarType->IsFixedLength() );
+		REQUIRE( arrayVarType->GetLength( someClassArray2 ) == 0 );
+		REQUIRE( arrayVarType->GetMaxLength() == 4 );
+		const ae::ClassType* classVarType = arrayVarType->GetInnerVarType().AsVarType< ae::ClassType >();
+		REQUIRE( classVarType );
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
+		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
+		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
+
+		// @TODO: Old, replace with Type functions
+		REQUIRE( someClassArray2Var->IsArray() );
+		REQUIRE( someClassArray2Var->GetSubType() == ae::GetClassType< SomeClass >() );
+		REQUIRE( !someClassArray2Var->IsArrayFixedLength() );
+		REQUIRE( someClassArray2Var->GetArrayLength( &c ) == 0 );
+		REQUIRE( someClassArray2Var->GetArrayMaxLength() == 4 );
+		REQUIRE( someClassArray2Var->SetArrayLength( &c, 4 ) == 4 );
 		REQUIRE( c.someClassArray2.Length() == 4 );
-		REQUIRE( someClassArray2->SetArrayLength( &c, 2 ) == 2 );
+		REQUIRE( someClassArray2Var->SetArrayLength( &c, 2 ) == 2 );
 		REQUIRE( c.someClassArray2.Length() == 2 );
-		REQUIRE( someClassArray2->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( someClassArray2Var->SetArrayLength( &c, 3 ) == 3 );
 		REQUIRE( c.someClassArray2.Length() == 3 );
-		REQUIRE( someClassArray2->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( someClassArray2Var->SetArrayLength( &c, 0 ) == 0 );
 		REQUIRE( c.someClassArray2.Length() == 0 );
-		REQUIRE( someClassArray2->SetArrayLength( &c, 1 ) == 1 );
+		REQUIRE( someClassArray2Var->SetArrayLength( &c, 1 ) == 1 );
 		REQUIRE( c.someClassArray2.Length() == 1 );
 	}
+	// ae::Array< SomeClass > someClassArray3 = AE_ALLOC_TAG_META_TEST;
 	{
-		const ae::Var* someClassArray3 = type->GetVarByName( "someClassArray3", false );
+		const ae::ClassVar* someClassArray3Var = type->GetVarByName( "someClassArray3", false );
+		REQUIRE( someClassArray3Var );
+
+		ae::DataPointer someClassArray3( someClassArray3Var, &c );
+		ae::DataPointer _someClassArray3( &c.someClassArray3 );
 		REQUIRE( someClassArray3 );
-		REQUIRE( someClassArray3->IsArray() );
-		REQUIRE( someClassArray3->GetType() == ae::BasicType::Class );
-		REQUIRE( someClassArray3->GetSize() == sizeof(SomeClass) );
-		REQUIRE( someClassArray3->GetSubType() == ae::GetType< SomeClass >() );
-		REQUIRE( !someClassArray3->IsArrayFixedLength() );
-		REQUIRE( someClassArray3->GetArrayLength( &c ) == 0 );
-		REQUIRE( someClassArray3->GetArrayMaxLength() == ae::MaxValue< uint32_t >() );
-		REQUIRE( someClassArray3->SetArrayLength( &c, 4 ) == 4 );
+		REQUIRE( _someClassArray3 );
+		REQUIRE( someClassArray3 == _someClassArray3 );
+		REQUIRE( &someClassArray3.GetVarType() == &someClassArray3Var->GetOuterVarType() );
+		const ae::ArrayType* arrayVarType = someClassArray3Var->GetOuterVarType().AsVarType< ae::ArrayType >();
+		REQUIRE( arrayVarType );
+
+		REQUIRE( !arrayVarType->IsFixedLength() );
+		REQUIRE( arrayVarType->GetLength( someClassArray3 ) == 0 );
+		REQUIRE( arrayVarType->GetMaxLength() == ae::MaxValue< uint32_t >() );
+		const ae::ClassType* classVarType = arrayVarType->GetInnerVarType().AsVarType< ae::ClassType >();
+		REQUIRE( classVarType );
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
+		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
+		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
+
+		// @TODO: Old, replace with Type functions
+		REQUIRE( someClassArray3Var->IsArray() );
+		REQUIRE( someClassArray3Var->GetSubType() == ae::GetClassType< SomeClass >() );
+		REQUIRE( !someClassArray3Var->IsArrayFixedLength() );
+		REQUIRE( someClassArray3Var->GetArrayLength( &c ) == 0 );
+		REQUIRE( someClassArray3Var->GetArrayMaxLength() == ae::MaxValue< uint32_t >() );
+		REQUIRE( someClassArray3Var->SetArrayLength( &c, 4 ) == 4 );
 		REQUIRE( c.someClassArray3.Length() == 4 );
-		REQUIRE( someClassArray3->SetArrayLength( &c, 2 ) == 2 );
+		REQUIRE( someClassArray3Var->SetArrayLength( &c, 2 ) == 2 );
 		REQUIRE( c.someClassArray3.Length() == 2 );
-		REQUIRE( someClassArray3->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( someClassArray3Var->SetArrayLength( &c, 3 ) == 3 );
 		REQUIRE( c.someClassArray3.Length() == 3 );
-		REQUIRE( someClassArray3->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( someClassArray3Var->SetArrayLength( &c, 0 ) == 0 );
 		REQUIRE( c.someClassArray3.Length() == 0 );
-		REQUIRE( someClassArray3->SetArrayLength( &c, 1 ) == 1 );
+		REQUIRE( someClassArray3Var->SetArrayLength( &c, 1 ) == 1 );
 		REQUIRE( c.someClassArray3.Length() == 1 );
-		REQUIRE( someClassArray3->SetArrayLength( &c, 10020 ) == 10020 );
+		REQUIRE( someClassArray3Var->SetArrayLength( &c, 10020 ) == 10020 );
 		REQUIRE( c.someClassArray3.Length() == 10020 );
-		REQUIRE( someClassArray3->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( someClassArray3Var->SetArrayLength( &c, 0 ) == 0 );
 		REQUIRE( c.someClassArray3.Length() == 0 );
 
-		REQUIRE( someClassArray3->SetArrayLength( &c, 3 ) == 3 );
-		REQUIRE( someClassArray3->GetPointer< SomeClass >( &c, -1 ) == nullptr );
-		REQUIRE( someClassArray3->GetPointer< SomeClass >( &c, 0 ) == &c.someClassArray3[ 0 ] );
-		REQUIRE( someClassArray3->GetPointer< SomeClass >( &c, 1 ) == &c.someClassArray3[ 1 ] );
-		REQUIRE( someClassArray3->GetPointer< SomeClass >( &c, 2 ) == &c.someClassArray3[ 2 ] );
+		REQUIRE( someClassArray3Var->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( someClassArray3Var->GetPointer< SomeClass >( &c, -1 ) == nullptr );
+		REQUIRE( someClassArray3Var->GetPointer< SomeClass >( &c, 0 ) == &c.someClassArray3[ 0 ] );
+		REQUIRE( someClassArray3Var->GetPointer< SomeClass >( &c, 1 ) == &c.someClassArray3[ 1 ] );
+		REQUIRE( someClassArray3Var->GetPointer< SomeClass >( &c, 2 ) == &c.someClassArray3[ 2 ] );
+	}
+}
+
+TEST_CASE("Optional test present", "[aeMeta]")
+{
+	const ae::ClassType* type = ae::GetClassType< OptionalClass >();
+	REQUIRE( type );
+
+	OptionalClass c;
+	c.intOptional = 123;
+	// c.someClassOptional = {}; // @TODO: Fix more than one operator matches operands
+	c.intStdOptional = 456;
+	c.someClassStdOptional = SomeClass();
+	c.someClassStdOptional->intMember = 456;
+	c.someClassStdOptional->boolMember = true;
+	c.someClassStdOptional->enumTest = TestEnumClass::Five;
+
+	// ae::Optional< int32_t > intOptional;
+	{
+		const ae::ClassVar* intOptional = type->GetVarByName( "intOptional", false );
+		REQUIRE( intOptional );
+		const ae::OptionalType* optionalType = intOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
+		REQUIRE( optionalType );
+		const ae::BasicType* basicVarType = optionalType->GetInnerVarType().AsVarType< ae::BasicType >();
+		REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
+
+		// int32_t value = 0;
+		// REQUIRE( c.intOptional->TryGet() );
+		// REQUIRE( value == 123 );
+	}
+	// ae::Optional < SomeClass > someClassOptional;
+	{
+		const ae::ClassVar* someClassOptional = type->GetVarByName( "someClassOptional", false );
+		REQUIRE( someClassOptional );
+		const ae::OptionalType* optionalType = someClassOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
+		REQUIRE( optionalType );
+		const ae::ClassType* classVarType = optionalType->GetInnerVarType().AsVarType< ae::ClassType >();
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
+		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
+		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
+
+		// SomeClass value;
+		// REQUIRE( someClassOptional->GetObjectValue( &c, &value ) );
+		// REQUIRE( value.intMember == 123 );
+		// REQUIRE( value.boolMember == true );
+		// REQUIRE( value.enumTest == TestEnumClass::Five );
+	}
+	// // std::optional< int32_t > intStdOptional;
+	// {
+	// 	const ae::ClassVar* intStdOptional = type->GetVarByName( "intStdOptional", false );
+	// 	REQUIRE( intStdOptional );
+	// 	const ae::OptionalType* optionalType = intStdOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
+	// 	REQUIRE( optionalType );
+	// 	const ae::BasicType* basicVarType = optionalType->GetInnerVarType().AsVarType< ae::BasicType >();
+	// 	REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
+
+	// 	int32_t value = 0;
+	// 	const ae::ConstDataPointer optional = intStdOptional->GetVarData( &c );
+	// 	REQUIRE( optional );
+	// 	ae::ConstDataPointer basic = optionalType->TryGet( optional );
+	// 	REQUIRE( basicVarType->GetVarData( basic, &value ) );
+	// 	REQUIRE( value == 456 );
+	// }
+	// // std::optional< SomeClass > someClassStdOptional;
+	// {
+	// 	const ae::ClassVar* someClassStdOptional = type->GetVarByName( "someClassStdOptional", false );
+	// 	REQUIRE( someClassStdOptional );
+	// 	const ae::OptionalType* optionalType = someClassStdOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
+	// 	REQUIRE( optionalType );
+	// 	const ae::ClassType* classVarType = optionalType->GetInnerVarType().AsVarType< ae::ClassType >();
+	// 	REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
+	// 	REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
+	// 	REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
+
+	// 	ae::ConstDataPointer optional = someClassStdOptional->GetVarData( &c );
+	// 	REQUIRE( optional );
+	// 	ae::ConstDataPointer _class = optionalType->TryGet( optional );
+	// 	REQUIRE( _class );
+	// 	const ae::ClassType* type = classVarType->GetType();
+	// 	const SomeClass* someClass = classVarType->TryGet< SomeClass >( _class );
+	// 	REQUIRE( someClass );
+	// 	REQUIRE( someClass->intMember == 456 );
+	// 	REQUIRE( someClass->boolMember == true );
+	// 	REQUIRE( someClass->enumTest == TestEnumClass::Five );
+	// }
+}
+
+TEST_CASE("Optional test no value", "[aeMeta]")
+{
+	const ae::ClassType* type = ae::GetClassType< OptionalClass >();
+	REQUIRE( type );
+
+	OptionalClass c;
+
+	// ae::Optional< int32_t > intOptional;
+	{
+		const ae::ClassVar* intOptional = type->GetVarByName( "intOptional", false );
+		REQUIRE( intOptional );
+		const ae::OptionalType* optionalType = intOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
+		REQUIRE( optionalType );
+		const ae::BasicType* basicVarType = optionalType->GetInnerVarType().AsVarType< ae::BasicType >();
+		REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
+
+		ae::ConstDataPointer optional( intOptional, &c );
+		REQUIRE( optional );
+		REQUIRE( !optionalType->TryGet( optional ) );
+	}
+	// ae::Optional < SomeClass > someClassOptional;
+	{
+		const ae::ClassVar* someClassOptional = type->GetVarByName( "someClassOptional", false );
+		REQUIRE( someClassOptional );
+		const ae::OptionalType* optionalType = someClassOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
+		REQUIRE( optionalType );
+		const ae::ClassType* classVarType = optionalType->GetInnerVarType().AsVarType< ae::ClassType >();
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
+		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
+		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
+
+		ae::ConstDataPointer optional( someClassOptional, &c );
+		REQUIRE( optional );
+		REQUIRE( !optionalType->TryGet( optional ) );
+	}
+	// std::optional< int32_t > intStdOptional;
+	{
+		const ae::ClassVar* intStdOptional = type->GetVarByName( "intStdOptional", false );
+		REQUIRE( intStdOptional );
+		const ae::OptionalType* optionalType = intStdOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
+		REQUIRE( optionalType );
+		const ae::BasicType* basicVarType = optionalType->GetInnerVarType().AsVarType< ae::BasicType >();
+		REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
+
+		ae::ConstDataPointer optional( intStdOptional, &c );
+		REQUIRE( optional );
+		REQUIRE( !optionalType->TryGet( optional ) );
+	}
+	// std::optional< SomeClass > someClassStdOptional;
+	{
+		const ae::ClassVar* someClassStdOptional = type->GetVarByName( "someClassStdOptional", false );
+		REQUIRE( someClassStdOptional );
+		const ae::OptionalType* optionalType = someClassStdOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
+		REQUIRE( optionalType );
+		const ae::ClassType* classVarType = optionalType->GetInnerVarType().AsVarType< ae::ClassType >();
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
+		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
+		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
+
+		ae::ConstDataPointer optional( someClassStdOptional, &c );
+		REQUIRE( optional );
+		REQUIRE( !optionalType->TryGet( optional ) );
 	}
 }
 
 TEST_CASE( "enum string conversions", "[aeMeta]" )
 {
-	const ae::Enum* playerStateEnum = ae::GetEnum( "PlayerState" );
+	const ae::EnumType* playerStateEnum = ae::GetEnumType( "PlayerState" );
 	REQUIRE( playerStateEnum->GetName() == ae::Str32( "PlayerState" ) );
 
 	REQUIRE( playerStateEnum->GetNameByValue( PlayerState::Idle ) == "Idle" );
@@ -429,7 +765,7 @@ TEST_CASE( "enum string conversions", "[aeMeta]" )
 
 TEST_CASE( "enum string conversions using missing values", "[aeMeta]" )
 {
-	const ae::Enum* playerStateEnum = ae::GetEnum( "PlayerState" );
+	const ae::EnumType* playerStateEnum = ae::GetEnumType( "PlayerState" );
 	REQUIRE( playerStateEnum->GetName() == ae::Str32( "PlayerState" ) );
 
 	REQUIRE( playerStateEnum->GetNameByValue( (PlayerState)666 ) == "" );
@@ -447,32 +783,44 @@ TEST_CASE( "enum string conversions using missing values", "[aeMeta]" )
 TEST_CASE( "can read enum values from object using meta definition", "[aeMeta]" )
 {
 	SomeClass c;
-	const ae::Type* type = ae::GetTypeFromObject( &c );
-	const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
-	REQUIRE( enumTestVar->GetType() == ae::BasicType::Enum );
+	const ae::ClassType* type = ae::GetClassTypeFromObject( &c );
+	const ae::ClassVar* enumTestVar = type->GetVarByName( "enumTest", false );
+	REQUIRE( enumTestVar );
+	const ae::EnumType* enumVarType = enumTestVar->GetOuterVarType().AsVarType< ae::EnumType >();
+	REQUIRE( enumVarType );
+	
+	ae::ConstDataPointer varData( enumTestVar, &c );
 	
 	c.enumTest = TestEnumClass::Five;
-	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Five" );
+	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Five" );
+	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Five" ); // @TODO: Remove
 	c.enumTest = TestEnumClass::Four;
-	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Four" );
+	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Four" );
+	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Four" ); // @TODO: Remove
 	c.enumTest = TestEnumClass::Three;
-	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Three" );
+	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Three" );
+	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Three" ); // @TODO: Remove
 	c.enumTest = TestEnumClass::Two;
-	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Two" );
+	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Two" );
+	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Two" ); // @TODO: Remove
 	c.enumTest = TestEnumClass::One;
-	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "One" );
+	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "One" );
+	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "One" ); // @TODO: Remove
 	c.enumTest = TestEnumClass::Zero;
-	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Zero" );
+	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Zero" );
+	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Zero" ); // @TODO: Remove
 	c.enumTest = TestEnumClass::NegativeOne;
-	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "NegativeOne" );
+	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "NegativeOne" );
+	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "NegativeOne" ); // @TODO: Remove
 }
 
 TEST_CASE( "can't read invalid enum values from object using meta definition", "[aeMeta]" )
 {
 	SomeClass c;
-	const ae::Type* type = ae::GetTypeFromObject( &c );
-	const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
-	REQUIRE( enumTestVar->GetType() == ae::BasicType::Enum );
+	const ae::ClassType* type = ae::GetClassTypeFromObject( &c );
+	const ae::ClassVar* enumTestVar = type->GetVarByName( "enumTest", false );
+	const ae::EnumType* enumVarType = enumTestVar->GetOuterVarType().AsVarType< ae::EnumType >();
+	REQUIRE( enumVarType );
 	
 	c.enumTest = (TestEnumClass)6;
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "" );
@@ -481,9 +829,10 @@ TEST_CASE( "can't read invalid enum values from object using meta definition", "
 TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
 {
 	SomeClass c;
-	const ae::Type* type = ae::GetTypeFromObject( &c );
-	const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
-	REQUIRE( enumTestVar->GetType() == ae::BasicType::Enum );
+	const ae::ClassType* type = ae::GetClassTypeFromObject( &c );
+	const ae::ClassVar* enumTestVar = type->GetVarByName( "enumTest", false );
+	const ae::EnumType* enumVarType = enumTestVar->GetOuterVarType().AsVarType< ae::EnumType >();
+	REQUIRE( enumVarType );
 	
 	REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Five" ) );
 	REQUIRE( c.enumTest == TestEnumClass::Five );
@@ -519,9 +868,10 @@ TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
 TEST_CASE( "can't set invalid enum values on object using meta definition", "[aeMeta]" )
 {
 	SomeClass c;
-	const ae::Type* type = ae::GetTypeFromObject( &c );
-	const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
-	REQUIRE( enumTestVar->GetType() == ae::BasicType::Enum );
+	const ae::ClassType* type = ae::GetClassTypeFromObject( &c );
+	const ae::ClassVar* enumTestVar = type->GetVarByName( "enumTest", false );
+	const ae::EnumType* enumVarType = enumTestVar->GetOuterVarType().AsVarType< ae::EnumType >();
+	REQUIRE( enumVarType );
 	
 	c.enumTest = TestEnumClass::Four;
 	REQUIRE( !enumTestVar->SetObjectValueFromString( &c, "Six" ) );
@@ -537,8 +887,8 @@ TEST_CASE( "can't set invalid enum values on object using meta definition", "[ae
 //------------------------------------------------------------------------------
 TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
 {
-	const ae::Enum* enumType = ae::GetEnum< SomeOldEnum >();
-	REQUIRE( enumType == ae::GetEnum( "SomeOldEnum" ) );
+	const ae::EnumType* enumType = ae::GetEnumType< SomeOldEnum >();
+	REQUIRE( enumType == ae::GetEnumType( "SomeOldEnum" ) );
 	REQUIRE( enumType->Length() == 3 );
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
@@ -550,8 +900,8 @@ TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
 
 TEST_CASE( "existing c-style enum string conversions", "[aeMeta]" )
 {
-	const ae::Enum* enumType = ae::GetEnum< SomeOldEnum >();
-	REQUIRE( enumType == ae::GetEnum( "SomeOldEnum" ) );
+	const ae::EnumType* enumType = ae::GetEnumType< SomeOldEnum >();
+	REQUIRE( enumType == ae::GetEnumType( "SomeOldEnum" ) );
 
 	REQUIRE( enumType->GetNameByValue( SomeOldEnum::Bleep ) == "Bleep" );
 	REQUIRE( enumType->GetValueFromString( "Bleep", (SomeOldEnum)666 ) == SomeOldEnum::Bleep );
@@ -591,8 +941,8 @@ TEST_CASE( "existing c-style enum string conversions", "[aeMeta]" )
 //------------------------------------------------------------------------------
 TEST_CASE( "can register an already existing c-style enum where each value has a prefix", "[aeMeta]" )
 {
-	const ae::Enum* enumType = ae::GetEnum< SomeOldPrefixEnum >();
-	REQUIRE( enumType == ae::GetEnum( "SomeOldPrefixEnum" ) );
+	const ae::EnumType* enumType = ae::GetEnumType< SomeOldPrefixEnum >();
+	REQUIRE( enumType == ae::GetEnumType( "SomeOldPrefixEnum" ) );
 	REQUIRE( enumType->Length() == 3 );
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
@@ -607,8 +957,8 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
 //------------------------------------------------------------------------------
 TEST_CASE( "can register an already existing c-style enum where each value has a manually specified name", "[aeMeta]" )
 {
-	const ae::Enum* enumType = ae::GetEnum< SomeOldRenamedEnum >();
-	REQUIRE( enumType == ae::GetEnum( "SomeOldRenamedEnum" ) );
+	const ae::EnumType* enumType = ae::GetEnumType< SomeOldRenamedEnum >();
+	REQUIRE( enumType == ae::GetEnumType( "SomeOldRenamedEnum" ) );
 	REQUIRE( enumType->Length() == 3 );
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
@@ -623,8 +973,8 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
 //------------------------------------------------------------------------------
 TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
 {
-	const ae::Enum* enumType = ae::GetEnum< SomeNewEnum >();
-	REQUIRE( enumType == ae::GetEnum( "SomeNewEnum" ) );
+	const ae::EnumType* enumType = ae::GetEnumType< SomeNewEnum >();
+	REQUIRE( enumType == ae::GetEnumType( "SomeNewEnum" ) );
 	REQUIRE( enumType->Length() == 3 );
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
@@ -639,8 +989,8 @@ TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
 //------------------------------------------------------------------------------
 TEST_CASE( "can register an already existing enum class in a nested namespace", "[aeMeta]" )
 {
-	const ae::Enum* enumType = ae::GetEnum< A::B::SomeNewEnum >();
-	REQUIRE( enumType == ae::GetEnum( "A::B::SomeNewEnum" ) );
+	const ae::EnumType* enumType = ae::GetEnumType< A::B::SomeNewEnum >();
+	REQUIRE( enumType == ae::GetEnumType( "A::B::SomeNewEnum" ) );
 	REQUIRE( enumType->Length() == 3 );
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
@@ -661,8 +1011,8 @@ std::string RefTester::GetIdString( const RefTester* obj )
 bool RefTester::StringToId( const char* str, uint32_t* idOut )
 {
 	char* endPtr = nullptr;
-	uint32_t id = strtoul( str, &endPtr, 10 );
-	if ( endPtr != str )
+	const uint32_t id = (uint32_t)strtoul( str, &endPtr, 10 );
+	if( endPtr != str )
 	{
 		*idOut = id;
 		return true;
@@ -683,26 +1033,29 @@ RefTester* RefTesterManager::GetObjectById( uint32_t id )
 
 TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
 {
-	const ae::Type* typeA = ae::GetType< RefTesterA >();
-	REQUIRE( typeA );
-	const ae::Var* typeA_notRef = typeA->GetVarByName( "notRef", false );
-	const ae::Var* typeA_varA = typeA->GetVarByName( "refA", false );
-	const ae::Var* typeA_varB = typeA->GetVarByName( "refB", false );
-	REQUIRE( typeA_notRef );
-	REQUIRE( typeA_varA );
-	REQUIRE( typeA_varB );
+	const ae::ClassType* type_RefTester = ae::GetClassType< RefTester >();
+	REQUIRE( type_RefTester );
+
+	const ae::ClassType* type_RefTesterA = ae::GetClassType< RefTesterA >();
+	REQUIRE( type_RefTesterA );
+	const ae::ClassVar* var_RefTesterA_notRef = type_RefTesterA->GetVarByName( "notRef", false );
+	const ae::ClassVar* var_RefTesterA_refA = type_RefTesterA->GetVarByName( "refA", false );
+	const ae::ClassVar* var_RefTesterA_refB = type_RefTesterA->GetVarByName( "refB", false );
+	REQUIRE( var_RefTesterA_notRef );
+	REQUIRE( var_RefTesterA_refA );
+	REQUIRE( var_RefTesterA_refB );
 	
-	const ae::Type* typeB = ae::GetType< RefTesterB >();
-	REQUIRE( typeB );
-	const ae::Var* typeB_varA = typeB->GetVarByName( "refA", false );
-	REQUIRE( typeB_varA );
+	const ae::ClassType* type_RefTesterB = ae::GetClassType< RefTesterB >();
+	REQUIRE( type_RefTesterB );
+	const ae::ClassVar* var_RefTesterB_ref = type_RefTesterB->GetVarByName( "ref", false );
+	REQUIRE( var_RefTesterB_ref );
 	
-	REQUIRE( !typeA_notRef->GetSubType() );
-	REQUIRE( typeA_varA->GetSubType() == typeA );
-	REQUIRE( typeA_varB->GetSubType() == typeB );
-	REQUIRE( typeB_varA->GetSubType() == typeA );
+	REQUIRE( !var_RefTesterA_notRef->GetSubType() );
+	REQUIRE( var_RefTesterA_refA->GetSubType() == type_RefTesterA );
+	REQUIRE( var_RefTesterA_refB->GetSubType() == type_RefTesterB );
+	REQUIRE( var_RefTesterB_ref->GetSubType() == type_RefTester );
 	
-	class RefSerializer : public ae::Var::Serializer
+	class RefSerializer : public ae::ClassVar::Serializer
 	{
 	public:
 		RefSerializer( RefTesterManager* manager ) : m_manager( manager ) {}
@@ -713,7 +1066,7 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
 		bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const override
 		{
 			uint32_t id = 0;
-			if ( RefTester::StringToId( pointerVal, &id ) )
+			if( RefTester::StringToId( pointerVal, &id ) )
 			{
 				*objOut = m_manager->GetObjectById( id );
 				return true;
@@ -725,104 +1078,138 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
 	};
 	RefTesterManager manager;
 	RefSerializer refSerializer = &manager;
-	ae::Var::SetSerializer( &refSerializer );
+	ae::ClassVar::SetSerializer( &refSerializer );
 	
-	RefTesterA* testerA1 = manager.Create< RefTesterA >();
-	RefTesterA* testerA2 = manager.Create< RefTesterA >();
-	RefTesterB* testerB3 = manager.Create< RefTesterB >();
+	RefTesterA* refTesterA1 = manager.Create< RefTesterA >();
+	RefTesterA* refTesterA2 = manager.Create< RefTesterA >();
+	RefTesterB* refTesterB3 = manager.Create< RefTesterB >();
 	
 	// Validate ids
-	REQUIRE( testerA1->id == 1 );
-	REQUIRE( testerA2->id == 2 );
-	REQUIRE( testerB3->id == 3 );
-	REQUIRE( RefTester::GetIdString( testerA1 ) == "1" );
-	REQUIRE( RefTester::GetIdString( testerA2 ) == "2" );
-	REQUIRE( RefTester::GetIdString( testerB3 ) == "3" );
+	REQUIRE( refTesterA1->id == 1 );
+	REQUIRE( refTesterA2->id == 2 );
+	REQUIRE( refTesterB3->id == 3 );
+	REQUIRE( RefTester::GetIdString( refTesterA1 ) == "1" );
+	REQUIRE( RefTester::GetIdString( refTesterA2 ) == "2" );
+	REQUIRE( RefTester::GetIdString( refTesterB3 ) == "3" );
 	
 	// Validate initial reference values
-	REQUIRE( testerA1->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA1->refA == nullptr );
-	REQUIRE( testerA1->refB == nullptr );
-	REQUIRE( testerA2->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA2->refA == nullptr );
-	REQUIRE( testerA2->refB == nullptr );
-	REQUIRE( testerB3->refA == nullptr );
-	REQUIRE( typeA_varA->GetObjectValueAsString( testerA1 ) == "0" );
-	REQUIRE( typeA_varA->GetObjectValueAsString( testerA2 ) == "0" );
-	REQUIRE( typeB_varA->GetObjectValueAsString( testerB3 ) == "0" );
+	REQUIRE( refTesterA1->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA1->refA == nullptr );
+	REQUIRE( refTesterA1->refB == nullptr );
+	REQUIRE( refTesterA2->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA2->refA == nullptr );
+	REQUIRE( refTesterA2->refB == nullptr );
+	REQUIRE( refTesterB3->ref == nullptr );
+	REQUIRE( var_RefTesterA_refA->GetObjectValueAsString( refTesterA1 ) == "0" );
+	REQUIRE( var_RefTesterA_refA->GetObjectValueAsString( refTesterA2 ) == "0" );
+	REQUIRE( var_RefTesterB_ref->GetObjectValueAsString( refTesterB3 ) == "0" );
 	
 	// Set type A's ref to type A
-	REQUIRE( typeA_varA->SetObjectValueFromString( testerA1, "2" ) );
-	REQUIRE( testerA1->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA1->refA == testerA2 );
-	REQUIRE( testerA1->refB == nullptr );
-	REQUIRE( testerA2->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA2->refA == nullptr );
-	REQUIRE( testerA2->refB == nullptr );
-	REQUIRE( testerB3->refA == nullptr );
+	REQUIRE( var_RefTesterA_refA->SetObjectValueFromString( refTesterA1, "2" ) );
+	REQUIRE( refTesterA1->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA1->refA == refTesterA2 );
+	REQUIRE( refTesterA1->refB == nullptr );
+	REQUIRE( refTesterA2->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA2->refA == nullptr );
+	REQUIRE( refTesterA2->refB == nullptr );
+	REQUIRE( refTesterB3->ref == nullptr );
 	
 	// Set type B's ref to type A
-	REQUIRE( typeB_varA->SetObjectValueFromString( testerB3, "2" ) );
-	REQUIRE( testerA1->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA1->refA == testerA2 );
-	REQUIRE( testerA1->refB == nullptr );
-	REQUIRE( testerA2->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA2->refA == nullptr );
-	REQUIRE( testerA2->refB == nullptr );
-	REQUIRE( testerB3->refA == testerA2 );
+	REQUIRE( var_RefTesterB_ref->SetObjectValueFromString( refTesterB3, "2" ) );
+	REQUIRE( refTesterA1->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA1->refA == refTesterA2 );
+	REQUIRE( refTesterA1->refB == nullptr );
+	REQUIRE( refTesterA2->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA2->refA == nullptr );
+	REQUIRE( refTesterA2->refB == nullptr );
+	REQUIRE( refTesterB3->ref == refTesterA2 );
+
+	// Set type B's ref to type B
+	REQUIRE( var_RefTesterB_ref->SetObjectValueFromString( refTesterB3, "3" ) );
+	REQUIRE( refTesterA1->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA1->refA == refTesterA2 );
+	REQUIRE( refTesterA1->refB == nullptr );
+	REQUIRE( refTesterA2->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA2->refA == nullptr );
+	REQUIRE( refTesterA2->refB == nullptr );
+	REQUIRE( refTesterB3->ref == refTesterB3 );
+
+	// Set type B's ref to type B
+	REQUIRE( var_RefTesterB_ref->SetObjectValue( refTesterB3, nullptr ) );
+	REQUIRE( refTesterB3->ref == nullptr );
+	REQUIRE( var_RefTesterB_ref->SetObjectValueFromString( refTesterB3, "3" ) );
+	REQUIRE( refTesterB3->ref == refTesterB3 );
+	REQUIRE( var_RefTesterB_ref->SetObjectValue( refTesterB3, nullptr ) );
+	REQUIRE( refTesterB3->ref == nullptr );
+	REQUIRE( var_RefTesterB_ref->SetObjectValue( refTesterB3, refTesterB3 ) );
+	REQUIRE( refTesterB3->ref == refTesterB3 );
+
+	// Set type B's ref to type A
+	REQUIRE( var_RefTesterB_ref->SetObjectValue( refTesterB3, nullptr ) );
+	REQUIRE( refTesterB3->ref == nullptr );
+	REQUIRE( var_RefTesterB_ref->SetObjectValueFromString( refTesterB3, "2" ) );
+	REQUIRE( refTesterB3->ref == refTesterA2 );
+	REQUIRE( var_RefTesterB_ref->SetObjectValue( refTesterB3, nullptr ) );
+	REQUIRE( refTesterB3->ref == nullptr );
+	REQUIRE( var_RefTesterB_ref->SetObjectValue( refTesterB3, refTesterA2 ) );
+	REQUIRE( refTesterB3->ref == refTesterA2 );
 	
-	REQUIRE( typeA_varA->GetObjectValueAsString( testerA1 ) == "2" );
-	REQUIRE( typeA_varA->GetObjectValueAsString( testerA2 ) == "0" );
-	REQUIRE( typeB_varA->GetObjectValueAsString( testerB3 ) == "2" );
+	REQUIRE( var_RefTesterA_refA->GetObjectValueAsString( refTesterA1 ) == "2" );
+	REQUIRE( var_RefTesterA_refA->GetObjectValueAsString( refTesterA2 ) == "0" );
+	REQUIRE( var_RefTesterB_ref->GetObjectValueAsString( refTesterB3 ) == "2" );
 	
 	// Set type A's ref B to type B
-	REQUIRE( typeA_varB->SetObjectValueFromString( testerA2, "3" ) );
-	REQUIRE( testerA1->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA1->refA == testerA2 );
-	REQUIRE( testerA1->refB == nullptr );
-	REQUIRE( testerA2->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA2->refA == nullptr );
-	REQUIRE( testerA2->refB == testerB3 );
-	REQUIRE( testerB3->refA == testerA2 );
+	REQUIRE( var_RefTesterA_refB->SetObjectValueFromString( refTesterA2, "3" ) );
+	REQUIRE( refTesterA1->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA1->refA == refTesterA2 );
+	REQUIRE( refTesterA1->refB == nullptr );
+	REQUIRE( refTesterA2->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA2->refA == nullptr );
+	REQUIRE( refTesterA2->refB == refTesterB3 );
+	REQUIRE( refTesterB3->ref == refTesterA2 );
 	
-	// Setting type A ref A to type B should do nothing
-	REQUIRE( !typeA_varA->SetObjectValueFromString( testerA1, "3" ) );
-	REQUIRE( testerA1->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA1->refA == testerA2 );
-	REQUIRE( testerA1->refB == nullptr );
-	REQUIRE( testerA2->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA2->refA == nullptr );
-	REQUIRE( testerA2->refB == testerB3 );
-	REQUIRE( testerB3->refA == testerA2 );
+	// Setting type A ref A to type B by string should do nothing
+	REQUIRE( !var_RefTesterA_refA->SetObjectValueFromString( refTesterA1, "3" ) );
+	REQUIRE( refTesterA1->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA1->refA == refTesterA2 );
+	REQUIRE( refTesterA1->refB == nullptr );
+	REQUIRE( refTesterA2->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA2->refA == nullptr );
+	REQUIRE( refTesterA2->refB == refTesterB3 );
+	REQUIRE( refTesterB3->ref == refTesterA2 );
+	
+	// Setting type A ref A to type B by value should do nothing
+	REQUIRE( !var_RefTesterA_refA->SetObjectValue( refTesterA1, refTesterB3 ) );
+	REQUIRE( refTesterA1->refA == refTesterA2 );
 	
 	// Setting ref from random string value does nothing
-	REQUIRE( !typeA_varA->SetObjectValueFromString( testerA1, "qwerty" ) );
-	REQUIRE( testerA1->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA1->refA == testerA2 );
-	REQUIRE( testerA1->refB == nullptr );
-	REQUIRE( testerA2->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA2->refA == nullptr );
-	REQUIRE( testerA2->refB == testerB3 );
-	REQUIRE( testerB3->refA == testerA2 );
+	REQUIRE( !var_RefTesterA_refA->SetObjectValueFromString( refTesterA1, "qwerty" ) );
+	REQUIRE( refTesterA1->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA1->refA == refTesterA2 );
+	REQUIRE( refTesterA1->refB == nullptr );
+	REQUIRE( refTesterA2->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA2->refA == nullptr );
+	REQUIRE( refTesterA2->refB == refTesterB3 );
+	REQUIRE( refTesterB3->ref == refTesterA2 );
 	
 	// Setting ref to null value succeeds and clears ref
-	REQUIRE( typeA_varA->SetObjectValueFromString( testerA1, "0" ) );
-	REQUIRE( testerA1->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA1->refA == nullptr );
-	REQUIRE( testerA1->refB == nullptr );
-	REQUIRE( testerA2->notRef == 0xfdfdfdfd );
-	REQUIRE( testerA2->refA == nullptr );
-	REQUIRE( testerA2->refB == testerB3 );
-	REQUIRE( testerB3->refA == testerA2 );
-	
-	manager.Destroy( testerA1 );
-	manager.Destroy( testerA2 );
-	manager.Destroy( testerB3 );
+	REQUIRE( var_RefTesterA_refA->SetObjectValueFromString( refTesterA1, "0" ) );
+	REQUIRE( refTesterA1->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA1->refA == nullptr );
+	REQUIRE( refTesterA1->refB == nullptr );
+	REQUIRE( refTesterA2->notRef == 0xfdfdfdfd );
+	REQUIRE( refTesterA2->refA == nullptr );
+	REQUIRE( refTesterA2->refB == refTesterB3 );
+	REQUIRE( refTesterB3->ref == refTesterA2 );
+
+	manager.Destroy( refTesterA1 );
+	manager.Destroy( refTesterA2 );
+	manager.Destroy( refTesterB3 );
 }
 
 TEST_CASE( "bitfield registration", "[aeMeta]" )
 {
-	const ae::Enum* gamePadBitFieldEnum = ae::GetEnum( "GamePadBitField" );
+	const ae::EnumType* gamePadBitFieldEnum = ae::GetEnumType( "GamePadBitField" );
 
 	REQUIRE( gamePadBitFieldEnum->GetName() == ae::Str32( "GamePadBitField" ) );
 	REQUIRE( gamePadBitFieldEnum->GetValueFromString( "A", (GamePadBitField)666 ) == GamePadBitField::A );

@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 26_Gamepad.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2024 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -41,7 +41,7 @@ int main()
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::DebugLines debug = TAG_EXAMPLE;
-	window.Initialize( 640, 640, false, true );
+	window.Initialize( 640, 640, false, true, true );
 	window.SetTitle( "Gamepad" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -76,7 +76,8 @@ int main()
 			{
 				x -= 0.5f;
 				y = ( 1.0f - y ) - 0.5f;
-				const ae::Color color = pressed ? ae::Color::AetherGreen() : inactiveColor;
+				const float length = ae::Clip01( dir.Length() );
+				const ae::Color color = inactiveColor.Lerp( ae::Color::AetherGreen(), ae::Max( (float)pressed, length ) );
 				debug.AddCircle( ae::Vec3( x, y, 0.0f ), ae::Vec3( 0, 0, 1 ), 0.075f, inactiveColor, 64 );
 				debug.AddCircle( ae::Vec3( x + dir.x * 0.025f, y + dir.y * 0.025f, 0.0f ), ae::Vec3( 0, 0, 1 ), 0.05f, color, 64 );
 				debug.AddCircle( ae::Vec3( x + dir.x * 0.025f, y + dir.y * 0.025f, 0.0f ), ae::Vec3( 0, 0, 1 ), 0.04f, color, 64 );

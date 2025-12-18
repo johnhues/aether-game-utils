@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 12_Geometry.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "ae/SpriteRenderer.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -44,11 +43,14 @@ int main()
 	ae::TimeStep timeStep;
 	ae::FileSystem fileSystem;
 	ae::DebugLines debug = TAG_EXAMPLE;
-	ae::Texture2D fontTexture;
 	ae::TextRender text = TAG_EXAMPLE;
 	ae::DebugCamera camera = ae::Axis::Z;
-
-	window.Initialize( 800, 600, false, true );
+	ae::Texture2D fontTexture;
+	ae::Shader meshShader;
+	ae::VertexBuffer meshVertexData;
+	ae::CollisionMesh<> meshCollision = TAG_EXAMPLE;
+	
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "geometry" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -65,6 +67,43 @@ int main()
 		targa.Load( fileBuffer.Data(), fileSize );
 		fontTexture.Initialize( targa.textureParams );
 	}
+	meshShader.Initialize(
+		R"(
+			AE_UNIFORM_HIGHP mat4 u_modelToProj;
+			AE_UNIFORM_HIGHP mat4 u_normalToWorld;
+			AE_IN_HIGHP vec3 a_position;
+			AE_IN_HIGHP vec3 a_normal;
+			AE_OUT_HIGHP vec3 v_normal;
+			void main()
+			{
+				v_normal = ( u_normalToWorld * vec4( a_normal, 0.0 ) ).xyz;
+				gl_Position = u_modelToProj * vec4( a_position, 1.0 );
+			}
+		)",
+		R"(
+			AE_IN_HIGHP vec3 v_normal;
+			void main()
+			{
+				float light = 0.5 + 0.5 * max( dot( normalize( v_normal ), vec3( 0.577, 0.577, 0.577 ) ), 0.0 );
+				AE_COLOR = vec4( vec3( 0.8, 0.5, 0.6 ) * light, 1.0 );
+			}
+		)"
+	);
+	meshShader.SetDepthWrite( true );
+	meshShader.SetDepthTest( true );
+	{
+		const char* fileName = "bunny.obj";
+		ae::OBJLoader objLoader = TAG_EXAMPLE;
+		const uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
+		AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
+		ae::Scratch< uint8_t > fileBuffer( fileSize );
+		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
+		const ae::OBJLoader::InitializeParams initParams = { .data = fileBuffer.Data(), .length = fileBuffer.Length() };
+		const ae::OBJLoader::VertexDataParams vertexParams = { .vertexData = &meshVertexData };
+		objLoader.Load( initParams );
+		objLoader.InitializeVertexData( vertexParams );
+		objLoader.InitializeCollisionMesh( &meshCollision );
+	}
 	text.Initialize( 16, 512, &fontTexture, 8, 1.0f );
 	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 	
@@ -76,15 +115,16 @@ int main()
 	static float s_pb = 0.0f;
 
 	AE_INFO( "Run" );
-	while ( !input.quit )
+	while( !input.quit )
 	{
+		const float dt = timeStep.GetTimeStep();
 		input.Pump();
 
-		if ( input.Get( ae::Key::F ) && !input.GetPrev( ae::Key::F ) )
+		if( input.Get( ae::Key::F ) && !input.GetPrev( ae::Key::F ) )
 		{
 			camera.Refocus( ae::Vec3( 0.0f ) );
 		}
-		camera.Update( &input, timeStep.GetTimeStep() );
+		camera.Update( &input, dt );
 
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
@@ -118,13 +158,13 @@ int main()
 			
 			static ae::Vec3 s_raySource( 2.0f, 0.6f, 2.0f );
 			static ae::Vec3 s_rayDir = -s_raySource.SafeNormalizeCopy();
-			static float s_rayLength = 4.0f;
+			static float s_rayLength = 12.0f;
 			
-			if ( input.Get( ae::Key::Num1 ) ) s_rayLength -= 0.016f;
-			if ( input.Get( ae::Key::Num2 ) ) s_rayLength += 0.016f;
+			if( input.Get( ae::Key::Num1 ) ) s_rayLength -= 0.016f;
+			if( input.Get( ae::Key::Num2 ) ) s_rayLength += 0.016f;
 			s_rayLength = ae::Clip( s_rayLength, 0.0f, 16.0f );
 			
-			if ( input.Get( ae::Key::G ) )
+			if( input.Get( ae::Key::G ) )
 			{
 				s_raySource = camera.GetPosition();
 				s_rayDir = camera.GetForward();
@@ -133,7 +173,7 @@ int main()
 			ray = s_rayDir * s_rayLength;
 			raySource = s_raySource;
 			
-			if ( drawRay )
+			if( drawRay )
 			{
 				debug.AddLine( raySource, raySource + ray, ae::Color::Red() );
 			}
@@ -141,18 +181,18 @@ int main()
 
 		// Test selection
 		static int32_t currentTest = 0;
-		if ( input.Get( ae::Key::Left ) && !input.GetPrev( ae::Key::Left ) )
+		if( input.Get( ae::Key::Left ) && !input.GetPrev( ae::Key::Left ) )
 		{
 			currentTest--;
 		}
-		if ( input.Get( ae::Key::Right ) && !input.GetPrev( ae::Key::Right ) )
+		if( input.Get( ae::Key::Right ) && !input.GetPrev( ae::Key::Right ) )
 		{
 			currentTest++;
 		}
-		currentTest = ae::Mod( currentTest, 8 );
+		currentTest = ae::Mod( currentTest, 11 );
 
 		// Geometry calculations / rendering
-		switch ( currentTest )
+		switch( currentTest )
 		{
 			case 0:
 			{
@@ -161,8 +201,8 @@ int main()
 				infoText.Append( "Scale: 3-4\n" );
 				
 				static float s_triangleScale = 1.0f;
-				if ( input.Get( ae::Key::Num3 ) ) s_triangleScale -= 0.016f;
-				if ( input.Get( ae::Key::Num4 ) ) s_triangleScale += 0.016f;
+				if( input.Get( ae::Key::Num3 ) ) s_triangleScale -= 0.016f;
+				if( input.Get( ae::Key::Num4 ) ) s_triangleScale += 0.016f;
 				s_triangleScale = ae::Max( 0.0f, s_triangleScale );
 				ae::Vec3 triangle[] =
 				{
@@ -179,8 +219,8 @@ int main()
 				debug.AddLine( triangleCenter, triangleCenter + normal, ae::Color::Red() );
 
 				static float r = 1.0f;
-				if ( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
-				if ( input.Get( ae::Key::Num4 ) ) r += 0.016f;
+				if( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
+				if( input.Get( ae::Key::Num4 ) ) r += 0.016f;
 				r = ae::Clip( r, 0.01f, 8.0f );
 				
 				bool ccw = true;
@@ -189,7 +229,7 @@ int main()
 				ae::Vec3 p;
 				ae::Vec3 n;
 				float t;
-				if ( ae::IntersectRayTriangle( raySource, ray, triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], ccw, cw, &p, &n, &t ) )
+				if( ae::IntersectRayTriangle( raySource, ray, triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], ccw, cw, &p, &n, &t ) )
 				{
 					debug.AddSphere( p, 0.1f, ae::Color::Green(), 8 );
 					debug.AddLine( p, p + n, ae::Color::Green() );
@@ -210,7 +250,7 @@ int main()
 				float c = e.LengthSquared() - 1.0f;
 
 				float discriminant = b * b - 4.0f * c;
-				if ( discriminant >= 0.0f )
+				if( discriminant >= 0.0f )
 				{
 					discriminant = sqrtf( discriminant );
 					float t0 = ( -b + discriminant ) / 2.0f;
@@ -231,14 +271,14 @@ int main()
 				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
 				infoText.Append( "Radius: 3-4\n" );
 				
-				if ( input.Get( ae::Key::D ) ) { s_spherePos.x += 0.01f; }
-				if ( input.Get( ae::Key::A ) ) { s_spherePos.x -= 0.01f; }
-				if ( input.Get( ae::Key::W ) ) { s_spherePos.y += 0.01f; }
-				if ( input.Get( ae::Key::S ) ) { s_spherePos.y -= 0.01f; }
-				if ( input.Get( ae::Key::E ) ) { s_spherePos.z += 0.01f; }
-				if ( input.Get( ae::Key::Q ) ) { s_spherePos.z -= 0.01f; }
-				if( input.Get( ae::Key::Num3 ) ) s_sphereRadius -= timeStep.GetDt();
-				if( input.Get( ae::Key::Num4 ) ) s_sphereRadius += timeStep.GetDt();
+				if( input.Get( ae::Key::D ) ) { s_spherePos.x += 0.01f; }
+				if( input.Get( ae::Key::A ) ) { s_spherePos.x -= 0.01f; }
+				if( input.Get( ae::Key::W ) ) { s_spherePos.y += 0.01f; }
+				if( input.Get( ae::Key::S ) ) { s_spherePos.y -= 0.01f; }
+				if( input.Get( ae::Key::E ) ) { s_spherePos.z += 0.01f; }
+				if( input.Get( ae::Key::Q ) ) { s_spherePos.z -= 0.01f; }
+				if( input.Get( ae::Key::Num3 ) ) s_sphereRadius -= dt;
+				if( input.Get( ae::Key::Num4 ) ) s_sphereRadius += dt;
 				s_sphereRadius = ae::Max( 0.01f, s_sphereRadius );
 				
 				const ae::Vec3 pos = raySource + ray;
@@ -270,13 +310,13 @@ int main()
 				ae::Vec2 dxy = ray.GetXY();
 				
 				float a = dxy.LengthSquared();
-				if ( a > 0.0f )
+				if( a > 0.0f )
 				{
 					float b = 2.0f * exy.Dot( dxy );
 					float c = exy.LengthSquared() - 1.0f;
 
 					float discriminant = b * b - 4.0f * a * c;
-					if ( discriminant >= 0.0f )
+					if( discriminant >= 0.0f )
 					{
 						discriminant = sqrtf( discriminant );
 						float t0 = ( -b + discriminant ) / ( 2.0f * a );
@@ -297,7 +337,7 @@ int main()
 						DrawText( z1, "z1", ae::Color::Blue() );
 						debug.AddLine( z0, z1, ae::Color::Blue() );
 
-						if ( ( p0.z - z0.z ) * ( p0.z - z1.z ) < 0.0f )
+						if( ( p0.z - z0.z ) * ( p0.z - z1.z ) < 0.0f )
 						{
 							float t2 = ( p0.z - e.z ) / d.z;
 							ae::Vec3 c0 = e + d * t2;
@@ -306,7 +346,7 @@ int main()
 							hit0 = true;
 						}
 
-						if ( ( p1.z - z0.z ) * ( p1.z - z1.z ) < 0.0f )
+						if( ( p1.z - z0.z ) * ( p1.z - z1.z ) < 0.0f )
 						{
 							float t2 = ( p1.z - e.z ) / d.z;
 							ae::Vec3 c1 = e + d * t2;
@@ -319,7 +359,7 @@ int main()
 
 				debug.AddCircle( p0, p0 - p1, 1.0f, hit0 ? ae::Color::Green() : ae::Color::Blue(), 16 );
 				debug.AddCircle( p1, p1 - p0, 1.0f, hit1 ? ae::Color::Green() : ae::Color::Blue(), 16 );
-				for ( uint32_t i = 0; i < 8; i++ )
+				for( uint32_t i = 0; i < 8; i++ )
 				{
 					ae::Vec2 offset = ae::Vec2::FromAngle( ae::TWO_PI * i / 8.0f );
 					debug.AddLine( p0 + ae::Vec3( offset ), p1 + ae::Vec3( offset ), ae::Color::Blue() );
@@ -348,13 +388,13 @@ int main()
 				debug.AddLine( triangleCenter, triangleCenter + normal, ae::Color::Red() );
 				
 				static float r = 1.0f;
-				if ( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
-				if ( input.Get( ae::Key::Num4 ) ) r += 0.016f;
+				if( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
+				if( input.Get( ae::Key::Num4 ) ) r += 0.016f;
 				r = ae::Clip( r, 0.01f, 8.0f );
 
 				ae::Vec3 nearestIntersectionPoint;
 				ae::Sphere sphere( raySource + ray, r );
-				if ( sphere.IntersectTriangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], &nearestIntersectionPoint ) )
+				if( sphere.IntersectTriangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], &nearestIntersectionPoint ) )
 				{
 					debug.AddSphere( raySource + ray, r, ae::Color::Green(), 16 );
 					debug.AddSphere( nearestIntersectionPoint, 0.05f, ae::Color::Red(), 8 );
@@ -384,18 +424,18 @@ int main()
 				infoText.Append( "Plane Distance from Origin: 7-8\n" );
 				infoText.Append( "Flip Normal: F\n" );
 				
-				if ( input.GetPress( ae::Key::Space ) ) { rayTest = !rayTest; }
-				if ( input.Get( ae::Key::Num3 ) ) a0 -= 0.016f;
-				if ( input.Get( ae::Key::Num4 ) ) a0 += 0.016f;
-				if ( input.Get( ae::Key::Num5 ) ) a1 -= 0.016f;
-				if ( input.Get( ae::Key::Num6 ) ) a1 += 0.016f;
-				if ( input.Get( ae::Key::Num7 ) ) d -= 0.016f;
-				if ( input.Get( ae::Key::Num8 ) ) d += 0.016f;
+				if( input.GetPress( ae::Key::Space ) ) { rayTest = !rayTest; }
+				if( input.Get( ae::Key::Num3 ) ) a0 -= 0.016f;
+				if( input.Get( ae::Key::Num4 ) ) a0 += 0.016f;
+				if( input.Get( ae::Key::Num5 ) ) a1 -= 0.016f;
+				if( input.Get( ae::Key::Num6 ) ) a1 += 0.016f;
+				if( input.Get( ae::Key::Num7 ) ) d -= 0.016f;
+				if( input.Get( ae::Key::Num8 ) ) d += 0.016f;
 				bool flipNormal = input.Get( ae::Key::F );
 				
 				ae::Vec2 xy( ae::Cos( a0 ), ae::Sin( a0 ) );
 				ae::Plane plane( ae::Vec4( xy * ae::Cos( a1 ), ae::Sin( a1 ), d ) );
-				if ( flipNormal )
+				if( flipNormal )
 				{
 					plane = ae::Plane( plane.GetClosestPointToOrigin(), -plane.GetNormal() );
 				}
@@ -404,11 +444,11 @@ int main()
 				ae::Vec3 pn = plane.GetClosestPointToOrigin() + plane.GetNormal();
 				
 				// Reference lines
-				if ( d > 0.0f )
+				if( d > 0.0f )
 				{
 					debug.AddLine( ae::Vec3( 0.0f ), p, ae::Color::Gray() );
 				}
-				else if ( d < -1.0f )
+				else if( d < -1.0f )
 				{
 					debug.AddLine( ae::Vec3( 0.0f ), pn, ae::Color::Gray() );
 				}
@@ -427,14 +467,14 @@ int main()
 				ae::Vec3 rayHit( 0.0f );
 				float t = 0.0f;
 				debug.AddSphere( raySource, 0.05f, ae::Color::PicoPeach(), 8 );
-				if ( rayTest && plane.IntersectRay( raySource, ray, &rayHit ) )
+				if( rayTest && plane.IntersectRay( raySource, ray, &rayHit ) )
 				{
 					debug.AddSphere( rayHit, 0.05f, ae::Color::PicoPeach(), 8 );
 					debug.AddLine( raySource, rayHit, ae::Color::PicoPeach() );
 					debug.AddCircle( p, plane.GetNormal(), ( p - rayHit ).Length(), ae::Color::PicoPink(), 32 );
 					debug.AddLine( rayHit, raySource + ray, ae::Color::Red() );
 				}
-				else if ( !rayTest && plane.IntersectLine( raySource, ray, nullptr, &t ) )
+				else if( !rayTest && plane.IntersectLine( raySource, ray, nullptr, &t ) )
 				{
 					rayHit = raySource + ray * t;
 					debug.AddSphere( rayHit, 0.05f, ae::Color::PicoPeach(), 8 );
@@ -464,19 +504,19 @@ int main()
 				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
 				infoText.Append( "Scale: I,J,K,L,U,O\n" );
 				
-				if ( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
-				if ( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
-				if ( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
-				if ( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
-				if ( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
-				if ( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
+				if( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
+				if( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
+				if( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
+				if( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
+				if( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
+				if( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
 				
-				if ( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
-				if ( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
-				if ( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
-				if ( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
-				if ( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
-				if ( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
+				if( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
+				if( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
+				if( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
+				if( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
+				if( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
+				if( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
 				s_scale = ae::Max( ae::Vec3( 0.0f ), s_scale );
 				
 				ae::Matrix4 transform = ae::Matrix4::Translation( s_translation );
@@ -486,7 +526,7 @@ int main()
 				ae::AABB aabb( pMin.GetXYZ(), pMax.GetXYZ() );
 				debug.AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), ae::Color::Green() );
 				
-				if ( input.Get( ae::Key::Space ) )
+				if( input.Get( ae::Key::Space ) )
 				{
 					s_pa += 0.007f;
 					s_pb += 0.01f;
@@ -507,7 +547,7 @@ int main()
 				
 				ae::Vec3 rayP, rayN;
 				float rayT;
-				if ( aabb.IntersectRay( raySource, ray, &rayP, &rayN, &rayT ) )
+				if( aabb.IntersectRay( raySource, ray, &rayP, &rayN, &rayT ) )
 				{
 					debug.AddLine( raySource, raySource + ray * rayT, ae::Color::PicoBlue() );
 					debug.AddLine( rayP, raySource + ray, ae::Color::Red() );
@@ -538,24 +578,24 @@ int main()
 				infoText.Append( "Scale: I,J,K,L,U,O\n" );
 				infoText.Append( "Rotate: Z,X,C\n" );
 				
-				if ( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
-				if ( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
-				if ( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
-				if ( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
-				if ( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
-				if ( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
+				if( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
+				if( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
+				if( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
+				if( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
+				if( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
+				if( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
 				
-				if ( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
-				if ( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
-				if ( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
-				if ( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
-				if ( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
-				if ( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
+				if( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
+				if( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
+				if( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
+				if( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
+				if( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
+				if( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
 				s_scale = ae::Max( ae::Vec3( 0.0f ), s_scale );
 				
-				if ( input.Get( ae::Key::Z ) ) { s_rotation.x += 0.01f; }
-				if ( input.Get( ae::Key::X ) ) { s_rotation.y += 0.01f; }
-				if ( input.Get( ae::Key::C ) ) { s_rotation.z += 0.01f; }
+				if( input.Get( ae::Key::Z ) ) { s_rotation.x += 0.01f; }
+				if( input.Get( ae::Key::X ) ) { s_rotation.y += 0.01f; }
+				if( input.Get( ae::Key::C ) ) { s_rotation.z += 0.01f; }
 				
 				ae::Matrix4 transform = ae::Matrix4::Translation( s_translation );
 				transform *= ae::Matrix4::RotationX( s_rotation.x );
@@ -565,7 +605,7 @@ int main()
 				ae::OBB obb( transform );
 				debug.AddOBB( obb.GetTransform(), ae::Color::Green() );
 				
-				if ( input.Get( ae::Key::Space ) )
+				if( input.Get( ae::Key::Space ) )
 				{
 					s_pa += 0.007f;
 					s_pb += 0.01f;
@@ -575,7 +615,7 @@ int main()
 				p += ae::Vec3( cosf( s_pa ), sinf( s_pa ), 0.0f );
 				p += ae::Vec3( cosf( s_pb ), 0.0f, sinf( s_pb ) );
 				
-				float dist = obb.GetSignedDistanceFromSurface( p );
+				const float dist = obb.GetSignedDistanceFromSurface( p );
 				debug.AddSphere( p, 0.05f, ae::Color::PicoPink(), 8 );
 				
 				ae::Color nearestColor = ( dist > 0.0f ) ? ae::Color::PicoGreen() : ae::Color::PicoRed();
@@ -600,14 +640,14 @@ int main()
 					{ ae::Vec3( 0.0f, -10.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::PicoGreen() },
 					{ ae::Vec3( 0.0f, 0.0f, -10.0f ), ae::Vec3( 0.0f ), ae::Color::PicoBlue() },
 				};
-				for ( uint32_t i = 0; i < countof(rays); i++ )
+				for( uint32_t i = 0; i < countof(rays); i++ )
 				{
 					rayP = rays[ i ].to;
 					obb.IntersectRay( rays[ i ].from, rays[ i ].to - rays[ i ].from, &rayP );
 					debug.AddLine( rays[ i ].from, rayP, rays[ i ].color );
 				}
 				
-				if ( obb.IntersectRay( raySource, ray, &rayP, &rayN, &rayT ) )
+				if( obb.IntersectRay( raySource, ray, &rayP, &rayN, &rayT ) )
 				{
 					debug.AddLine( raySource, raySource + ray * rayT, ae::Color::PicoBlue() );
 					debug.AddLine( rayP, raySource + ray, ae::Color::Red() );
@@ -663,10 +703,10 @@ int main()
 
 				static float s_turnerAngle = 0.0f;
 				static float s_turnerVel = 0.0f;
-				if ( input.Get( ae::Key::Num1 ) ) { s_turnerVel -= timeStep.GetTimeStep(); }
-				if ( input.Get( ae::Key::Num2 ) ) { s_turnerVel += timeStep.GetTimeStep(); }
-				if ( input.Get( ae::Key::Num3 ) ) { s_turnerVel = 0.0f; }
-				if ( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) )
+				if( input.Get( ae::Key::Num1 ) ) { s_turnerVel -= timeStep.GetTimeStep(); }
+				if( input.Get( ae::Key::Num2 ) ) { s_turnerVel += timeStep.GetTimeStep(); }
+				if( input.Get( ae::Key::Num3 ) ) { s_turnerVel = 0.0f; }
+				if( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) )
 				{
 					s_setAnglePrev = s_setAngle;
 					s_setAngle = s_turnerAngle;
@@ -678,15 +718,140 @@ int main()
 				debug.AddLine( ae::Vec3( 0.0f ), t, ae::Color::Red() );
 				break;
 			}
+			case 9:
+			{
+				infoText.Append( "AABB Overlap\n" );
+				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
+				infoText.Append( "Scale: I,J,K,L,U,O\n" );
+				static bool s_first = true;
+				static ae::AABB s_aabb0;
+				static ae::AABB s_aabb1;
+				if( s_first || input.Get( ae::Key::R ) )
+				{
+					s_aabb0 = ae::AABB( ae::Vec3( 0.5f ), ae::Vec3( 1.5f ) );
+					s_aabb1 = ae::AABB( ae::Vec3( -0.5f ), ae::Vec3( 0.5f ) );
+					s_first = false;
+				}
+				auto TranslateAABB = []( ae::AABB& aabb, const ae::Vec3& translation )
+				{
+					aabb = ae::AABB( aabb.GetMin() + translation, aabb.GetMax() + translation );
+				};
+				auto ScaleAABB = []( ae::AABB& aabb, const ae::Vec3& scale )
+				{
+					const ae::Vec3 halfSize = aabb.GetHalfSize() * scale;
+					aabb = ae::AABB( aabb.GetCenter() - halfSize, aabb.GetCenter() + halfSize );
+				};
+				if( input.Get( ae::Key::W ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::S ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, -0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::A ) ) { TranslateAABB( s_aabb0, ae::Vec3( -0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::D ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::Q ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.0f, -0.5f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::E ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.0f, 0.5f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::I ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::K ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, -0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::J ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( -0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::L ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::U ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.0f, -0.5f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::O ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.0f, 0.5f ) * timeStep.GetTimeStep() ); }
+				const bool overlap = s_aabb0.Intersect( s_aabb1 );
+				debug.AddAABB( s_aabb0, overlap ? ae::Color::Red() : ae::Color::Green() );
+				debug.AddAABB( s_aabb1, overlap ? ae::Color::Red() : ae::Color::Green() );
+				break;
+			}
+			case 10:
+			{
+				infoText.Append( "Mesh-Ray/Point\n" );
+				doRay( false );
+				infoText.Append( "Rotate Point: Space\n" );
+				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
+				infoText.Append( "Scale: I,J,K,L,U,O\n" );
+				infoText.Append( "Rotate: Z,X,C\n" );
+				
+				if( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
+				if( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
+				if( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
+				if( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
+				if( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
+				if( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
+				
+				if( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
+				if( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
+				if( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
+				if( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
+				if( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
+				if( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
+				s_scale = ae::Max( ae::Vec3( 0.1f ), s_scale );
+				
+				if( input.Get( ae::Key::Z ) ) { s_rotation.x += 0.01f; }
+				if( input.Get( ae::Key::X ) ) { s_rotation.y += 0.01f; }
+				if( input.Get( ae::Key::C ) ) { s_rotation.z += 0.01f; }
+				
+				ae::Matrix4 modelToWorld = ae::Matrix4::Translation( s_translation );
+				modelToWorld *= ae::Matrix4::RotationX( s_rotation.x );
+				modelToWorld *= ae::Matrix4::RotationY( s_rotation.y );
+				modelToWorld *= ae::Matrix4::RotationZ( s_rotation.z );
+				modelToWorld *= ae::Matrix4::Scaling( s_scale );
+				// Model to 'local' space. Do this here because the bunny model
+				// is very small, not centered and is y-up. Additionally keeping
+				// it small tests raycasts against very small triangles, which
+				// is a good test.
+				modelToWorld *= ae::Matrix4::Scaling( 15.0f ) * ae::Matrix4::Translation( 0.0f, 0.0f, -0.05f ) * ae::Matrix4::RotationX( ae::HalfPi );
+				ae::UniformList meshUniforms;
+				meshUniforms.Set( "u_modelToProj", worldToProj * modelToWorld );
+				meshUniforms.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
+				meshVertexData.Bind( &meshShader, meshUniforms );
+				meshVertexData.Draw();
+				
+				const auto drawRaycast = [ &debug, &meshCollision ]( const ae::RaycastParams& params, ae::Color color )
+				{
+					const ae::Vec3 scale = params.transform.GetScale();
+					const float radius = 0.002f * ae::Max( scale.x, scale.y, scale.z );
+					const float normLength = 0.02f * ae::Max( scale.x, scale.y, scale.z );
+					debug.AddLine( params.source, params.source + params.ray, color );
+					const ae::RaycastResult result = meshCollision.Raycast( params );
+					if( result.hits.Length() )
+					{
+						const auto hit = result.hits[ 0 ];
+						debug.AddLine( hit.position, hit.position + hit.normal.SafeNormalizeCopy() * normLength, color );
+						debug.AddSphere( hit.position, radius, color, 16 );
+					}
+					else
+					{
+						debug.AddSphere( params.source + params.ray, radius, color, 16 );
+					}
+				};
+
+				struct
+				{
+					ae::Vec3 source;
+					ae::Color color;
+				} rays[] = {
+					{ .source = ae::Vec3( 10.0f, 0.0f, 0.0f ), .color = ae::Color::PicoRed() },
+					{ .source = ae::Vec3( 0.0f, 10.0f, 0.0f ), .color = ae::Color::PicoGreen() },
+					{ .source = ae::Vec3( 0.0f, 0.0f, 10.0f ), .color = ae::Color::PicoBlue() },
+					{ .source = ae::Vec3( -10.0f, 0.0f, 0.0f ), .color = ae::Color::PicoRed() },
+					{ .source = ae::Vec3( 0.0f, -10.0f, 0.0f ), .color = ae::Color::PicoGreen() },
+					{ .source = ae::Vec3( 0.0f, 0.0f, -10.0f ), .color = ae::Color::PicoBlue() },
+				};
+				for( uint32_t i = 0; i < countof(rays); i++ )
+				{
+					const ae::RaycastParams params = { .transform = modelToWorld, .source = rays[ i ].source, .ray = -rays[ i ].source };
+					drawRaycast( params, rays[ i ].color );
+				}
+
+				const ae::RaycastParams params = { .transform = modelToWorld, .source = raySource, .ray = ray };
+				drawRaycast( params, ae::Color::PicoPink() );
+				break;
+			}
 			default:
 				break;
 		}
 
 		int newlineCount = 0;
 		const char* infoStr = infoText.c_str();
-		while ( *infoStr )
+		while( *infoStr )
 		{
-			if ( *infoStr == '\n' )
+			if( *infoStr == '\n' )
 			{
 				newlineCount++;
 			}

@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 include(FetchContent)
 
+message("")
+message("aether-game-utils net")
+message("")
+
 # enet dependency
 if(EMSCRIPTEN)
 	add_compile_definitions(HAS_SOCKLEN_T=1) # Prevent enet from redefining socklen_t
@@ -9,8 +13,9 @@ FetchContent_Declare(
 	enet
 	GIT_REPOSITORY "https://github.com/lsalzman/enet.git"
 	GIT_TAG cf735e639e5c9e3d2d84d71f1dbf789e8c2f3fd0
+	SOURCE_SUBDIR "NO-SUBDIRECTORY" # Use a non-existent subdirectory name to skip add_subdirectory()
 )
-FetchContent_Populate(enet) # Download but don't build
+FetchContent_MakeAvailable(enet)
 add_library(enet STATIC "")
 set_target_properties(enet PROPERTIES DEBUG_POSTFIX "d")
 target_include_directories(enet PUBLIC ${enet_SOURCE_DIR}/include)

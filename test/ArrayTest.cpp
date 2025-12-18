@@ -1,6 +1,25 @@
 //------------------------------------------------------------------------------
 // ArrayTest.cpp
-// Copyright (c) John Hughes on 12/2/19. All rights reserved.
+//------------------------------------------------------------------------------
+// Copyright (c) 2025 John Hughes
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files( the "Software" ), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and /or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions :
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
@@ -8,15 +27,307 @@
 #include "TestUtils.h"
 #include <catch2/catch_test_macros.hpp>
 
+const ae::Tag TAG_TEST = "test";
+
+//------------------------------------------------------------------------------
+// ae::New tests
+//------------------------------------------------------------------------------
+TEST_CASE( "new with no params", "[ae::New]" )
+{
+	ae::LifetimeTester::ClearStats();
+
+	ae::LifetimeTester* tester = ae::New< ae::LifetimeTester >( TAG_TEST );
+	ae::LifetimeTester* tester9 = ae::NewArray< ae::LifetimeTester >( TAG_TEST, 9 );
+	
+	REQUIRE( tester != nullptr );
+	REQUIRE( tester->check == ae::LifetimeTester::kConstructed );
+	REQUIRE( tester9 != nullptr );
+	for( uint32_t i = 0; i < 9; i++ )
+	{
+		REQUIRE( tester9[ i ].check == ae::LifetimeTester::kConstructed );
+	}
+
+	REQUIRE( ae::LifetimeTester::ctorCount == 10 );
+	REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == 10 );
+	
+	ae::Delete( tester );
+	ae::Delete( tester9 );
+
+	REQUIRE( ae::LifetimeTester::ctorCount == 10 );
+	REQUIRE( ae::LifetimeTester::dtorCount == 10 );
+	REQUIRE( ae::LifetimeTester::moveCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == 0 );
+}
+
+TEST_CASE( "new param test", "[ae::New]" )
+{
+	ae::LifetimeTester::ClearStats();
+	uint32_t ctorCount = 0;
+	uint32_t copyCount = 0;
+	uint32_t moveCount = 0;
+	uint32_t dtorCount = 0;
+	uint32_t currentCount = 0;
+
+	{
+		ae::LifetimeTester param;
+		param.value = 101;
+		ctorCount += 1;
+		currentCount += 1;
+	
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	
+		ae::LifetimeTester* tester = ae::New< ae::LifetimeTester >( TAG_TEST, param );
+		copyCount += 1; // New
+		currentCount += 1;
+		
+		REQUIRE( tester != nullptr );
+		REQUIRE( tester->check == ae::LifetimeTester::kConstructed );
+		REQUIRE( tester->value == 101 );
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+		
+		ae::Delete( tester );
+		dtorCount += 1;
+		currentCount -= 1;
+
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	}
+	dtorCount += 1;
+	currentCount -= 1;
+
+	REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+	REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+	REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+	REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+}
+
+TEST_CASE( "new move test", "[ae::New]" )
+{
+	ae::LifetimeTester::ClearStats();
+	uint32_t ctorCount = 0;
+	uint32_t copyCount = 0;
+	uint32_t moveCount = 0;
+	uint32_t dtorCount = 0;
+	uint32_t currentCount = 0;
+
+	{
+		ae::LifetimeTester param;
+		param.value = 101;
+		ctorCount += 1;
+		currentCount += 1;
+	
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	
+		ae::LifetimeTester* tester = ae::New< ae::LifetimeTester >( TAG_TEST, std::move( param ) );
+		moveCount += 1; // New
+		currentCount += 1;
+		
+		REQUIRE( tester != nullptr );
+		REQUIRE( tester->check == ae::LifetimeTester::kConstructed );
+		REQUIRE( tester->value == 101 );
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+		
+		ae::Delete( tester );
+		dtorCount += 1;
+		currentCount -= 1;
+
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	}
+	dtorCount += 1;
+	currentCount -= 1;
+
+	REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+	REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+	REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+	REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+}
+
+TEST_CASE( "new array param test", "[ae::New]" )
+{
+	ae::LifetimeTester::ClearStats();
+	uint32_t ctorCount = 0;
+	uint32_t copyCount = 0;
+	uint32_t moveCount = 0;
+	uint32_t dtorCount = 0;
+	uint32_t currentCount = 0;
+
+	{
+		ae::LifetimeTester param;
+		param.value = 109;
+		ctorCount += 1;
+		currentCount += 1;
+	
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	
+		ae::LifetimeTester* tester = ae::NewArray< ae::LifetimeTester >( TAG_TEST, 10, param );
+		copyCount += 10; // New
+		currentCount += 10;
+		
+		REQUIRE( tester != nullptr );
+		for( uint32_t i = 0; i < 9; i++ )
+		{
+			REQUIRE( tester[ i ].check == ae::LifetimeTester::kConstructed );
+			REQUIRE( tester[ i ].value == 109 );
+		}
+		// REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+		
+		ae::Delete( tester );
+		dtorCount += 10;
+		currentCount -= 10;
+
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	}
+	dtorCount += 1;
+	currentCount -= 1;
+
+	REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+	REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+	REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+	REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+}
+
+TEST_CASE( "new array move test", "[ae::New]" )
+{
+	ae::LifetimeTester::ClearStats();
+	uint32_t ctorCount = 0;
+	uint32_t copyCount = 0;
+	uint32_t moveCount = 0;
+	uint32_t dtorCount = 0;
+	uint32_t currentCount = 0;
+
+	{
+		ae::LifetimeTester param;
+		param.value = 109;
+		ctorCount += 1;
+		currentCount += 1;
+	
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	
+		ae::LifetimeTester* tester = ae::NewArray< ae::LifetimeTester >( TAG_TEST, 10, std::move( param ) );
+		copyCount += 10; // New
+		currentCount += 10;
+		
+		REQUIRE( tester != nullptr );
+		for( uint32_t i = 0; i < 9; i++ )
+		{
+			REQUIRE( tester[ i ].check == ae::LifetimeTester::kConstructed );
+			REQUIRE( tester[ i ].value == 109 );
+		}
+		// REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+		
+		ae::Delete( tester );
+		dtorCount += 10;
+		currentCount -= 10;
+
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	}
+	dtorCount += 1;
+	currentCount -= 1;
+
+	REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+	REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+	REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+	REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+}
+
 //------------------------------------------------------------------------------
 // ae::Array tests
 //------------------------------------------------------------------------------
-const ae::Tag TAG_TEST = "test";
-
 TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 16; i++ )
+	for( uint32_t i = 0; i < 16; i++ )
 	{
 		REQUIRE( array.Append( 100 + i ) == 100 + i );
 		REQUIRE( array.Length() == i + 1 );
@@ -26,7 +337,7 @@ TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 
 	SECTION( "elements can be queried" )
 	{
-		for ( uint32_t i = 0; i < 16; i++ )
+		for( uint32_t i = 0; i < 16; i++ )
 		{
 			REQUIRE( array[ i ] == 100 + i );
 		}
@@ -34,7 +345,7 @@ TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 
 	SECTION( "array can be resized and elements can be queried" )
 	{
-		for ( uint32_t i = array.Length(); i < 19; i++ )
+		for( uint32_t i = array.Length(); i < 19; i++ )
 		{
 			REQUIRE( array.Append( 100 + i ) == 100 + i );
 			REQUIRE( array.Length() == i + 1 );
@@ -42,7 +353,7 @@ TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 		}
 		REQUIRE( array.Length() == 19 );
 
-		for ( uint32_t i = 0; i < 19; i++ )
+		for( uint32_t i = 0; i < 19; i++ )
 		{
 			REQUIRE( array[ i ] == 100 + i );
 		}
@@ -61,7 +372,7 @@ TEST_CASE( "array will assert if too many elements are appended" )
 TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 5; i++ )
+	for( uint32_t i = 0; i < 5; i++ )
 	{
 		REQUIRE( array.Append( 100 + i ) == 100 + i );
 		int* p = array.Append( 1000 + i, 2 );
@@ -75,7 +386,7 @@ TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]"
 
 	SECTION( "elements can be queried" )
 	{
-		for ( uint32_t i = 0; i < 5; i++ )
+		for( uint32_t i = 0; i < 5; i++ )
 		{
 			REQUIRE( array[ i * 3 ] == 100 + i );
 			REQUIRE( array[ i * 3 + 1 ] == 1000 + i );
@@ -85,7 +396,7 @@ TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]"
 
 	SECTION( "array can be resized and elements can be queried" )
 	{
-		for ( uint32_t i = array.Length() / 3; i < 8; i++ )
+		for( uint32_t i = array.Length() / 3; i < 8; i++ )
 		{
 			REQUIRE( array.Append( 100 + i ) == 100 + i );
 			int* p = array.Append( 1000 + i, 2 );
@@ -97,7 +408,7 @@ TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]"
 		}
 		REQUIRE( array.Length() == 24 );
 
-		for ( uint32_t i = 0; i < 8; i++ )
+		for( uint32_t i = 0; i < 8; i++ )
 		{
 			REQUIRE( array[ i * 3 ] == 100 + i );
 			REQUIRE( array[ i * 3 + 1 ] == 1000 + i );
@@ -109,7 +420,7 @@ TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]"
 TEST_CASE( "arrays can be constructed from initializer lists", "[ae::Array]" )
 {
 	ae::Array< int, 8 > array = { 100, 101, 102, 103, 104, 105, 106, 107 };
-	for ( uint32_t i = 0; i < 8; i++ )
+	for( uint32_t i = 0; i < 8; i++ )
 	{
 		REQUIRE( array[ i ] == 100 + i );
 	}
@@ -122,13 +433,13 @@ TEST_CASE( "arrays can be appended to other arrays", "[ae::Array]" )
 	ae::Array< int > array = TAG_TEST;
 
 	array.AppendArray( first, countof(first) );
-	for ( uint32_t i = 0; i < 8; i++ )
+	for( uint32_t i = 0; i < 8; i++ )
 	{
 		REQUIRE( array[ i ] == 100 + i );
 	}
 
 	array.AppendArray( second, countof(second) );
-	for ( uint32_t i = 0; i < 16; i++ )
+	for( uint32_t i = 0; i < 16; i++ )
 	{
 		REQUIRE( array[ i ] == 100 + i );
 	}
@@ -137,7 +448,7 @@ TEST_CASE( "arrays can be appended to other arrays", "[ae::Array]" )
 TEST_CASE( "initial size of dynamic array is exact when specified", "[ae::Array]" ) // @NOTE: This isn't 100% true, there's a minimum number of bytes allocated for the array
 {
 	ae::Array< int > array( TAG_TEST, 111 );
-	for ( uint32_t i = 0; i < 111; i++ )
+	for( uint32_t i = 0; i < 111; i++ )
 	{
 		array.Append( 100 + i );
 		REQUIRE( array.Length() == i + 1 );
@@ -147,7 +458,7 @@ TEST_CASE( "initial size of dynamic array is exact when specified", "[ae::Array]
 
 	SECTION( "elements can be queried" )
 	{
-		for ( uint32_t i = 0; i < 111; i++ )
+		for( uint32_t i = 0; i < 111; i++ )
 		{
 			REQUIRE( array[ i ] == 100 + i );
 		}
@@ -159,7 +470,7 @@ TEST_CASE( "initial size of dynamic array is exact when specified", "[ae::Array]
 TEST_CASE( "arrays elements can be removed by value", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 10; i++ )
+	for( uint32_t i = 0; i < 10; i++ )
 	{
 		array.Append( i );
 		array.Append( 0 );
@@ -202,7 +513,7 @@ TEST_CASE( "arrays can be sized and resized", "[ae::Array]" )
 	ae::Array< int > a( TAG_TEST, 5 );
 
 	REQUIRE( a.Length() == 0 );
-	REQUIRE( a.Size() == 16 );
+	REQUIRE( a.Size() == 5 );
 
 	SECTION( "reserving bigger changes size but not length" )
 	{
@@ -216,14 +527,14 @@ TEST_CASE( "arrays can be sized and resized", "[ae::Array]" )
 		a.Reserve( 0 );
 
 		REQUIRE( a.Length() == 0 );
-		REQUIRE( a.Size() == 16 );
+		REQUIRE( a.Size() == 5 );
 	}
 	SECTION( "clearing reduces length but does not affect size" )
 	{
 		a.Clear();
 
 		REQUIRE( a.Length() == 0 );
-		REQUIRE( a.Size() == 16 );
+		REQUIRE( a.Size() == 5 );
 	}
 }
 
@@ -232,7 +543,7 @@ TEST_CASE( "arrays can be constructed with a specified length", "[ae::Array]" )
 	ae::Array< int > a( TAG_TEST, 7, 5 );
 
 	REQUIRE( a.Length() == 5 );
-	REQUIRE( a.Size() == 16 );
+	REQUIRE( a.Size() == 5 );
 }
 
 TEST_CASE( "0 array elements can be inserted by index", "[ae::Array]" )
@@ -241,7 +552,7 @@ TEST_CASE( "0 array elements can be inserted by index", "[ae::Array]" )
 	REQUIRE( empty.Length() == 0 );
 
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 1; i <= 5; i++ )
+	for( uint32_t i = 1; i <= 5; i++ )
 	{
 		array.Append( i );
 	}
@@ -293,7 +604,7 @@ TEST_CASE( "array elements can be inserted by index", "[ae::Array]" )
 	REQUIRE( empty.Length() == 0 );
 
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 1; i <= 5; i++ )
+	for( uint32_t i = 1; i <= 5; i++ )
 	{
 		array.Append( i );
 	}
@@ -346,15 +657,15 @@ TEST_CASE( "array elements can be inserted by index", "[ae::Array]" )
 TEST_CASE( "multiple array elements can be inserted by index", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		array.Append( 100 + i );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		REQUIRE( array[ i ] == 100 + i );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		int val = 1000 + i;
 		int* p = array.Insert( i * 4 + 1, val, 3 );
@@ -362,7 +673,7 @@ TEST_CASE( "multiple array elements can be inserted by index", "[ae::Array]" )
 		REQUIRE( p[ 1 ] == val );
 		REQUIRE( p[ 2 ] == val );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		REQUIRE( array[ i * 4 ] == 100 + i );
 		REQUIRE( array[ i * 4 + 1 ] == 1000 + i );
@@ -374,15 +685,15 @@ TEST_CASE( "multiple array elements can be inserted by index", "[ae::Array]" )
 TEST_CASE( "arrays can be inserted into other arrays by index", "[ae::Array]" )
 {
 	ae::Array< uint32_t > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		array.Append( 100 + i );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		REQUIRE( array[ i ] == 100 + i );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		uint32_t vals[] = { 200 + i, 300 + i, 400 + i };
 		uint32_t* p = array.InsertArray( i * 4 + 1, vals, countof(vals) );
@@ -390,7 +701,7 @@ TEST_CASE( "arrays can be inserted into other arrays by index", "[ae::Array]" )
 		REQUIRE( p[ 1 ] == vals[ 1 ] );
 		REQUIRE( p[ 2 ] == vals[ 2 ] );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		REQUIRE( array[ i * 4 ] == 100 + i );
 		REQUIRE( array[ i * 4 + 1 ] == 200 + i );
@@ -507,7 +818,7 @@ TEST_CASE( "copy construct", "[ae::Array]" )
 		{
 			ae::Array< ae::LifetimeTester > array0( TAG_TEST, ae::LifetimeTester(), 5 ); // +1 ctor, +1 dtor, +5 copy
 			REQUIRE( array0.Length() == 5 );
-			REQUIRE( array0.Size() >= 6 );
+			REQUIRE( array0.Size() >= 5 );
 			REQUIRE( ae::LifetimeTester::ctorCount == 1 );
 			REQUIRE( ae::LifetimeTester::copyCount == 5 );
 			REQUIRE( ae::LifetimeTester::dtorCount == 1 );
@@ -537,7 +848,7 @@ TEST_CASE( "assignment operator", "[ae::Array]" )
 		{
 			ae::Array< ae::LifetimeTester > array0( TAG_TEST, ae::LifetimeTester(), 5 ); // +1 ctor, +1 dtor, +5 copy
 			REQUIRE( array0.Length() == 5 );
-			REQUIRE( array0.Size() >= 6 );
+			REQUIRE( array0.Size() >= 5 );
 			REQUIRE( ae::LifetimeTester::ctorCount == 1 );
 			REQUIRE( ae::LifetimeTester::copyCount == 5 );
 			REQUIRE( ae::LifetimeTester::dtorCount == 1 );
@@ -658,7 +969,7 @@ TEST_CASE( "append to non-empty array", "[ae::Array]" )
 		REQUIRE( ae::LifetimeTester::dtorCount == dtor );
 		REQUIRE( ae::LifetimeTester::currentCount == current );
 		
-		for ( uint32_t i = 0; i < 111; i++ )
+		for( uint32_t i = 0; i < 111; i++ )
 		{
 			array5.Append( ae::LifetimeTester() );
 			ctor++;
@@ -703,7 +1014,7 @@ TEST_CASE( "append array to empty array", "[ae::Array]" )
 		REQUIRE( ae::LifetimeTester::dtorCount == dtor );
 		REQUIRE( ae::LifetimeTester::currentCount == current );
 		
-		for ( uint32_t i = 0; i < 25; i++ )
+		for( uint32_t i = 0; i < 25; i++ )
 		{
 			{
 				ae::LifetimeTester* t = new ae::LifetimeTester[ i ];
@@ -763,7 +1074,7 @@ TEST_CASE( "append array to array", "[ae::Array]" )
 		REQUIRE( ae::LifetimeTester::dtorCount == dtor );
 		REQUIRE( ae::LifetimeTester::currentCount == current );
 		
-		for ( uint32_t i = 0; i < 25; i++ )
+		for( uint32_t i = 0; i < 25; i++ )
 		{
 			{
 				ae::LifetimeTester* t = new ae::LifetimeTester[ i ];
@@ -819,7 +1130,7 @@ TEST_CASE( "insert element at end of array", "[ae::Array]" )
 		REQUIRE( ae::LifetimeTester::dtorCount == dtor );
 		REQUIRE( ae::LifetimeTester::currentCount == current );
 		
-		for ( uint32_t i = 0; i < 123; i++ )
+		for( uint32_t i = 0; i < 123; i++ )
 		{
 			array.Insert( i, ae::LifetimeTester() );
 			ctor++;
@@ -878,7 +1189,7 @@ TEST_CASE( "insert element at beginning of array", "[ae::Array]" )
 		REQUIRE( ae::LifetimeTester::dtorCount == dtor + ae::LifetimeTester::moveCount );
 		REQUIRE( ae::LifetimeTester::currentCount == current );
 		
-		for ( uint32_t i = 0; i < 123; i++ )
+		for( uint32_t i = 0; i < 123; i++ )
 		{
 			uint32_t prevSize = array.Size();
 			array.Insert( 0, ae::LifetimeTester() );
@@ -887,7 +1198,7 @@ TEST_CASE( "insert element at beginning of array", "[ae::Array]" )
 			assign++;
 			moveAssign += current - 1;
 			dtor++;
-			if ( prevSize != array.Size() )
+			if( prevSize != array.Size() )
 			{
 				move += current;
 				dtor += current;
@@ -936,7 +1247,7 @@ TEST_CASE( "remove all elements from array", "[ae::Array]" )
 	REQUIRE( ae::LifetimeTester::dtorCount == dtor );
 	REQUIRE( ae::LifetimeTester::currentCount == current );
 	
-	while ( array.Length() )
+	while( array.Length() )
 	{
 		array.Remove( 0 );
 		current--;
@@ -956,18 +1267,18 @@ TEST_CASE( "remove all elements from array", "[ae::Array]" )
 TEST_CASE( "array elements can be removed by index", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 16; i++ )
+	for( uint32_t i = 0; i < 16; i++ )
 	{
 		array.Append( i );
 	}
 	REQUIRE( array.Length() == 16 );
 
-	for ( uint32_t i = 0; i < 8; i++ )
+	for( uint32_t i = 0; i < 8; i++ )
 	{
 		array.Remove( i + 1 );
 	}
 	REQUIRE( array.Length() == 8 );
-	for ( uint32_t i = 0; i < 8; i++ )
+	for( uint32_t i = 0; i < 8; i++ )
 	{
 		REQUIRE( array[ i ] == i * 2 );
 	}
@@ -990,7 +1301,7 @@ TEST_CASE( "arrays support range based loop", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
 	const ae::Array< int >& constArray = array;
-	for ( uint32_t i = 0; i < 10; i++ )
+	for( uint32_t i = 0; i < 10; i++ )
 	{
 		array.Append( i );
 		array.Append( 0 );
@@ -1001,7 +1312,7 @@ TEST_CASE( "arrays support range based loop", "[ae::Array]" )
 	SECTION( "can iterate over non-const array" )
 	{
 		int i = 0;
-		for ( int& v : array )
+		for( int& v : array )
 		{
 			REQUIRE( v == array[ i ] );
 			REQUIRE( v == compare[ i ] );
@@ -1012,7 +1323,7 @@ TEST_CASE( "arrays support range based loop", "[ae::Array]" )
 	SECTION( "can iterate over const array" )
 	{
 		int i = 0;
-		for ( const int& v : constArray )
+		for( const int& v : constArray )
 		{
 			REQUIRE( v == constArray[ i ] );
 			REQUIRE( v == compare[ i ] );

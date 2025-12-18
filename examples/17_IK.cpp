@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 16_IK.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -99,7 +99,7 @@ int main()
 	ae::DebugLines gridLines = TAG_ALL;
 	aeImGui ui;
 
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "17_IK" );
 	window.SetAlwaysOnTop( ( ae::GetScreens().FindFn( []( const ae::Screen& s ){ return s.isExternal; } ) >= 0 ) && ae::IsDebuggerAttached() );
 	render.Initialize( &window );
@@ -107,7 +107,7 @@ int main()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	fileSystem.Initialize( "data", "ae", "ik" );
 	camera.Reset( ae::Vec3( 0.0f, 0.0f, 1.0f ), ae::Vec3( 0.0f, 3.5f, 0.4f ) );
-	camera.SetDistanceLimits( 0.25f, 25.0f );
+	camera.SetDistanceLimits( 0.01f, 25.0f );
 	debugLines.Initialize( 20 * 1024 );
 	gridLines.Initialize( 4096 );
 	gridLines.SetXRayEnabled( false );
@@ -138,14 +138,14 @@ int main()
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
 		AE_ASSERT_MSG( fileSize, "Could not load '#'", fileName );
 		ae::Scratch< uint8_t > fileData( fileSize );
-		if ( !fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() ) )
+		if( !fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() ) )
 		{
 			AE_ERR( "Error reading fbx file: '#'", fileName );
 			return -1;
 		}
 		
 		ae::FbxLoader fbxLoader = TAG_ALL;
-		if ( !fbxLoader.Initialize( fileData.Data(), fileData.Length() ) )
+		if( !fbxLoader.Initialize( fileData.Data(), fileData.Length() ) )
 		{
 			AE_ERR( "Error parsing fbx file: '#'", fileName );
 			return -1;
@@ -163,7 +163,7 @@ int main()
 		params.maxVerts = fbxLoader.GetMeshVertexCount( 0u );
 		vertices = ae::NewArray< Vertex >( TAG_ALL, params.maxVerts );
 		params.vertexOut = vertices;
-		if ( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
+		if( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
 		{
 			AE_ERR( "Error loading fbx file data: '#'", fileName );
 			return -1;
@@ -183,21 +183,21 @@ int main()
 	ae::Skeleton currentPose = TAG_ALL;
 	ae::Array< ae::IKConstraints > ikConstraints = TAG_ALL;
 	ikConstraints.Reserve( skin.GetBindPose().GetBoneCount() );
-	for ( uint32_t i = 0; i < skin.GetBindPose().GetBoneCount(); i++ )
+	for( uint32_t i = 0; i < skin.GetBindPose().GetBoneCount(); i++ )
 	{
 		ae::IKConstraints constraints;
 		const ae::Bone* bone = skin.GetBindPose().GetBoneByIndex( i );
 		if( strncmp( "QuickRigCharacter_Right", bone->name.c_str(), strlen("QuickRigCharacter_Right") ) == 0 )
 		{
-			constraints.primaryAxis = ae::Axis::NegativeX;
+			constraints.twistAxis = ae::Axis::NegativeX;
 			constraints.horizontalAxis = ae::Axis::NegativeZ;
-			constraints.verticalAxis = ae::Axis::Y;
+			constraints.bendAxis = ae::Axis::Y;
 		}
 		else
 		{
-			constraints.primaryAxis = ae::Axis::X;
+			constraints.twistAxis = ae::Axis::X;
 			constraints.horizontalAxis = ae::Axis::NegativeZ;
-			constraints.verticalAxis = ae::Axis::NegativeY;
+			constraints.bendAxis = ae::Axis::NegativeY;
 		}
 		ikConstraints.Append( constraints );
 	}
@@ -224,11 +224,11 @@ int main()
 	ae::Matrix4 targetTransform, testJoint0, testJoint1;
 	auto SetDefault = [&]()
 	{
-		targetTransform = skeletonTransform * skin.GetBindPose().GetBoneByName( rightHandBoneName )->transform;
-		testJoint0 = testJoint0Bind;
-		testJoint1 = testJoint1Bind;
 		currentPose.Initialize( &skin.GetBindPose() );
 		currentPose.SetTransform( currentPose.GetRoot(), skeletonTransform );
+		targetTransform = currentPose.GetBoneByName( rightHandBoneName )->modelToBone;
+		testJoint0 = testJoint0Bind;
+		testJoint1 = testJoint1Bind;
 	};
 	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
@@ -238,6 +238,9 @@ int main()
 	bool autoIK = true;
 	bool fromBindPose = true;
 	bool drawIK = false;
+	int32_t iterCount = 5;
+	float ikJointScale = 0.1f;
+	bool rotationIK = true;
 	enum class TestJointId
 	{
 		None,
@@ -249,8 +252,8 @@ int main()
 	static uint32_t s_selectedJointIndex = skin.GetBindPose().GetBoneByName( rightHandBoneName )->index;
 	ae::IKConstraints testConstraints;
 	testConstraints.horizontalAxis = ae::Axis::NegativeY;
-	testConstraints.verticalAxis = ae::Axis::Z;
-	testConstraints.primaryAxis = ae::Axis::X;
+	testConstraints.bendAxis = ae::Axis::Z;
+	testConstraints.twistAxis = ae::Axis::X;
 	testConstraints.rotationLimits[ 0 ] = 0.14f;
 	testConstraints.rotationLimits[ 1 ] = 0.52f;
 	testConstraints.rotationLimits[ 2 ] = 0.38f;
@@ -268,11 +271,11 @@ int main()
 	auto GetFocusPos = [&]() -> ae::Vec3
 	{
 		if( selTestJoint != TestJointId::None ) { return GetSelectedTransform().GetTranslation(); }
-		return currentPose.GetBoneByIndex( s_selectedJointIndex )->transform.GetTranslation();
+		return currentPose.GetBoneByIndex( s_selectedJointIndex )->modelToBone.GetTranslation();
 	};
 	
 	AE_INFO( "Run" );
-	while ( !input.quit )
+	while( !input.quit )
 	{
 		const float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
 		input.Pump();
@@ -287,7 +290,7 @@ int main()
 		bool shouldStep = false;
 		ImGui::SetNextWindowPos( ImVec2( 0, 0 ), ImGuiCond_FirstUseEver );
 		ImGui::SetNextWindowSize( ImVec2( 200, 300 ), ImGuiCond_FirstUseEver );
-		if ( ImGui::Begin( "Options" ) )
+		if( ImGui::Begin( "Options" ) )
 		{
 			ImGui::Checkbox( "Draw Mesh", &drawMesh );
 			ImGui::Checkbox( "Draw Skeleton", &drawSkeleton );
@@ -295,12 +298,15 @@ int main()
 			ImGui::Checkbox( "Auto IK", &autoIK );
 			ImGui::SameLine();
 			ImGui::BeginDisabled( autoIK );
-			if ( ImGui::Button( "Step" ) )
+			if( ImGui::Button( "Step" ) )
 			{
 				shouldStep = true;
 			}
 			ImGui::EndDisabled();
 			ImGui::Checkbox( "From Bind Pose", &fromBindPose );
+			ImGui::SliderInt( "Iterations", &iterCount, 0, 10 );
+			ImGui::SliderFloat( "Joint Scale", &ikJointScale, 0.01f, 1.0f );
+			ImGui::Checkbox( "IK Rotation Limits", &rotationIK );
 
 			ImGui::Separator();
 
@@ -319,12 +325,12 @@ int main()
 
 			ImGui::Separator();
 
-			if ( ImGui::Button( "Reset" ) )
+			if( ImGui::Button( "Reset" ) )
 			{
 				SetDefault();
 			}
 			ImGui::SameLine();
-			if ( ImGui::Button( "Focus" ) )
+			if( ImGui::Button( "Focus" ) )
 			{
 				camera.Refocus( GetFocusPos() );
 			}
@@ -361,8 +367,8 @@ int main()
 			}();
 			const char* axisNames[] = { "None", "X", "Y", "Z", "NegativeX", "NegativeY", "NegativeZ" };
 			ImGui::ListBox( "Horizontal", (int*)&constraints->horizontalAxis, axisNames, countof(axisNames), 3 );
-			ImGui::ListBox( "Vertical", (int*)&constraints->verticalAxis, axisNames, countof(axisNames), 3 );
-			ImGui::ListBox( "Primary", (int*)&constraints->primaryAxis, axisNames, countof(axisNames), 3 );
+			ImGui::ListBox( "Vertical", (int*)&constraints->bendAxis, axisNames, countof(axisNames), 3 );
+			ImGui::ListBox( "Primary", (int*)&constraints->twistAxis, axisNames, countof(axisNames), 3 );
 			ImGui::SliderFloat( "R0", &constraints->rotationLimits[ 0 ], 0.0f, ae::HalfPi );
 			ImGui::SliderFloat( "R1", &constraints->rotationLimits[ 1 ], 0.0f, ae::HalfPi );
 			ImGui::SliderFloat( "R2", &constraints->rotationLimits[ 2 ], 0.0f, ae::HalfPi );
@@ -370,41 +376,41 @@ int main()
 			ImGui::SliderFloat( "T0", &constraints->twistLimits[ 0 ], -ae::Pi, 0.0f );
 			ImGui::SliderFloat( "T1", &constraints->twistLimits[ 1 ], 0.0f, ae::Pi );
 		}
-		if ( input.GetPress( ae::Key::V ) )
+		if( input.GetPress( ae::Key::V ) )
 		{
 			drawMesh = !drawMesh;
 		}
-		if ( input.GetPress( ae::Key::S ) )
+		if( input.GetPress( ae::Key::S ) )
 		{
 			drawSkeleton = !drawSkeleton;
 		}
-		if ( input.GetPress( ae::Key::W ) )
+		if( input.GetPress( ae::Key::W ) )
 		{
-			if ( gizmoOperation != ImGuizmo::TRANSLATE ) { gizmoOperation = ImGuizmo::TRANSLATE; }
+			if( gizmoOperation != ImGuizmo::TRANSLATE ) { gizmoOperation = ImGuizmo::TRANSLATE; }
 			else { gizmoMode = ( gizmoMode == ImGuizmo::WORLD ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD; }
 		}
-		if ( input.GetPress( ae::Key::E ) )
+		if( input.GetPress( ae::Key::E ) )
 		{
-			if ( gizmoOperation != ImGuizmo::ROTATE ) { gizmoOperation = ImGuizmo::ROTATE; }
+			if( gizmoOperation != ImGuizmo::ROTATE ) { gizmoOperation = ImGuizmo::ROTATE; }
 			else { gizmoMode = ( gizmoMode == ImGuizmo::WORLD ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD; }
 		}
-		if ( input.GetPress( ae::Key::R ) )
+		if( input.GetPress( ae::Key::R ) )
 		{
 			gizmoOperation = ImGuizmo::SCALE;
 		}
-		if ( input.GetPress( ae::Key::Space ) )
+		if( input.GetPress( ae::Key::Space ) )
 		{
 			SetDefault();
 		}
-		if ( input.GetPress( ae::Key::F ) )
+		if( input.GetPress( ae::Key::F ) )
 		{
 			camera.Refocus( GetFocusPos() );
 		}
-		if ( input.GetPress( ae::Key::I ) )
+		if( input.GetPress( ae::Key::I ) )
 		{
 			autoIK = !autoIK;
 		}
-		if ( !autoIK && input.GetPress( ae::Key::Space ) )
+		if( !autoIK && input.GetPress( ae::Key::Space ) )
 		{
 			shouldStep = true;
 		}
@@ -418,15 +424,15 @@ int main()
 			currentPose.Initialize( &skin.GetBindPose() );
 			currentPose.SetTransform( currentPose.GetRoot(), skeletonTransform );
 		}
-		if ( ( autoIK || shouldStep ) && ( drawSkeleton || drawMesh || drawIK ) )
+		if( ( autoIK || shouldStep ) && ( drawSkeleton || drawMesh || drawIK ) )
 		{
 			ae::IK ik = TAG_ALL;
 			const ae::Bone* extentBone = currentPose.GetBoneByName( rightHandBoneName );
-			for ( auto b = extentBone; b; b = b->parent )
+			for( auto b = extentBone; b; b = b->parent )
 			{
 				ik.chain.Insert( 0, b->index );
 				ik.joints.Insert( 0, ikConstraints[ b->index ] );
-				if ( b->name == anchorBoneName )
+				if( b->name == anchorBoneName )
 				{
 					break;
 				}
@@ -436,7 +442,10 @@ int main()
 			ik.targetTransform = targetTransform;
 			ik.bindPose = &skin.GetBindPose();
 			ik.pose.Initialize( &currentPose );
-			ik.Run( autoIK ? 10 : 1, &currentPose, drawIK ? &debugLines : nullptr );
+			ik.debugLines = drawIK ? &debugLines : nullptr;
+			ik.debugJointScale = ikJointScale;
+			ik.enableRotationLimits = rotationIK;
+			ik.Run( autoIK ? iterCount : 1, &currentPose );
 		}
 		
 		// Update mesh
@@ -444,11 +453,11 @@ int main()
 		vertexData.UploadVertices( 0, vertices, vertexData.GetMaxVertexCount() );
 		
 		// Debug
-		if ( drawSkeleton )
+		if( drawSkeleton )
 		{
-			for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+			for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 			{
-				const ae::Matrix4& t = currentPose.GetBoneByIndex( i )->transform;
+				const ae::Matrix4& t = currentPose.GetBoneByIndex( i )->modelToBone;
 				ae::Vec3 p = t.GetTranslation();
 				ae::Vec3 xAxis = t.GetAxis( 0 );
 				ae::Vec3 yAxis = t.GetAxis( 1 );
@@ -458,14 +467,14 @@ int main()
 				debugLines.AddLine( p, p + zAxis * 0.05f, ae::Color::Blue() );
 			}
 
-			for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+			for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 			{
 				const ae::Bone* bone = currentPose.GetBoneByIndex( i );
 				const ae::Bone* parent = bone->parent;
-				if ( parent )
+				if( parent )
 				{
-					debugLines.AddLine( parent->transform.GetTranslation(), bone->transform.GetTranslation(), ae::Color::PicoBlue() );
-					debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
+					debugLines.AddLine( parent->modelToBone.GetTranslation(), bone->modelToBone.GetTranslation(), ae::Color::PicoBlue() );
+					debugLines.AddOBB( bone->modelToBone * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
 				}
 			}
 
@@ -476,13 +485,17 @@ int main()
 			}
 		}
 
-		const ae::Vec3 testJointClipped = testJoint1.GetTranslation() + ae::IK::ClipJoint(
+		ae::IK ik = TAG_ALL;
+		ik.debugLines = &debugLines;
+		ik.debugJointScale = ikJointScale;
+		ik.enableRotationLimits = rotationIK;
+		const ae::Vec3 testJointClipped = testJoint1.GetTranslation() + ik.ClipJoint(
 			( testJoint0Bind.GetTranslation() - testJoint1Bind.GetTranslation() ).Length(),
 			testJoint0.GetTranslation(),
 			testJoint0.GetRotation(),
 			testJoint1.GetTranslation(),
 			testConstraints,
-			&debugLines
+			ae::Color::PicoBlue()
 		);
 
 		// Joint limits
@@ -493,9 +506,9 @@ int main()
 		// Add grid
 		gridLines.AddLine( ae::Vec3( -2, 0, 0 ), ae::Vec3( 2, 0, 0 ), ae::Color::Red() );
 		gridLines.AddLine( ae::Vec3( 0, -2, 0 ), ae::Vec3( 0, 2, 0 ), ae::Color::Green() );
-		for ( float i = -2; i <= 2.00001f; i += 0.5f )
+		for( float i = -2; i <= 2.00001f; i += 0.5f )
 		{
-			if ( ae::Abs( i ) < 0.0001f ) { continue; }
+			if( ae::Abs( i ) < 0.0001f ) { continue; }
 			gridLines.AddLine( ae::Vec3( i, -2, 0 ), ae::Vec3( i, 2, 0 ), ae::Color::PicoLightGray() );
 			gridLines.AddLine( ae::Vec3( -2, i, 0 ), ae::Vec3( 2, i, 0 ), ae::Color::PicoLightGray() );
 		}
@@ -515,17 +528,17 @@ int main()
 			const ae::Vec3 rayDir = ( worldPos.GetXYZ() - rayOrigin ).SafeNormalizeCopy();
 			const ae::Plane plane( ae::Vec3( 0.0f ), ae::Vec3( 0, 0, 1 ) );
 			ae::Vec3 intersection;
-			if ( plane.IntersectRay( rayOrigin, rayDir * 1000.0f, &intersection ) )
+			if( plane.IntersectRay( rayOrigin, rayDir * 1000.0f, &intersection ) )
 			{
 				debugLines.AddCircle( intersection, -rayDir, 0.1f, ae::Color::Red(), 16 );
 			}
 
 			// @TODO: Picking
-			// for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+			// for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 			// {
 			// 	const ae::Bone* bone = currentPose.GetBoneByIndex( i );
 			// 	const ae::Bone* parent = bone->parent;
-			// 	if ( parent )
+			// 	if( parent )
 			// 	{
 			// 		const ae::Vec3 pos = bone->transform.GetTranslation();
 			// 		const ae::Color color = ( ae::Line( rayOrigin, rayOrigin + rayDir ).GetDistance( pos ) < 0.3f ) ? ae::Color::PicoRed() : ae::Color::PicoBlue();
@@ -534,19 +547,22 @@ int main()
 			// }
 		}
 		
-		ImGuizmo::Manipulate(
-			worldToView.data,
-			viewToProj.data,
-			gizmoOperation,
-			( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : gizmoMode,
-			GetSelectedTransform().data
-		);
+		if( camera.GetMode() == ae::DebugCamera::Mode::None )
+		{
+			ImGuizmo::Manipulate(
+				worldToView.data,
+				viewToProj.data,
+				gizmoOperation,
+				( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : gizmoMode,
+				GetSelectedTransform().data
+			);
+		}
 		
 		render.Activate();
 		render.Clear( window.GetFocused() ? ae::Color::AetherBlack() : ae::Color::PicoBlack() );
 		
 		// Render mesh
-		if ( drawMesh )
+		if( drawMesh )
 		{
 			ae::Matrix4 modelToWorld = ae::Matrix4::Identity();
 			ae::UniformList uniformList;

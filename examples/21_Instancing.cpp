@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 21_Instancing.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2022 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -98,7 +98,7 @@ int main()
 	ae::VertexBuffer vertexData;
 	ae::InstanceData instanceData;
 
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "instancing" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -119,9 +119,9 @@ int main()
 	vertexData.UploadIndices( 0, kCubeIndices, countof( kCubeIndices ) );
 
 	ae::Vec3* offsets = ae::NewArray< ae::Vec3 >( "instance", kMaxInstances );
-	for ( uint32_t z = 0 ; z < kMaxInstancesDimm; z++ )
-	for ( uint32_t y = 0 ; y < kMaxInstancesDimm; y++ )
-	for ( uint32_t x = 0 ; x < kMaxInstancesDimm; x++ )
+	for( uint32_t z = 0 ; z < kMaxInstancesDimm; z++ )
+	for( uint32_t y = 0 ; y < kMaxInstancesDimm; y++ )
+	for( uint32_t x = 0 ; x < kMaxInstancesDimm; x++ )
 	{
 		ae::Vec3 offset( x, y, z );
 		offset -= ae::Vec3( kMaxInstancesDimm / 2 );
@@ -166,7 +166,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
 #else
-	while ( Update() ) {}
+	while( Update() ) {}
 #endif
 
 	AE_INFO( "Terminate" );

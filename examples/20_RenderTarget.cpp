@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 20_RenderTarget.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -109,7 +109,7 @@ int main()
 	ae::Shader shader;
 	ae::VertexBuffer cube, cursor;
 
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "render target" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -192,7 +192,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
 #else
-	while ( Update() ) {}
+	while( Update() ) {}
 #endif
 
 	AE_INFO( "Terminate" );

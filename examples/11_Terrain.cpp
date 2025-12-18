@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 11_Terrain.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -26,7 +26,6 @@
 #include "aether.h"
 #include "ae/aeImGui.h"
 #include "ae/aeTerrain.h"
-#include "ae/SpriteRenderer.h"
 #include "ImGuizmo.h"
 
 const char* kFileName = "objects.dat";
@@ -94,7 +93,7 @@ const char* kGridFragStr = R"(
       AE_COLOR.rgb = mix( vec3( 0.3 ), vec3( 0.35 ), int( x != y ) );
       float gridX = mod( v_worldPos.x + 16.0, 32.0 ) - 16.0;
       float gridY = mod( v_worldPos.y + 16.0, 32.0 ) - 16.0;
-      if ( abs( gridX ) < 0.05 || abs( gridY ) < 0.05 ) { AE_COLOR.rgb = vec3( 0.25 ); }
+      if( abs( gridX ) < 0.05 || abs( gridY ) < 0.05 ) { AE_COLOR.rgb = vec3( 0.25 ); }
       AE_COLOR.a = 1.0;
     })";
 
@@ -110,11 +109,11 @@ public:
     
     BGVertex bgVertices[ aeQuadVertCount ];
     uint8_t bgIndices[ aeQuadIndexCount ];
-    for ( uint32_t i = 0; i < aeQuadVertCount; i++ )
+    for( uint32_t i = 0; i < aeQuadVertCount; i++ )
     {
       bgVertices[ i ].pos = ae::Vec4( aeQuadVertPos[ i ] * 2.0f, 1.0f );
     }
-    for ( uint32_t i = 0; i < aeQuadIndexCount; i++ )
+    for( uint32_t i = 0; i < aeQuadIndexCount; i++ )
     {
       bgIndices[ i ] = (uint8_t)aeQuadIndices[ i ];
     }
@@ -163,9 +162,9 @@ void Object::Serialize( ae::BinaryStream* stream )
 {
   stream->SerializeString( name );
   
-  if ( shape )
+  if( shape )
   {
-    if ( ae::BinaryWriter* wStream = stream->AsWriter() )
+    if( ae::BinaryWriter* wStream = stream->AsWriter() )
     {
       wStream->SerializeRaw( &shape->GetTransform(), sizeof( shape->GetTransform() ) );
     }
@@ -185,7 +184,7 @@ void Object::Serialize( ae::BinaryStream* stream )
     stream->SerializeFloat( rayDir.y );
     stream->SerializeFloat( rayDir.z );
     stream->SerializeFloat( rayLength );
-    stream->SerializeUint32( rayType );
+    stream->SerializeUInt32( rayType );
   }
 }
 
@@ -193,17 +192,17 @@ void WriteObjects( ae::FileSystem* fileSystem, const ae::Array< Object* >& objec
 {
   ae::Array< uint8_t > buffer = TAG_EXAMPLE;
   ae::BinaryWriter wStream( &buffer );
-  wStream.SerializeUint32( kCurrentFileVersion );
+  wStream.SerializeUInt32( kCurrentFileVersion );
 
-  wStream.SerializeUint32( objects.Length() );
-  for ( uint32_t i = 0; i < objects.Length(); i++ )
+  wStream.SerializeUInt32( objects.Length() );
+  for( uint32_t i = 0; i < objects.Length(); i++ )
   {
     Object* object = objects[ i ];
     
     ae::Str16 type = "";
-    if ( ae::Cast< ae::SdfBox >( object->shape ) ) { type = "box"; }
-    else if ( ae::Cast< ae::SdfCylinder >( object->shape ) ) { type = "cylinder"; }
-    else if ( ae::Cast< ae::SdfHeightmap >( object->shape ) ) { type = "heightmap"; }
+    if( ae::Cast< ae::SdfBox >( object->shape ) ) { type = "box"; }
+    else if( ae::Cast< ae::SdfCylinder >( object->shape ) ) { type = "cylinder"; }
+    else if( ae::Cast< ae::SdfHeightmap >( object->shape ) ) { type = "heightmap"; }
     else { type = "ray"; }
     wStream.SerializeString( type );
     
@@ -219,35 +218,35 @@ bool ReadObjects( ae::FileSystem* fileSystem, ae::Terrain* terrain, ae::Image* h
   ae::BinaryReader rStream( scratch.Data(), scratch.Length() );
 
   uint32_t version = 0;
-  rStream.SerializeUint32( version );
-  if ( version < kMinSupportedFileVersion )
+  rStream.SerializeUInt32( version );
+  if( version < kMinSupportedFileVersion )
   {
     return false;
   }
   
   uint32_t len = 0;
-  rStream.SerializeUint32( len );
-  if ( !len )
+  rStream.SerializeUInt32( len );
+  if( !len )
   {
     return false;
   }
   
   objects.Clear();
-  for ( uint32_t i = 0; i < len; i++ )
+  for( uint32_t i = 0; i < len; i++ )
   {
     Object* object = ae::New< Object >( TAG_EXAMPLE );
     
     ae::Str16 type = "";
     rStream.SerializeString( type );
-    if ( type == "box" ) { object->shape = terrain->sdf.CreateSdf< ae::SdfBox >(); }
-    else if ( type == "cylinder" ) { object->shape = terrain->sdf.CreateSdf< ae::SdfCylinder >(); }
-    else if ( type == "heightmap" )
+    if( type == "box" ) { object->shape = terrain->sdf.CreateSdf< ae::SdfBox >(); }
+    else if( type == "cylinder" ) { object->shape = terrain->sdf.CreateSdf< ae::SdfCylinder >(); }
+    else if( type == "heightmap" )
     {
       ae::SdfHeightmap* heightmap = terrain->sdf.CreateSdf< ae::SdfHeightmap >();
       heightmap->SetImage( heightmapImage );
       object->shape = heightmap;
     }
-    else if ( type == "ray" ) {}
+    else if( type == "ray" ) {}
     else { AE_FAIL(); }
     
     rStream.SerializeObject( *object );
@@ -280,13 +279,13 @@ int main()
 
   fileSystem.Initialize( "data", "ae", "terrain" );
   ui = ae::New< aeImGui >( TAG_EXAMPLE );
-  if ( headless )
+  if( headless )
   {
     ui->InitializeHeadless();
   }
   else
   {
-    window.Initialize( 800, 600, false, true );
+    window.Initialize( 800, 600, false, true, true );
     window.SetTitle( "terrain edit" );
     render.Initialize( &window );
     debug.Initialize( 64 );
@@ -297,7 +296,7 @@ int main()
   timeStep.SetTimeStep( 1.0f / 60.0f );
   camera.SetDistanceFromFocus( 100.0f );
   
-  if ( !headless )
+  if( !headless )
   {
     terrainShader.Initialize( kTerrainVertShader, kTerrainFragShader, nullptr, 0 );
     terrainShader.SetDepthTest( true );
@@ -334,7 +333,7 @@ int main()
   ae::Array< Object* > objects = TAG_EXAMPLE;
   Object* currentObject = nullptr;
 //
-//  if ( !ReadObjects( &fileSystem, terrain, &heightmapImage, objects ) )
+//  if( !ReadObjects( &fileSystem, terrain, &heightmapImage, objects ) )
 //  {
 //    ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
 //    box->SetTransform( ae::Matrix4::Translation( camera.GetFocus() ) * ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
@@ -345,7 +344,7 @@ int main()
   ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 
   AE_INFO( "Run" );
-  while ( !input.quit )
+  while( !input.quit )
   {
     input.Pump();
     float dt = ae::Max( 0.00001f, timeStep.GetDt() );
@@ -357,12 +356,12 @@ int main()
     ImGuizmo::SetOrthographic( false );
     ImGuizmo::BeginFrame();
 
-    if ( ImGui::Begin( "edit", nullptr ) )
+    if( ImGui::Begin( "edit", nullptr ) )
     {
       // New terrain objects
-      if ( ImGui::CollapsingHeader( "create" ) )
+      if( ImGui::CollapsingHeader( "create" ) )
       {
-        if ( ImGui::Button( "box" ) )
+        if( ImGui::Button( "box" ) )
         {
           ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
           box->SetTransform(
@@ -372,7 +371,7 @@ int main()
           currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Box", box ) );
         }
 
-        if ( ImGui::Button( "cylinder" ) )
+        if( ImGui::Button( "cylinder" ) )
         {
           ae::SdfCylinder* cylinder = terrain->sdf.CreateSdf< ae::SdfCylinder >();
           cylinder->SetTransform(
@@ -382,7 +381,7 @@ int main()
           currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Cylinder", cylinder ) );
         }
         
-//        if ( ImGui::Button( "height map" ) )
+//        if( ImGui::Button( "height map" ) )
 //        {
 //          ae::SdfHeightmap* heightMap = terrain->sdf.CreateSdf< ae::SdfHeightmap >();
 //          heightMap->SetTransform(
@@ -393,7 +392,7 @@ int main()
 //          currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Height Map", heightMap ) );
 //        }
 
-        if ( ImGui::Button( "ray" ) )
+        if( ImGui::Button( "ray" ) )
         {
           currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Ray", nullptr ) );
           currentObject->raySrc = camera.GetPosition();
@@ -402,7 +401,7 @@ int main()
         }
 
         // @TODO: Disabled because "material" is used in properties, and having both creates a conflict
-        //if ( ImGui::Button( "material" ) )
+        //if( ImGui::Button( "material" ) )
         //{
         //  ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
         //  box->SetTransform(
@@ -415,13 +414,13 @@ int main()
         //}
       }
       
-      if ( ImGui::CollapsingHeader( "properties" ) )
+      if( ImGui::CollapsingHeader( "properties" ) )
       {
-        if ( currentObject )
+        if( currentObject )
         {
           aeImGui::InputText( "name", &currentObject->name );
 
-          if ( ae::Sdf* currentShape = currentObject->shape )
+          if( ae::Sdf* currentShape = currentObject->shape )
           {
             bool changed = false;
 
@@ -431,7 +430,7 @@ int main()
             changed |= ImGui::InputFloat3( "translation", matrixTranslation );
             changed |= ImGui::InputFloat3( "rotation", matrixRotation );
             changed |= ImGui::InputFloat3( "scale", matrixScale );
-            if ( changed )
+            if( changed )
             {
               ImGuizmo::RecomposeMatrixFromComponents( matrixTranslation, matrixRotation, matrixScale, temp.data );
               currentShape->SetTransform( temp );
@@ -440,7 +439,7 @@ int main()
             const char* types[] = { "union", "subtraction", "smooth union", "smooth subtraction", "material" };
             changed |= ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) );
 
-            if ( currentShape->type == ae::Sdf::Type::SmoothUnion || currentShape->type == ae::Sdf::Type::SmoothSubtraction )
+            if( currentShape->type == ae::Sdf::Type::SmoothUnion || currentShape->type == ae::Sdf::Type::SmoothSubtraction )
             {
               ae::Vec3 halfSize = currentShape->GetHalfSize();
               float maxLength = ae::Max( halfSize.x, halfSize.y, halfSize.z );
@@ -450,19 +449,19 @@ int main()
             const char* materialNames[] = { "grass", "sand" };
             changed |= ImGui::Combo( "material", (int32_t*)&currentShape->materialId, materialNames, countof( materialNames ) );
 
-            if ( auto box = ae::Cast< ae::SdfBox >( currentShape ) )
+            if( auto box = ae::Cast< ae::SdfBox >( currentShape ) )
             {
               ae::Vec3 halfSize = box->GetHalfSize();
               float minLength = ae::Min( halfSize.x, halfSize.y, halfSize.z );
               changed |= ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, minLength );
             }
-            else if ( auto cylinder = ae::Cast< ae::SdfCylinder >( currentShape ) )
+            else if( auto cylinder = ae::Cast< ae::SdfCylinder >( currentShape ) )
             {
               changed |= ImGui::SliderFloat( "top", &cylinder->top, 0.0f, 1.0f );
               changed |= ImGui::SliderFloat( "bottom", &cylinder->bottom, 0.0f, 1.0f );
             }
 
-            if ( changed )
+            if( changed )
             {
               currentShape->Dirty();
             }
@@ -470,7 +469,7 @@ int main()
           else
           {
             ImGui::InputFloat3( "source", currentObject->raySrc.data );
-            if ( ImGui::InputFloat3( "direction", currentObject->rayDir.data ) )
+            if( ImGui::InputFloat3( "direction", currentObject->rayDir.data ) )
             {
               currentObject->rayDir.SafeNormalize();
             }
@@ -486,14 +485,14 @@ int main()
         }
       }
 
-      if ( ImGui::CollapsingHeader( "objects" ) )
+      if( ImGui::CollapsingHeader( "objects" ) )
       {
         ImGui::BeginChild( "ChildL" );
-        for ( uint32_t i = 0; i < objects.Length(); i++ )
+        for( uint32_t i = 0; i < objects.Length(); i++ )
         {
           Object* object = objects[ i ];
           ae::Str32 displayName = ae::Str32::Format( "(#) #", i, object->name );
-          if ( ImGui::Selectable( displayName.c_str(), object == currentObject ) )
+          if( ImGui::Selectable( displayName.c_str(), object == currentObject ) )
           {
             currentObject = object;
           }
@@ -503,9 +502,9 @@ int main()
     }
     ImGui::End();
 
-    if ( !ImGuizmo::IsUsing() )
+    if( !ImGuizmo::IsUsing() )
     {
-      if ( s_showTerrainDebug )
+      if( s_showTerrainDebug )
       {
         terrain->SetDebugTextCallback( drawWorldText );
       }
@@ -525,7 +524,7 @@ int main()
     camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
     camera.Update( &input, dt );
 
-    if ( !headless )
+    if( !headless )
     {
       render.Activate();
       render.Clear( ae::Color::PicoDarkPurple() );
@@ -543,7 +542,7 @@ int main()
       ae::Color path = ae::Color::SRGB8( 64, 64, 54 );
       ae::UniformList uniformList;
       uniformList.Set( "u_worldToProj", worldToProj );
-      if ( wireframe )
+      if( wireframe )
       {
         uniformList.Set( "u_topColor", top.GetLinearRGBA() );
         uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
@@ -575,26 +574,26 @@ int main()
       ImGuizmo::SetRect( 0, 0, io.DisplaySize.x, io.DisplaySize.y );
 
       bool allowKeyboardInput = !headless && io.WantTextInput;
-      if ( !allowKeyboardInput )
+      if( !allowKeyboardInput )
       {
         ae::Key delKey = _AE_OSX_ ? ae::Key::Backspace : ae::Key::Delete;
-        if ( input.Get( ae::Key::Q ) && !input.GetPrev( ae::Key::Q ) )
+        if( input.Get( ae::Key::Q ) && !input.GetPrev( ae::Key::Q ) )
         {
           currentObject = nullptr;
         }
-        else if ( input.Get( ae::Key::W ) && !input.GetPrev( ae::Key::W ) )
+        else if( input.Get( ae::Key::W ) && !input.GetPrev( ae::Key::W ) )
         {
           gizmoOperation = ImGuizmo::TRANSLATE;
         }
-        else if ( input.Get( ae::Key::E ) && !input.GetPrev( ae::Key::E ) )
+        else if( input.Get( ae::Key::E ) && !input.GetPrev( ae::Key::E ) )
         {
           gizmoOperation = ImGuizmo::ROTATE;
         }
-        else if ( input.Get( ae::Key::R ) && !input.GetPrev( ae::Key::R ) )
+        else if( input.Get( ae::Key::R ) && !input.GetPrev( ae::Key::R ) )
         {
           gizmoOperation = ImGuizmo::SCALE;
         }
-        else if ( currentObject && input.Get( delKey ) && !input.GetPrev( delKey ) )
+        else if( currentObject && input.Get( delKey ) && !input.GetPrev( delKey ) )
         {
           objects.Remove( objects.Find( currentObject ) );
           terrain->sdf.DestroySdf( currentObject->shape );
@@ -603,9 +602,9 @@ int main()
         }
         
         // Camera focus
-        if ( currentObject && !input.GetPrev( ae::Key::F ) && input.Get( ae::Key::F ) )
+        if( currentObject && !input.GetPrev( ae::Key::F ) && input.Get( ae::Key::F ) )
         {
-          if ( currentObject->shape )
+          if( currentObject->shape )
           {
             camera.Refocus( currentObject->shape->GetAABB().GetCenter() );
           }
@@ -616,34 +615,34 @@ int main()
         }
         
         // Render mode
-        if ( !input.GetPrev( ae::Key::Num1 ) && input.Get( ae::Key::Num1 ) )
+        if( !input.GetPrev( ae::Key::Num1 ) && input.Get( ae::Key::Num1 ) )
         {
           wireframe = true;
           s_showTerrainDebug = true;
         }
-        else if ( !input.GetPrev( ae::Key::Num2 ) && input.Get( ae::Key::Num2 ) )
+        else if( !input.GetPrev( ae::Key::Num2 ) && input.Get( ae::Key::Num2 ) )
         {
           wireframe = false;
           s_showTerrainDebug = true;
         }
-        else if ( input.Get( ae::Key::Num3 ) && !input.GetPrev( ae::Key::Num3 ) )
+        else if( input.Get( ae::Key::Num3 ) && !input.GetPrev( ae::Key::Num3 ) )
         {
           wireframe = false;
           s_showTerrainDebug = false;
         }
       }
 
-      for ( uint32_t i = 0; i < objects.Length(); i++ )
+      for( uint32_t i = 0; i < objects.Length(); i++ )
       {
         const Object* object = objects[ i ];
-        if ( !object->shape )
+        if( !object->shape )
         {
-          if ( s_showTerrainDebug )
+          if( s_showTerrainDebug )
           {
             ae::Vec3 ray = object->rayDir * object->rayLength;
-            if ( object->rayType == 0 || object->rayType == 1 )
+            if( object->rayType == 0 || object->rayType == 1 )
             {
-              if ( object->rayType )
+              if( object->rayType )
               {
 //                terrain->RaycastFast( object->raySrc, ray, true );
               }
@@ -668,11 +667,11 @@ int main()
         }
       }
 
-      if ( currentObject )
+      if( currentObject )
       {
         bool gizmoClicked = ImGuizmo::IsUsing();
 
-        if ( ae::Sdf* currentShape = currentObject->shape )
+        if( ae::Sdf* currentShape = currentObject->shape )
         {
           ae::Matrix4 gizmoTransform = currentShape->GetTransform();
 
@@ -686,13 +685,13 @@ int main()
 
           debug.AddOBB( gizmoTransform, ae::Color::Green() );
         
-          if ( gizmoClicked )
+          if( gizmoClicked )
           {
             // Dragging
             currentShape->SetTransform( gizmoTransform );
           }
           
-          if ( gizmoClickedPrev && !gizmoClicked )
+          if( gizmoClickedPrev && !gizmoClicked )
           {
             // Use ImGuizmo::IsUsing() to only update terrain when finished dragging
             currentShape->Dirty();
@@ -710,7 +709,7 @@ int main()
             gizmoTransform.data
           );
 
-          if ( gizmoClicked )
+          if( gizmoClicked )
           {
             // Dragging
             currentObject->raySrc = gizmoTransform.GetTranslation();
@@ -738,7 +737,7 @@ int main()
   terrain->Terminate();
   ae::Delete( terrain );
   input.Terminate();
-  if ( !headless )
+  if( !headless )
   {
     render.Terminate();
     window.Terminate();

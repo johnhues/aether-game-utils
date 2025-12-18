@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 24_HotLoadable.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2023 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -53,7 +53,7 @@ uint16_t kTriangleIndices[] = { 0, 1, 2 };
 //------------------------------------------------------------------------------
 bool Game::Initialize()
 {
-	window.Initialize( 640, 480, false, true );
+	window.Initialize( 640, 480, false, true, true );
 	window.SetTitle( "Hot Load" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -94,10 +94,10 @@ bool Game::Update()
 	rotation += timeStep.GetDt();
 
 	ae::Vec3 dir( 0.0f );
-	if ( input.Get( ae::Key::Up ) ) { dir.y += 1.0f; }
-	if ( input.Get( ae::Key::Down ) ) { dir.y -= 1.0f; }
-	if ( input.Get( ae::Key::Left ) ) { dir.x -= 1.0f; }
-	if ( input.Get( ae::Key::Right ) ) { dir.x += 1.0f; }
+	if( input.Get( ae::Key::Up ) ) { dir.y += 1.0f; }
+	if( input.Get( ae::Key::Down ) ) { dir.y -= 1.0f; }
+	if( input.Get( ae::Key::Left ) ) { dir.x -= 1.0f; }
+	if( input.Get( ae::Key::Right ) ) { dir.x += 1.0f; }
 	dir.SafeNormalize();
 	pos += dir * 0.01f;
 

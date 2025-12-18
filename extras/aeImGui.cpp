@@ -15,7 +15,7 @@ void aeImGui::InitializeHeadless()
 void aeImGui::Terminate()
 {
 	AE_ASSERT( m_init );
-	if ( !m_headless )
+	if( !m_headless )
 	{
 		ImGui_ImplOpenGL3_Shutdown();
 	}
@@ -45,7 +45,7 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 
 	dt = ae::Max( dt, 0.0001f );
 	
-	if ( m_pendingRender )
+	if( m_pendingRender )
 	{
 		ImGui::Render();
 		m_pendingRender = false;
@@ -58,7 +58,7 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 
 	float displayScale = 1.0f;
 	float windowHeight = render->GetHeight();
-	if ( ae::Window* window = render->GetWindow() )
+	if( ae::Window* window = render->GetWindow() )
 	{
 		displayScale = window->GetScaleFactor();
 		windowHeight = window->GetHeight();
@@ -77,7 +77,7 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 	io.MousePos = ImVec2( mousePos.x, mousePos.y );
 	
 		// AE_STATIC_ASSERT( kKeyCount <= countof( io.KeysDown ) );
-	for ( uint32_t i = 0; i < 256; i++ )
+	for( uint32_t i = 0; i < 256; i++ )
 	{
 		io.KeysDown[ i ] = input->Get( (ae::Key)i );
 	}
@@ -86,7 +86,7 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 	io.KeyAlt = input->Get( ae::Key::LeftAlt ) || input->Get( ae::Key::RightAlt );
 	io.KeySuper = input->Get( ae::Key::LeftSuper ) || input->Get( ae::Key::RightSuper );
 	
-	if ( !m_headless )
+	if( !m_headless )
 	{
 		ImGui_ImplOpenGL3_NewFrame();
 	}
@@ -99,7 +99,7 @@ void aeImGui::Render()
 {
 	AE_ASSERT( m_init );
 	ImGui::Render();
-	if ( !m_headless )
+	if( !m_headless )
 	{
 		ImGui_ImplOpenGL3_RenderDrawData( ImGui::GetDrawData() );
 	}
@@ -127,7 +127,7 @@ void aeImGui::BeginGroupPanel( const char* name, const ImVec2& size )
 	ImGui::BeginGroup();
 
 	ImVec2 effectiveSize = size;
-	if ( size.x < 0.0f )
+	if( size.x < 0.0f )
 		effectiveSize.x = ImGui::GetContentRegionAvail().x;
 	else
 		effectiveSize.x = size.x;
@@ -198,9 +198,9 @@ void aeImGui::EndGroupPanel()
 	ImRect frameRect = ImRect( itemMin + halfFrame, itemMax - ImVec2( halfFrame.x, 0.0f ) );
 	labelRect.Min.x -= itemSpacing.x;
 	labelRect.Max.x += itemSpacing.x;
-	for ( int i = 0; i < 4; ++i )
+	for( int i = 0; i < 4; ++i )
 	{
-		switch ( i )
+		switch( i )
 		{
 		// left half-plane
 		case 0: ImGui::PushClipRect( ImVec2( -FLT_MAX, -FLT_MAX ), ImVec2( labelRect.Min.x, FLT_MAX ), true ); break;
@@ -250,7 +250,7 @@ void aeImGui::m_Initialize()
 
 	// Convert default colors to linear color space
 	ImGuiStyle* style = &ImGui::GetStyle();
-	for ( ImVec4& color : style->Colors )
+	for( ImVec4& color : style->Colors )
 	{
 		ae::Vec3 c = ae::Color::SRGB( color.x, color.y, color.z ).GetLinearRGB();
 		color.x = c.x;
@@ -258,7 +258,7 @@ void aeImGui::m_Initialize()
 		color.z = c.z;
 	}
 
-	if ( m_headless )
+	if( m_headless )
 	{
 		ImGuiIO& io = ImGui::GetIO();
 		unsigned char* pixels;

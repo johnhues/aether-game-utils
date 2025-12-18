@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // aeImage.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -75,14 +75,14 @@ namespace ae
   };
 }
 
-template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
+template< typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
 class aeStaticImage3D
 {
 public:
   aeStaticImage3D();
   void Set( ae::Int3 p, Pixel v );
   Pixel Get( ae::Int3 p ) const;
-  template < Pixel (*BlendFn)(Pixel, Pixel, float) >
+  template< Pixel (*BlendFn)(Pixel, Pixel, float) >
   Pixel Get( ae::Vec3 p ) const;
   
   uint32_t GetWidth() const { return Width; }
@@ -98,31 +98,31 @@ inline int32_t aeModulo( int32_t a, int32_t b )
   return ( a % b + b ) % b;
 }
 
-template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
+template< typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
 inline aeStaticImage3D< Pixel, Width, Height, Depth >::aeStaticImage3D()
 {
-  for ( int32_t z = 0; z < Depth; z++ )
-  for ( int32_t y = 0; y < Height; y++ )
-  for ( int32_t x = 0; x < Width; x++ )
+  for( int32_t z = 0; z < Depth; z++ )
+  for( int32_t y = 0; y < Height; y++ )
+  for( int32_t x = 0; x < Width; x++ )
   {
     m_data[ z ][ y ][ x ] = Pixel();
   }
 }
 
-template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
+template< typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
 inline void aeStaticImage3D< Pixel, Width, Height, Depth >::Set( ae::Int3 p, Pixel v )
 {
   m_data[ aeModulo( p.z, Depth ) ][ aeModulo( p.y, Height ) ][ aeModulo( p.x, Width ) ] = v;
 }
 
-template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
+template< typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
 inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth >::Get( ae::Int3 p ) const
 {
   return m_data[ aeModulo( p.z, Depth ) ][ aeModulo( p.y, Height ) ][ aeModulo( p.x, Width ) ];
 }
 
-template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
-template < Pixel (*BlendFn)(Pixel, Pixel, float) >
+template< typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
+template< Pixel (*BlendFn)(Pixel, Pixel, float) >
 inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth >::Get( ae::Vec3 pf ) const
 {
   ae::Int3 pi = pf.FloorCopy();

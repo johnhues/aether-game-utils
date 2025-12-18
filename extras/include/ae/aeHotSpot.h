@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // aeHotSpot.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -28,7 +28,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "aeSignal.h"
 #include "aeSparseGrid.h"
 
 //------------------------------------------------------------------------------
@@ -84,9 +83,20 @@ public:
 class HotSpotObject
 {
 public:
+  struct CollisionInfo
+  {
+    HotSpotObject* object;
+    ae::Int2 position;
+    ae::Int2 normal;
+    uint32_t tile;
+    uint32_t properties;
+  };
+  using CollisionCallback = void (*)( const CollisionInfo& info, void* userData );
+
   void SetMass( float kilograms ); // Average human: 155lb ~= 70kg
   void SetRestitution( float groundPercent, float wallPercent ); // Percent of velocity kept on collision
   void SetVolume( float meters ); // meters^3: A humans volume is roughly their weight in kg/1050 (slightly denser than water). Volume is required for correct buoyancy behavior
+  void SetOnCollisionCallback( CollisionCallback callback, void* userData ) { m_onCollisionCallback = callback; m_onCollisionUserData = userData; }
 
   float GetMass() const;
 
@@ -100,15 +110,6 @@ public:
   ae::Vec2 GetPosition() const;
   ae::Vec2 GetVelocity() const;
   bool IsOnGround() const;
-
-  struct CollisionInfo
-  {
-    ae::Int2 position;
-    ae::Int2 normal;
-    uint32_t tile;
-    uint32_t properties;
-  };
-  aeSignalList< const CollisionInfo* > onCollision;
 
 private:
   friend HotSpotWorld;
@@ -125,6 +126,8 @@ private:
   float m_wallRestitution = 0.3f;
   float m_volume = 1.0f;
   float m_airTimer = 0.0f;
+  CollisionCallback m_onCollisionCallback = nullptr;
+  void* m_onCollisionUserData = nullptr;
 };
 
 #endif

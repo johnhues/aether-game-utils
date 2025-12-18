@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 10_Splines.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "ae/SpriteRenderer.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -76,7 +75,7 @@ int main()
   ae::SpriteRenderer spriteRender = TAG_EXAMPLE;
   ae::Shader spriteShader;
   
-  window.Initialize( 800, 600, false, true );
+  window.Initialize( 800, 600, false, true, true );
   window.SetTitle( "splines" );
   render.Initialize( &window );
   input.Initialize( &window );
@@ -110,7 +109,7 @@ int main()
   float t = 0.0f;
   float angle = 0.0f;
 
-  while ( !input.quit )
+  while( !input.quit )
   {
     input.Pump();
     render.Activate();
@@ -120,14 +119,14 @@ int main()
     ae::Matrix4 transform;
 
     float splineLen = spline.GetLength();
-    for ( float d = 0.0f; d < splineLen; d += 0.25f )
+    for( float d = 0.0f; d < splineLen; d += 0.25f )
     {
       transform = ae::Matrix4::Translation( spline.GetPoint( d ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.1f ) );
       spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Blue() );
     }
     
-    for ( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
+    for( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
     {
       transform = ae::Matrix4::Translation( spline.GetControlPoint( i ) - ae::Vec3( 0.0f, 0.0f, 0.1f ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
@@ -143,7 +142,7 @@ int main()
     spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::White() );
 
     t += timeStep.GetTimeStep();
-    if ( t > splineLen )
+    if( t > splineLen )
     {
       t -= splineLen;
     }
