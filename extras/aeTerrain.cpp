@@ -330,11 +330,11 @@ uint32_t TerrainChunk::GetIndex() const
 TerrainJob::TerrainJob() :
   m_hasJob( false ),
   m_running( false ),
+  m_chunk( nullptr ),
   m_vertexCount( kChunkCountEmpty ),
   m_indexCount( 0 ),
   m_vertices( ae::Array< TerrainVertex >( AE_ALLOC_TAG_TERRAIN, TerrainVertex(), (uint32_t)kMaxChunkVerts ) ),
-  m_indices( ae::Array< TerrainIndex >( AE_ALLOC_TAG_TERRAIN, TerrainIndex(), kMaxChunkIndices ) ),
-  m_chunk( nullptr )
+  m_indices( ae::Array< TerrainIndex >( AE_ALLOC_TAG_TERRAIN, TerrainIndex(), kMaxChunkIndices ) )
 {
   edgeInfo = ae::NewArray< TempEdges >( AE_ALLOC_TAG_TERRAIN, kTempChunkSize3 );
 }

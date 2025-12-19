@@ -11329,9 +11329,9 @@ typename ObjectPool< T, N, Paged >::template Iterator< const T > ObjectPool< T, 
 template< typename T, uint32_t N, bool Paged >
 template< typename T2 >
 ObjectPool< T, N, Paged >::Iterator< T2 >::Iterator( const ObjectPool* pool, const struct Page* page, pointer ptr ) :
-	m_pool( pool ),
+	m_ptr( ptr ),
 	m_page( page ),
-	m_ptr( ptr )
+	m_pool( pool )
 {}
 
 template< typename T, uint32_t N, bool Paged >

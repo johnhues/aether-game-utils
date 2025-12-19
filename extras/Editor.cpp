@@ -444,12 +444,12 @@ class EditorProgram
 {
 public:
 	EditorProgram( const ae::Tag& tag, const EditorParams& params, EditorPluginArray& plugins ) :
-		m_tag( tag ),
 		camera( params.worldUp ),
 		debugLines( tag ),
 		editor( tag ),
+		plugins( plugins ),
 		params( params ),
-		plugins( plugins )
+		m_tag( tag )
 	{}
 	void Initialize();
 	void Terminate();
@@ -4363,7 +4363,7 @@ void SendPluginEvent( EditorPluginArray& plugins, const EditorEvent& event )
 //------------------------------------------------------------------------------
 // JsonScene helper
 //------------------------------------------------------------------------------
-JsonScene::JsonScene( const ae::Tag& tag, rapidjson::Value& scene, bool allowMissingParents ) : entityLookup( tag ), entities( tag ), components( tag ), json( scene ), success( false )
+JsonScene::JsonScene( const ae::Tag& tag, rapidjson::Value& scene, bool allowMissingParents ) : entityLookup( tag ), entities( tag ), components( tag ), success( false ), json( scene )
 {
 	if( !ValidateLevel( scene ) )
 	{
