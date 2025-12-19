@@ -771,6 +771,82 @@ TEST_CASE( "DocumentUndo ClearUndo", "[ae::Document][undo]" )
 	REQUIRE( doc.Redo() == false ); // Should fail after clear
 }
 
+TEST_CASE( "DocumentUndo BasicValueCoalescing", "[ae::Document][undo]" )
+{
+	ae::Document doc( "test" );
+	REQUIRE( doc.GetUndoStackSize() == 0 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Multiple SetBasicValue calls in same group should coalesce
+	doc.SetBasicValue( "first" );
+	REQUIRE( doc.GetBasicValue() == std::string( "first" ) );
+	doc.SetBasicValue( "second" );
+	REQUIRE( doc.GetBasicValue() == std::string( "second" ) );
+	doc.SetBasicValue( "third" );
+	REQUIRE( doc.GetBasicValue() == std::string( "third" ) );
+	doc.EndUndoGroup();
+
+	// Should only have one undo operation despite 3 SetBasicValue calls
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Single undo should revert to initial state (empty)
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.GetValueType() == ae::DocumentValueType::None );
+	REQUIRE( doc.GetUndoStackSize() == 0 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+
+	// Single redo should restore final value
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.GetBasicValue() == std::string( "third" ) );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+}
+
+TEST_CASE( "DocumentUndo BasicValueSeparateGroups", "[ae::Document][undo]" )
+{
+	ae::Document doc( "test" );
+	REQUIRE( doc.GetUndoStackSize() == 0 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// First value with separate undo group
+	doc.SetBasicValue( "first" );
+	doc.EndUndoGroup();
+	REQUIRE( doc.GetBasicValue() == std::string( "first" ) );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Second value with separate undo group (no coalescing)
+	doc.SetBasicValue( "second" );
+	doc.EndUndoGroup();
+	REQUIRE( doc.GetBasicValue() == std::string( "second" ) );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Third value with separate undo group (no coalescing)
+	doc.SetBasicValue( "third" );
+	doc.EndUndoGroup();
+	REQUIRE( doc.GetBasicValue() == std::string( "third" ) );
+	REQUIRE( doc.GetUndoStackSize() == 3 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Multiple undos should step through each value
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.GetBasicValue() == std::string( "second" ) );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.GetBasicValue() == std::string( "first" ) );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 2 );
+
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.GetValueType() == ae::DocumentValueType::None );
+	REQUIRE( doc.GetUndoStackSize() == 0 );
+	REQUIRE( doc.GetRedoStackSize() == 3 );
+}
+
 TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
