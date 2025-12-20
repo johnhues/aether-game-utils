@@ -57,7 +57,7 @@ public:
 	//--------------------------------------------------------------------------
 	//! Converts this value to an array type, clearing any existing data.
 	//! \param reserveLength Optional hint for initial capacity to avoid reallocations.
-	void SetArray( uint32_t reserveLength = 0 );
+	void ArrayInitialize( uint32_t reserveLength = 0 );
 	//! Inserts a new DocumentValue at the specified index in the array.
 	//! \param index The position to insert at. Must be <= ArrayLength().
 	//! \return Reference to the newly created DocumentValue.
@@ -88,7 +88,7 @@ public:
 	//--------------------------------------------------------------------------
 	//! Converts this value to a map type, clearing any existing data.
 	//! \param reserveLength Optional hint for initial capacity to avoid reallocations.
-	void SetMap( uint32_t reserveLength = 0 );
+	void MapInitialize( uint32_t reserveLength = 0 );
 	//! Gets a mutable reference to the DocumentValue for the given key,
 	//! creating it if it doesn't exist.
 	//! \param key The string key to look up. Must not be nullptr.
@@ -237,7 +237,7 @@ const char* DocumentValue::GetBasicValue() const
 }
 
 // Array manipulation
-void DocumentValue::SetArray( uint32_t reserveLength )
+void DocumentValue::ArrayInitialize( uint32_t reserveLength )
 {
 	Initialize( DocumentValueType::Array );
 	m_array.Reserve( reserveLength );
@@ -296,7 +296,7 @@ const DocumentValue& DocumentValue::ArrayGet( uint32_t index ) const
 }
 
 // Map manipulation
-void DocumentValue::SetMap( uint32_t reserveLength )
+void DocumentValue::MapInitialize( uint32_t reserveLength )
 {
 	Initialize( DocumentValueType::Map );
 	m_map.Reserve( reserveLength );
@@ -721,7 +721,7 @@ TEST_CASE( "DocumentUndo TypeChange", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Change to array
-	doc.SetArray( 4 );
+	doc.ArrayInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.IsArray() );
 	REQUIRE( doc.ArrayLength() == 0 );
@@ -745,7 +745,7 @@ TEST_CASE( "DocumentUndo TypeChange", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo ArrayOperations", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	doc.SetArray( 4 );
+	doc.ArrayInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
@@ -807,7 +807,7 @@ TEST_CASE( "DocumentUndo ArrayOperations", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo MapOperations", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	doc.SetMap( 4 );
+	doc.MapInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
@@ -852,7 +852,7 @@ TEST_CASE( "DocumentUndo MapOperations", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo UndoGroups", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	doc.SetArray( 4 );
+	doc.ArrayInitialize( 4 );
 
 	// Multiple operations in one group
 	doc.ArrayAppend().SetBasicValue( "first" );
@@ -987,10 +987,10 @@ TEST_CASE( "DocumentUndo BasicValueSeparateGroups", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	doc.SetArray( 4 );
+	doc.ArrayInitialize( 4 );
 
 	// Create nested structure
-	doc.ArrayAppend().SetMap( 2 );
+	doc.ArrayAppend().MapInitialize( 2 );
 	doc.ArrayGet( 0 ).MapGet( "nested" ).SetBasicValue( "deep" );
 	doc.EndUndoGroup();
 
@@ -1034,7 +1034,7 @@ TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	doc.SetMap( 4 );
+	doc.MapInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
@@ -1163,7 +1163,7 @@ TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo MapRemoveReturnValue", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	doc.SetMap( 4 );
+	doc.MapInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
@@ -1243,7 +1243,7 @@ TEST_CASE( "DocumentUndo MapGetVsTryGet", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
 	const ae::DocumentValue& constDoc = doc;
-	doc.SetMap( 4 );
+	doc.MapInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
@@ -1339,7 +1339,7 @@ TEST_CASE( "DocumentUndo EdgeCasesAndInitialState", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test array with zero reserve
-	doc.SetArray( 0 );
+	doc.ArrayInitialize( 0 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.IsArray() );
 	REQUIRE( doc.ArrayLength() == 0 );
@@ -1347,7 +1347,7 @@ TEST_CASE( "DocumentUndo EdgeCasesAndInitialState", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test map with zero reserve
-	doc.SetMap( 0 );
+	doc.MapInitialize( 0 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.IsMap() );
 	REQUIRE( doc.MapLength() == 0 );
@@ -1366,9 +1366,9 @@ TEST_CASE( "DocumentUndo EdgeCasesAndInitialState", "[ae::Document][undo]" )
 
 	// Test multiple type changes in same group - should coalesce SetType operations
 	doc.SetBasicValue( "test" );
-	doc.SetArray( 2 );
-	doc.SetMap( 2 );
-	doc.EndUndoGroup(); // SetType operations should coalesce
+	doc.ArrayInitialize( 2 );
+	doc.MapInitialize( 2 );
+	doc.EndUndoGroup(); // Should coalesce into single type change operation
 
 	REQUIRE( doc.IsMap() );
 	REQUIRE( doc.GetUndoStackSize() == 4 ); // Previous 3 + 1 coalesced group
@@ -1535,8 +1535,7 @@ TEST_CASE( "DocumentUndo InitializeChaining", "[ae::Document][undo]" )
 	ae::Document doc( "test" );
 
 	// Test method chaining with Initialize
-	doc.Initialize( ae::DocumentValueType::Array )
-		.ArrayAppend().SetBasicValue( "chained1" );
+	doc.Initialize( ae::DocumentValueType::Array ).ArrayAppend().SetBasicValue( "chained1" );
 	doc.ArrayAppend().SetBasicValue( "chained2" );
 	doc.EndUndoGroup();
 
@@ -1548,8 +1547,7 @@ TEST_CASE( "DocumentUndo InitializeChaining", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test chaining with type change
-	doc.Initialize( ae::DocumentValueType::Map )
-		.MapGet( "chained_key" ).SetBasicValue( "chained_value" );
+	doc.Initialize( ae::DocumentValueType::Map ).MapGet( "chained_key" ).SetBasicValue( "chained_value" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.GetType() == ae::DocumentValueType::Map );
@@ -1573,10 +1571,10 @@ TEST_CASE( "DocumentUndo InitializeComplexClear", "[ae::Document][undo]" )
 	ae::Document doc( "test" );
 
 	// Create complex nested array structure
-	doc.SetArray( 3 );
-	doc.ArrayAppend().SetArray( 2 );
+	doc.ArrayInitialize( 3 );
+	doc.ArrayAppend().ArrayInitialize( 2 );
 	doc.ArrayGet( 0 ).ArrayAppend().SetBasicValue( "nested1" );
-	doc.ArrayGet( 0 ).ArrayAppend().SetMap( 2 );
+	doc.ArrayGet( 0 ).ArrayAppend().MapInitialize( 2 );
 	doc.ArrayGet( 0 ).ArrayGet( 1 ).MapGet( "nested_key" ).SetBasicValue( "nested_value" );
 	doc.ArrayAppend().SetBasicValue( "second" );
 	doc.EndUndoGroup();
@@ -1624,7 +1622,7 @@ TEST_CASE( "DocumentUndo InitializeComplexClear", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo InitializeCoalescing", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	
+
 	// Set initial state
 	doc.SetBasicValue( "initial" );
 	doc.EndUndoGroup();
@@ -1634,7 +1632,7 @@ TEST_CASE( "DocumentUndo InitializeCoalescing", "[ae::Document][undo]" )
 
 	// Multiple Initialize calls in same group should coalesce SetType operations
 	doc.Initialize( ae::DocumentValueType::Array );
-	doc.Initialize( ae::DocumentValueType::Map ); 
+	doc.Initialize( ae::DocumentValueType::Map );
 	doc.Initialize( ae::DocumentValueType::Basic );
 	doc.Initialize( ae::DocumentValueType::Array );
 	doc.EndUndoGroup(); // All SetType operations should coalesce into one
@@ -1662,7 +1660,7 @@ TEST_CASE( "DocumentUndo InitializeCoalescing", "[ae::Document][undo]" )
 	doc.ArrayAppend().SetBasicValue( "element1" );
 	doc.Initialize( ae::DocumentValueType::Map ); // Should clear array and change type
 	doc.MapGet( "key1" ).SetBasicValue( "value1" );
-	doc.Initialize( ae::DocumentValueType::Basic ); // Should clear map and change type  
+	doc.Initialize( ae::DocumentValueType::Basic ); // Should clear map and change type
 	doc.SetBasicValue( "final_basic" );
 	doc.EndUndoGroup();
 
@@ -1676,5 +1674,210 @@ TEST_CASE( "DocumentUndo InitializeCoalescing", "[ae::Document][undo]" )
 	REQUIRE( doc.IsArray() );
 	REQUIRE( doc.ArrayLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+}
+
+TEST_CASE( "DocumentUndo ArrayInitialize", "[ae::Document][undo]" )
+{
+	ae::Document doc( "test" );
+	REQUIRE( doc.GetUndoStackSize() == 0 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Start with array and add some elements
+	doc.ArrayInitialize( 4 );
+	doc.ArrayAppend().SetBasicValue( "first" );
+	doc.ArrayAppend().SetBasicValue( "second" );
+	doc.ArrayAppend().SetBasicValue( "third" );
+	doc.EndUndoGroup();
+
+	REQUIRE( doc.IsArray() );
+	REQUIRE( doc.ArrayLength() == 3 );
+	REQUIRE( doc.ArrayGet( 0 ).GetBasicValue() == std::string( "first" ) );
+	REQUIRE( doc.ArrayGet( 1 ).GetBasicValue() == std::string( "second" ) );
+	REQUIRE( doc.ArrayGet( 2 ).GetBasicValue() == std::string( "third" ) );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// ArrayInitialize should clear existing array contents
+	doc.ArrayInitialize( 2 );
+	doc.EndUndoGroup();
+
+	REQUIRE( doc.IsArray() );
+	REQUIRE( doc.ArrayLength() == 0 ); // Should be cleared
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Add new elements to verify it works after clearing
+	doc.ArrayAppend().SetBasicValue( "new1" );
+	doc.ArrayAppend().SetBasicValue( "new2" );
+	doc.EndUndoGroup();
+
+	REQUIRE( doc.ArrayLength() == 2 );
+	REQUIRE( doc.ArrayGet( 0 ).GetBasicValue() == std::string( "new1" ) );
+	REQUIRE( doc.ArrayGet( 1 ).GetBasicValue() == std::string( "new2" ) );
+	REQUIRE( doc.GetUndoStackSize() == 3 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Undo should restore empty array
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.IsArray() );
+	REQUIRE( doc.ArrayLength() == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+
+	// Undo should restore original array with all elements
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.IsArray() );
+	REQUIRE( doc.ArrayLength() == 3 );
+	REQUIRE( doc.ArrayGet( 0 ).GetBasicValue() == std::string( "first" ) );
+	REQUIRE( doc.ArrayGet( 1 ).GetBasicValue() == std::string( "second" ) );
+	REQUIRE( doc.ArrayGet( 2 ).GetBasicValue() == std::string( "third" ) );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 2 );
+
+	// Redo should restore cleared array
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.IsArray() );
+	REQUIRE( doc.ArrayLength() == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+
+	// Redo should restore new elements
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.IsArray() );
+	REQUIRE( doc.ArrayLength() == 2 );
+	REQUIRE( doc.ArrayGet( 0 ).GetBasicValue() == std::string( "new1" ) );
+	REQUIRE( doc.ArrayGet( 1 ).GetBasicValue() == std::string( "new2" ) );
+	REQUIRE( doc.GetUndoStackSize() == 3 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Test ArrayInitialize on different type (basic value)
+	doc.SetBasicValue( "convert_to_array" );
+	doc.EndUndoGroup();
+	REQUIRE( doc.IsBasicValue() );
+	REQUIRE( doc.GetBasicValue() == std::string( "convert_to_array" ) );
+	REQUIRE( doc.GetUndoStackSize() == 4 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// ArrayInitialize should convert from basic to array
+	doc.ArrayInitialize( 1 );
+	doc.EndUndoGroup();
+	REQUIRE( doc.IsArray() );
+	REQUIRE( doc.ArrayLength() == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 5 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Undo should restore basic value
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.IsBasicValue() );
+	REQUIRE( doc.GetBasicValue() == std::string( "convert_to_array" ) );
+	REQUIRE( doc.GetUndoStackSize() == 4 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+}
+
+TEST_CASE( "DocumentUndo MapInitialize", "[ae::Document][undo]" )
+{
+	ae::Document doc( "test" );
+	REQUIRE( doc.GetUndoStackSize() == 0 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Start with map and add some key-value pairs
+	doc.MapInitialize( 4 );
+	doc.MapGet( "key1" ).SetBasicValue( "value1" );
+	doc.MapGet( "key2" ).SetBasicValue( "value2" );
+	doc.MapGet( "key3" ).SetBasicValue( "value3" );
+	doc.EndUndoGroup();
+
+	REQUIRE( doc.IsMap() );
+	REQUIRE( doc.MapLength() == 3 );
+	REQUIRE( doc.MapTryGet( "key1" )->GetBasicValue() == std::string( "value1" ) );
+	REQUIRE( doc.MapTryGet( "key2" )->GetBasicValue() == std::string( "value2" ) );
+	REQUIRE( doc.MapTryGet( "key3" )->GetBasicValue() == std::string( "value3" ) );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// MapInitialize should clear existing map contents
+	doc.MapInitialize( 2 );
+	doc.EndUndoGroup();
+
+	REQUIRE( doc.IsMap() );
+	REQUIRE( doc.MapLength() == 0 ); // Should be cleared
+	REQUIRE( doc.MapTryGet( "key1" ) == nullptr );
+	REQUIRE( doc.MapTryGet( "key2" ) == nullptr );
+	REQUIRE( doc.MapTryGet( "key3" ) == nullptr );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Add new key-value pairs to verify it works after clearing
+	doc.MapGet( "newkey1" ).SetBasicValue( "newvalue1" );
+	doc.MapGet( "newkey2" ).SetBasicValue( "newvalue2" );
+	doc.EndUndoGroup();
+
+	REQUIRE( doc.MapLength() == 2 );
+	REQUIRE( doc.MapTryGet( "newkey1" )->GetBasicValue() == std::string( "newvalue1" ) );
+	REQUIRE( doc.MapTryGet( "newkey2" )->GetBasicValue() == std::string( "newvalue2" ) );
+	REQUIRE( doc.MapTryGet( "key1" ) == nullptr ); // Old keys should still be gone
+	REQUIRE( doc.GetUndoStackSize() == 3 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Undo should restore empty map
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.IsMap() );
+	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.MapTryGet( "newkey1" ) == nullptr );
+	REQUIRE( doc.MapTryGet( "newkey2" ) == nullptr );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+
+	// Undo should restore original map with all key-value pairs
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.IsMap() );
+	REQUIRE( doc.MapLength() == 3 );
+	REQUIRE( doc.MapTryGet( "key1" )->GetBasicValue() == std::string( "value1" ) );
+	REQUIRE( doc.MapTryGet( "key2" )->GetBasicValue() == std::string( "value2" ) );
+	REQUIRE( doc.MapTryGet( "key3" )->GetBasicValue() == std::string( "value3" ) );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 2 );
+
+	// Redo should restore cleared map
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.IsMap() );
+	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.MapTryGet( "key1" ) == nullptr );
+	REQUIRE( doc.MapTryGet( "key2" ) == nullptr );
+	REQUIRE( doc.MapTryGet( "key3" ) == nullptr );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+
+	// Redo should restore new key-value pairs
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.IsMap() );
+	REQUIRE( doc.MapLength() == 2 );
+	REQUIRE( doc.MapTryGet( "newkey1" )->GetBasicValue() == std::string( "newvalue1" ) );
+	REQUIRE( doc.MapTryGet( "newkey2" )->GetBasicValue() == std::string( "newvalue2" ) );
+	REQUIRE( doc.GetUndoStackSize() == 3 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Test MapInitialize on different type (basic value)
+	doc.SetBasicValue( "convert_to_map" );
+	doc.EndUndoGroup();
+	REQUIRE( doc.IsBasicValue() );
+	REQUIRE( doc.GetBasicValue() == std::string( "convert_to_map" ) );
+	REQUIRE( doc.GetUndoStackSize() == 4 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// MapInitialize should convert from basic to map
+	doc.MapInitialize( 1 );
+	doc.EndUndoGroup();
+	REQUIRE( doc.IsMap() );
+	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 5 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Undo should restore basic value
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.IsBasicValue() );
+	REQUIRE( doc.GetBasicValue() == std::string( "convert_to_map" ) );
+	REQUIRE( doc.GetUndoStackSize() == 4 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 }
