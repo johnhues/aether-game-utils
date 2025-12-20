@@ -1806,7 +1806,7 @@ private:
 	T* m_array;
 	ae::Tag m_tag;
 	// clang-format off
-	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
+	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT; // NOLINT WarnOnSizeOfPointerToAggregate
 #if _AE_LINUX_
 	struct Storage { AlignedStorageT data[ N ]; };
 	Storage m_storage;
@@ -1906,7 +1906,7 @@ private:
 	// clang-format on
 };
 
-//! Set ae::Map to Fast mode to allow reording of elements. Stable to maintain
+//! Set ae::Map to Fast mode to allow reordering of elements. Stable to maintain
 //! the order of inserted elements.
 enum class MapMode { Fast, Stable };
 //------------------------------------------------------------------------------
