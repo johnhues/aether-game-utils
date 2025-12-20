@@ -178,6 +178,7 @@ public:
 
 private:
 	friend class DocumentValue;
+	ae::Array< UndoOp > m_ReverseOps( const ae::Array< UndoOp >& ops );
 	void m_PushOp( const UndoOp& op );
 	void m_AddRef( DocumentValue* value );
 	void m_RemoveRef( DocumentValue* value );
@@ -441,6 +442,69 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 Document::Document( const ae::Tag& tag ) : DocumentValue( this, tag ), m_tag( tag ), m_values( tag ), m_undoStack( tag ), m_redoStack( tag ), m_currentGroup( tag ) {}
 Document::~Document() { m_values.DeleteAll(); }
 
+ae::Array< Document::UndoOp > Document::m_ReverseOps( const ae::Array< UndoOp >& ops )
+{
+	ae::Array< UndoOp > reverseGroup( m_tag );
+	for( int32_t i = ops.Length() - 1; i >= 0; i-- )
+	{
+		const UndoOp& op = ops[ i ];
+		UndoOp reverseOp;
+		reverseOp.target = op.target;
+
+		switch( op.type )
+		{
+			case UndoOpType::SetType:
+				reverseOp.type = UndoOpType::SetType;
+				reverseOp.oldType = op.target->m_type;
+				op.target->m_type = op.oldType;
+				// Data should always be empty when the type changes since
+				// Initialize() removes all elements first
+				AE_DEBUG_ASSERT( op.target->m_basic.empty() );
+				AE_DEBUG_ASSERT( op.target->m_array.Length() == 0 );
+				AE_DEBUG_ASSERT( op.target->m_map.Length() == 0 );
+				break;
+			case UndoOpType::ValueSet:
+				reverseOp.type = UndoOpType::ValueSet;
+				reverseOp.oldValue = op.target->m_basic;
+				op.target->m_basic = op.oldValue;
+				break;
+			case UndoOpType::ArrayInsert:
+				reverseOp.type = UndoOpType::ArrayRemove;
+				reverseOp.index = op.index;
+				op.target->m_array.Insert( op.index, op.oldChild );
+				AE_DEBUG_ASSERT( op.oldChild->m_refCount == 1 );
+				op.oldChild->m_refCount = 0; // Object back in document tree, reset to document ownership
+				break;
+			case UndoOpType::ArrayRemove:
+				reverseOp.type = UndoOpType::ArrayInsert;
+				reverseOp.index = op.index;
+				reverseOp.oldChild = op.target->m_array[ op.index ];
+				op.target->m_array.Remove( op.index );
+				m_AddRef( reverseOp.oldChild ); // Object removed from document, add reference
+				break;
+			case UndoOpType::MapSet:
+				reverseOp.type = UndoOpType::MapRemove;
+				reverseOp.key = op.key;
+				op.target->m_map.Set( op.key, op.oldChild );
+				AE_DEBUG_ASSERT( op.oldChild->m_refCount == 1 );
+				op.oldChild->m_refCount = 0; // Object back in document tree, reset to document ownership
+				break;
+			case UndoOpType::MapRemove:
+				reverseOp.type = UndoOpType::MapSet;
+				reverseOp.key = op.key;
+				if( DocumentValue* existing = op.target->m_map.Get( op.key, nullptr ) )
+				{
+					reverseOp.oldChild = existing;
+					m_AddRef( existing ); // Object removed from document, add reference
+				}
+				op.target->m_map.Remove( op.key, nullptr );
+				break;
+		}
+		reverseGroup.Append( reverseOp );
+	}
+	return reverseGroup;
+}
+
 void Document::m_PushOp( const UndoOp& op )
 {
 	m_currentGroup.Append( op );
@@ -484,74 +548,14 @@ void Document::ClearUndo()
 bool Document::Undo()
 {
 	EndUndoGroup(); // Finalize current group
-	if( m_undoStack.Length() == 0 ) return false;
-
+	if( m_undoStack.Length() == 0 )
+	{
+		return false;
+	}
 	ae::Array< UndoOp > group = std::move( m_undoStack[ m_undoStack.Length() - 1 ] );
 	m_undoStack.Remove( m_undoStack.Length() - 1 );
-
-	ae::Array< UndoOp > redoGroup( m_tag );
-
-	// Execute operations in reverse order
-	for( int32_t i = group.Length() - 1; i >= 0; i-- )
-	{
-		const UndoOp& op = group[ i ];
-		UndoOp redoOp;
-		redoOp.target = op.target;
-
-		switch( op.type )
-		{
-			case UndoOpType::SetType:
-				redoOp.type = UndoOpType::SetType;
-				redoOp.oldType = op.target->m_type;
-				op.target->m_type = op.oldType;
-				// Data should always be empty when the type changes since
-				// Initialize() removes all elements first
-				AE_DEBUG_ASSERT( op.target->m_basic.empty() );
-				AE_DEBUG_ASSERT( op.target->m_array.Length() == 0 );
-				AE_DEBUG_ASSERT( op.target->m_map.Length() == 0 );
-				break;
-			case UndoOpType::ValueSet:
-				redoOp.type = UndoOpType::ValueSet;
-				redoOp.oldValue = op.target->m_basic;
-				op.target->m_basic = op.oldValue;
-				break;
-			case UndoOpType::ArrayInsert:
-				redoOp.type = UndoOpType::ArrayRemove;
-				redoOp.index = op.index;
-				op.target->m_array.Insert( op.index, op.oldChild );
-				AE_DEBUG_ASSERT( op.oldChild->m_refCount == 1 );
-				op.oldChild->m_refCount = 0; // Object back in document tree, reset to document ownership
-				break;
-			case UndoOpType::ArrayRemove:
-				redoOp.type = UndoOpType::ArrayInsert;
-				redoOp.index = op.index;
-				redoOp.oldChild = op.target->m_array[ op.index ];
-				op.target->m_array.Remove( op.index );
-				m_AddRef( redoOp.oldChild ); // Object removed from document, add redo reference
-				break;
-			case UndoOpType::MapSet:
-				redoOp.type = UndoOpType::MapRemove;
-				redoOp.key = op.key;
-				op.target->m_map.Set( op.key, op.oldChild );
-				AE_DEBUG_ASSERT( op.oldChild->m_refCount == 1 );
-				op.oldChild->m_refCount = 0; // Object back in document tree, reset to document ownership
-				break;
-			case UndoOpType::MapRemove:
-				redoOp.type = UndoOpType::MapSet;
-				redoOp.key = op.key;
-				if( DocumentValue* existing = op.target->m_map.Get( op.key, nullptr ) )
-				{
-					redoOp.oldChild = existing;
-					m_AddRef( existing ); // Object removed from document, add redo reference
-				}
-				op.target->m_map.Remove( op.key, nullptr );
-				break;
-		}
-		redoGroup.Append( redoOp );
-	}
-
-	m_redoStack.Append( std::move( redoGroup ) );
-	m_ValidateState( group );
+	m_redoStack.Append( m_ReverseOps( group ) );
+	m_ValidateState( m_redoStack[ m_redoStack.Length() - 1 ] );
 	return true;
 }
 
@@ -591,75 +595,15 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 
 bool Document::Redo()
 {
+	EndUndoGroup(); // Finalize current group
 	if( m_redoStack.Length() == 0 )
 	{
 		return false;
 	}
-
 	ae::Array< UndoOp > group = std::move( m_redoStack[ m_redoStack.Length() - 1 ] );
 	m_redoStack.Remove( m_redoStack.Length() - 1 );
-	ae::Array< UndoOp > undoGroup( m_tag );
-
-	for( int32_t i = group.Length() - 1; i >= 0; i-- )
-	{
-		const UndoOp& op = group[ i ];
-		UndoOp undoOp;
-		undoOp.target = op.target;
-
-		switch( op.type )
-		{
-			case UndoOpType::SetType:
-				undoOp.type = UndoOpType::SetType;
-				undoOp.oldType = op.target->m_type;
-				op.target->m_type = op.oldType;
-				// Data should always be empty when the type changes since
-				// Initialize() removes all elements first
-				AE_DEBUG_ASSERT( op.target->m_basic.empty() );
-				AE_DEBUG_ASSERT( op.target->m_array.Length() == 0 );
-				AE_DEBUG_ASSERT( op.target->m_map.Length() == 0 );
-				break;
-			case UndoOpType::ValueSet:
-				undoOp.type = UndoOpType::ValueSet;
-				undoOp.oldValue = op.target->m_basic;
-				op.target->m_basic = op.oldValue;
-				break;
-			case UndoOpType::ArrayInsert:
-				undoOp.type = UndoOpType::ArrayRemove;
-				undoOp.index = op.index;
-				op.target->m_array.Insert( op.index, op.oldChild );
-				AE_DEBUG_ASSERT( op.oldChild->m_refCount == 1 );
-				op.oldChild->m_refCount = 0; // Object back in document tree, reset to document ownership
-				break;
-			case UndoOpType::ArrayRemove:
-				undoOp.type = UndoOpType::ArrayInsert;
-				undoOp.index = op.index;
-				undoOp.oldChild = op.target->m_array[ op.index ];
-				op.target->m_array.Remove( op.index );
-				m_AddRef( undoOp.oldChild ); // Object removed from document, add undo reference
-				break;
-			case UndoOpType::MapSet:
-				undoOp.type = UndoOpType::MapRemove;
-				undoOp.key = op.key;
-				op.target->m_map.Set( op.key, op.oldChild );
-				AE_DEBUG_ASSERT( op.oldChild->m_refCount == 1 );
-				op.oldChild->m_refCount = 0; // Object back in document tree, reset to document ownership
-				break;
-			case UndoOpType::MapRemove:
-				undoOp.type = UndoOpType::MapSet;
-				undoOp.key = op.key;
-				if( DocumentValue* existing = op.target->m_map.Get( op.key, nullptr ) )
-				{
-					undoOp.oldChild = existing;
-					m_AddRef( existing ); // Object removed from document, add undo reference
-				}
-				op.target->m_map.Remove( op.key, nullptr );
-				break;
-		}
-		undoGroup.Append( undoOp );
-	}
-
-	m_undoStack.Append( std::move( undoGroup ) );
-	m_ValidateState( group );
+	m_undoStack.Append( m_ReverseOps( group ) );
+	m_ValidateState( m_undoStack[ m_undoStack.Length() - 1 ] );
 	return true;
 }
 
