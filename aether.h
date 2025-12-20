@@ -2565,7 +2565,7 @@ public:
 	//--------------------------------------------------------------------------
 	//! Converts this value to an array type, clearing any existing data.
 	//! \param reserveLength Optional hint for initial capacity to avoid reallocations.
-	void ArrayInitialize( uint32_t reserveLength = 0 );
+	DocumentValue& ArrayInitialize( uint32_t reserveLength = 0 );
 	//! Inserts a new DocumentValue at the specified index in the array.
 	//! \param index The position to insert at. Must be <= ArrayLength().
 	//! \return Reference to the newly created DocumentValue.
@@ -2596,25 +2596,25 @@ public:
 	//--------------------------------------------------------------------------
 	//! Converts this value to a map type, clearing any existing data.
 	//! \param reserveLength Optional hint for initial capacity to avoid reallocations.
-	void MapInitialize( uint32_t reserveLength = 0 );
+	DocumentValue& MapInitialize( uint32_t reserveLength = 0 );
 	//! Gets a mutable reference to the DocumentValue for the given key,
 	//! creating it if it doesn't exist.
-	//! \param key The string key to look up. Must not be nullptr.
+	//! \param key The string key to look up.
 	//! \return Mutable reference to the DocumentValue associated with the key.
-	DocumentValue& MapGet( const char* key );
+	DocumentValue& MapSet( const char* key );
 	//! Removes the key-value pair from the map if it exists.
-	//! \param key The string key to remove. Must not be nullptr.
+	//! \param key The string key to remove.
 	//! \return True if the key was found and removed, false if the key didn't exist.
 	bool MapRemove( const char* key );
 	//--------------------------------------------------------------------------
 	// Map queries
 	//--------------------------------------------------------------------------
 	//! Attempts to get a mutable pointer to the DocumentValue for the given key.
-	//! \param key The string key to look up. Must not be nullptr.
+	//! \param key The string key to look up.
 	//! \return Pointer to the DocumentValue if found, nullptr if the key doesn't exist.
 	DocumentValue* MapTryGet( const char* key );
 	//! Attempts to get a const pointer to the DocumentValue for the given key.
-	//! \param key The string key to look up. Must not be nullptr.
+	//! \param key The string key to look up.
 	//! \return Const pointer to the DocumentValue if found, nullptr if the key doesn't exist.
 	const DocumentValue* MapTryGet( const char* key ) const;
 	//--------------------------------------------------------------------------
@@ -2651,7 +2651,7 @@ protected:
 	{
 		UndoOpType type;
 		class DocumentValue* target;
-		uint32_t index = 0;
+		int32_t index = -1;
 		std::string key;
 		std::string oldValue;
 		DocumentValueType oldType = DocumentValueType::None;
@@ -2665,7 +2665,7 @@ protected:
 	int32_t m_refCount = 0; // References from undo stack only
 	std::string m_basic;
 	ae::Array< DocumentValue* > m_array;
-	ae::Map< std::string, DocumentValue* > m_map;
+	ae::Map< std::string, DocumentValue*, 0, ae::Hash32, ae::MapMode::Stable > m_map;
 };
 
 //------------------------------------------------------------------------------
@@ -2677,7 +2677,7 @@ public:
 	Document( const ae::Tag& tag );
 	~Document();
 
-	void EndUndoGroup();
+	bool EndUndoGroup();
 	void ClearUndo();
 	bool Undo();
 	bool Redo();
@@ -17186,10 +17186,11 @@ const char* DocumentValue::ValueGet() const
 }
 
 // Array manipulation
-void DocumentValue::ArrayInitialize( uint32_t reserveLength )
+DocumentValue& DocumentValue::ArrayInitialize( uint32_t reserveLength )
 {
 	Initialize( DocumentValueType::Array );
 	m_array.Reserve( reserveLength );
+	return *this;
 }
 DocumentValue& DocumentValue::ArrayInsert( uint32_t index )
 {
@@ -17245,12 +17246,13 @@ const DocumentValue& DocumentValue::ArrayGet( uint32_t index ) const
 }
 
 // Map manipulation
-void DocumentValue::MapInitialize( uint32_t reserveLength )
+DocumentValue& DocumentValue::MapInitialize( uint32_t reserveLength )
 {
 	Initialize( DocumentValueType::Map );
 	m_map.Reserve( reserveLength );
+	return *this;
 }
-DocumentValue& DocumentValue::MapGet( const char* key )
+DocumentValue& DocumentValue::MapSet( const char* key )
 {
 	AE_ASSERT( IsMap() );
 	DocumentValue* existing = m_map.Get( key, nullptr );
@@ -17260,6 +17262,7 @@ DocumentValue& DocumentValue::MapGet( const char* key )
 		op.type = UndoOpType::MapRemove; // Reverse operation
 		op.target = this;
 		op.key = key;
+		op.index = m_map.Length(); // New element will be appended at this index
 		m_document->m_PushOp( op );
 		return *m_map.Set( key, m_document->m_values.New( m_document, m_document->m_tag ) );
 	}
@@ -17274,14 +17277,16 @@ bool DocumentValue::MapRemove( const char* key )
 		return false; // Key doesn't exist
 	}
 
+	const int32_t index = m_map.GetIndex( key );
 	UndoOp op;
 	op.type = UndoOpType::MapSet; // Reverse operation
 	op.target = this;
 	op.key = key;
+	op.index = index; // Capture position for stable reinsertion
 	op.oldChild = existing;
 	m_document->m_PushOp( op );
 
-	m_map.Remove( key, nullptr );
+	m_map.RemoveIndex( index, nullptr );
 	// Increment reference count - now only kept alive by undo stack
 	m_document->m_AddRef( existing );
 	return true;
@@ -17328,13 +17333,15 @@ const DocumentValue& DocumentValue::MapGetValue( uint32_t index ) const
 Document::Document( const ae::Tag& tag ) : DocumentValue( this, tag ), m_tag( tag ), m_values( tag ), m_undoStack( tag ), m_redoStack( tag ), m_currentGroup( tag ) {}
 Document::~Document() { m_values.DeleteAll(); }
 
-void Document::EndUndoGroup()
+bool Document::EndUndoGroup()
 {
 	if( m_currentGroup.Length() > 0 )
 	{
 		m_undoStack.Append( std::move( m_currentGroup ) );
 		m_currentGroup.Clear();
+		return true;
 	}
+	return false;
 }
 
 void Document::ClearUndo()
@@ -17399,7 +17406,6 @@ ae::Array< Document::UndoOp > Document::m_ReverseOps( const ae::Array< UndoOp >&
 		const UndoOp& op = ops[ i ];
 		UndoOp reverseOp;
 		reverseOp.target = op.target;
-
 		switch( op.type )
 		{
 			case UndoOpType::SetType:
@@ -17434,7 +17440,7 @@ ae::Array< Document::UndoOp > Document::m_ReverseOps( const ae::Array< UndoOp >&
 			case UndoOpType::MapSet:
 				reverseOp.type = UndoOpType::MapRemove;
 				reverseOp.key = op.key;
-				op.target->m_map.Set( op.key, op.oldChild );
+				op.target->m_map.Set( op.key, op.oldChild, op.index );
 				AE_DEBUG_ASSERT( op.oldChild->m_refCount == 1 );
 				op.oldChild->m_refCount = 0; // Object back in document tree, reset to document ownership
 				break;

@@ -157,8 +157,8 @@ TEST_CASE( "DocumentUndo MapOperations", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add map values
-	doc.MapGet( "key1" ).ValueSet( "value1" );
-	doc.MapGet( "key2" ).ValueSet( "value2" );
+	doc.MapSet( "key1" ).ValueSet( "value1" );
+	doc.MapSet( "key2" ).ValueSet( "value2" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.MapLength() == 2 );
@@ -180,6 +180,8 @@ TEST_CASE( "DocumentUndo MapOperations", "[ae::Document][undo]" )
 	// Undo remove should restore key and value
 	REQUIRE( doc.Undo() );
 	REQUIRE( doc.MapLength() == 2 );
+	REQUIRE( doc.MapGetValue( 0 ).ValueGet() == std::string( "value1" ) );
+	REQUIRE( doc.MapGetValue( 1 ).ValueGet() == std::string( "value2" ) );
 	REQUIRE( doc.MapTryGet( "key1" )->ValueGet() == std::string( "value1" ) );
 	REQUIRE( doc.MapTryGet( "key2" )->ValueGet() == std::string( "value2" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
@@ -335,26 +337,26 @@ TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 
 	// Create nested structure
 	doc.ArrayAppend().MapInitialize( 2 );
-	doc.ArrayGet( 0 ).MapGet( "nested" ).ValueSet( "deep" );
+	doc.ArrayGet( 0 ).MapSet( "nested" ).ValueSet( "deep" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.ArrayLength() == 1 );
 	REQUIRE( doc.ArrayGet( 0 ).IsMap() );
-	REQUIRE( doc.ArrayGet( 0 ).MapGet( "nested" ).ValueGet() == std::string( "deep" ) );
+	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).ValueGet() == std::string( "deep" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Modify nested value
-	doc.ArrayGet( 0 ).MapGet( "nested" ).ValueSet( "modified" );
+	doc.ArrayGet( 0 ).MapSet( "nested" ).ValueSet( "modified" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.ArrayGet( 0 ).MapGet( "nested" ).ValueGet() == std::string( "modified" ) );
+	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).ValueGet() == std::string( "modified" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore deep nested value
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.ArrayGet( 0 ).MapGet( "nested" ).ValueGet() == std::string( "deep" ) );
+	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).ValueGet() == std::string( "deep" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
@@ -370,7 +372,7 @@ TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 	REQUIRE( doc.Undo() );
 	REQUIRE( doc.ArrayLength() == 1 );
 	REQUIRE( doc.ArrayGet( 0 ).IsMap() );
-	REQUIRE( doc.ArrayGet( 0 ).MapGet( "nested" ).ValueGet() == std::string( "deep" ) );
+	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).ValueGet() == std::string( "deep" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 }
@@ -384,9 +386,9 @@ TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add multiple map values with different keys
-	doc.MapGet( "apple" ).ValueSet( "fruit1" );
-	doc.MapGet( "banana" ).ValueSet( "fruit2" );
-	doc.MapGet( "cherry" ).ValueSet( "fruit3" );
+	doc.MapSet( "apple" ).ValueSet( "fruit1" );
+	doc.MapSet( "banana" ).ValueSet( "fruit2" );
+	doc.MapSet( "cherry" ).ValueSet( "fruit3" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.MapLength() == 3 );
@@ -513,8 +515,8 @@ TEST_CASE( "DocumentUndo MapRemoveReturnValue", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add some map values
-	doc.MapGet( "existing1" ).ValueSet( "value1" );
-	doc.MapGet( "existing2" ).ValueSet( "value2" );
+	doc.MapSet( "existing1" ).ValueSet( "value1" );
+	doc.MapSet( "existing2" ).ValueSet( "value2" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.MapLength() == 2 );
@@ -593,7 +595,7 @@ TEST_CASE( "DocumentUndo MapGetVsTryGet", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add some map values
-	doc.MapGet( "existing" ).ValueSet( "value" );
+	doc.MapSet( "existing" ).ValueSet( "value" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.MapLength() == 1 );
@@ -629,7 +631,7 @@ TEST_CASE( "DocumentUndo MapGetVsTryGet", "[ae::Document][undo]" )
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	ae::DocumentValue& nonConstRef = doc.MapGet( "existing" );
+	ae::DocumentValue& nonConstRef = doc.MapSet( "existing" );
 	REQUIRE( nonConstRef.ValueGet() == std::string( "modified_via_tryget" ) );
 
 	// Modify through MapGet reference
@@ -782,9 +784,9 @@ TEST_CASE( "DocumentUndo Initialize", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add map elements to test clearing
-	doc.MapGet( "key1" ).ValueSet( "value1" );
-	doc.MapGet( "key2" ).ValueSet( "value2" );
-	doc.MapGet( "key3" ).ValueSet( "value3" );
+	doc.MapSet( "key1" ).ValueSet( "value1" );
+	doc.MapSet( "key2" ).ValueSet( "value2" );
+	doc.MapSet( "key3" ).ValueSet( "value3" );
 	doc.EndUndoGroup();
 	REQUIRE( doc.MapLength() == 3 );
 	REQUIRE( doc.MapTryGet( "key1" )->ValueGet() == std::string( "value1" ) );
@@ -891,7 +893,7 @@ TEST_CASE( "DocumentUndo InitializeChaining", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test chaining with type change
-	doc.Initialize( ae::DocumentValueType::Map ).MapGet( "chained_key" ).ValueSet( "chained_value" );
+	doc.Initialize( ae::DocumentValueType::Map ).MapSet( "chained_key" ).ValueSet( "chained_value" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.GetType() == ae::DocumentValueType::Map );
@@ -919,7 +921,7 @@ TEST_CASE( "DocumentUndo InitializeComplexClear", "[ae::Document][undo]" )
 	doc.ArrayAppend().ArrayInitialize( 2 );
 	doc.ArrayGet( 0 ).ArrayAppend().ValueSet( "nested1" );
 	doc.ArrayGet( 0 ).ArrayAppend().MapInitialize( 2 );
-	doc.ArrayGet( 0 ).ArrayGet( 1 ).MapGet( "nested_key" ).ValueSet( "nested_value" );
+	doc.ArrayGet( 0 ).ArrayGet( 1 ).MapSet( "nested_key" ).ValueSet( "nested_value" );
 	doc.ArrayAppend().ValueSet( "second" );
 	doc.EndUndoGroup();
 
@@ -1003,7 +1005,7 @@ TEST_CASE( "DocumentUndo InitializeCoalescing", "[ae::Document][undo]" )
 	// Test coalescing with data operations in between
 	doc.ArrayAppend().ValueSet( "element1" );
 	doc.Initialize( ae::DocumentValueType::Map ); // Should clear array and change type
-	doc.MapGet( "key1" ).ValueSet( "value1" );
+	doc.MapSet( "key1" ).ValueSet( "value1" );
 	doc.Initialize( ae::DocumentValueType::Value ); // Should clear map and change type
 	doc.ValueSet( "final_basic" );
 	doc.EndUndoGroup();
@@ -1127,9 +1129,9 @@ TEST_CASE( "DocumentUndo MapInitialize", "[ae::Document][undo]" )
 
 	// Start with map and add some key-value pairs
 	doc.MapInitialize( 4 );
-	doc.MapGet( "key1" ).ValueSet( "value1" );
-	doc.MapGet( "key2" ).ValueSet( "value2" );
-	doc.MapGet( "key3" ).ValueSet( "value3" );
+	doc.MapSet( "key1" ).ValueSet( "value1" );
+	doc.MapSet( "key2" ).ValueSet( "value2" );
+	doc.MapSet( "key3" ).ValueSet( "value3" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.IsMap() );
@@ -1153,8 +1155,8 @@ TEST_CASE( "DocumentUndo MapInitialize", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add new key-value pairs to verify it works after clearing
-	doc.MapGet( "newkey1" ).ValueSet( "newvalue1" );
-	doc.MapGet( "newkey2" ).ValueSet( "newvalue2" );
+	doc.MapSet( "newkey1" ).ValueSet( "newvalue1" );
+	doc.MapSet( "newkey2" ).ValueSet( "newvalue2" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.MapLength() == 2 );
@@ -1225,3 +1227,212 @@ TEST_CASE( "DocumentUndo MapInitialize", "[ae::Document][undo]" )
 	REQUIRE( doc.GetUndoStackSize() == 4 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 }
+
+TEST_CASE( "DocumentUndo MapOrderStability", "[ae::Document][undo][map]" )
+{
+	ae::Document doc( "test" );
+	doc.MapInitialize( 10 );
+	
+	// Add elements in specific order
+	doc.MapSet( "alpha" ).ValueSet( "first" );
+	doc.MapSet( "beta" ).ValueSet( "second" );
+	doc.MapSet( "gamma" ).ValueSet( "third" );
+	doc.MapSet( "delta" ).ValueSet( "fourth" );
+	doc.MapSet( "epsilon" ).ValueSet( "fifth" );
+	doc.EndUndoGroup();
+	
+	// Verify initial order through iteration
+	REQUIRE( doc.MapLength() == 5 );
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.MapGetKey( 2 ) == std::string( "gamma" ) );
+	REQUIRE( doc.MapGetKey( 3 ) == std::string( "delta" ) );
+	REQUIRE( doc.MapGetKey( 4 ) == std::string( "epsilon" ) );
+	
+	// Modify existing values (should not affect order)
+	doc.MapSet( "gamma" ).ValueSet( "modified_third" );
+	doc.MapSet( "alpha" ).ValueSet( "modified_first" );
+	doc.EndUndoGroup();
+	
+	// Verify order is preserved after modifications
+	REQUIRE( doc.MapLength() == 5 );
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.MapGetKey( 2 ) == std::string( "gamma" ) );
+	REQUIRE( doc.MapGetKey( 3 ) == std::string( "delta" ) );
+	REQUIRE( doc.MapGetKey( 4 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.MapGetValue( 0 ).ValueGet() == std::string( "modified_first" ) );
+	REQUIRE( doc.MapGetValue( 2 ).ValueGet() == std::string( "modified_third" ) );
+	
+	// Add new elements (should append to end)
+	doc.MapSet( "zeta" ).ValueSet( "sixth" );
+	doc.MapSet( "eta" ).ValueSet( "seventh" );
+	doc.EndUndoGroup();
+	
+	// Verify new elements maintain insertion order
+	REQUIRE( doc.MapLength() == 7 );
+	REQUIRE( doc.MapGetKey( 5 ) == std::string( "zeta" ) );
+	REQUIRE( doc.MapGetKey( 6 ) == std::string( "eta" ) );
+	
+	// Remove middle element
+	doc.MapRemove( "gamma" );
+	doc.EndUndoGroup();
+	
+	// Verify order is preserved after removal (remaining elements shift)
+	REQUIRE( doc.MapLength() == 6 );
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.MapGetKey( 2 ) == std::string( "delta" ) );  // gamma removed, delta shifts up
+	REQUIRE( doc.MapGetKey( 3 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.MapGetKey( 4 ) == std::string( "zeta" ) );
+	REQUIRE( doc.MapGetKey( 5 ) == std::string( "eta" ) );
+	
+	// Undo removal - element should return to same position
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.MapLength() == 7 );
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.MapGetKey( 2 ) == std::string( "gamma" ) );  // gamma restored to original position
+	REQUIRE( doc.MapGetKey( 3 ) == std::string( "delta" ) );
+	REQUIRE( doc.MapGetKey( 4 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.MapGetKey( 5 ) == std::string( "zeta" ) );
+	REQUIRE( doc.MapGetKey( 6 ) == std::string( "eta" ) );
+	REQUIRE( doc.MapGetValue( 2 ).ValueGet() == std::string( "modified_third" ) );
+	
+	// Undo additions
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.MapLength() == 5 );
+	REQUIRE( doc.MapGetKey( 4 ) == std::string( "epsilon" ) );  // zeta and eta should be gone
+	REQUIRE( doc.MapTryGet( "zeta" ) == nullptr );
+	REQUIRE( doc.MapTryGet( "eta" ) == nullptr );
+	
+	// Undo modifications - values should revert but order preserved
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.MapLength() == 5 );
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.MapGetKey( 2 ) == std::string( "gamma" ) );
+	REQUIRE( doc.MapGetValue( 0 ).ValueGet() == std::string( "first" ) );      // alpha reverted
+	REQUIRE( doc.MapGetValue( 2 ).ValueGet() == std::string( "third" ) );      // gamma reverted
+	
+	// Test complete redo cycle maintains order
+	REQUIRE( doc.Redo() );  // redo modifications
+	REQUIRE( doc.Redo() );  // redo additions
+	REQUIRE( doc.Redo() );  // redo removal
+	
+	// Final state should match removal state
+	REQUIRE( doc.MapLength() == 6 );
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.MapGetKey( 2 ) == std::string( "delta" ) );   // gamma removed
+	REQUIRE( doc.MapGetKey( 3 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.MapGetKey( 4 ) == std::string( "zeta" ) );
+	REQUIRE( doc.MapGetKey( 5 ) == std::string( "eta" ) );
+	REQUIRE( doc.MapTryGet( "gamma" ) == nullptr );
+	
+	// Test that re-adding a removed key appends to end (new insertion)
+	doc.MapSet( "gamma" ).ValueSet( "re_added" );
+	doc.EndUndoGroup();
+	
+	REQUIRE( doc.MapLength() == 7 );
+	REQUIRE( doc.MapGetKey( 6 ) == std::string( "gamma" ) );  // Should be at end, not original position
+	REQUIRE( doc.MapGetValue( 6 ).ValueGet() == std::string( "re_added" ) );
+	
+	// Verify all other elements maintain their positions
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.MapGetKey( 2 ) == std::string( "delta" ) );
+	REQUIRE( doc.MapGetKey( 3 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.MapGetKey( 4 ) == std::string( "zeta" ) );
+	REQUIRE( doc.MapGetKey( 5 ) == std::string( "eta" ) );
+}
+
+TEST_CASE( "DocumentUndo MapOrderPerfectRestoration", "[ae::Document][undo][map][order]" )
+{
+	ae::Document doc( "test" );
+	doc.MapInitialize( 10 );
+	
+	// Build a complex map with specific ordering
+	doc.MapSet( "z_last" ).ValueSet( "should_be_first" );
+	doc.MapSet( "a_first" ).ValueSet( "should_be_second" );
+	doc.MapSet( "m_middle" ).ValueSet( "should_be_third" );
+	doc.EndUndoGroup();
+	
+	// Capture the original order
+	std::vector< std::string > originalOrder;
+	for( uint32_t i = 0; i < doc.MapLength(); i++ )
+	{
+		originalOrder.push_back( doc.MapGetKey( i ) );
+	}
+	
+	REQUIRE( originalOrder.size() == 3 );
+	REQUIRE( originalOrder[0] == "z_last" );
+	REQUIRE( originalOrder[1] == "a_first" );
+	REQUIRE( originalOrder[2] == "m_middle" );
+	
+	// Remove the middle element
+	REQUIRE( doc.MapRemove( "a_first" ) );
+	doc.EndUndoGroup();
+	
+	REQUIRE( doc.MapLength() == 2 );
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "z_last" ) );
+	REQUIRE( doc.MapGetKey( 1 ) == std::string( "m_middle" ) );
+	REQUIRE( doc.MapTryGet( "a_first" ) == nullptr );
+	
+	// Add some more elements
+	doc.MapSet( "new_element" ).ValueSet( "new_value" );
+	doc.MapSet( "another_new" ).ValueSet( "another_value" );
+	doc.EndUndoGroup();
+	
+	REQUIRE( doc.MapLength() == 4 );
+	REQUIRE( doc.MapGetKey( 2 ) == std::string( "new_element" ) );
+	REQUIRE( doc.MapGetKey( 3 ) == std::string( "another_new" ) );
+	
+	// Undo the additions
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.MapLength() == 2 );
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "z_last" ) );
+	REQUIRE( doc.MapGetKey( 1 ) == std::string( "m_middle" ) );
+	REQUIRE( doc.MapTryGet( "new_element" ) == nullptr );
+	REQUIRE( doc.MapTryGet( "another_new" ) == nullptr );
+	
+	// Undo the removal - should restore exact original position
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.MapLength() == 3 );
+	
+	// Verify the exact original order is restored
+	for( uint32_t i = 0; i < doc.MapLength(); i++ )
+	{
+		REQUIRE( doc.MapGetKey( i ) == originalOrder[i] );
+	}
+	
+	// Verify values are correct too
+	REQUIRE( doc.MapSet( "z_last" ).ValueGet() == std::string( "should_be_first" ) );
+	REQUIRE( doc.MapSet( "a_first" ).ValueGet() == std::string( "should_be_second" ) );
+	REQUIRE( doc.MapSet( "m_middle" ).ValueGet() == std::string( "should_be_third" ) );
+	
+	// Test that redo preserves order through complex operations
+	REQUIRE( doc.Redo() ); // redo removal
+	REQUIRE( doc.Redo() ); // redo additions
+	
+	REQUIRE( doc.MapLength() == 4 );
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "z_last" ) );
+	REQUIRE( doc.MapGetKey( 1 ) == std::string( "m_middle" ) );  // a_first removed
+	REQUIRE( doc.MapGetKey( 2 ) == std::string( "new_element" ) );
+	REQUIRE( doc.MapGetKey( 3 ) == std::string( "another_new" ) );
+	
+	// Now test removing and re-adding the same key
+	REQUIRE( doc.MapRemove( "z_last" ) );
+	doc.EndUndoGroup();
+	
+	// Re-add the same key (should append to end, not go back to original position)
+	doc.MapSet( "z_last" ).ValueSet( "reinserted_value" );
+	doc.EndUndoGroup();
+	
+	REQUIRE( doc.MapLength() == 4 );
+	REQUIRE( doc.MapGetKey( 0 ) == std::string( "m_middle" ) );
+	REQUIRE( doc.MapGetKey( 1 ) == std::string( "new_element" ) );
+	REQUIRE( doc.MapGetKey( 2 ) == std::string( "another_new" ) );
+	REQUIRE( doc.MapGetKey( 3 ) == std::string( "z_last" ) );  // Should be at end now
+	REQUIRE( doc.MapSet( "z_last" ).ValueGet() == std::string( "reinserted_value" ) );
+}
+
