@@ -173,7 +173,7 @@ public:
 	void ClearUndo();
 	bool Undo();
 	bool Redo();
-	uint32_t GetUndoStackSize() const { return m_undoStack.Length(); }
+	uint32_t GetUndoStackSize() const { return m_undoStack.Length() + ( m_currentGroup.Length() ? 1 : 0 ); }
 	uint32_t GetRedoStackSize() const { return m_redoStack.Length(); }
 
 private:
@@ -405,27 +405,29 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 		case DocumentValueType::None: break;
 	}
 
-	// Now create the type change operation with coalescing logic
-	bool combined = false;
-	if( m_document->m_currentGroup.Length() > 0 )
+	if( m_type != type )
 	{
-		UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
-		if( lastOp.type == UndoOpType::SetType && lastOp.target == this )
+		// Create the type change operation with coalescing logic
+		bool combined = false;
+		if( m_document->m_currentGroup.Length() > 0 )
 		{
-			// Keep the original old type, don't add new operation
-			combined = true;
+			UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
+			if( lastOp.type == UndoOpType::SetType && lastOp.target == this )
+			{
+				// Keep the original old type, don't add new operation
+				combined = true;
+			}
 		}
+		if( !combined )
+		{
+			UndoOp op;
+			op.type = UndoOpType::SetType;
+			op.target = this;
+			op.oldType = m_type;
+			m_document->m_PushOp( op );
+		}
+		m_type = type;
 	}
-	if( !combined )
-	{
-		UndoOp op;
-		op.type = UndoOpType::SetType;
-		op.target = this;
-		op.oldType = m_type;
-		m_document->m_PushOp( op );
-	}
-
-	m_type = type;
 	// Data should already be cleared by the switch above
 	AE_ASSERT( m_basic.empty() );
 	AE_ASSERT( m_array.Length() == 0 );
