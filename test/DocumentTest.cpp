@@ -195,7 +195,69 @@ private:
 //------------------------------------------------------------------------------
 DocumentValue::DocumentValue( class Document* document, const ae::Tag& tag ) : m_document( document ), m_array( tag ), m_map( tag ) {}
 
-// Type queries
+// Type functions
+DocumentValue& DocumentValue::Initialize( DocumentValueType type )
+{
+	// First, clear existing data using proper undo operations
+	switch( m_type )
+	{
+		case DocumentValueType::Array:
+			while( m_array.Length() > 0 )
+			{
+				ArrayRemove( m_array.Length() - 1 );
+			}
+			break;
+		case DocumentValueType::Map:
+			while( m_map.Length() > 0 )
+			{
+				MapRemove( m_map.GetKey( m_map.Length() - 1 ).c_str() );
+			}
+			break;
+		case DocumentValueType::Value:
+			// For basic values, create a ValueSet undo operation
+			if( !m_basic.empty() )
+			{
+				UndoOp op;
+				op.type = UndoOpType::ValueSet;
+				op.target = this;
+				op.oldValue = m_basic;
+				m_document->m_PushOp( op );
+				m_basic.clear();
+			}
+			break;
+		case DocumentValueType::None: break;
+	}
+
+	if( m_type != type )
+	{
+		// Create the type change operation with coalescing logic
+		bool combined = false;
+		if( m_document->m_currentGroup.Length() > 0 )
+		{
+			UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
+			if( lastOp.type == UndoOpType::SetType && lastOp.target == this )
+			{
+				// Keep the original old type, don't add new operation
+				combined = true;
+			}
+		}
+		if( !combined )
+		{
+			UndoOp op;
+			op.type = UndoOpType::SetType;
+			op.target = this;
+			op.oldType = m_type;
+			m_document->m_PushOp( op );
+		}
+		m_type = type;
+	}
+	// Data should already be cleared by the switch above
+	AE_ASSERT( m_basic.empty() );
+	AE_ASSERT( m_array.Length() == 0 );
+	AE_ASSERT( m_map.Length() == 0 );
+	return *this;
+}
+
 bool DocumentValue::IsValue() const { return ( m_type == DocumentValueType::Value ); }
 bool DocumentValue::IsArray() const { return ( m_type == DocumentValueType::Array ); }
 bool DocumentValue::IsMap() const { return ( m_type == DocumentValueType::Map ); }
@@ -373,68 +435,6 @@ const DocumentValue& DocumentValue::MapGetValue( uint32_t index ) const
 	return *m_map.GetValue( index );
 }
 
-// Protected methods
-DocumentValue& DocumentValue::Initialize( DocumentValueType type )
-{
-	// First, clear existing data using proper undo operations
-	switch( m_type )
-	{
-		case DocumentValueType::Array:
-			while( m_array.Length() > 0 )
-			{
-				ArrayRemove( m_array.Length() - 1 );
-			}
-			break;
-		case DocumentValueType::Map:
-			while( m_map.Length() > 0 )
-			{
-				MapRemove( m_map.GetKey( m_map.Length() - 1 ).c_str() );
-			}
-			break;
-		case DocumentValueType::Value:
-			// For basic values, create a ValueSet undo operation
-			if( !m_basic.empty() )
-			{
-				UndoOp op;
-				op.type = UndoOpType::ValueSet;
-				op.target = this;
-				op.oldValue = m_basic;
-				m_document->m_PushOp( op );
-				m_basic.clear();
-			}
-			break;
-		case DocumentValueType::None: break;
-	}
-
-	if( m_type != type )
-	{
-		// Create the type change operation with coalescing logic
-		bool combined = false;
-		if( m_document->m_currentGroup.Length() > 0 )
-		{
-			UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
-			if( lastOp.type == UndoOpType::SetType && lastOp.target == this )
-			{
-				// Keep the original old type, don't add new operation
-				combined = true;
-			}
-		}
-		if( !combined )
-		{
-			UndoOp op;
-			op.type = UndoOpType::SetType;
-			op.target = this;
-			op.oldType = m_type;
-			m_document->m_PushOp( op );
-		}
-		m_type = type;
-	}
-	// Data should already be cleared by the switch above
-	AE_ASSERT( m_basic.empty() );
-	AE_ASSERT( m_array.Length() == 0 );
-	AE_ASSERT( m_map.Length() == 0 );
-	return *this;
-}
 
 //------------------------------------------------------------------------------
 // ae::Document member functions
@@ -442,6 +442,69 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 Document::Document( const ae::Tag& tag ) : DocumentValue( this, tag ), m_tag( tag ), m_values( tag ), m_undoStack( tag ), m_redoStack( tag ), m_currentGroup( tag ) {}
 Document::~Document() { m_values.DeleteAll(); }
 
+void Document::EndUndoGroup()
+{
+	if( m_currentGroup.Length() > 0 )
+	{
+		m_undoStack.Append( std::move( m_currentGroup ) );
+		m_currentGroup.Clear();
+	}
+}
+
+void Document::ClearUndo()
+{
+#define AE_REMOVE_OP_GROUP_REFS( group ) \
+	for( const UndoOp& op : group ) \
+	{ \
+		if( op.oldChild ) \
+		{ \
+			m_RemoveRef( op.oldChild ); \
+		} \
+	}
+	for( const auto& group : m_undoStack )
+	{
+		AE_REMOVE_OP_GROUP_REFS( group );
+	}
+	for( const auto& group : m_redoStack )
+	{
+		AE_REMOVE_OP_GROUP_REFS( group );
+	}
+	AE_REMOVE_OP_GROUP_REFS( m_currentGroup );
+#undef AE_REMOVE_OP_GROUP_REFS
+	m_undoStack.Clear();
+	m_redoStack.Clear();
+	m_currentGroup.Clear();
+}
+
+bool Document::Undo()
+{
+	EndUndoGroup(); // Finalize current group
+	if( m_undoStack.Length() == 0 )
+	{
+		return false;
+	}
+	ae::Array< UndoOp > group = std::move( m_undoStack[ m_undoStack.Length() - 1 ] );
+	m_undoStack.Remove( m_undoStack.Length() - 1 );
+	m_redoStack.Append( m_ReverseOps( group ) );
+	m_ValidateState( m_redoStack[ m_redoStack.Length() - 1 ] );
+	return true;
+}
+
+bool Document::Redo()
+{
+	EndUndoGroup(); // Finalize current group
+	if( m_redoStack.Length() == 0 )
+	{
+		return false;
+	}
+	ae::Array< UndoOp > group = std::move( m_redoStack[ m_redoStack.Length() - 1 ] );
+	m_redoStack.Remove( m_redoStack.Length() - 1 );
+	m_undoStack.Append( m_ReverseOps( group ) );
+	m_ValidateState( m_undoStack[ m_undoStack.Length() - 1 ] );
+	return true;
+}
+
+// Private member functions
 ae::Array< Document::UndoOp > Document::m_ReverseOps( const ae::Array< UndoOp >& ops )
 {
 	ae::Array< UndoOp > reverseGroup( m_tag );
@@ -511,54 +574,6 @@ void Document::m_PushOp( const UndoOp& op )
 	m_redoStack.Clear(); // Clear redo stack on new operation
 }
 
-void Document::EndUndoGroup()
-{
-	if( m_currentGroup.Length() > 0 )
-	{
-		m_undoStack.Append( std::move( m_currentGroup ) );
-		m_currentGroup.Clear();
-	}
-}
-
-void Document::ClearUndo()
-{
-#define AE_REMOVE_OP_GROUP_REFS( group ) \
-	for( const UndoOp& op : group ) \
-	{ \
-		if( op.oldChild ) \
-		{ \
-			m_RemoveRef( op.oldChild ); \
-		} \
-	}
-	for( const auto& group : m_undoStack )
-	{
-		AE_REMOVE_OP_GROUP_REFS( group );
-	}
-	for( const auto& group : m_redoStack )
-	{
-		AE_REMOVE_OP_GROUP_REFS( group );
-	}
-	AE_REMOVE_OP_GROUP_REFS( m_currentGroup );
-#undef AE_REMOVE_OP_GROUP_REFS
-	m_undoStack.Clear();
-	m_redoStack.Clear();
-	m_currentGroup.Clear();
-}
-
-bool Document::Undo()
-{
-	EndUndoGroup(); // Finalize current group
-	if( m_undoStack.Length() == 0 )
-	{
-		return false;
-	}
-	ae::Array< UndoOp > group = std::move( m_undoStack[ m_undoStack.Length() - 1 ] );
-	m_undoStack.Remove( m_undoStack.Length() - 1 );
-	m_redoStack.Append( m_ReverseOps( group ) );
-	m_ValidateState( m_redoStack[ m_redoStack.Length() - 1 ] );
-	return true;
-}
-
 void Document::m_AddRef( DocumentValue* value )
 {
 	if( value )
@@ -591,20 +606,6 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 		AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Map );
 		AE_DEBUG_ASSERT( target->m_refCount >= 0 );
 	}
-}
-
-bool Document::Redo()
-{
-	EndUndoGroup(); // Finalize current group
-	if( m_redoStack.Length() == 0 )
-	{
-		return false;
-	}
-	ae::Array< UndoOp > group = std::move( m_redoStack[ m_redoStack.Length() - 1 ] );
-	m_redoStack.Remove( m_redoStack.Length() - 1 );
-	m_undoStack.Append( m_ReverseOps( group ) );
-	m_ValidateState( m_undoStack[ m_undoStack.Length() - 1 ] );
-	return true;
 }
 
 } // namespace ae
