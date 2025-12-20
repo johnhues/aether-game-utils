@@ -1866,8 +1866,13 @@ public:
 	//! Removes the entry with \p key if it exists. Returns the index associated
 	//! with the removed key on success, -1 otherwise.
 	int32_t Remove( Key key );
+	//! Increments the existing index values supplied to ae::HashMap::Insert()
+	//! of all entries greater than or equal to \p index (inclusive). Useful
+	//! when index values represent offsets into another array being offset
+	//! after the insertion of an entry.
+	void Increment( uint32_t index );
 	//! Decrements the existing index values supplied to ae::HashMap::Insert()
-	//! of all entries greater than \p index. Useful when index values represent
+	//! of all entries greater than \p index (exclusive). Useful when index values represent
 	//! offsets into another array being compacted after the removal of an entry.
 	void Decrement( uint32_t index );
 	//! Returns the index associated with the given key, or -1 if the key is not found.
@@ -1931,7 +1936,11 @@ public:
 	//! ae::Map::Get(). The value is updated in place if the element is found,
 	//! otherwise the new pair is appended. It's not safe to keep a pointer to
 	//! the value across non-const operations.
-	Value& Set( const Key& key, const Value& value );
+	//! \param stableInsertIndex When the given \p key does not exist in the map
+	//! and when ae::MapMode::Stable is enabled, this index will be used to
+	//! insert the key/value pair in the map for iteration. Must be -1 with
+	//! ae::MapMode::Fast.
+	Value& Set( const Key& key, const Value& value, int32_t stableInsertIndex = -1 );
 	//! Returns a modifiable reference to the value set with \p key. Asserts
 	//! when key/value pair is missing.
 	Value& Get( const Key& key );
@@ -1988,7 +1997,7 @@ public:
 	const ae::Pair< Key, Value >* end() const { return m_pairs.end(); }
 
 private:
-	bool m_RemoveIndex( int32_t index, Value* valueOut );
+	bool m_RemovePairAndCompact( int32_t index, Value* valueOut );
 	template< typename K2, typename V2, uint32_t N2, typename H2, ae::MapMode M2 >
 	friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2, H2, M2 >& );
 	HashMap< Key, N, Hash > m_hashMap;
@@ -10307,6 +10316,22 @@ int32_t HashMap< Key, N, Hash >::Remove( Key key )
 }
 
 template< typename Key, uint32_t N, typename Hash >
+void HashMap< Key, N, Hash >::Increment( uint32_t index )
+{
+	if( m_length )
+	{
+		for( uint32_t i = 0; i < m_size; i++ )
+		{
+			Entry* e = &m_entries[ i ];
+			if( e->index >= (int32_t)index )
+			{
+				e->index++;
+			}
+		}
+	}
+}
+
+template< typename Key, uint32_t N, typename Hash >
 void HashMap< Key, N, Hash >::Decrement( uint32_t index )
 {
 	if( m_length )
@@ -10314,7 +10339,7 @@ void HashMap< Key, N, Hash >::Decrement( uint32_t index )
 		for( uint32_t i = 0; i < m_size; i++ )
 		{
 			Entry* e = &m_entries[ i ];
-			if( e->index > index )
+			if( e->index > (int32_t)index )
 			{
 				e->index--;
 			}
@@ -10374,7 +10399,7 @@ bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32
 	const uint32_t startIdx = ( hash % m_size );
 	for( uint32_t i = 0; i < m_size; i++ )
 	{
-		uint32_t currentIdx = ( i + startIdx ) % m_size;
+		const uint32_t currentIdx = ( i + startIdx ) % m_size;
 		Entry* e = &m_entries[ currentIdx ];
 		if( e->index < 0 )
 		{
@@ -10416,21 +10441,32 @@ Map< K, V, N, H, M >::Map( ae::Tag pool ) :
 }
 
 template< typename K, typename V, uint32_t N, typename H, MapMode M >
-V& Map< K, V, N, H, M >::Set( const K& key, const V& value )
+V& Map< K, V, N, H, M >::Set( const K& key, const V& value, int32_t stableInsertIndex )
 {
-	int32_t index = GetIndex( key ); // @TODO: SetIfMissing()? to avoid double lookup of key
+	if constexpr( M != ae::MapMode::Stable )
+	{
+		AE_DEBUG_ASSERT_MSG( stableInsertIndex == -1, "Map insert at index is only supported with stable ordering" );
+	}
+	const int32_t index = GetIndex( key ); // @TODO: SetIfMissing()? to avoid double lookup of key
 	Pair< K, V >* pair = ( index >= 0 ) ? &m_pairs[ index ] : nullptr;
 	if( pair )
 	{
 		pair->value = value;
 		return pair->value;
 	}
-	else
+	else if constexpr( M == ae::MapMode::Stable )
 	{
-		uint32_t idx = m_pairs.Length();
-		m_hashMap.Set( key, idx ); // @TODO: Handle bad return value
-		return m_pairs.Append( Pair( key, value ) ).value;
+		if( stableInsertIndex >= 0 )
+		{
+			AE_DEBUG_ASSERT_MSG( stableInsertIndex <= m_pairs.Length(), "Map can't insert at index #, length is #", stableInsertIndex, m_pairs.Length() );
+			m_pairs.Insert( stableInsertIndex, Pair( key, value ) );
+			m_hashMap.Increment( stableInsertIndex );
+			m_hashMap.Set( key, stableInsertIndex ); // @TODO: Handle bad return value
+			return m_pairs[ stableInsertIndex ].value;
+		}
 	}
+	m_hashMap.Set( key, m_pairs.Length() ); // @TODO: Handle bad return value
+	return m_pairs.Append( Pair( key, value ) ).value;
 }
 
 template< typename K, typename V, uint32_t N, typename H, MapMode M >
@@ -10497,7 +10533,7 @@ bool Map< K, V, N, H, M >::TryGet( const K& key, V* valueOut ) const
 template< typename K, typename V, uint32_t N, typename H, MapMode M >
 bool Map< K, V, N, H, M >::Remove( const K& key, V* valueOut )
 {
-	return m_RemoveIndex( m_hashMap.Remove(  key ), valueOut );
+	return m_RemovePairAndCompact( m_hashMap.Remove(  key ), valueOut );
 }
 
 template< typename K, typename V, uint32_t N, typename H, MapMode M >
@@ -10510,11 +10546,11 @@ void Map< K, V, N, H, M >::RemoveIndex( uint32_t index, V* valueOut )
 #else
 	m_hashMap.Remove( key );
 #endif
-	m_RemoveIndex( index, valueOut );
+	m_RemovePairAndCompact( index, valueOut );
 }
 
 template< typename K, typename V, uint32_t N, typename H, MapMode M >
-bool Map< K, V, N, H, M >::m_RemoveIndex( int32_t index, V* valueOut )
+bool Map< K, V, N, H, M >::m_RemovePairAndCompact( int32_t index, V* valueOut )
 {
 	if( index >= 0 )
 	{

@@ -799,3 +799,96 @@ TEST_CASE( "stable full map stress test", "[ae::Map" AE_HASH_N "]" )
 	}
 	REQUIRE( map.Length() == 0 );
 }
+
+TEST_CASE( "Map StableInsertIndex", "[ae::Map" AE_HASH_N "][stable]" )
+{
+	ae::Map< std::string, int, 0, aeHashN, ae::MapMode::Stable > map = TAG_TEST;
+	
+	// Add initial elements
+	map.Set( "alpha", 1 );
+	map.Set( "gamma", 3 );
+	map.Set( "epsilon", 5 );
+	
+	REQUIRE( map.Length() == 3 );
+	REQUIRE( map.GetKey( 0 ) == "alpha" );
+	REQUIRE( map.GetKey( 1 ) == "gamma" );
+	REQUIRE( map.GetKey( 2 ) == "epsilon" );
+	
+	// Insert at beginning
+	map.Set( "aardvark", 0, 0 );
+	REQUIRE( map.Length() == 4 );
+	REQUIRE( map.GetKey( 0 ) == "aardvark" );
+	REQUIRE( map.GetKey( 1 ) == "alpha" );
+	REQUIRE( map.GetKey( 2 ) == "gamma" );
+	REQUIRE( map.GetKey( 3 ) == "epsilon" );
+	
+	// Insert in middle
+	map.Set( "beta", 2, 2 );
+	REQUIRE( map.Length() == 5 );
+	REQUIRE( map.GetKey( 0 ) == "aardvark" );
+	REQUIRE( map.GetKey( 1 ) == "alpha" );
+	REQUIRE( map.GetKey( 2 ) == "beta" );
+	REQUIRE( map.GetKey( 3 ) == "gamma" );
+	REQUIRE( map.GetKey( 4 ) == "epsilon" );
+	
+	// Insert at end (should be same as default append)
+	map.Set( "zeta", 6, 5 );
+	REQUIRE( map.Length() == 6 );
+	REQUIRE( map.GetKey( 5 ) == "zeta" );
+	
+	// Verify all values are correct
+	REQUIRE( map.Get( "aardvark" ) == 0 );
+	REQUIRE( map.Get( "alpha" ) == 1 );
+	REQUIRE( map.Get( "beta" ) == 2 );
+	REQUIRE( map.Get( "gamma" ) == 3 );
+	REQUIRE( map.Get( "epsilon" ) == 5 );
+	REQUIRE( map.Get( "zeta" ) == 6 );
+	
+	// Test updating existing key (should not change order)
+	map.Set( "gamma", 30 );
+	REQUIRE( map.GetKey( 3 ) == "gamma" );
+	REQUIRE( map.Get( "gamma" ) == 30 );
+}
+
+TEST_CASE( "HashMap Increment Decrement", "[ae::HashMap" AE_HASH_N "][increment][decrement]" )
+{
+	ae::HashMap< std::string, 0, aeHashN > hashMap = TAG_TEST;
+	
+	// Add initial entries
+	hashMap.Set( "first", 0 );
+	hashMap.Set( "second", 1 );
+	hashMap.Set( "third", 2 );
+	hashMap.Set( "fourth", 3 );
+	hashMap.Set( "fifth", 4 );
+	
+	REQUIRE( hashMap.Length() == 5 );
+	REQUIRE( hashMap.Get( "first" ) == 0 );
+	REQUIRE( hashMap.Get( "second" ) == 1 );
+	REQUIRE( hashMap.Get( "third" ) == 2 );
+	REQUIRE( hashMap.Get( "fourth" ) == 3 );
+	REQUIRE( hashMap.Get( "fifth" ) == 4 );
+	
+	// Test increment from index 2 (should affect "third", "fourth", "fifth")
+	hashMap.Increment( 2 );
+	REQUIRE( hashMap.Get( "first" ) == 0 );  // unchanged
+	REQUIRE( hashMap.Get( "second" ) == 1 ); // unchanged  
+	REQUIRE( hashMap.Get( "third" ) == 3 );  // 2 -> 3
+	REQUIRE( hashMap.Get( "fourth" ) == 4 ); // 3 -> 4
+	REQUIRE( hashMap.Get( "fifth" ) == 5 );  // 4 -> 5
+	
+	// Test decrement from index 3 (should affect "fourth", "fifth")
+	hashMap.Decrement( 3 );
+	REQUIRE( hashMap.Get( "first" ) == 0 );  // unchanged
+	REQUIRE( hashMap.Get( "second" ) == 1 ); // unchanged
+	REQUIRE( hashMap.Get( "third" ) == 3 );  // unchanged (not > 3)
+	REQUIRE( hashMap.Get( "fourth" ) == 3 ); // 4 -> 3
+	REQUIRE( hashMap.Get( "fifth" ) == 4 );  // 5 -> 4
+	
+	// Test increment from index 0 (should affect all)
+	hashMap.Increment( 0 );
+	REQUIRE( hashMap.Get( "first" ) == 1 );  // 0 -> 1
+	REQUIRE( hashMap.Get( "second" ) == 2 ); // 1 -> 2
+	REQUIRE( hashMap.Get( "third" ) == 4 );  // 3 -> 4
+	REQUIRE( hashMap.Get( "fourth" ) == 4 ); // 3 -> 4
+	REQUIRE( hashMap.Get( "fifth" ) == 5 );  // 4 -> 5
+}
