@@ -2519,6 +2519,25 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::Any
+//------------------------------------------------------------------------------
+template< uint32_t Size, uint32_t Alignment >
+struct Any
+{
+	Any() = default;
+	template< typename T > explicit Any( const T& value );
+	template< typename T > void operator=( const T& value );
+	template< typename T > T Get( const T& defaultValue = {} ) const;
+	template< typename T > T* TryGet();
+	template< typename T > const T* TryGet() const;
+	uint32_t GetType() const { return m_typeId; }
+
+private:
+	uint32_t m_typeId = 0; // ae::TypeId
+	alignas( Alignment ) std::byte m_data[ Size ];
+};
+
+//------------------------------------------------------------------------------
 // ae::DocumentValueType
 //------------------------------------------------------------------------------
 enum class DocumentValueType
@@ -11698,6 +11717,79 @@ OpaquePool::Iterator< T > OpaquePool::Iterator< T >::end()
 		return Iterator< T >( m_pool, nullptr, nullptr, m_seq );
 	}
 	return Iterator< T >();
+}
+
+//------------------------------------------------------------------------------
+// ae::Any templated member functions
+//------------------------------------------------------------------------------
+template< uint32_t Size, uint32_t Alignment >
+template< typename T >
+Any< Size, Alignment >::Any( const T& value )
+{
+	*this = value;
+}
+
+template< uint32_t Size, uint32_t Alignment >
+template< typename T >
+void Any< Size, Alignment >::operator=( const T& value )
+{
+	if constexpr( !std::is_trivially_destructible_v< T > )
+	{
+		AE_STATIC_FAIL( "T must be trivially destructible" );
+	}
+	else if constexpr( !std::is_trivially_copyable_v< T > )
+	{
+		AE_STATIC_FAIL( "T must be trivially copyable" );
+	}
+	else if constexpr( sizeof( T ) > Size )
+	{
+		AE_STATIC_FAIL( "T is too large to store in DocumentValue" );
+	}
+	else if constexpr( alignof( T ) > Alignment )
+	{
+		AE_STATIC_FAIL( "T has too large an alignment to store in DocumentValue" );
+	}
+	else if constexpr( std::is_same_v< T, char* > ||
+		std::is_same_v< T, const char* > ||
+		( std::is_array_v< T > && std::is_same_v< std::remove_extent_t< T >, char > ) )
+	{
+		AE_STATIC_FAIL( "ae::Any is not compatible with c-strings" );
+	}
+	else
+	{
+		m_typeId = ae::GetTypeIdWithQualifiers< T >();
+		new ( &m_data ) T( value );
+	}
+}
+
+template< uint32_t Size, uint32_t Alignment >
+template< typename T >
+T Any< Size, Alignment >::Get( const T& defaultValue ) const
+{
+	const T* value = TryGet< T >();
+	return value ? *value : defaultValue;
+}
+
+template< uint32_t Size, uint32_t Alignment >
+template< typename T >
+T* Any< Size, Alignment >::TryGet()
+{
+	if( m_typeId == ae::GetTypeIdWithQualifiers< T >() )
+	{
+		return reinterpret_cast< T* >( &m_data );
+	}
+	return nullptr;
+}
+
+template< uint32_t Size, uint32_t Alignment >
+template< typename T >
+const T* Any< Size, Alignment >::TryGet() const
+{
+	if( m_typeId == ae::GetTypeIdWithQualifiers< T >() )
+	{
+		return reinterpret_cast< const T* >( &m_data );
+	}
+	return nullptr;
 }
 
 //------------------------------------------------------------------------------
