@@ -2543,6 +2543,7 @@ private:
 enum class DocumentValueType
 {
 	None,
+	String,
 	Value,
 	Array,
 	Map
@@ -2562,9 +2563,23 @@ public:
 	//--------------------------------------------------------------------------
 	DocumentValue& Initialize( DocumentValueType type );
 	DocumentValueType GetType() const { return m_type; }
+	bool IsString() const;
 	bool IsValue() const;
 	bool IsArray() const;
 	bool IsMap() const;
+
+	//--------------------------------------------------------------------------
+	// String value
+	//--------------------------------------------------------------------------
+	//! Sets the value to a basic string type. Note that repeated calls to
+	//! StringSet will be coalesced into a single undo operation. This
+	//! behavior can be circumvented by ending the current undo group between
+	//! calls.
+	//! \param str The string value to set. Can be nullptr or empty string.
+	void StringSet( const char* str );
+	//! Returns the basic string value. Must only be called when IsString() returns true.
+	//! \return The string value as a null-terminated C string.
+	const char* StringGet() const;
 
 	//--------------------------------------------------------------------------
 	// Basic value
@@ -2574,10 +2589,10 @@ public:
 	//! behavior can be circumvented by ending the current undo group between
 	//! calls.
 	//! \param value The string value to set. Can be nullptr or empty string.
-	void ValueSet( const char* value );
+	template< typename T > void ValueSet( const T& value );
 	//! Returns the basic string value. Must only be called when IsValue() returns true.
 	//! \return The string value as a null-terminated C string.
-	const char* ValueGet() const;
+	template< typename T > T ValueGet( const T& defaultValue ) const;
 
 	//--------------------------------------------------------------------------
 	// Array manipulation
@@ -2660,6 +2675,7 @@ protected:
 	enum class UndoOpType
 	{
 		SetType,
+		StringSet,
 		ValueSet,
 		ArrayInsert,
 		ArrayRemove,
@@ -2672,8 +2688,9 @@ protected:
 		class DocumentValue* target;
 		int32_t index = -1;
 		std::string key;
-		std::string oldValue;
 		DocumentValueType oldType = DocumentValueType::None;
+		std::string oldString;
+		ae::Any< 64, 16 > oldValue;
 		class DocumentValue* oldChild = nullptr;
 	};
 	DocumentValue() = delete;
@@ -2682,7 +2699,8 @@ protected:
 	Document* m_document = nullptr;
 	DocumentValueType m_type = DocumentValueType::None;
 	int32_t m_refCount = 0; // References from undo stack only
-	std::string m_basic;
+	std::string m_string;
+	ae::Any< 64, 16 > m_value;
 	ae::Array< DocumentValue* > m_array;
 	ae::Map< std::string, DocumentValue*, 0, ae::Hash32, ae::MapMode::Stable > m_map;
 };
@@ -11793,6 +11811,45 @@ const T* Any< Size, Alignment >::TryGet() const
 }
 
 //------------------------------------------------------------------------------
+// ae::DocumentValue templated member functions
+//------------------------------------------------------------------------------
+template< typename T >
+void DocumentValue::ValueSet( const T& value )
+{
+	if( !IsValue() )
+	{
+		Initialize( DocumentValueType::Value );
+	}
+	// Try to combine with previous ValueSet operation in current group
+	bool combined = false;
+	if( m_document->m_currentGroup.Length() > 0 )
+	{
+		UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
+		if( lastOp.type == UndoOpType::ValueSet && lastOp.target == this )
+		{
+			// Keep the original old value, just update current value
+			combined = true;
+		}
+	}
+	if( !combined )
+	{
+		UndoOp op;
+		op.type = UndoOpType::ValueSet;
+		op.target = this;
+		op.oldValue = m_value;
+		m_document->m_PushOp( op );
+	}
+	m_value = value;
+}
+
+template< typename T >
+T DocumentValue::ValueGet( const T& defaultValue ) const
+{
+	AE_ASSERT( IsValue() );
+	return m_value.Get( defaultValue );
+}
+
+//------------------------------------------------------------------------------
 // ae::BVH member functions
 //------------------------------------------------------------------------------
 template< typename T, uint32_t N >
@@ -17191,16 +17248,26 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 				MapRemove( m_map.GetKey( m_map.Length() - 1 ).c_str() );
 			}
 			break;
+		case DocumentValueType::String:
+			if( !m_string.empty() )
+			{
+				UndoOp op;
+				op.type = UndoOpType::StringSet;
+				op.target = this;
+				op.oldString = m_string;
+				m_document->m_PushOp( op );
+				m_string.clear();
+			}
+			break;
 		case DocumentValueType::Value:
-			// For basic values, create a ValueSet undo operation
-			if( !m_basic.empty() )
+			if( m_value.GetType() )
 			{
 				UndoOp op;
 				op.type = UndoOpType::ValueSet;
 				op.target = this;
-				op.oldValue = m_basic;
+				op.oldValue = m_value;
 				m_document->m_PushOp( op );
-				m_basic.clear();
+				m_value = {};
 			}
 			break;
 		case DocumentValueType::None: break;
@@ -17208,53 +17275,50 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 
 	if( m_type != type )
 	{
-		// Create the type change operation with coalescing logic
-		bool combined = false;
-		if( m_document->m_currentGroup.Length() > 0 )
+		const bool isSameAsPreviousOp = [&]()
 		{
-			UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
-			if( lastOp.type == UndoOpType::SetType && lastOp.target == this )
-			{
-				// Keep the original old type, don't add new operation
-				combined = true;
-			}
-		}
-		if( !combined )
+			const ae::Array< UndoOp >& undoGroup = m_document->m_currentGroup;
+			const UndoOp* previousOp = undoGroup.Length() ? &undoGroup[ undoGroup.Length() - 1 ] : nullptr;
+			return ( previousOp && previousOp->type == UndoOpType::SetType && previousOp->target == this );
+		}();
+		if( !isSameAsPreviousOp )
 		{
 			UndoOp op;
 			op.type = UndoOpType::SetType;
 			op.target = this;
-			op.oldType = m_type;
+			op.oldType = m_type; // Keep the original undo target even when coalescing operations
 			m_document->m_PushOp( op );
 		}
 		m_type = type;
 	}
 	// Data should already be cleared by the switch above
-	AE_ASSERT( m_basic.empty() );
+	AE_ASSERT( m_string.empty() );
+	AE_ASSERT( !m_value.GetType() );
 	AE_ASSERT( m_array.Length() == 0 );
 	AE_ASSERT( m_map.Length() == 0 );
 	return *this;
 }
 
+bool DocumentValue::IsString() const { return ( m_type == DocumentValueType::String ); }
 bool DocumentValue::IsValue() const { return ( m_type == DocumentValueType::Value ); }
 bool DocumentValue::IsArray() const { return ( m_type == DocumentValueType::Array ); }
 bool DocumentValue::IsMap() const { return ( m_type == DocumentValueType::Map ); }
 
-// Basic
-void DocumentValue::ValueSet( const char* value )
+// Strings
+void DocumentValue::StringSet( const char* str )
 {
-	if( !IsValue() )
+	if( !IsString() )
 	{
-		Initialize( DocumentValueType::Value );
+		Initialize( DocumentValueType::String );
 	}
-	if( m_basic != value )
+	if( m_string != str )
 	{
-		// Try to combine with previous ValueSet operation in current group
+		// Try to combine with previous StringSet operation in current group
 		bool combined = false;
 		if( m_document->m_currentGroup.Length() > 0 )
 		{
 			UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
-			if( lastOp.type == UndoOpType::ValueSet && lastOp.target == this )
+			if( lastOp.type == UndoOpType::StringSet && lastOp.target == this )
 			{
 				// Keep the original old value, just update current value
 				combined = true;
@@ -17263,18 +17327,18 @@ void DocumentValue::ValueSet( const char* value )
 		if( !combined )
 		{
 			UndoOp op;
-			op.type = UndoOpType::ValueSet;
+			op.type = UndoOpType::StringSet;
 			op.target = this;
-			op.oldValue = m_basic;
+			op.oldString = m_string;
 			m_document->m_PushOp( op );
 		}
-		m_basic = value;
+		m_string = str;
 	}
 }
-const char* DocumentValue::ValueGet() const
+const char* DocumentValue::StringGet() const
 {
-	AE_ASSERT( IsValue() );
-	return m_basic.c_str();
+	AE_ASSERT( IsString() );
+	return m_string.c_str();
 }
 
 // Array manipulation
@@ -17506,14 +17570,20 @@ ae::Array< Document::UndoOp > Document::m_ReverseOps( const ae::Array< UndoOp >&
 				op.target->m_type = op.oldType;
 				// Data should always be empty when the type changes since
 				// Initialize() removes all elements first
-				AE_DEBUG_ASSERT( op.target->m_basic.empty() );
+				AE_DEBUG_ASSERT( op.target->m_string.empty() );
+				AE_DEBUG_ASSERT( !op.target->m_value.GetType() );
 				AE_DEBUG_ASSERT( op.target->m_array.Length() == 0 );
 				AE_DEBUG_ASSERT( op.target->m_map.Length() == 0 );
 				break;
+			case UndoOpType::StringSet:
+				reverseOp.type = UndoOpType::StringSet;
+				reverseOp.oldString = op.target->m_string;
+				op.target->m_string = op.oldString;
+				break;
 			case UndoOpType::ValueSet:
 				reverseOp.type = UndoOpType::ValueSet;
-				reverseOp.oldValue = op.target->m_basic;
-				op.target->m_basic = op.oldValue;
+				reverseOp.oldValue = op.target->m_value;
+				op.target->m_value = op.oldValue;
 				break;
 			case UndoOpType::ArrayInsert:
 				reverseOp.type = UndoOpType::ArrayRemove;
@@ -17585,7 +17655,8 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 	{
 		DocumentValue* target = op.target;
 		// Validate type consistency with data contents
-		AE_DEBUG_ASSERT( target->m_basic.length() == 0 || target->m_type == DocumentValueType::Value );
+		AE_DEBUG_ASSERT( target->m_string.length() == 0 || target->m_type == DocumentValueType::String );
+		AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Value );
 		AE_DEBUG_ASSERT( target->m_array.Length() == 0 || target->m_type == DocumentValueType::Array );
 		AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Map );
 		AE_DEBUG_ASSERT( target->m_refCount >= 0 );
