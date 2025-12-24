@@ -88,7 +88,6 @@ void TestLogger( ae::LogSeverity severity, const char* filePath, uint32_t line, 
 		default:
 			break;
 	}
-	ae::_LogImpl( severity, filePath, line, tags, tagCount, message );
 }
 
 TEST_CASE( "Log message tagging", "[ae::Log]" )
