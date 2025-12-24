@@ -380,6 +380,7 @@ private:
 	const ae::File* m_pendingLevel = nullptr;
 
 	bool m_showTransparent = true;
+	bool m_showGrid = false;
 
 	// Manipulation
 	const ae::ClassType* m_objectListType = nullptr;
@@ -498,7 +499,7 @@ private:
 	ae::Matrix4 m_worldToView = ae::Matrix4::Identity();
 	ae::Matrix4 m_worldToProj = ae::Matrix4::Identity();
 	ae::Matrix4 m_projToWorld = ae::Matrix4::Identity();
-	float m_fov = 0.46f; // 28mm camera 65.5 degree horizontal fov
+	float m_fov = 1.14f; // 28mm camera 65.5 degree horizontal fov
 	ae::Vec3 m_mouseRay = ae::Vec3( 0.0f );
 	float m_barWidth = 0.0f;
 	
@@ -748,8 +749,8 @@ void EditorProgram::Initialize()
 			vec3 fp = p - ip;
 			float checker = mod( ip.x + ip.y + ip.z, 2.0 );
 			float dist = length( u_cameraPos - v_position );
-			float fade = 1.0 - clamp( ( dist - 100.0 ) / 100.0, 0.0, 1.0 );
-			checker = 1.0 - 0.2 * checker * fade;
+			float fade = 1.0 - clamp( ( dist - 50.0 ) / 50.0, 0.0, 1.0 );
+			checker = 1.0 - 0.1 * checker * fade;
 			light *= checker;
 
 			AE_COLOR.rgb = u_color.rgb * light;
@@ -1761,7 +1762,7 @@ void EditorServer::Update( EditorProgram* program )
 	m_connections.RemoveAllFn( []( const EditorConnection* c ){ return !c; } );
 
 	// Camera update
-	const float kTapTime = 0.15f;
+	const float kTapTime = 0.2f;
 	const bool couldSnapRefocus = ( m_refocusHeldTime < kTapTime );
 	ae::DebugCamera* camera = &program->camera;
 	if( m_doRefocusImm > 0 )
@@ -1798,7 +1799,7 @@ void EditorServer::Update( EditorProgram* program )
 	
 	if( !m_doRefocusImm && m_doRefocusPrev && couldSnapRefocus )
 	{
-		camera->Refocus( program->editor.m_selected.Length() ? program->editor.GetSelectedAABB( program ).GetCenter() : m_mouseHover );
+		camera->Refocus( program->editor.m_selected.Length() ? program->editor.GetSelectedAABB( program ).GetCenter() : m_mouseHover, 4.0f );
 	}
 	m_doRefocusPrev = ( m_doRefocusImm > 0 );
 }
@@ -2086,12 +2087,13 @@ void EditorServer::ShowMenuBar( EditorProgram* program )
 	if( ImGui::BeginMenu( "View" ) )
 	{
 		ImGui::Checkbox( "Show Transparent", &m_showTransparent );
+		ImGui::Checkbox( "Show Grid", &m_showGrid );
 		ImGui::Checkbox( "ImGui Demo", &m_imGuiDemoOpen );
 		ImGui::Separator();
+
 		if( ImGui::RadioButton( "Zen", ( m_mode == 0 ) ) ){ m_mode = 0; }
 		if( ImGui::RadioButton( "Object Properties", ( m_mode == 1 ) ) ){ m_mode = 1; }
 		if( ImGui::RadioButton( "Scene Hierarchy", ( m_mode == 2 ) ) ){ m_mode = 2; }
-
 		ImGui::Separator();
 
 		ImGui::ColorEdit3( "Selection", m_selectionColor.data );
@@ -2336,6 +2338,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 	ae::Optional< ae::Vec3 > gridLineCenter;
 	const ae::Vec3 pivot = program->camera.GetPivot();
 	const float zoom = program->camera.GetDistanceFromPivot();
+	if( m_showGrid )
 	{
 		const ae::Vec3 showPivot = pivot - program->camera.GetForward() * ( zoom / 1000.0f );
 		ae::Vec3 gridPivot = showPivot;

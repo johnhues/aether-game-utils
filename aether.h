@@ -4718,7 +4718,7 @@ public:
 	void Refocus( ae::Vec3 pivot, float snappiness = 2.5f );
 	//! Call this every frame even when no input has taken place so refocus works as expected.
 	//! See ae::DebugCamera::SetInputEnabled() if you would like to prevent the camera from moving.
-	void Update( const ae::Input* input, float dt );
+	void Update( ae::Input* input, float dt );
 
 	//! Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
 	Mode GetMode() const;
@@ -26078,7 +26078,7 @@ void DebugCamera::SetDistanceLimits( float min, float max )
 	m_Precalculate();
 }
 
-void DebugCamera::Update( const ae::Input* input, float dt )
+void DebugCamera::Update( ae::Input* input, float dt )
 {
 	if( !m_inputEnabled )
 	{
@@ -26144,6 +26144,10 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 		if( nextMode != Mode::None )
 		{
 			m_mode = nextMode;
+			if( input )
+			{
+				input->SetMouseCaptured( true );
+			}
 		}
 		else if( !m_preventModeExitImm )
 		{
@@ -26154,6 +26158,10 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 			else
 			{
 				m_mode = Mode::None;
+				if( input )
+				{
+					input->SetMouseCaptured( false );
+				}
 			}
 		}
 		m_moveAccum = 0.0f;
