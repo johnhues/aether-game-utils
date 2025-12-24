@@ -31,7 +31,12 @@
 //------------------------------------------------------------------------------
 // Config defines
 //------------------------------------------------------------------------------
-#define AE_ASSERT_IMPL( msgStr ) throw "assert" // Throw exceptions so unit tests can test asserts
+#define AE_ASSERT_IMPL aeAssertImpl
+inline void aeAssertImpl( const char* msgStr )
+{
+	throw "assert"; // Throw exceptions so unit tests can validate assertions
+}
+
 #define AE_MEMORY_CHECKS 1 // Enable strict memory checks for unit tests
 
 #define AE_LOG_FUNCTION_CONFIG TestLogger
