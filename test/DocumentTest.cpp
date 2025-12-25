@@ -7,6 +7,101 @@
 #include "aether.h"
 #include <catch2/catch_test_macros.hpp>
 
+//------------------------------------------------------------------------------
+// Undo/Redo Callback Tracking
+//------------------------------------------------------------------------------
+struct DocumentCallbackData
+{
+	// Per-object statistics
+	struct ObjectStats
+	{
+		int createCount = 0;
+		int destroyCount = 0;
+		int modifyCount = 0;
+	};
+	ae::Map< const ae::DocumentValue*, ObjectStats > objectStats = ae::Tag( "test" );
+	
+	// Global statistics
+	int totalCreateCount = 0;
+	int totalDestroyCount = 0;
+	int totalModifyCount = 0;
+	
+	// Operation tracking
+	ae::Array< ae::DocumentUndoRedoOp > operations = ae::Tag( "test" );
+	ae::Array< const ae::DocumentValue* > affectedValues = ae::Tag( "test" );
+	const ae::DocumentValue* lastValue = nullptr;
+	
+	void Reset()
+	{
+		objectStats.Clear();
+		totalCreateCount = 0;
+		totalDestroyCount = 0;
+		totalModifyCount = 0;
+		operations.Clear();
+		affectedValues.Clear();
+		lastValue = nullptr;
+	}
+	
+	void RecordOperation( ae::DocumentUndoRedoOp op, const ae::DocumentValue* value )
+	{
+		lastValue = value;
+		operations.Append( op );
+		affectedValues.Append( value );
+		
+		// Update per-object stats
+		ObjectStats* stats = objectStats.TryGet( value );
+		if( !stats )
+		{
+			objectStats.Set( value, {} );
+			stats = objectStats.TryGet( value );
+		}
+		
+		// Update counts
+		switch( op )
+		{
+			case ae::DocumentUndoRedoOp::Create:
+				stats->createCount++;
+				totalCreateCount++;
+				break;
+			case ae::DocumentUndoRedoOp::Destroy:
+				stats->destroyCount++;
+				totalDestroyCount++;
+				break;
+			case ae::DocumentUndoRedoOp::Modify:
+				stats->modifyCount++;
+				totalModifyCount++;
+				break;
+		}
+	}
+	
+	int GetObjectCreateCount( const ae::DocumentValue* value ) const
+	{
+		const ObjectStats* stats = objectStats.TryGet( value );
+		return stats ? stats->createCount : 0;
+	}
+	
+	int GetObjectDestroyCount( const ae::DocumentValue* value ) const
+	{
+		const ObjectStats* stats = objectStats.TryGet( value );
+		return stats ? stats->destroyCount : 0;
+	}
+	
+	int GetObjectModifyCount( const ae::DocumentValue* value ) const
+	{
+		const ObjectStats* stats = objectStats.TryGet( value );
+		return stats ? stats->modifyCount : 0;
+	}
+};
+
+// Global callback helper that can be reused across tests
+auto MakeDocumentCallback( DocumentCallbackData& data )
+{
+	return [&data]( ae::DocumentUndoRedoOp op, const ae::DocumentValue* value )
+	{
+		data.RecordOperation( op, value );
+	};
+}
+
 TEST_CASE( "Any DefaultConstructor", "[ae::Any]" )
 {
 	ae::Any< 16, 8 > any;
@@ -455,6 +550,8 @@ TEST_CASE( "Any ConstPointer", "[ae::Any]" )
 TEST_CASE( "DocumentUndo Value", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
+	DocumentCallbackData data;
+	auto callback = MakeDocumentCallback( data );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -473,31 +570,45 @@ TEST_CASE( "DocumentUndo Value", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore previous string
-	REQUIRE( doc.Undo() );
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
 	REQUIRE( doc.StringGet() == std::string( "initial" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
+	REQUIRE( data.totalModifyCount == 1 );
+	REQUIRE( data.totalCreateCount == 0 );
+	REQUIRE( data.totalDestroyCount == 0 );
 
 	// Redo should restore changed string
-	REQUIRE( doc.Redo() );
+	data.Reset();
+	REQUIRE( doc.Redo( callback ) );
 	REQUIRE( doc.StringGet() == std::string( "changed" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
+	REQUIRE( data.totalModifyCount == 1 );
+	REQUIRE( data.totalCreateCount == 0 );
+	REQUIRE( data.totalDestroyCount == 0 );
 
 	// Multiple undos
-	REQUIRE( doc.Undo() );
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
 	REQUIRE( doc.StringGet() == std::string( "initial" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( doc.Undo() );
+	REQUIRE( data.totalModifyCount == 1 );
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 2 );
+	REQUIRE( data.totalModifyCount == 1 );
 	REQUIRE( doc.Undo() == false ); // No more undo available
 }
 
 TEST_CASE( "DocumentUndo TypeChange", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
+	DocumentCallbackData data;
+	auto callback = MakeDocumentCallback( data );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -518,31 +629,46 @@ TEST_CASE( "DocumentUndo TypeChange", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore type and string
-	REQUIRE( doc.Undo() );
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
 	REQUIRE( doc.IsString() );
 	REQUIRE( doc.StringGet() == std::string( "test" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
+	REQUIRE( data.totalCreateCount == 0 );
+	REQUIRE( data.totalDestroyCount == 0 );
+	REQUIRE( data.totalModifyCount == 1 );
+	REQUIRE( data.GetObjectModifyCount( &doc ) == 1 );
 
 	// Redo should restore array type
-	REQUIRE( doc.Redo() );
+	data.Reset();
+	REQUIRE( doc.Redo( callback ) );
 	REQUIRE( doc.IsArray() );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
+	REQUIRE( data.totalCreateCount == 0 );
+	REQUIRE( data.totalDestroyCount == 0 );
+	REQUIRE( data.totalModifyCount == 1 );
+	REQUIRE( data.GetObjectModifyCount( &doc ) == 1 );
 }
 
 TEST_CASE( "DocumentUndo ArrayOperations", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
+	DocumentCallbackData data;
+	auto callback = MakeDocumentCallback( data );
 	doc.ArrayInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add array elements
-	doc.ArrayAppend().StringSet( "first" );
-	doc.ArrayAppend().StringSet( "second" );
-	doc.ArrayAppend().StringSet( "third" );
+	auto& elem0 = doc.ArrayAppend();
+	elem0.StringSet( "first" );
+	auto& elem1 = doc.ArrayAppend();
+	elem1.StringSet( "second" );
+	auto& elem2 = doc.ArrayAppend();
+	elem2.StringSet( "third" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.ArrayLength() == 3 );
@@ -553,9 +679,9 @@ TEST_CASE( "DocumentUndo ArrayOperations", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Insert in middle
-	doc.ArrayInsert( 1 ).StringSet( "inserted" );
+	auto& elemInserted = doc.ArrayInsert( 1 );
+	elemInserted.StringSet( "inserted" );
 	doc.EndUndoGroup();
-
 	REQUIRE( doc.ArrayLength() == 4 );
 	REQUIRE( doc.ArrayGet( 0 ).StringGet() == std::string( "first" ) );
 	REQUIRE( doc.ArrayGet( 1 ).StringGet() == std::string( "inserted" ) );
@@ -563,15 +689,19 @@ TEST_CASE( "DocumentUndo ArrayOperations", "[ae::Document][undo]" )
 	REQUIRE( doc.ArrayGet( 3 ).StringGet() == std::string( "third" ) );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
-
 	// Undo insert
-	REQUIRE( doc.Undo() );
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
 	REQUIRE( doc.ArrayLength() == 3 );
 	REQUIRE( doc.ArrayGet( 0 ).StringGet() == std::string( "first" ) );
 	REQUIRE( doc.ArrayGet( 1 ).StringGet() == std::string( "second" ) );
 	REQUIRE( doc.ArrayGet( 2 ).StringGet() == std::string( "third" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
+	REQUIRE( data.totalCreateCount == 0 );
+	REQUIRE( data.totalDestroyCount == 1 );
+	REQUIRE( data.totalModifyCount == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &elemInserted ) == 1 );
 
 	// Remove element
 	doc.ArrayRemove( 1 );
@@ -584,26 +714,35 @@ TEST_CASE( "DocumentUndo ArrayOperations", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo remove should restore element at correct position
-	REQUIRE( doc.Undo() );
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
 	REQUIRE( doc.ArrayLength() == 3 );
 	REQUIRE( doc.ArrayGet( 0 ).StringGet() == std::string( "first" ) );
 	REQUIRE( doc.ArrayGet( 1 ).StringGet() == std::string( "second" ) );
 	REQUIRE( doc.ArrayGet( 2 ).StringGet() == std::string( "third" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
+	REQUIRE( data.totalCreateCount == 1 );
+	REQUIRE( data.totalDestroyCount == 0 );
+	REQUIRE( data.totalModifyCount == 0 );
+	REQUIRE( data.GetObjectCreateCount( &elem1 ) == 1 );
 }
 
 TEST_CASE( "DocumentUndo MapOperations", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
+	DocumentCallbackData data;
+	auto callback = MakeDocumentCallback( data );
 	doc.MapInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add map strings
-	doc.MapSet( "key1" ).StringSet( "string1" );
-	doc.MapSet( "key2" ).StringSet( "string2" );
+	auto& val1 = doc.MapSet( "key1" );
+	val1.StringSet( "string1" );
+	auto& val2 = doc.MapSet( "key2" );
+	val2.StringSet( "string2" );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.MapLength() == 2 );
@@ -623,7 +762,8 @@ TEST_CASE( "DocumentUndo MapOperations", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo remove should restore key and value
-	REQUIRE( doc.Undo() );
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
 	REQUIRE( doc.MapLength() == 2 );
 	REQUIRE( doc.MapGetValue( 0 ).StringGet() == std::string( "string1" ) );
 	REQUIRE( doc.MapGetValue( 1 ).StringGet() == std::string( "string2" ) );
@@ -631,13 +771,22 @@ TEST_CASE( "DocumentUndo MapOperations", "[ae::Document][undo]" )
 	REQUIRE( doc.MapTryGet( "key2" )->StringGet() == std::string( "string2" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
+	REQUIRE( data.totalCreateCount == 1 );
+	REQUIRE( data.totalDestroyCount == 0 );
+	REQUIRE( data.totalModifyCount == 0 );
+	REQUIRE( data.GetObjectCreateCount( &val1 ) == 1 );
 
 	// Redo remove
-	REQUIRE( doc.Redo() );
+	data.Reset();
+	REQUIRE( doc.Redo( callback ) );
 	REQUIRE( doc.MapLength() == 1 );
 	REQUIRE( doc.MapTryGet( "key1" ) == nullptr );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
+	REQUIRE( data.totalCreateCount == 0 );
+	REQUIRE( data.totalDestroyCount == 1 );
+	REQUIRE( data.totalModifyCount == 0 );
+	REQUIRE( data.GetObjectDestroyCount( &val1 ) == 1 );
 }
 
 TEST_CASE( "DocumentUndo UndoGroups", "[ae::Document][undo]" )
@@ -778,13 +927,16 @@ TEST_CASE( "DocumentUndo ValueSeparateGroups", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
+	DocumentCallbackData data;
+	auto callback = MakeDocumentCallback( data );
 	doc.ArrayInitialize( 4 );
 
 	// Create nested structure
-	doc.ArrayAppend().MapInitialize( 2 );
-	doc.ArrayGet( 0 ).MapSet( "nested" ).StringSet( "deep" );
+	auto& mapElem = doc.ArrayAppend();
+	mapElem.MapInitialize( 2 );
+	auto& nestedValue = doc.ArrayGet( 0 ).MapSet( "nested" );
+	nestedValue.StringSet( "deep" );
 	doc.EndUndoGroup();
-
 	REQUIRE( doc.ArrayLength() == 1 );
 	REQUIRE( doc.ArrayGet( 0 ).IsMap() );
 	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).StringGet() == std::string( "deep" ) );
@@ -794,32 +946,350 @@ TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 	// Modify nested string
 	doc.ArrayGet( 0 ).MapSet( "nested" ).StringSet( "modified" );
 	doc.EndUndoGroup();
-
 	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).StringGet() == std::string( "modified" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
-
-	// Undo should restore deep nested string
-	REQUIRE( doc.Undo() );
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) ); // Undo should restore deep nested string
 	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).StringGet() == std::string( "deep" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
+	REQUIRE( data.totalCreateCount == 0 );
+	REQUIRE( data.totalDestroyCount == 0 );
+	REQUIRE( data.totalModifyCount == 1 );
+	REQUIRE( data.GetObjectModifyCount( &nestedValue ) == 1 );
 
 	// Remove entire nested structure
 	doc.ArrayRemove( 0 );
 	doc.EndUndoGroup();
-
 	REQUIRE( doc.ArrayLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 2 ); // Redo stack was cleared
 	REQUIRE( doc.GetRedoStackSize() == 0 );
-
-	// Undo should restore entire nested structure
-	REQUIRE( doc.Undo() );
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) ); // Undo should restore entire nested structure
 	REQUIRE( doc.ArrayLength() == 1 );
 	REQUIRE( doc.ArrayGet( 0 ).IsMap() );
 	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).StringGet() == std::string( "deep" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
+	REQUIRE( data.totalCreateCount == 2 );  // mapElem and nestedValue
+	REQUIRE( data.totalDestroyCount == 0 );
+	REQUIRE( data.totalModifyCount == 0 );
+	REQUIRE( data.GetObjectCreateCount( &mapElem ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &nestedValue ) == 1 );
+}
+
+TEST_CASE( "DocumentUndo MultiElementArrayWithDescendants", "[ae::Document][undo]" )
+{
+	ae::Document doc( "test" );
+	DocumentCallbackData data;
+	auto callback = MakeDocumentCallback( data );
+	doc.ArrayInitialize( 8 );
+
+	// Create array with multiple elements, each with deeply nested descendants
+	// Tree structure:
+	//   Array[0] (elem0) -> Map["nested"] (elem0_nested) -> Array[0] (elem0_deep) -> String
+	//   Array[1] (elem1) -> Map["nested"] (elem1_nested) -> Map["value"] (elem1_deep) -> Number
+	//   Array[2] (elem2) -> Array[0] (elem2_nested) -> Map["flag"] (elem2_deep) -> Bool
+
+	// Element 0: Map -> Array -> String
+	auto& elem0 = doc.ArrayAppend();
+	elem0.MapInitialize( 2 );
+	auto& elem0_nested = elem0.MapSet( "nested" );
+	elem0_nested.ArrayInitialize( 2 );
+	auto& elem0_deep = elem0_nested.ArrayAppend();
+	elem0_deep.StringSet( "deep0" );
+
+	// Element 1: Map -> Map -> Number
+	auto& elem1 = doc.ArrayAppend();
+	elem1.MapInitialize( 2 );
+	auto& elem1_nested = elem1.MapSet( "nested" );
+	elem1_nested.MapInitialize( 2 );
+	auto& elem1_deep = elem1_nested.MapSet( "value" );
+	elem1_deep.ValueSet( 42.0 );
+
+	// Element 2: Array -> Map -> Bool
+	auto& elem2 = doc.ArrayAppend();
+	elem2.ArrayInitialize( 2 );
+	auto& elem2_nested = elem2.ArrayAppend();
+	elem2_nested.MapInitialize( 2 );
+	auto& elem2_deep = elem2_nested.MapSet( "flag" );
+	elem2_deep.ValueSet( true );
+
+	doc.EndUndoGroup();
+	REQUIRE( doc.ArrayLength() == 3 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Remove all elements at once
+	doc.ArrayRemove( 0 );
+	doc.ArrayRemove( 0 );
+	doc.ArrayRemove( 0 );
+	doc.EndUndoGroup();
+	REQUIRE( doc.ArrayLength() == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Undo should restore all elements and ALL their descendants
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.ArrayLength() == 3 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+
+	// Verify Create callbacks for all descendants (not just children)
+	REQUIRE( data.totalCreateCount == 9 ); // elem0, elem0_nested, elem0_deep, elem1, elem1_nested, elem1_deep, elem2, elem2_nested, elem2_deep
+	REQUIRE( data.totalDestroyCount == 0 );
+	REQUIRE( data.totalModifyCount == 0 );
+
+	// Verify each element and its descendants
+	REQUIRE( data.GetObjectCreateCount( &elem0 ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &elem0_nested ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &elem0_deep ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &elem1 ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &elem1_nested ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &elem1_deep ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &elem2 ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &elem2_nested ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &elem2_deep ) == 1 );
+
+	// Verify restored structure
+	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).ArrayGet( 0 ).StringGet() == std::string( "deep0" ) );
+	REQUIRE( doc.ArrayGet( 1 ).MapSet( "nested" ).MapSet( "value" ).ValueGet( 0.0 ) == 42.0 );
+	REQUIRE( doc.ArrayGet( 2 ).ArrayGet( 0 ).MapSet( "flag" ).ValueGet( false ) == true );
+
+	// Redo should destroy all elements and ALL their descendants
+	data.Reset();
+	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.ArrayLength() == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Verify Destroy callbacks for all descendants
+	REQUIRE( data.totalCreateCount == 0 );
+	REQUIRE( data.totalDestroyCount == 9 );
+	REQUIRE( data.totalModifyCount == 0 );
+
+	REQUIRE( data.GetObjectDestroyCount( &elem0 ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &elem0_nested ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &elem0_deep ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &elem1 ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &elem1_nested ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &elem1_deep ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &elem2 ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &elem2_nested ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &elem2_deep ) == 1 );
+}
+
+TEST_CASE( "DocumentUndo MultiElementMapWithDescendants", "[ae::Document][undo]" )
+{
+	ae::Document doc( "test" );
+	DocumentCallbackData data;
+	auto callback = MakeDocumentCallback( data );
+	doc.MapInitialize( 8 );
+
+	// Create map with multiple entries, each with deeply nested descendants
+	// Tree structure:
+	//   Map["a"] (entry_a) -> Array[0] (entry_a_nested) -> Map["text"] (entry_a_deep) -> String
+	//   Map["b"] (entry_b) -> Map["list"] (entry_b_nested) -> Array[0] (entry_b_deep) -> Number
+	//   Map["c"] (entry_c) -> Map["level2"] (entry_c_nested) -> Map["level3"] (entry_c_level3) -> Map["flag"] (entry_c_deep) -> Bool
+
+	// Entry "a": Array -> Map -> String
+	auto& entry_a = doc.MapSet( "a" );
+	entry_a.ArrayInitialize( 2 );
+	auto& entry_a_nested = entry_a.ArrayAppend();
+	entry_a_nested.MapInitialize( 2 );
+	auto& entry_a_deep = entry_a_nested.MapSet( "text" );
+	entry_a_deep.StringSet( "deepA" );
+
+	// Entry "b": Map -> Array -> Number
+	auto& entry_b = doc.MapSet( "b" );
+	entry_b.MapInitialize( 2 );
+	auto& entry_b_nested = entry_b.MapSet( "list" );
+	entry_b_nested.ArrayInitialize( 2 );
+	auto& entry_b_deep = entry_b_nested.ArrayAppend();
+	entry_b_deep.ValueSet( 99.5 );
+
+	// Entry "c": Map -> Map -> Map -> Bool
+	auto& entry_c = doc.MapSet( "c" );
+	entry_c.MapInitialize( 2 );
+	auto& entry_c_nested = entry_c.MapSet( "level2" );
+	entry_c_nested.MapInitialize( 2 );
+	auto& entry_c_level3 = entry_c_nested.MapSet( "level3" );
+	entry_c_level3.MapInitialize( 2 );
+	auto& entry_c_deep = entry_c_level3.MapSet( "flag" );
+	entry_c_deep.ValueSet( false );
+
+	doc.EndUndoGroup();
+	REQUIRE( doc.MapLength() == 3 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Remove all map entries
+	doc.MapRemove( "a" );
+	doc.MapRemove( "b" );
+	doc.MapRemove( "c" );
+	doc.EndUndoGroup();
+	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Undo should restore all entries and ALL their descendants
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.MapLength() == 3 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+
+	// Verify Create callbacks for all descendants (not just children)
+	REQUIRE( data.totalCreateCount == 10 ); // entry_a, entry_a_nested, entry_a_deep, entry_b, entry_b_nested, entry_b_deep, entry_c, entry_c_nested, entry_c_level3, entry_c_deep
+	REQUIRE( data.totalDestroyCount == 0 );
+	REQUIRE( data.totalModifyCount == 0 );
+
+	// Verify each entry and its descendants
+	REQUIRE( data.GetObjectCreateCount( &entry_a ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &entry_a_nested ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &entry_a_deep ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &entry_b ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &entry_b_nested ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &entry_b_deep ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &entry_c ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &entry_c_nested ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &entry_c_level3 ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &entry_c_deep ) == 1 );
+
+	// Verify restored structure
+	REQUIRE( doc.MapSet( "a" ).ArrayGet( 0 ).MapSet( "text" ).StringGet() == std::string( "deepA" ) );
+	REQUIRE( doc.MapSet( "b" ).MapSet( "list" ).ArrayGet( 0 ).ValueGet( 0.0 ) == 99.5 );
+	REQUIRE( doc.MapSet( "c" ).MapSet( "level2" ).MapSet( "level3" ).MapSet( "flag" ).ValueGet( false ) == false );
+
+	// Redo should destroy all entries and ALL their descendants
+	data.Reset();
+	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Verify Destroy callbacks for all descendants
+	REQUIRE( data.totalCreateCount == 0 );
+	REQUIRE( data.totalDestroyCount == 10 );
+	REQUIRE( data.totalModifyCount == 0 );
+
+	REQUIRE( data.GetObjectDestroyCount( &entry_a ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &entry_a_nested ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &entry_a_deep ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &entry_b ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &entry_b_nested ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &entry_b_deep ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &entry_c ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &entry_c_nested ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &entry_c_level3 ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &entry_c_deep ) == 1 );
+}
+
+TEST_CASE( "DocumentUndo MixedArrayMapDescendants", "[ae::Document][undo]" )
+{
+	ae::Document doc( "test" );
+	DocumentCallbackData data;
+	auto callback = MakeDocumentCallback( data );
+	doc.ArrayInitialize( 4 );
+
+	// Create a complex structure with very deep nesting
+	// Tree structure:
+	//   Array[0] (level1) -> Map["key1"] (level2) -> Array[0] (level3) -> Map["key2"] (level4) -> Array[0] (level5) -> String
+	//   Array[1] (level1b) -> Map["keyB"] (level2b) -> Array[0] (level3b) -> Number
+
+	// Array -> Map -> Array -> Map -> Array -> String
+	auto& level1 = doc.ArrayAppend();
+	level1.MapInitialize( 2 );
+	auto& level2 = level1.MapSet( "key1" );
+	level2.ArrayInitialize( 2 );
+	auto& level3 = level2.ArrayAppend();
+	level3.MapInitialize( 2 );
+	auto& level4 = level3.MapSet( "key2" );
+	level4.ArrayInitialize( 2 );
+	auto& level5 = level4.ArrayAppend();
+	level5.StringSet( "veryDeep" );
+
+	// Add another top-level element with similar structure
+	auto& level1b = doc.ArrayAppend();
+	level1b.MapInitialize( 2 );
+	auto& level2b = level1b.MapSet( "keyB" );
+	level2b.ArrayInitialize( 2 );
+	auto& level3b = level2b.ArrayAppend();
+	level3b.ValueSet( 123.0 );
+
+	doc.EndUndoGroup();
+	REQUIRE( doc.ArrayLength() == 2 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Clear the entire array
+	doc.ArrayRemove( 0 );
+	doc.ArrayRemove( 0 );
+	doc.EndUndoGroup();
+	REQUIRE( doc.ArrayLength() == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// Undo should restore entire hierarchy with all descendants
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.ArrayLength() == 2 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+
+	// All descendants should trigger Create callbacks (5 + 3 = 8 total)
+	REQUIRE( data.totalCreateCount == 8 );
+	REQUIRE( data.totalDestroyCount == 0 );
+	REQUIRE( data.totalModifyCount == 0 );
+
+	// Verify first branch (5 objects)
+	REQUIRE( data.GetObjectCreateCount( &level1 ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &level2 ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &level3 ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &level4 ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &level5 ) == 1 );
+
+	// Verify second branch (3 objects)t
+	REQUIRE( data.GetObjectCreateCount( &level1b ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &level2b ) == 1 );
+	REQUIRE( data.GetObjectCreateCount( &level3b ) == 1 );
+
+	// Verify restored data
+	REQUIRE( doc.ArrayGet( 0 ).MapSet( "key1" ).ArrayGet( 0 ).MapSet( "key2" ).ArrayGet( 0 ).StringGet() == std::string( "veryDeep" ) );
+	REQUIRE( doc.ArrayGet( 1 ).MapSet( "keyB" ).ArrayGet( 0 ).ValueGet( 0.0 ) == 123.0 );
+
+	// Redo should destroy all descendants
+	data.Reset();
+	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.ArrayLength() == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+
+	// All descendants should trigger Destroy callbacks
+	REQUIRE( data.totalCreateCount == 0 );
+	REQUIRE( data.totalDestroyCount == 8 );
+	REQUIRE( data.totalModifyCount == 0 );
+
+	REQUIRE( data.GetObjectDestroyCount( &level1 ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &level2 ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &level3 ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &level4 ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &level5 ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &level1b ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &level2b ) == 1 );
+	REQUIRE( data.GetObjectDestroyCount( &level3b ) == 1 );
+
+	// Undo again to verify callbacks work on second undo
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.ArrayLength() == 2 );
+
+	// Should get Create callbacks again for all descendants
+	REQUIRE( data.totalCreateCount == 8 );
+	REQUIRE( data.totalDestroyCount == 0 );
+	REQUIRE( data.totalModifyCount == 0 );
 }
 
 TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
