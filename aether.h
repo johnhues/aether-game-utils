@@ -2542,11 +2542,11 @@ private:
 //------------------------------------------------------------------------------
 enum class DocumentValueType
 {
-	None,
+	Null,
 	String,
-	Value,
+	Opaque,
 	Array,
-	Map
+	Object
 };
 
 //------------------------------------------------------------------------------
@@ -2572,10 +2572,11 @@ public:
 	//--------------------------------------------------------------------------
 	DocumentValue& Initialize( DocumentValueType type );
 	DocumentValueType GetType() const { return m_type; }
+	bool IsNull() const;
 	bool IsString() const;
-	bool IsValue() const;
+	bool IsOpaque() const;
 	bool IsArray() const;
-	bool IsMap() const;
+	bool IsObject() const;
 
 	//--------------------------------------------------------------------------
 	// String value
@@ -2591,17 +2592,17 @@ public:
 	const char* StringGet() const;
 
 	//--------------------------------------------------------------------------
-	// Basic value
+	// Opaque value
 	//--------------------------------------------------------------------------
-	//! Sets the value to a basic string type. Note that repeated calls to
-	//! ValueSet will be coalesced into a single undo operation. This
+	//! Sets the value to an opaque type. Note that repeated calls to
+	//! OpaqueSet will be coalesced into a single undo operation. This
 	//! behavior can be circumvented by ending the current undo group between
 	//! calls.
 	//! \param value The string value to set. Can be nullptr or empty string.
-	template< typename T > void ValueSet( const T& value );
-	//! Returns the basic string value. Must only be called when IsValue() returns true.
+	template< typename T > void OpaqueSet( const T& value );
+	//! Returns the basic string value. Must only be called when IsOpaque() returns true.
 	//! \return The string value as a null-terminated C string.
-	template< typename T > T ValueGet( const T& defaultValue ) const;
+	template< typename T > T OpaqueGet( const T& defaultValue ) const;
 
 	//--------------------------------------------------------------------------
 	// Array manipulation
@@ -2635,49 +2636,49 @@ public:
 	const DocumentValue& ArrayGet( uint32_t index ) const;
 
 	//--------------------------------------------------------------------------
-	// Map manipulation
+	// Object manipulation
 	//--------------------------------------------------------------------------
-	//! Converts this value to a map type, clearing any existing data.
+	//! Converts this value to an object type, clearing any existing data.
 	//! \param reserveLength Optional hint for initial capacity to avoid reallocations.
-	DocumentValue& MapInitialize( uint32_t reserveLength = 0 );
+	DocumentValue& ObjectInitialize( uint32_t reserveLength = 0 );
 	//! Gets a mutable reference to the DocumentValue for the given key,
 	//! creating it if it doesn't exist.
 	//! \param key The string key to look up.
 	//! \return Mutable reference to the DocumentValue associated with the key.
-	DocumentValue& MapSet( const char* key );
-	//! Removes the key-value pair from the map if it exists.
+	DocumentValue& ObjectSet( const char* key );
+	//! Removes the key-value pair from the object if it exists.
 	//! \param key The string key to remove.
 	//! \return True if the key was found and removed, false if the key didn't exist.
-	bool MapRemove( const char* key );
+	bool ObjectRemove( const char* key );
 	//--------------------------------------------------------------------------
-	// Map queries
+	// Object queries
 	//--------------------------------------------------------------------------
 	//! Attempts to get a mutable pointer to the DocumentValue for the given key.
 	//! \param key The string key to look up.
 	//! \return Pointer to the DocumentValue if found, nullptr if the key doesn't exist.
-	DocumentValue* MapTryGet( const char* key );
+	DocumentValue* ObjectTryGet( const char* key );
 	//! Attempts to get a const pointer to the DocumentValue for the given key.
 	//! \param key The string key to look up.
 	//! \return Const pointer to the DocumentValue if found, nullptr if the key doesn't exist.
-	const DocumentValue* MapTryGet( const char* key ) const;
+	const DocumentValue* ObjectTryGet( const char* key ) const;
 	//--------------------------------------------------------------------------
-	// Map iteration
+	// Object iteration
 	//--------------------------------------------------------------------------
-	//! Returns the number of key-value pairs in the map.
-	//! \return The map size. Only valid when IsMap() returns true.
-	uint32_t MapLength() const;
+	//! Returns the number of key-value pairs in the object.
+	//! \return The object size. Only valid when IsObject() returns true.
+	uint32_t ObjectLength() const;
 	//! Gets the key string at the specified iteration index.
-	//! \param index The iteration index. Must be < MapLength().
+	//! \param index The iteration index. Must be < ObjectLength().
 	//! \return The key as a null-terminated C string.
-	const char* MapGetKey( uint32_t index ) const;
+	const char* ObjectGetKey( uint32_t index ) const;
 	//! Gets a mutable reference to the DocumentValue at the specified iteration index.
-	//! \param index The iteration index. Must be < MapLength().
+	//! \param index The iteration index. Must be < ObjectLength().
 	//! \return Mutable reference to the DocumentValue at the specified index.
-	DocumentValue& MapGetValue( uint32_t index );
+	DocumentValue& ObjectGetValue( uint32_t index );
 	//! Gets a const reference to the DocumentValue at the specified iteration index.
-	//! \param index The iteration index. Must be < MapLength().
+	//! \param index The iteration index. Must be < ObjectLength().
 	//! \return Const reference to the DocumentValue at the specified index.
-	const DocumentValue& MapGetValue( uint32_t index ) const;
+	const DocumentValue& ObjectGetValue( uint32_t index ) const;
 
 protected:
 	friend class Document;
@@ -2685,11 +2686,11 @@ protected:
 	{
 		SetType,
 		StringSet,
-		ValueSet,
+		OpaqueSet,
 		ArrayInsert,
 		ArrayRemove,
-		MapSet,
-		MapRemove
+		ObjectSet,
+		ObjectRemove
 	};
 	struct UndoOp
 	{
@@ -2697,7 +2698,7 @@ protected:
 		class DocumentValue* target;
 		int32_t index = -1;
 		std::string key;
-		DocumentValueType oldType = DocumentValueType::None;
+		DocumentValueType oldType = DocumentValueType::Null;
 		std::string oldString;
 		ae::Any< 64, 16 > oldValue;
 		class DocumentValue* oldChild = nullptr;
@@ -2706,7 +2707,7 @@ protected:
 	DocumentValue( const DocumentValue& ) = delete;
 	DocumentValue& operator=( const DocumentValue& ) = delete;
 	Document* m_document = nullptr;
-	DocumentValueType m_type = DocumentValueType::None;
+	DocumentValueType m_type = DocumentValueType::Null;
 	int32_t m_refCount = 0; // References from undo stack only
 	std::string m_string;
 	ae::Any< 64, 16 > m_value;
@@ -2725,7 +2726,9 @@ public:
 
 	bool EndUndoGroup();
 	void ClearUndo();
+	//! \param callback Should match the signature void(*)( DocumentUndoRedoOp, const DocumentValue* )
 	template< typename Fn = nullptr_t > bool Undo( Fn callback = nullptr );
+	//! \param callback Should match the signature void(*)( DocumentUndoRedoOp, const DocumentValue* )
 	template< typename Fn = nullptr_t > bool Redo( Fn callback = nullptr );
 	uint32_t GetUndoStackSize() const { return m_undoStack.Length() + ( m_currentGroup.Length() ? 1 : 0 ); }
 	uint32_t GetRedoStackSize() const { return m_redoStack.Length(); }
@@ -11824,18 +11827,18 @@ const T* Any< Size, Alignment >::TryGet() const
 // ae::DocumentValue templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
-void DocumentValue::ValueSet( const T& value )
+void DocumentValue::OpaqueSet( const T& value )
 {
-	if( !IsValue() )
+	if( !IsOpaque() )
 	{
-		Initialize( DocumentValueType::Value );
+		Initialize( DocumentValueType::Opaque );
 	}
-	// Try to combine with previous ValueSet operation in current group
+	// Try to combine with previous OpaqueSet operation in current group
 	bool combined = false;
 	if( m_document->m_currentGroup.Length() > 0 )
 	{
 		UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
-		if( lastOp.type == UndoOpType::ValueSet && lastOp.target == this )
+		if( lastOp.type == UndoOpType::OpaqueSet && lastOp.target == this )
 		{
 			// Keep the original old value, just update current value
 			combined = true;
@@ -11844,7 +11847,7 @@ void DocumentValue::ValueSet( const T& value )
 	if( !combined )
 	{
 		UndoOp op;
-		op.type = UndoOpType::ValueSet;
+		op.type = UndoOpType::OpaqueSet;
 		op.target = this;
 		op.oldValue = m_value;
 		m_document->m_PushOp( op );
@@ -11853,9 +11856,9 @@ void DocumentValue::ValueSet( const T& value )
 }
 
 template< typename T >
-T DocumentValue::ValueGet( const T& defaultValue ) const
+T DocumentValue::OpaqueGet( const T& defaultValue ) const
 {
-	AE_ASSERT( IsValue() );
+	AE_ASSERT( IsOpaque() );
 	return m_value.Get( defaultValue );
 }
 
@@ -17284,10 +17287,10 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 				ArrayRemove( m_array.Length() - 1 );
 			}
 			break;
-		case DocumentValueType::Map:
+		case DocumentValueType::Object:
 			while( m_map.Length() > 0 )
 			{
-				MapRemove( m_map.GetKey( m_map.Length() - 1 ).c_str() );
+				ObjectRemove( m_map.GetKey( m_map.Length() - 1 ).c_str() );
 			}
 			break;
 		case DocumentValueType::String:
@@ -17301,18 +17304,18 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 				m_string.clear();
 			}
 			break;
-		case DocumentValueType::Value:
+		case DocumentValueType::Opaque:
 			if( m_value.GetType() )
 			{
 				UndoOp op;
-				op.type = UndoOpType::ValueSet;
+				op.type = UndoOpType::OpaqueSet;
 				op.target = this;
 				op.oldValue = m_value;
 				m_document->m_PushOp( op );
 				m_value = {};
 			}
 			break;
-		case DocumentValueType::None: break;
+		case DocumentValueType::Null: break;
 	}
 
 	if( m_type != type )
@@ -17341,10 +17344,11 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 	return *this;
 }
 
+bool DocumentValue::IsNull() const { return ( m_type == DocumentValueType::Null ); }
 bool DocumentValue::IsString() const { return ( m_type == DocumentValueType::String ); }
-bool DocumentValue::IsValue() const { return ( m_type == DocumentValueType::Value ); }
+bool DocumentValue::IsOpaque() const { return ( m_type == DocumentValueType::Opaque ); }
 bool DocumentValue::IsArray() const { return ( m_type == DocumentValueType::Array ); }
-bool DocumentValue::IsMap() const { return ( m_type == DocumentValueType::Map ); }
+bool DocumentValue::IsObject() const { return ( m_type == DocumentValueType::Object ); }
 
 // Strings
 void DocumentValue::StringSet( const char* str )
@@ -17422,15 +17426,15 @@ void DocumentValue::ArrayRemove( uint32_t index )
 				child->ArrayRemove( child->m_array.Length() - 1 );
 			}
 			break;
-		case DocumentValueType::Map:
+		case DocumentValueType::Object:
 			while( child->m_map.Length() > 0 )
 			{
-				child->MapRemove( child->m_map.GetKey( child->m_map.Length() - 1 ).c_str() );
+				child->ObjectRemove( child->m_map.GetKey( child->m_map.Length() - 1 ).c_str() );
 			}
 			break;
 		case DocumentValueType::String: break;
-		case DocumentValueType::Value: break;
-		case DocumentValueType::None: break;
+		case DocumentValueType::Opaque: break;
+		case DocumentValueType::Null: break;
 	}
 
 	UndoOp op;
@@ -17463,20 +17467,20 @@ const DocumentValue& DocumentValue::ArrayGet( uint32_t index ) const
 }
 
 // Map manipulation
-DocumentValue& DocumentValue::MapInitialize( uint32_t reserveLength )
+DocumentValue& DocumentValue::ObjectInitialize( uint32_t reserveLength )
 {
-	Initialize( DocumentValueType::Map );
+	Initialize( DocumentValueType::Object );
 	m_map.Reserve( reserveLength );
 	return *this;
 }
-DocumentValue& DocumentValue::MapSet( const char* key )
+DocumentValue& DocumentValue::ObjectSet( const char* key )
 {
-	AE_ASSERT( IsMap() );
+	AE_ASSERT( IsObject() );
 	DocumentValue* child = m_map.Get( key, nullptr );
 	if( !child )
 	{
 		UndoOp op;
-		op.type = UndoOpType::MapRemove; // Reverse operation
+		op.type = UndoOpType::ObjectRemove; // Reverse operation
 		op.target = this;
 		op.key = key;
 		op.index = m_map.Length(); // New element will be appended at this index
@@ -17485,9 +17489,9 @@ DocumentValue& DocumentValue::MapSet( const char* key )
 	}
 	return *child;
 }
-bool DocumentValue::MapRemove( const char* key )
+bool DocumentValue::ObjectRemove( const char* key )
 {
-	AE_ASSERT( IsMap() );
+	AE_ASSERT( IsObject() );
 	DocumentValue* child = m_map.Get( key, nullptr );
 	if( !child )
 	{
@@ -17502,20 +17506,20 @@ bool DocumentValue::MapRemove( const char* key )
 				child->ArrayRemove( child->m_array.Length() - 1 );
 			}
 			break;
-		case DocumentValueType::Map:
+		case DocumentValueType::Object:
 			while( child->m_map.Length() > 0 )
 			{
-				child->MapRemove( child->m_map.GetKey( child->m_map.Length() - 1 ).c_str() );
+				child->ObjectRemove( child->m_map.GetKey( child->m_map.Length() - 1 ).c_str() );
 			}
 			break;
 		case DocumentValueType::String: break;
-		case DocumentValueType::Value: break;
-		case DocumentValueType::None: break;
+		case DocumentValueType::Opaque: break;
+		case DocumentValueType::Null: break;
 	}
 
 	const int32_t index = m_map.GetIndex( key );
 	UndoOp op;
-	op.type = UndoOpType::MapSet; // Reverse operation
+	op.type = UndoOpType::ObjectSet; // Reverse operation
 	op.target = this;
 	op.key = key;
 	op.index = index; // Capture position for stable reinsertion
@@ -17529,36 +17533,36 @@ bool DocumentValue::MapRemove( const char* key )
 }
 
 // Map queries
-DocumentValue* DocumentValue::MapTryGet( const char* key )
+DocumentValue* DocumentValue::ObjectTryGet( const char* key )
 {
-	AE_ASSERT( IsMap() );
+	AE_ASSERT( IsObject() );
 	return m_map.Get( key, nullptr );
 }
-const DocumentValue* DocumentValue::MapTryGet( const char* key ) const
+const DocumentValue* DocumentValue::ObjectTryGet( const char* key ) const
 {
-	AE_ASSERT( IsMap() );
+	AE_ASSERT( IsObject() );
 	return m_map.Get( key, nullptr );
 }
 
 // Map iteration
-uint32_t DocumentValue::MapLength() const
+uint32_t DocumentValue::ObjectLength() const
 {
-	AE_ASSERT( IsMap() );
+	AE_ASSERT( IsObject() );
 	return m_map.Length();
 }
-const char* DocumentValue::MapGetKey( uint32_t index ) const
+const char* DocumentValue::ObjectGetKey( uint32_t index ) const
 {
-	AE_ASSERT( IsMap() );
+	AE_ASSERT( IsObject() );
 	return m_map.GetKey( index ).c_str();
 }
-DocumentValue& DocumentValue::MapGetValue( uint32_t index )
+DocumentValue& DocumentValue::ObjectGetValue( uint32_t index )
 {
-	AE_ASSERT( IsMap() );
+	AE_ASSERT( IsObject() );
 	return *m_map.GetValue( index );
 }
-const DocumentValue& DocumentValue::MapGetValue( uint32_t index ) const
+const DocumentValue& DocumentValue::ObjectGetValue( uint32_t index ) const
 {
-	AE_ASSERT( IsMap() );
+	AE_ASSERT( IsObject() );
 	return *m_map.GetValue( index );
 }
 
@@ -17644,8 +17648,8 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target, void ( *fn )( Docum
 					fn( DocumentUndoRedoOp::Modify, op.target, userData );
 				}
 				break;
-			case UndoOpType::ValueSet:
-				reverseOp.type = UndoOpType::ValueSet;
+			case UndoOpType::OpaqueSet:
+				reverseOp.type = UndoOpType::OpaqueSet;
 				reverseOp.oldValue = op.target->m_value;
 				op.target->m_value = op.oldValue;
 				if( fn )
@@ -17675,8 +17679,8 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target, void ( *fn )( Docum
 				op.target->m_array.Remove( op.index );
 				m_AddRef( reverseOp.oldChild ); // Object removed from document, add reference
 				break;
-			case UndoOpType::MapSet:
-				reverseOp.type = UndoOpType::MapRemove;
+			case UndoOpType::ObjectSet:
+				reverseOp.type = UndoOpType::ObjectRemove;
 				reverseOp.key = op.key;
 				op.target->m_map.Set( op.key, op.oldChild, op.index );
 				AE_DEBUG_ASSERT( op.oldChild->m_refCount == 1 );
@@ -17686,8 +17690,8 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target, void ( *fn )( Docum
 					fn( DocumentUndoRedoOp::Create, op.oldChild, userData );
 				}
 				break;
-			case UndoOpType::MapRemove:
-				reverseOp.type = UndoOpType::MapSet;
+			case UndoOpType::ObjectRemove:
+				reverseOp.type = UndoOpType::ObjectSet;
 				reverseOp.key = op.key;
 				reverseOp.oldChild = op.target->m_map.Get( op.key, nullptr ); // @TODO: Why is this alowed to be missing?
 				if( reverseOp.oldChild )
@@ -17741,9 +17745,9 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 		DocumentValue* target = op.target;
 		// Validate type consistency with data contents
 		AE_DEBUG_ASSERT( target->m_string.length() == 0 || target->m_type == DocumentValueType::String );
-		AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Value );
+		AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Opaque );
 		AE_DEBUG_ASSERT( target->m_array.Length() == 0 || target->m_type == DocumentValueType::Array );
-		AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Map );
+		AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Object );
 		AE_DEBUG_ASSERT( target->m_refCount >= 0 );
 	}
 }

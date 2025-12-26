@@ -728,47 +728,47 @@ TEST_CASE( "DocumentUndo ArrayOperations", "[ae::Document][undo]" )
 	REQUIRE( data.GetObjectCreateCount( &elem1 ) == 1 );
 }
 
-TEST_CASE( "DocumentUndo MapOperations", "[ae::Document][undo]" )
+TEST_CASE( "DocumentUndo ObjectOperations", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
 	DocumentCallbackData data;
 	auto callback = MakeDocumentCallback( data );
-	doc.MapInitialize( 4 );
+	doc.ObjectInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add map strings
-	auto& val1 = doc.MapSet( "key1" );
+	auto& val1 = doc.ObjectSet( "key1" );
 	val1.StringSet( "string1" );
-	auto& val2 = doc.MapSet( "key2" );
+	auto& val2 = doc.ObjectSet( "key2" );
 	val2.StringSet( "string2" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 2 );
-	REQUIRE( doc.MapTryGet( "key1" )->StringGet() == std::string( "string1" ) );
-	REQUIRE( doc.MapTryGet( "key2" )->StringGet() == std::string( "string2" ) );
+	REQUIRE( doc.ObjectLength() == 2 );
+	REQUIRE( doc.ObjectTryGet( "key1" )->StringGet() == std::string( "string1" ) );
+	REQUIRE( doc.ObjectTryGet( "key2" )->StringGet() == std::string( "string2" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Remove a key
-	REQUIRE( doc.MapRemove( "key1" ) ); // Should return true for successful removal
+	REQUIRE( doc.ObjectRemove( "key1" ) ); // Should return true for successful removal
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 1 );
-	REQUIRE( doc.MapTryGet( "key1" ) == nullptr );
-	REQUIRE( doc.MapTryGet( "key2" )->StringGet() == std::string( "string2" ) );
+	REQUIRE( doc.ObjectLength() == 1 );
+	REQUIRE( doc.ObjectTryGet( "key1" ) == nullptr );
+	REQUIRE( doc.ObjectTryGet( "key2" )->StringGet() == std::string( "string2" ) );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo remove should restore key and value
 	data.Reset();
 	REQUIRE( doc.Undo( callback ) );
-	REQUIRE( doc.MapLength() == 2 );
-	REQUIRE( doc.MapGetValue( 0 ).StringGet() == std::string( "string1" ) );
-	REQUIRE( doc.MapGetValue( 1 ).StringGet() == std::string( "string2" ) );
-	REQUIRE( doc.MapTryGet( "key1" )->StringGet() == std::string( "string1" ) );
-	REQUIRE( doc.MapTryGet( "key2" )->StringGet() == std::string( "string2" ) );
+	REQUIRE( doc.ObjectLength() == 2 );
+	REQUIRE( doc.ObjectGetValue( 0 ).StringGet() == std::string( "string1" ) );
+	REQUIRE( doc.ObjectGetValue( 1 ).StringGet() == std::string( "string2" ) );
+	REQUIRE( doc.ObjectTryGet( "key1" )->StringGet() == std::string( "string1" ) );
+	REQUIRE( doc.ObjectTryGet( "key2" )->StringGet() == std::string( "string2" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 	REQUIRE( data.totalCreateCount == 1 );
@@ -779,8 +779,8 @@ TEST_CASE( "DocumentUndo MapOperations", "[ae::Document][undo]" )
 	// Redo remove
 	data.Reset();
 	REQUIRE( doc.Redo( callback ) );
-	REQUIRE( doc.MapLength() == 1 );
-	REQUIRE( doc.MapTryGet( "key1" ) == nullptr );
+	REQUIRE( doc.ObjectLength() == 1 );
+	REQUIRE( doc.ObjectTryGet( "key1" ) == nullptr );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 	REQUIRE( data.totalCreateCount == 0 );
@@ -806,7 +806,7 @@ TEST_CASE( "DocumentUndo UndoGroups", "[ae::Document][undo]" )
 
 	// Single undo should reverse entire group
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.GetType() == ae::DocumentValueType::None ); // Back to empty document
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Null ); // Back to empty document
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
@@ -869,7 +869,7 @@ TEST_CASE( "DocumentUndo ValueCoalescing", "[ae::Document][undo]" )
 
 	// Single undo should revert to initial state (empty)
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.GetType() == ae::DocumentValueType::None );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Null );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
@@ -919,7 +919,7 @@ TEST_CASE( "DocumentUndo ValueSeparateGroups", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 2 );
 
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.GetType() == ae::DocumentValueType::None );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Null );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 3 );
 }
@@ -933,25 +933,25 @@ TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 
 	// Create nested structure
 	auto& mapElem = doc.ArrayAppend();
-	mapElem.MapInitialize( 2 );
-	auto& nestedValue = doc.ArrayGet( 0 ).MapSet( "nested" );
+	mapElem.ObjectInitialize( 2 );
+	auto& nestedValue = doc.ArrayGet( 0 ).ObjectSet( "nested" );
 	nestedValue.StringSet( "deep" );
 	doc.EndUndoGroup();
 	REQUIRE( doc.ArrayLength() == 1 );
-	REQUIRE( doc.ArrayGet( 0 ).IsMap() );
-	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).StringGet() == std::string( "deep" ) );
+	REQUIRE( doc.ArrayGet( 0 ).IsObject() );
+	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "nested" ).StringGet() == std::string( "deep" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Modify nested string
-	doc.ArrayGet( 0 ).MapSet( "nested" ).StringSet( "modified" );
+	doc.ArrayGet( 0 ).ObjectSet( "nested" ).StringSet( "modified" );
 	doc.EndUndoGroup();
-	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).StringGet() == std::string( "modified" ) );
+	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "nested" ).StringGet() == std::string( "modified" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 	data.Reset();
 	REQUIRE( doc.Undo( callback ) ); // Undo should restore deep nested string
-	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).StringGet() == std::string( "deep" ) );
+	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "nested" ).StringGet() == std::string( "deep" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 	REQUIRE( data.totalCreateCount == 0 );
@@ -968,8 +968,8 @@ TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 	data.Reset();
 	REQUIRE( doc.Undo( callback ) ); // Undo should restore entire nested structure
 	REQUIRE( doc.ArrayLength() == 1 );
-	REQUIRE( doc.ArrayGet( 0 ).IsMap() );
-	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).StringGet() == std::string( "deep" ) );
+	REQUIRE( doc.ArrayGet( 0 ).IsObject() );
+	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "nested" ).StringGet() == std::string( "deep" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 	REQUIRE( data.totalCreateCount == 2 );  // mapElem and nestedValue
@@ -994,27 +994,27 @@ TEST_CASE( "DocumentUndo MultiElementArrayWithDescendants", "[ae::Document][undo
 
 	// Element 0: Map -> Array -> String
 	auto& elem0 = doc.ArrayAppend();
-	elem0.MapInitialize( 2 );
-	auto& elem0_nested = elem0.MapSet( "nested" );
+	elem0.ObjectInitialize( 2 );
+	auto& elem0_nested = elem0.ObjectSet( "nested" );
 	elem0_nested.ArrayInitialize( 2 );
 	auto& elem0_deep = elem0_nested.ArrayAppend();
 	elem0_deep.StringSet( "deep0" );
 
 	// Element 1: Map -> Map -> Number
 	auto& elem1 = doc.ArrayAppend();
-	elem1.MapInitialize( 2 );
-	auto& elem1_nested = elem1.MapSet( "nested" );
-	elem1_nested.MapInitialize( 2 );
-	auto& elem1_deep = elem1_nested.MapSet( "value" );
-	elem1_deep.ValueSet( 42.0 );
+	elem1.ObjectInitialize( 2 );
+	auto& elem1_nested = elem1.ObjectSet( "nested" );
+	elem1_nested.ObjectInitialize( 2 );
+	auto& elem1_deep = elem1_nested.ObjectSet( "value" );
+	elem1_deep.OpaqueSet( 42.0 );
 
 	// Element 2: Array -> Map -> Bool
 	auto& elem2 = doc.ArrayAppend();
 	elem2.ArrayInitialize( 2 );
 	auto& elem2_nested = elem2.ArrayAppend();
-	elem2_nested.MapInitialize( 2 );
-	auto& elem2_deep = elem2_nested.MapSet( "flag" );
-	elem2_deep.ValueSet( true );
+	elem2_nested.ObjectInitialize( 2 );
+	auto& elem2_deep = elem2_nested.ObjectSet( "flag" );
+	elem2_deep.OpaqueSet( true );
 
 	doc.EndUndoGroup();
 	REQUIRE( doc.ArrayLength() == 3 );
@@ -1054,9 +1054,9 @@ TEST_CASE( "DocumentUndo MultiElementArrayWithDescendants", "[ae::Document][undo
 	REQUIRE( data.GetObjectCreateCount( &elem2_deep ) == 1 );
 
 	// Verify restored structure
-	REQUIRE( doc.ArrayGet( 0 ).MapSet( "nested" ).ArrayGet( 0 ).StringGet() == std::string( "deep0" ) );
-	REQUIRE( doc.ArrayGet( 1 ).MapSet( "nested" ).MapSet( "value" ).ValueGet( 0.0 ) == 42.0 );
-	REQUIRE( doc.ArrayGet( 2 ).ArrayGet( 0 ).MapSet( "flag" ).ValueGet( false ) == true );
+	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "nested" ).ArrayGet( 0 ).StringGet() == std::string( "deep0" ) );
+	REQUIRE( doc.ArrayGet( 1 ).ObjectSet( "nested" ).ObjectSet( "value" ).OpaqueGet( 0.0 ) == 42.0 );
+	REQUIRE( doc.ArrayGet( 2 ).ArrayGet( 0 ).ObjectSet( "flag" ).OpaqueGet( false ) == true );
 
 	// Redo should destroy all elements and ALL their descendants
 	data.Reset();
@@ -1086,7 +1086,7 @@ TEST_CASE( "DocumentUndo MultiElementMapWithDescendants", "[ae::Document][undo]"
 	ae::Document doc( "test" );
 	DocumentCallbackData data;
 	auto callback = MakeDocumentCallback( data );
-	doc.MapInitialize( 8 );
+	doc.ObjectInitialize( 8 );
 
 	// Create map with multiple entries, each with deeply nested descendants
 	// Tree structure:
@@ -1095,49 +1095,49 @@ TEST_CASE( "DocumentUndo MultiElementMapWithDescendants", "[ae::Document][undo]"
 	//   Map["c"] (entry_c) -> Map["level2"] (entry_c_nested) -> Map["level3"] (entry_c_level3) -> Map["flag"] (entry_c_deep) -> Bool
 
 	// Entry "a": Array -> Map -> String
-	auto& entry_a = doc.MapSet( "a" );
+	auto& entry_a = doc.ObjectSet( "a" );
 	entry_a.ArrayInitialize( 2 );
 	auto& entry_a_nested = entry_a.ArrayAppend();
-	entry_a_nested.MapInitialize( 2 );
-	auto& entry_a_deep = entry_a_nested.MapSet( "text" );
+	entry_a_nested.ObjectInitialize( 2 );
+	auto& entry_a_deep = entry_a_nested.ObjectSet( "text" );
 	entry_a_deep.StringSet( "deepA" );
 
 	// Entry "b": Map -> Array -> Number
-	auto& entry_b = doc.MapSet( "b" );
-	entry_b.MapInitialize( 2 );
-	auto& entry_b_nested = entry_b.MapSet( "list" );
+	auto& entry_b = doc.ObjectSet( "b" );
+	entry_b.ObjectInitialize( 2 );
+	auto& entry_b_nested = entry_b.ObjectSet( "list" );
 	entry_b_nested.ArrayInitialize( 2 );
 	auto& entry_b_deep = entry_b_nested.ArrayAppend();
-	entry_b_deep.ValueSet( 99.5 );
+	entry_b_deep.OpaqueSet( 99.5 );
 
 	// Entry "c": Map -> Map -> Map -> Bool
-	auto& entry_c = doc.MapSet( "c" );
-	entry_c.MapInitialize( 2 );
-	auto& entry_c_nested = entry_c.MapSet( "level2" );
-	entry_c_nested.MapInitialize( 2 );
-	auto& entry_c_level3 = entry_c_nested.MapSet( "level3" );
-	entry_c_level3.MapInitialize( 2 );
-	auto& entry_c_deep = entry_c_level3.MapSet( "flag" );
-	entry_c_deep.ValueSet( false );
+	auto& entry_c = doc.ObjectSet( "c" );
+	entry_c.ObjectInitialize( 2 );
+	auto& entry_c_nested = entry_c.ObjectSet( "level2" );
+	entry_c_nested.ObjectInitialize( 2 );
+	auto& entry_c_level3 = entry_c_nested.ObjectSet( "level3" );
+	entry_c_level3.ObjectInitialize( 2 );
+	auto& entry_c_deep = entry_c_level3.ObjectSet( "flag" );
+	entry_c_deep.OpaqueSet( false );
 
 	doc.EndUndoGroup();
-	REQUIRE( doc.MapLength() == 3 );
+	REQUIRE( doc.ObjectLength() == 3 );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Remove all map entries
-	doc.MapRemove( "a" );
-	doc.MapRemove( "b" );
-	doc.MapRemove( "c" );
+	doc.ObjectRemove( "a" );
+	doc.ObjectRemove( "b" );
+	doc.ObjectRemove( "c" );
 	doc.EndUndoGroup();
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore all entries and ALL their descendants
 	data.Reset();
 	REQUIRE( doc.Undo( callback ) );
-	REQUIRE( doc.MapLength() == 3 );
+	REQUIRE( doc.ObjectLength() == 3 );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
@@ -1159,14 +1159,14 @@ TEST_CASE( "DocumentUndo MultiElementMapWithDescendants", "[ae::Document][undo]"
 	REQUIRE( data.GetObjectCreateCount( &entry_c_deep ) == 1 );
 
 	// Verify restored structure
-	REQUIRE( doc.MapSet( "a" ).ArrayGet( 0 ).MapSet( "text" ).StringGet() == std::string( "deepA" ) );
-	REQUIRE( doc.MapSet( "b" ).MapSet( "list" ).ArrayGet( 0 ).ValueGet( 0.0 ) == 99.5 );
-	REQUIRE( doc.MapSet( "c" ).MapSet( "level2" ).MapSet( "level3" ).MapSet( "flag" ).ValueGet( false ) == false );
+	REQUIRE( doc.ObjectSet( "a" ).ArrayGet( 0 ).ObjectSet( "text" ).StringGet() == std::string( "deepA" ) );
+	REQUIRE( doc.ObjectSet( "b" ).ObjectSet( "list" ).ArrayGet( 0 ).OpaqueGet( 0.0 ) == 99.5 );
+	REQUIRE( doc.ObjectSet( "c" ).ObjectSet( "level2" ).ObjectSet( "level3" ).ObjectSet( "flag" ).OpaqueGet( false ) == false );
 
 	// Redo should destroy all entries and ALL their descendants
 	data.Reset();
 	REQUIRE( doc.Redo( callback ) );
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -1201,23 +1201,23 @@ TEST_CASE( "DocumentUndo MixedArrayMapDescendants", "[ae::Document][undo]" )
 
 	// Array -> Map -> Array -> Map -> Array -> String
 	auto& level1 = doc.ArrayAppend();
-	level1.MapInitialize( 2 );
-	auto& level2 = level1.MapSet( "key1" );
+	level1.ObjectInitialize( 2 );
+	auto& level2 = level1.ObjectSet( "key1" );
 	level2.ArrayInitialize( 2 );
 	auto& level3 = level2.ArrayAppend();
-	level3.MapInitialize( 2 );
-	auto& level4 = level3.MapSet( "key2" );
+	level3.ObjectInitialize( 2 );
+	auto& level4 = level3.ObjectSet( "key2" );
 	level4.ArrayInitialize( 2 );
 	auto& level5 = level4.ArrayAppend();
 	level5.StringSet( "veryDeep" );
 
 	// Add another top-level element with similar structure
 	auto& level1b = doc.ArrayAppend();
-	level1b.MapInitialize( 2 );
-	auto& level2b = level1b.MapSet( "keyB" );
+	level1b.ObjectInitialize( 2 );
+	auto& level2b = level1b.ObjectSet( "keyB" );
 	level2b.ArrayInitialize( 2 );
 	auto& level3b = level2b.ArrayAppend();
-	level3b.ValueSet( 123.0 );
+	level3b.OpaqueSet( 123.0 );
 
 	doc.EndUndoGroup();
 	REQUIRE( doc.ArrayLength() == 2 );
@@ -1257,8 +1257,8 @@ TEST_CASE( "DocumentUndo MixedArrayMapDescendants", "[ae::Document][undo]" )
 	REQUIRE( data.GetObjectCreateCount( &level3b ) == 1 );
 
 	// Verify restored data
-	REQUIRE( doc.ArrayGet( 0 ).MapSet( "key1" ).ArrayGet( 0 ).MapSet( "key2" ).ArrayGet( 0 ).StringGet() == std::string( "veryDeep" ) );
-	REQUIRE( doc.ArrayGet( 1 ).MapSet( "keyB" ).ArrayGet( 0 ).ValueGet( 0.0 ) == 123.0 );
+	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "key1" ).ArrayGet( 0 ).ObjectSet( "key2" ).ArrayGet( 0 ).StringGet() == std::string( "veryDeep" ) );
+	REQUIRE( doc.ArrayGet( 1 ).ObjectSet( "keyB" ).ArrayGet( 0 ).OpaqueGet( 0.0 ) == 123.0 );
 
 	// Redo should destroy all descendants
 	data.Reset();
@@ -1295,27 +1295,27 @@ TEST_CASE( "DocumentUndo MixedArrayMapDescendants", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	doc.MapInitialize( 4 );
+	doc.ObjectInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add multiple map strings with different keys
-	doc.MapSet( "apple" ).StringSet( "fruit1" );
-	doc.MapSet( "banana" ).StringSet( "fruit2" );
-	doc.MapSet( "cherry" ).StringSet( "fruit3" );
+	doc.ObjectSet( "apple" ).StringSet( "fruit1" );
+	doc.ObjectSet( "banana" ).StringSet( "fruit2" );
+	doc.ObjectSet( "cherry" ).StringSet( "fruit3" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 3 );
+	REQUIRE( doc.ObjectLength() == 3 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	// Test MapGetKey and MapGetValue iteration
+	// Test ObjectGetKey and MapGetValue iteration
 	bool foundApple = false, foundBanana = false, foundCherry = false;
-	for( uint32_t i = 0; i < doc.MapLength(); i++ )
+	for( uint32_t i = 0; i < doc.ObjectLength(); i++ )
 	{
-		const char* key = doc.MapGetKey( i );
-		const ae::DocumentValue& value = doc.MapGetValue( i );
+		const char* key = doc.ObjectGetKey( i );
+		const ae::DocumentValue& value = doc.ObjectGetValue( i );
 
 		if( std::string( key ) == "apple" )
 		{
@@ -1338,10 +1338,10 @@ TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
 	REQUIRE( foundCherry );
 
 	// Test non-const MapGetValue for modification
-	for( uint32_t i = 0; i < doc.MapLength(); i++ )
+	for( uint32_t i = 0; i < doc.ObjectLength(); i++ )
 	{
-		const char* key = doc.MapGetKey( i );
-		ae::DocumentValue& value = doc.MapGetValue( i );
+		const char* key = doc.ObjectGetKey( i );
+		ae::DocumentValue& value = doc.ObjectGetValue( i );
 
 		if( std::string( key ) == "banana" )
 		{
@@ -1352,15 +1352,15 @@ TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
 	doc.EndUndoGroup();
 
 	// Verify the modification
-	REQUIRE( doc.MapTryGet( "banana" )->StringGet() == std::string( "yellow_fruit" ) );
+	REQUIRE( doc.ObjectTryGet( "banana" )->StringGet() == std::string( "yellow_fruit" ) );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Remove one key and verify iteration still works
-	REQUIRE( doc.MapRemove( "apple" ) ); // Should return true for successful removal
+	REQUIRE( doc.ObjectRemove( "apple" ) ); // Should return true for successful removal
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 2 );
+	REQUIRE( doc.ObjectLength() == 2 );
 	REQUIRE( doc.GetUndoStackSize() == 4 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -1368,10 +1368,10 @@ TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
 	foundBanana = false;
 	foundCherry = false;
 	foundApple = false;
-	for( uint32_t i = 0; i < doc.MapLength(); i++ )
+	for( uint32_t i = 0; i < doc.ObjectLength(); i++ )
 	{
-		const char* key = doc.MapGetKey( i );
-		const ae::DocumentValue& value = doc.MapGetValue( i );
+		const char* key = doc.ObjectGetKey( i );
+		const ae::DocumentValue& value = doc.ObjectGetValue( i );
 		if( std::string( key ) == "apple" )
 		{
 			foundApple = true;
@@ -1391,7 +1391,7 @@ TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
 
 	// Undo remove and verify iteration works with restored key
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.MapLength() == 3 );
+	REQUIRE( doc.ObjectLength() == 3 );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
@@ -1399,9 +1399,9 @@ TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
 	foundApple = false;
 	foundBanana = false;
 	foundCherry = false;
-	for( uint32_t i = 0; i < doc.MapLength(); i++ )
+	for( uint32_t i = 0; i < doc.ObjectLength(); i++ )
 	{
-		const char* key = doc.MapGetKey( i );
+		const char* key = doc.ObjectGetKey( i );
 
 		if( std::string( key ) == "apple" )
 		{
@@ -1424,78 +1424,78 @@ TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo MapRemoveReturnValue", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	doc.MapInitialize( 4 );
+	doc.ObjectInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add some map strings
-	doc.MapSet( "existing1" ).StringSet( "string1" );
-	doc.MapSet( "existing2" ).StringSet( "string2" );
+	doc.ObjectSet( "existing1" ).StringSet( "string1" );
+	doc.ObjectSet( "existing2" ).StringSet( "string2" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 2 );
+	REQUIRE( doc.ObjectLength() == 2 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test successful removal - should return true
-	REQUIRE( doc.MapRemove( "existing1" ) == true );
+	REQUIRE( doc.ObjectRemove( "existing1" ) == true );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 1 );
-	REQUIRE( doc.MapTryGet( "existing1" ) == nullptr );
-	REQUIRE( doc.MapTryGet( "existing2" ) != nullptr );
+	REQUIRE( doc.ObjectLength() == 1 );
+	REQUIRE( doc.ObjectTryGet( "existing1" ) == nullptr );
+	REQUIRE( doc.ObjectTryGet( "existing2" ) != nullptr );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test unsuccessful removal - should return false for non-existent key
-	REQUIRE( doc.MapRemove( "nonexistent" ) == false );
+	REQUIRE( doc.ObjectRemove( "nonexistent" ) == false );
 	doc.EndUndoGroup();
 
 	// Map should be unchanged after failed removal
-	REQUIRE( doc.MapLength() == 1 );
-	REQUIRE( doc.MapTryGet( "existing2" ) != nullptr );
+	REQUIRE( doc.ObjectLength() == 1 );
+	REQUIRE( doc.ObjectTryGet( "existing2" ) != nullptr );
 	// Undo stack should be unchanged since no operation was performed
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test removing the same key again - should return false
-	REQUIRE( doc.MapRemove( "existing1" ) == false ); // Already removed
+	REQUIRE( doc.ObjectRemove( "existing1" ) == false ); // Already removed
 	doc.EndUndoGroup();
 
 	// Map should still be unchanged
-	REQUIRE( doc.MapLength() == 1 );
+	REQUIRE( doc.ObjectLength() == 1 );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test successful removal of remaining key
-	REQUIRE( doc.MapRemove( "existing2" ) == true );
+	REQUIRE( doc.ObjectRemove( "existing2" ) == true );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 4 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test removal from empty map - should return false
-	REQUIRE( doc.MapRemove( "anything" ) == false );
+	REQUIRE( doc.ObjectRemove( "anything" ) == false );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 4 ); // No change since no operation performed
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo and test that removed keys can be successfully removed again
 	REQUIRE( doc.Undo() ); // Restore "existing2"
-	REQUIRE( doc.MapLength() == 1 );
-	REQUIRE( doc.MapTryGet( "existing2" ) != nullptr );
+	REQUIRE( doc.ObjectLength() == 1 );
+	REQUIRE( doc.ObjectTryGet( "existing2" ) != nullptr );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
 	// Should be able to remove it again
-	REQUIRE( doc.MapRemove( "existing2" ) == true );
+	REQUIRE( doc.ObjectRemove( "existing2" ) == true );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 4 ); // Redo stack cleared, new operation added
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 }
@@ -1504,49 +1504,49 @@ TEST_CASE( "DocumentUndo MapGetVsTryGet", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
 	const ae::DocumentValue& constDoc = doc;
-	doc.MapInitialize( 4 );
+	doc.ObjectInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add some map strings
-	doc.MapSet( "existing" ).StringSet( "string" );
+	doc.ObjectSet( "existing" ).StringSet( "string" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 1 );
+	REQUIRE( doc.ObjectLength() == 1 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	// Test const MapTryGet with existing key - should return valid pointer
-	const ae::DocumentValue* constExisting = constDoc.MapTryGet( "existing" );
+	// Test const ObjectTryGet with existing key - should return valid pointer
+	const ae::DocumentValue* constExisting = constDoc.ObjectTryGet( "existing" );
 	REQUIRE( constExisting != nullptr );
 	REQUIRE( constExisting->StringGet() == std::string( "string" ) );
 
-	// Test const MapTryGet with non-existing key - should return nullptr
-	const ae::DocumentValue* constNonExisting = constDoc.MapTryGet( "nonexistent" );
+	// Test const ObjectTryGet with non-existing key - should return nullptr
+	const ae::DocumentValue* constNonExisting = constDoc.ObjectTryGet( "nonexistent" );
 	REQUIRE( constNonExisting == nullptr );
 
-	// Test non-const MapTryGet with existing key - should return valid pointer
-	ae::DocumentValue* nonConstExisting = doc.MapTryGet( "existing" );
+	// Test non-const ObjectTryGet with existing key - should return valid pointer
+	ae::DocumentValue* nonConstExisting = doc.ObjectTryGet( "existing" );
 	REQUIRE( nonConstExisting != nullptr );
 	REQUIRE( nonConstExisting->StringGet() == std::string( "string" ) );
 
-	// Test non-const MapTryGet with non-existing key - should return nullptr
-	ae::DocumentValue* nonConstNonExisting = doc.MapTryGet( "nonexistent" );
+	// Test non-const ObjectTryGet with non-existing key - should return nullptr
+	ae::DocumentValue* nonConstNonExisting = doc.ObjectTryGet( "nonexistent" );
 	REQUIRE( nonConstNonExisting == nullptr );
 
-	// Test modification through non-const MapTryGet pointer
-	ae::DocumentValue* modifyPtr = doc.MapTryGet( "existing" );
+	// Test modification through non-const ObjectTryGet pointer
+	ae::DocumentValue* modifyPtr = doc.ObjectTryGet( "existing" );
 	REQUIRE( modifyPtr != nullptr );
 	modifyPtr->StringSet( "modified_via_tryget" );
 	doc.EndUndoGroup();
 
 	// Verify modification worked
-	REQUIRE( doc.MapTryGet( "existing" )->StringGet() == std::string( "modified_via_tryget" ) );
+	REQUIRE( doc.ObjectTryGet( "existing" )->StringGet() == std::string( "modified_via_tryget" ) );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	ae::DocumentValue& nonConstRef = doc.MapSet( "existing" );
+	ae::DocumentValue& nonConstRef = doc.ObjectSet( "existing" );
 	REQUIRE( nonConstRef.StringGet() == std::string( "modified_via_tryget" ) );
 
 	// Modify through MapGet reference
@@ -1554,7 +1554,7 @@ TEST_CASE( "DocumentUndo MapGetVsTryGet", "[ae::Document][undo]" )
 	doc.EndUndoGroup();
 
 	// Verify modification
-	REQUIRE( doc.MapTryGet( "existing" )->StringGet() == std::string( "modified_string" ) );
+	REQUIRE( doc.ObjectTryGet( "existing" )->StringGet() == std::string( "modified_string" ) );
 	REQUIRE( doc.GetUndoStackSize() == 4 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -1567,7 +1567,7 @@ TEST_CASE( "DocumentUndo EdgeCasesAndInitialState", "[ae::Document][undo]" )
 	ae::Document doc( "test" );
 
 	// Test initial empty document state
-	REQUIRE( doc.GetType() == ae::DocumentValueType::None );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Null );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -1608,37 +1608,37 @@ TEST_CASE( "DocumentUndo EdgeCasesAndInitialState", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test map with zero reserve
-	doc.MapInitialize( 0 );
+	doc.ObjectInitialize( 0 );
 	doc.EndUndoGroup();
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test MapRemove on empty map
-	REQUIRE( doc.MapRemove( "anything" ) == false );
+	REQUIRE( doc.ObjectRemove( "anything" ) == false );
 	doc.EndUndoGroup();
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 3 ); // Should not change
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	// Test MapTryGet on empty map
-	REQUIRE( doc.MapTryGet( "anything" ) == nullptr );
+	// Test ObjectTryGet on empty map
+	REQUIRE( doc.ObjectTryGet( "anything" ) == nullptr );
 
 	// Test multiple type changes in same group - should coalesce SetType operations
 	doc.StringSet( "test" );
 	doc.ArrayInitialize( 2 );
-	doc.MapInitialize( 2 );
+	doc.ObjectInitialize( 2 );
 	doc.EndUndoGroup(); // Should coalesce into single type change operation
 
-	REQUIRE( doc.IsMap() );
+	REQUIRE( doc.IsObject() );
 	REQUIRE( doc.GetUndoStackSize() == 4 ); // Previous 3 + 1 coalesced group
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should revert to previous state (empty map from before the coalesced changes)
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 }
@@ -1650,9 +1650,9 @@ TEST_CASE( "DocumentUndo Initialize", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test Initialize with same type (None -> None) - should be no-op
-	ae::DocumentValue& result = doc.Initialize( ae::DocumentValueType::None );
+	ae::DocumentValue& result = doc.Initialize( ae::DocumentValueType::Null );
 	REQUIRE( &result == &doc ); // Should return reference to self
-	REQUIRE( doc.GetType() == ae::DocumentValueType::None );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Null );
 	REQUIRE( doc.GetUndoStackSize() == 0 ); // No undo operation created
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -1690,23 +1690,23 @@ TEST_CASE( "DocumentUndo Initialize", "[ae::Document][undo]" )
 	REQUIRE( doc.GetUndoStackSize() == 4 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	// Test Initialize from Array to Map (should clear all array elements)
-	doc.Initialize( ae::DocumentValueType::Map );
+	// Test Initialize from Array to object (should clear all array elements)
+	doc.Initialize( ae::DocumentValueType::Object );
 	doc.EndUndoGroup();
-	REQUIRE( doc.GetType() == ae::DocumentValueType::Map );
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Object );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 5 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add map elements to test clearing
-	doc.MapSet( "key1" ).StringSet( "string1" );
-	doc.MapSet( "key2" ).StringSet( "string2" );
-	doc.MapSet( "key3" ).StringSet( "string3" );
+	doc.ObjectSet( "key1" ).StringSet( "string1" );
+	doc.ObjectSet( "key2" ).StringSet( "string2" );
+	doc.ObjectSet( "key3" ).StringSet( "string3" );
 	doc.EndUndoGroup();
-	REQUIRE( doc.MapLength() == 3 );
-	REQUIRE( doc.MapTryGet( "key1" )->StringGet() == std::string( "string1" ) );
-	REQUIRE( doc.MapTryGet( "key2" )->StringGet() == std::string( "string2" ) );
-	REQUIRE( doc.MapTryGet( "key3" )->StringGet() == std::string( "string3" ) );
+	REQUIRE( doc.ObjectLength() == 3 );
+	REQUIRE( doc.ObjectTryGet( "key1" )->StringGet() == std::string( "string1" ) );
+	REQUIRE( doc.ObjectTryGet( "key2" )->StringGet() == std::string( "string2" ) );
+	REQUIRE( doc.ObjectTryGet( "key3" )->StringGet() == std::string( "string3" ) );
 	REQUIRE( doc.GetUndoStackSize() == 6 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -1718,18 +1718,18 @@ TEST_CASE( "DocumentUndo Initialize", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test undo sequence - should restore each state in reverse order
-	REQUIRE( doc.Undo() ); // Back to Map with 3 elements
-	REQUIRE( doc.GetType() == ae::DocumentValueType::Map );
-	REQUIRE( doc.MapLength() == 3 );
-	REQUIRE( doc.MapTryGet( "key1" )->StringGet() == std::string( "string1" ) );
-	REQUIRE( doc.MapTryGet( "key2" )->StringGet() == std::string( "string2" ) );
-	REQUIRE( doc.MapTryGet( "key3" )->StringGet() == std::string( "string3" ) );
+	REQUIRE( doc.Undo() ); // Back to object with 3 elements
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Object );
+	REQUIRE( doc.ObjectLength() == 3 );
+	REQUIRE( doc.ObjectTryGet( "key1" )->StringGet() == std::string( "string1" ) );
+	REQUIRE( doc.ObjectTryGet( "key2" )->StringGet() == std::string( "string2" ) );
+	REQUIRE( doc.ObjectTryGet( "key3" )->StringGet() == std::string( "string3" ) );
 	REQUIRE( doc.GetUndoStackSize() == 6 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
 	REQUIRE( doc.Undo() ); // Back to empty Map
-	REQUIRE( doc.GetType() == ae::DocumentValueType::Map );
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Object );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 5 );
 	REQUIRE( doc.GetRedoStackSize() == 2 );
 
@@ -1760,7 +1760,7 @@ TEST_CASE( "DocumentUndo Initialize", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 6 );
 
 	REQUIRE( doc.Undo() ); // Back to None
-	REQUIRE( doc.GetType() == ae::DocumentValueType::None );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Null );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 7 );
 
@@ -1808,12 +1808,12 @@ TEST_CASE( "DocumentUndo InitializeChaining", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Test chaining with type change
-	doc.Initialize( ae::DocumentValueType::Map ).MapSet( "chained_key" ).StringSet( "chained_string" );
+	doc.Initialize( ae::DocumentValueType::Object ).ObjectSet( "chained_key" ).StringSet( "chained_string" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.GetType() == ae::DocumentValueType::Map );
-	REQUIRE( doc.MapLength() == 1 );
-	REQUIRE( doc.MapTryGet( "chained_key" )->StringGet() == std::string( "chained_string" ) );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Object );
+	REQUIRE( doc.ObjectLength() == 1 );
+	REQUIRE( doc.ObjectTryGet( "chained_key" )->StringGet() == std::string( "chained_string" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -1835,8 +1835,8 @@ TEST_CASE( "DocumentUndo InitializeComplexClear", "[ae::Document][undo]" )
 	doc.ArrayInitialize( 3 );
 	doc.ArrayAppend().ArrayInitialize( 2 );
 	doc.ArrayGet( 0 ).ArrayAppend().StringSet( "nested1" );
-	doc.ArrayGet( 0 ).ArrayAppend().MapInitialize( 2 );
-	doc.ArrayGet( 0 ).ArrayGet( 1 ).MapSet( "nested_key" ).StringSet( "nested_string" );
+	doc.ArrayGet( 0 ).ArrayAppend().ObjectInitialize( 2 );
+	doc.ArrayGet( 0 ).ArrayGet( 1 ).ObjectSet( "nested_key" ).StringSet( "nested_string" );
 	doc.ArrayAppend().StringSet( "second" );
 	doc.EndUndoGroup();
 
@@ -1845,17 +1845,17 @@ TEST_CASE( "DocumentUndo InitializeComplexClear", "[ae::Document][undo]" )
 	REQUIRE( doc.ArrayGet( 0 ).IsArray() );
 	REQUIRE( doc.ArrayGet( 0 ).ArrayLength() == 2 );
 	REQUIRE( doc.ArrayGet( 0 ).ArrayGet( 0 ).StringGet() == std::string( "nested1" ) );
-	REQUIRE( doc.ArrayGet( 0 ).ArrayGet( 1 ).IsMap() );
-	REQUIRE( doc.ArrayGet( 0 ).ArrayGet( 1 ).MapTryGet( "nested_key" )->StringGet() == std::string( "nested_string" ) );
+	REQUIRE( doc.ArrayGet( 0 ).ArrayGet( 1 ).IsObject() );
+	REQUIRE( doc.ArrayGet( 0 ).ArrayGet( 1 ).ObjectTryGet( "nested_key" )->StringGet() == std::string( "nested_string" ) );
 	REQUIRE( doc.ArrayGet( 1 ).StringGet() == std::string( "second" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	// Initialize to Map should clear all nested structures
-	doc.Initialize( ae::DocumentValueType::Map );
+	// Initialize to object should clear all nested structures
+	doc.Initialize( ae::DocumentValueType::Object );
 	doc.EndUndoGroup();
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -1866,16 +1866,16 @@ TEST_CASE( "DocumentUndo InitializeComplexClear", "[ae::Document][undo]" )
 	REQUIRE( doc.ArrayGet( 0 ).IsArray() );
 	REQUIRE( doc.ArrayGet( 0 ).ArrayLength() == 2 );
 	REQUIRE( doc.ArrayGet( 0 ).ArrayGet( 0 ).StringGet() == std::string( "nested1" ) );
-	REQUIRE( doc.ArrayGet( 0 ).ArrayGet( 1 ).IsMap() );
-	REQUIRE( doc.ArrayGet( 0 ).ArrayGet( 1 ).MapTryGet( "nested_key" )->StringGet() == std::string( "nested_string" ) );
+	REQUIRE( doc.ArrayGet( 0 ).ArrayGet( 1 ).IsObject() );
+	REQUIRE( doc.ArrayGet( 0 ).ArrayGet( 1 ).ObjectTryGet( "nested_key" )->StringGet() == std::string( "nested_string" ) );
 	REQUIRE( doc.ArrayGet( 1 ).StringGet() == std::string( "second" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
 	// Redo should clear back to empty map
 	REQUIRE( doc.Redo() );
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 }
@@ -1893,7 +1893,7 @@ TEST_CASE( "DocumentUndo InitializeCoalescing", "[ae::Document][undo]" )
 
 	// Multiple Initialize calls in same group should coalesce SetType operations
 	doc.Initialize( ae::DocumentValueType::Array );
-	doc.Initialize( ae::DocumentValueType::Map );
+	doc.Initialize( ae::DocumentValueType::Object );
 	doc.Initialize( ae::DocumentValueType::String );
 	doc.Initialize( ae::DocumentValueType::Array );
 	doc.EndUndoGroup(); // All SetType operations should coalesce into one
@@ -1919,8 +1919,8 @@ TEST_CASE( "DocumentUndo InitializeCoalescing", "[ae::Document][undo]" )
 
 	// Test coalescing with data operations in between
 	doc.ArrayAppend().StringSet( "element1" );
-	doc.Initialize( ae::DocumentValueType::Map ); // Should clear array and change type
-	doc.MapSet( "key1" ).StringSet( "string1" );
+	doc.Initialize( ae::DocumentValueType::Object ); // Should clear array and change type
+	doc.ObjectSet( "key1" ).StringSet( "string1" );
 	doc.Initialize( ae::DocumentValueType::String ); // Should clear map and change type
 	doc.StringSet( "final_basic" );
 	doc.EndUndoGroup();
@@ -2036,198 +2036,198 @@ TEST_CASE( "DocumentUndo ArrayInitialize", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 }
 
-TEST_CASE( "DocumentUndo MapInitialize", "[ae::Document][undo]" )
+TEST_CASE( "DocumentUndo ObjectInitialize", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Start with map and add some key-value pairs
-	doc.MapInitialize( 4 );
-	doc.MapSet( "key1" ).StringSet( "string1" );
-	doc.MapSet( "key2" ).StringSet( "string2" );
-	doc.MapSet( "key3" ).StringSet( "string3" );
+	doc.ObjectInitialize( 4 );
+	doc.ObjectSet( "key1" ).StringSet( "string1" );
+	doc.ObjectSet( "key2" ).StringSet( "string2" );
+	doc.ObjectSet( "key3" ).StringSet( "string3" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 3 );
-	REQUIRE( doc.MapTryGet( "key1" )->StringGet() == std::string( "string1" ) );
-	REQUIRE( doc.MapTryGet( "key2" )->StringGet() == std::string( "string2" ) );
-	REQUIRE( doc.MapTryGet( "key3" )->StringGet() == std::string( "string3" ) );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 3 );
+	REQUIRE( doc.ObjectTryGet( "key1" )->StringGet() == std::string( "string1" ) );
+	REQUIRE( doc.ObjectTryGet( "key2" )->StringGet() == std::string( "string2" ) );
+	REQUIRE( doc.ObjectTryGet( "key3" )->StringGet() == std::string( "string3" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	// MapInitialize should clear existing map contents
-	doc.MapInitialize( 2 );
+	// ObjectInitialize should clear existing map contents
+	doc.ObjectInitialize( 2 );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 0 ); // Should be cleared
-	REQUIRE( doc.MapTryGet( "key1" ) == nullptr );
-	REQUIRE( doc.MapTryGet( "key2" ) == nullptr );
-	REQUIRE( doc.MapTryGet( "key3" ) == nullptr );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 0 ); // Should be cleared
+	REQUIRE( doc.ObjectTryGet( "key1" ) == nullptr );
+	REQUIRE( doc.ObjectTryGet( "key2" ) == nullptr );
+	REQUIRE( doc.ObjectTryGet( "key3" ) == nullptr );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Add new key-value pairs to verify it works after clearing
-	doc.MapSet( "newkey1" ).StringSet( "newstring1" );
-	doc.MapSet( "newkey2" ).StringSet( "newstring2" );
+	doc.ObjectSet( "newkey1" ).StringSet( "newstring1" );
+	doc.ObjectSet( "newkey2" ).StringSet( "newstring2" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 2 );
-	REQUIRE( doc.MapTryGet( "newkey1" )->StringGet() == std::string( "newstring1" ) );
-	REQUIRE( doc.MapTryGet( "newkey2" )->StringGet() == std::string( "newstring2" ) );
-	REQUIRE( doc.MapTryGet( "key1" ) == nullptr ); // Old keys should still be gone
+	REQUIRE( doc.ObjectLength() == 2 );
+	REQUIRE( doc.ObjectTryGet( "newkey1" )->StringGet() == std::string( "newstring1" ) );
+	REQUIRE( doc.ObjectTryGet( "newkey2" )->StringGet() == std::string( "newstring2" ) );
+	REQUIRE( doc.ObjectTryGet( "key1" ) == nullptr ); // Old keys should still be gone
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore empty map
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 0 );
-	REQUIRE( doc.MapTryGet( "newkey1" ) == nullptr );
-	REQUIRE( doc.MapTryGet( "newkey2" ) == nullptr );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 0 );
+	REQUIRE( doc.ObjectTryGet( "newkey1" ) == nullptr );
+	REQUIRE( doc.ObjectTryGet( "newkey2" ) == nullptr );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
 	// Undo should restore original map with all key-value pairs
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 3 );
-	REQUIRE( doc.MapTryGet( "key1" )->StringGet() == std::string( "string1" ) );
-	REQUIRE( doc.MapTryGet( "key2" )->StringGet() == std::string( "string2" ) );
-	REQUIRE( doc.MapTryGet( "key3" )->StringGet() == std::string( "string3" ) );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 3 );
+	REQUIRE( doc.ObjectTryGet( "key1" )->StringGet() == std::string( "string1" ) );
+	REQUIRE( doc.ObjectTryGet( "key2" )->StringGet() == std::string( "string2" ) );
+	REQUIRE( doc.ObjectTryGet( "key3" )->StringGet() == std::string( "string3" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 2 );
 
 	// Redo should restore cleared map
 	REQUIRE( doc.Redo() );
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 0 );
-	REQUIRE( doc.MapTryGet( "key1" ) == nullptr );
-	REQUIRE( doc.MapTryGet( "key2" ) == nullptr );
-	REQUIRE( doc.MapTryGet( "key3" ) == nullptr );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 0 );
+	REQUIRE( doc.ObjectTryGet( "key1" ) == nullptr );
+	REQUIRE( doc.ObjectTryGet( "key2" ) == nullptr );
+	REQUIRE( doc.ObjectTryGet( "key3" ) == nullptr );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
 	// Redo should restore new key-value pairs
 	REQUIRE( doc.Redo() );
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 2 );
-	REQUIRE( doc.MapTryGet( "newkey1" )->StringGet() == std::string( "newstring1" ) );
-	REQUIRE( doc.MapTryGet( "newkey2" )->StringGet() == std::string( "newstring2" ) );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 2 );
+	REQUIRE( doc.ObjectTryGet( "newkey1" )->StringGet() == std::string( "newstring1" ) );
+	REQUIRE( doc.ObjectTryGet( "newkey2" )->StringGet() == std::string( "newstring2" ) );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	// Test MapInitialize on different type (basic string)
-	doc.StringSet( "convert_to_map" );
+	// Test ObjectInitialize on different type (basic string)
+	doc.StringSet( "convert_to_object" );
 	doc.EndUndoGroup();
 	REQUIRE( doc.IsString() );
-	REQUIRE( doc.StringGet() == std::string( "convert_to_map" ) );
+	REQUIRE( doc.StringGet() == std::string( "convert_to_object" ) );
 	REQUIRE( doc.GetUndoStackSize() == 4 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	// MapInitialize should convert from basic to map
-	doc.MapInitialize( 1 );
+	// ObjectInitialize should convert from basic to object
+	doc.ObjectInitialize( 1 );
 	doc.EndUndoGroup();
-	REQUIRE( doc.IsMap() );
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 5 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore basic string
 	REQUIRE( doc.Undo() );
 	REQUIRE( doc.IsString() );
-	REQUIRE( doc.StringGet() == std::string( "convert_to_map" ) );
+	REQUIRE( doc.StringGet() == std::string( "convert_to_object" ) );
 	REQUIRE( doc.GetUndoStackSize() == 4 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 }
 
-TEST_CASE( "DocumentUndo MapOrderStability", "[ae::Document][undo][map]" )
+TEST_CASE( "DocumentUndo ObjectOrderStability", "[ae::Document][undo][object]" )
 {
 	ae::Document doc( "test" );
-	doc.MapInitialize( 10 );
+	doc.ObjectInitialize( 10 );
 
 	// Add elements in specific order
-	doc.MapSet( "alpha" ).StringSet( "first" );
-	doc.MapSet( "beta" ).StringSet( "second" );
-	doc.MapSet( "gamma" ).StringSet( "third" );
-	doc.MapSet( "delta" ).StringSet( "fourth" );
-	doc.MapSet( "epsilon" ).StringSet( "fifth" );
+	doc.ObjectSet( "alpha" ).StringSet( "first" );
+	doc.ObjectSet( "beta" ).StringSet( "second" );
+	doc.ObjectSet( "gamma" ).StringSet( "third" );
+	doc.ObjectSet( "delta" ).StringSet( "fourth" );
+	doc.ObjectSet( "epsilon" ).StringSet( "fifth" );
 	doc.EndUndoGroup();
 
 	// Verify initial order through iteration
-	REQUIRE( doc.MapLength() == 5 );
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
-	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
-	REQUIRE( doc.MapGetKey( 2 ) == std::string( "gamma" ) );
-	REQUIRE( doc.MapGetKey( 3 ) == std::string( "delta" ) );
-	REQUIRE( doc.MapGetKey( 4 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.ObjectLength() == 5 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "gamma" ) );
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "delta" ) );
+	REQUIRE( doc.ObjectGetKey( 4 ) == std::string( "epsilon" ) );
 
 	// Modify existing strings (should not affect order)
-	doc.MapSet( "gamma" ).StringSet( "modified_third" );
-	doc.MapSet( "alpha" ).StringSet( "modified_first" );
+	doc.ObjectSet( "gamma" ).StringSet( "modified_third" );
+	doc.ObjectSet( "alpha" ).StringSet( "modified_first" );
 	doc.EndUndoGroup();
 
 	// Verify order is preserved after modifications
-	REQUIRE( doc.MapLength() == 5 );
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
-	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
-	REQUIRE( doc.MapGetKey( 2 ) == std::string( "gamma" ) );
-	REQUIRE( doc.MapGetKey( 3 ) == std::string( "delta" ) );
-	REQUIRE( doc.MapGetKey( 4 ) == std::string( "epsilon" ) );
-	REQUIRE( doc.MapGetValue( 0 ).StringGet() == std::string( "modified_first" ) );
-	REQUIRE( doc.MapGetValue( 2 ).StringGet() == std::string( "modified_third" ) );
+	REQUIRE( doc.ObjectLength() == 5 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "gamma" ) );
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "delta" ) );
+	REQUIRE( doc.ObjectGetKey( 4 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.ObjectGetValue( 0 ).StringGet() == std::string( "modified_first" ) );
+	REQUIRE( doc.ObjectGetValue( 2 ).StringGet() == std::string( "modified_third" ) );
 
 	// Add new elements (should append to end)
-	doc.MapSet( "zeta" ).StringSet( "sixth" );
-	doc.MapSet( "eta" ).StringSet( "seventh" );
+	doc.ObjectSet( "zeta" ).StringSet( "sixth" );
+	doc.ObjectSet( "eta" ).StringSet( "seventh" );
 	doc.EndUndoGroup();
 
 	// Verify new elements maintain insertion order
-	REQUIRE( doc.MapLength() == 7 );
-	REQUIRE( doc.MapGetKey( 5 ) == std::string( "zeta" ) );
-	REQUIRE( doc.MapGetKey( 6 ) == std::string( "eta" ) );
+	REQUIRE( doc.ObjectLength() == 7 );
+	REQUIRE( doc.ObjectGetKey( 5 ) == std::string( "zeta" ) );
+	REQUIRE( doc.ObjectGetKey( 6 ) == std::string( "eta" ) );
 
 	// Remove middle element
-	doc.MapRemove( "gamma" );
+	doc.ObjectRemove( "gamma" );
 	doc.EndUndoGroup();
 
 	// Verify order is preserved after removal (remaining elements shift)
-	REQUIRE( doc.MapLength() == 6 );
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
-	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
-	REQUIRE( doc.MapGetKey( 2 ) == std::string( "delta" ) ); // gamma removed, delta shifts up
-	REQUIRE( doc.MapGetKey( 3 ) == std::string( "epsilon" ) );
-	REQUIRE( doc.MapGetKey( 4 ) == std::string( "zeta" ) );
-	REQUIRE( doc.MapGetKey( 5 ) == std::string( "eta" ) );
+	REQUIRE( doc.ObjectLength() == 6 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "delta" ) ); // gamma removed, delta shifts up
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.ObjectGetKey( 4 ) == std::string( "zeta" ) );
+	REQUIRE( doc.ObjectGetKey( 5 ) == std::string( "eta" ) );
 
 	// Undo removal - element should return to same position
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.MapLength() == 7 );
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
-	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
-	REQUIRE( doc.MapGetKey( 2 ) == std::string( "gamma" ) ); // gamma restored to original position
-	REQUIRE( doc.MapGetKey( 3 ) == std::string( "delta" ) );
-	REQUIRE( doc.MapGetKey( 4 ) == std::string( "epsilon" ) );
-	REQUIRE( doc.MapGetKey( 5 ) == std::string( "zeta" ) );
-	REQUIRE( doc.MapGetKey( 6 ) == std::string( "eta" ) );
-	REQUIRE( doc.MapGetValue( 2 ).StringGet() == std::string( "modified_third" ) );
+	REQUIRE( doc.ObjectLength() == 7 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "gamma" ) ); // gamma restored to original position
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "delta" ) );
+	REQUIRE( doc.ObjectGetKey( 4 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.ObjectGetKey( 5 ) == std::string( "zeta" ) );
+	REQUIRE( doc.ObjectGetKey( 6 ) == std::string( "eta" ) );
+	REQUIRE( doc.ObjectGetValue( 2 ).StringGet() == std::string( "modified_third" ) );
 
 	// Undo additions
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.MapLength() == 5 );
-	REQUIRE( doc.MapGetKey( 4 ) == std::string( "epsilon" ) ); // zeta and eta should be gone
-	REQUIRE( doc.MapTryGet( "zeta" ) == nullptr );
-	REQUIRE( doc.MapTryGet( "eta" ) == nullptr );
+	REQUIRE( doc.ObjectLength() == 5 );
+	REQUIRE( doc.ObjectGetKey( 4 ) == std::string( "epsilon" ) ); // zeta and eta should be gone
+	REQUIRE( doc.ObjectTryGet( "zeta" ) == nullptr );
+	REQUIRE( doc.ObjectTryGet( "eta" ) == nullptr );
 
 	// Undo modifications - strings should revert but order preserved
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.MapLength() == 5 );
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
-	REQUIRE( doc.MapGetKey( 2 ) == std::string( "gamma" ) );
-	REQUIRE( doc.MapGetValue( 0 ).StringGet() == std::string( "first" ) ); // alpha reverted
-	REQUIRE( doc.MapGetValue( 2 ).StringGet() == std::string( "third" ) ); // gamma reverted
+	REQUIRE( doc.ObjectLength() == 5 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "gamma" ) );
+	REQUIRE( doc.ObjectGetValue( 0 ).StringGet() == std::string( "first" ) ); // alpha reverted
+	REQUIRE( doc.ObjectGetValue( 2 ).StringGet() == std::string( "third" ) ); // gamma reverted
 
 	// Test complete redo cycle maintains order
 	REQUIRE( doc.Redo() ); // redo modifications
@@ -2235,48 +2235,48 @@ TEST_CASE( "DocumentUndo MapOrderStability", "[ae::Document][undo][map]" )
 	REQUIRE( doc.Redo() ); // redo removal
 
 	// Final state should match removal state
-	REQUIRE( doc.MapLength() == 6 );
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
-	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
-	REQUIRE( doc.MapGetKey( 2 ) == std::string( "delta" ) ); // gamma removed
-	REQUIRE( doc.MapGetKey( 3 ) == std::string( "epsilon" ) );
-	REQUIRE( doc.MapGetKey( 4 ) == std::string( "zeta" ) );
-	REQUIRE( doc.MapGetKey( 5 ) == std::string( "eta" ) );
-	REQUIRE( doc.MapTryGet( "gamma" ) == nullptr );
+	REQUIRE( doc.ObjectLength() == 6 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "delta" ) ); // gamma removed
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.ObjectGetKey( 4 ) == std::string( "zeta" ) );
+	REQUIRE( doc.ObjectGetKey( 5 ) == std::string( "eta" ) );
+	REQUIRE( doc.ObjectTryGet( "gamma" ) == nullptr );
 
 	// Test that re-adding a removed key appends to end (new insertion)
-	doc.MapSet( "gamma" ).StringSet( "re_added" );
+	doc.ObjectSet( "gamma" ).StringSet( "re_added" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 7 );
-	REQUIRE( doc.MapGetKey( 6 ) == std::string( "gamma" ) ); // Should be at end, not original position
-	REQUIRE( doc.MapGetValue( 6 ).StringGet() == std::string( "re_added" ) );
+	REQUIRE( doc.ObjectLength() == 7 );
+	REQUIRE( doc.ObjectGetKey( 6 ) == std::string( "gamma" ) ); // Should be at end, not original position
+	REQUIRE( doc.ObjectGetValue( 6 ).StringGet() == std::string( "re_added" ) );
 
 	// Verify all other elements maintain their positions
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "alpha" ) );
-	REQUIRE( doc.MapGetKey( 1 ) == std::string( "beta" ) );
-	REQUIRE( doc.MapGetKey( 2 ) == std::string( "delta" ) );
-	REQUIRE( doc.MapGetKey( 3 ) == std::string( "epsilon" ) );
-	REQUIRE( doc.MapGetKey( 4 ) == std::string( "zeta" ) );
-	REQUIRE( doc.MapGetKey( 5 ) == std::string( "eta" ) );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "alpha" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "beta" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "delta" ) );
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "epsilon" ) );
+	REQUIRE( doc.ObjectGetKey( 4 ) == std::string( "zeta" ) );
+	REQUIRE( doc.ObjectGetKey( 5 ) == std::string( "eta" ) );
 }
 
-TEST_CASE( "DocumentUndo MapOrderPerfectRestoration", "[ae::Document][undo][map][order]" )
+TEST_CASE( "DocumentUndo MapOrderPerfectRestoration", "[ae::Document][undo][object][order]" )
 {
 	ae::Document doc( "test" );
-	doc.MapInitialize( 10 );
+	doc.ObjectInitialize( 10 );
 
 	// Build a complex map with specific ordering
-	doc.MapSet( "z_last" ).StringSet( "should_be_first" );
-	doc.MapSet( "a_first" ).StringSet( "should_be_second" );
-	doc.MapSet( "m_middle" ).StringSet( "should_be_third" );
+	doc.ObjectSet( "z_last" ).StringSet( "should_be_first" );
+	doc.ObjectSet( "a_first" ).StringSet( "should_be_second" );
+	doc.ObjectSet( "m_middle" ).StringSet( "should_be_third" );
 	doc.EndUndoGroup();
 
 	// Capture the original order
 	std::vector< std::string > originalOrder;
-	for( uint32_t i = 0; i < doc.MapLength(); i++ )
+	for( uint32_t i = 0; i < doc.ObjectLength(); i++ )
 	{
-		originalOrder.push_back( doc.MapGetKey( i ) );
+		originalOrder.push_back( doc.ObjectGetKey( i ) );
 	}
 
 	REQUIRE( originalOrder.size() == 3 );
@@ -2285,129 +2285,129 @@ TEST_CASE( "DocumentUndo MapOrderPerfectRestoration", "[ae::Document][undo][map]
 	REQUIRE( originalOrder[ 2 ] == "m_middle" );
 
 	// Remove the middle element
-	REQUIRE( doc.MapRemove( "a_first" ) );
+	REQUIRE( doc.ObjectRemove( "a_first" ) );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 2 );
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "z_last" ) );
-	REQUIRE( doc.MapGetKey( 1 ) == std::string( "m_middle" ) );
-	REQUIRE( doc.MapTryGet( "a_first" ) == nullptr );
+	REQUIRE( doc.ObjectLength() == 2 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "z_last" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "m_middle" ) );
+	REQUIRE( doc.ObjectTryGet( "a_first" ) == nullptr );
 
 	// Add some more elements
-	doc.MapSet( "new_element" ).StringSet( "new_string" );
-	doc.MapSet( "another_new" ).StringSet( "another_string" );
+	doc.ObjectSet( "new_element" ).StringSet( "new_string" );
+	doc.ObjectSet( "another_new" ).StringSet( "another_string" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 4 );
-	REQUIRE( doc.MapGetKey( 2 ) == std::string( "new_element" ) );
-	REQUIRE( doc.MapGetKey( 3 ) == std::string( "another_new" ) );
+	REQUIRE( doc.ObjectLength() == 4 );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "new_element" ) );
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "another_new" ) );
 
 	// Undo the additions
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.MapLength() == 2 );
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "z_last" ) );
-	REQUIRE( doc.MapGetKey( 1 ) == std::string( "m_middle" ) );
-	REQUIRE( doc.MapTryGet( "new_element" ) == nullptr );
-	REQUIRE( doc.MapTryGet( "another_new" ) == nullptr );
+	REQUIRE( doc.ObjectLength() == 2 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "z_last" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "m_middle" ) );
+	REQUIRE( doc.ObjectTryGet( "new_element" ) == nullptr );
+	REQUIRE( doc.ObjectTryGet( "another_new" ) == nullptr );
 
 	// Undo the removal - should restore exact original position
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.MapLength() == 3 );
+	REQUIRE( doc.ObjectLength() == 3 );
 
 	// Verify the exact original order is restored
-	for( uint32_t i = 0; i < doc.MapLength(); i++ )
+	for( uint32_t i = 0; i < doc.ObjectLength(); i++ )
 	{
-		REQUIRE( doc.MapGetKey( i ) == originalOrder[ i ] );
+		REQUIRE( doc.ObjectGetKey( i ) == originalOrder[ i ] );
 	}
 
 	// Verify strings are correct too
-	REQUIRE( doc.MapSet( "z_last" ).StringGet() == std::string( "should_be_first" ) );
-	REQUIRE( doc.MapSet( "a_first" ).StringGet() == std::string( "should_be_second" ) );
-	REQUIRE( doc.MapSet( "m_middle" ).StringGet() == std::string( "should_be_third" ) );
+	REQUIRE( doc.ObjectSet( "z_last" ).StringGet() == std::string( "should_be_first" ) );
+	REQUIRE( doc.ObjectSet( "a_first" ).StringGet() == std::string( "should_be_second" ) );
+	REQUIRE( doc.ObjectSet( "m_middle" ).StringGet() == std::string( "should_be_third" ) );
 
 	// Test that redo preserves order through complex operations
 	REQUIRE( doc.Redo() ); // redo removal
 	REQUIRE( doc.Redo() ); // redo additions
 
-	REQUIRE( doc.MapLength() == 4 );
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "z_last" ) );
-	REQUIRE( doc.MapGetKey( 1 ) == std::string( "m_middle" ) ); // a_first removed
-	REQUIRE( doc.MapGetKey( 2 ) == std::string( "new_element" ) );
-	REQUIRE( doc.MapGetKey( 3 ) == std::string( "another_new" ) );
+	REQUIRE( doc.ObjectLength() == 4 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "z_last" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "m_middle" ) ); // a_first removed
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "new_element" ) );
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "another_new" ) );
 
 	// Now test removing and re-adding the same key
-	REQUIRE( doc.MapRemove( "z_last" ) );
+	REQUIRE( doc.ObjectRemove( "z_last" ) );
 	doc.EndUndoGroup();
 
 	// Re-add the same key (should append to end, not go back to original position)
-	doc.MapSet( "z_last" ).StringSet( "reinserted_string" );
+	doc.ObjectSet( "z_last" ).StringSet( "reinserted_string" );
 	doc.EndUndoGroup();
 
-	REQUIRE( doc.MapLength() == 4 );
-	REQUIRE( doc.MapGetKey( 0 ) == std::string( "m_middle" ) );
-	REQUIRE( doc.MapGetKey( 1 ) == std::string( "new_element" ) );
-	REQUIRE( doc.MapGetKey( 2 ) == std::string( "another_new" ) );
-	REQUIRE( doc.MapGetKey( 3 ) == std::string( "z_last" ) ); // Should be at end now
-	REQUIRE( doc.MapSet( "z_last" ).StringGet() == std::string( "reinserted_string" ) );
+	REQUIRE( doc.ObjectLength() == 4 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "m_middle" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "new_element" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "another_new" ) );
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "z_last" ) ); // Should be at end now
+	REQUIRE( doc.ObjectSet( "z_last" ).StringGet() == std::string( "reinserted_string" ) );
 }
 
-TEST_CASE( "DocumentValue ValueSet ValueGet BasicTypes", "[ae::Document][value]" )
+TEST_CASE( "DocumentValue OpaqueSet OpaqueGet BasicTypes", "[ae::Document][opaque]" )
 {
 	ae::Document doc( "test" );
 
 	// Test int
-	doc.ValueSet( 42 );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.GetType() == ae::DocumentValueType::Value );
-	REQUIRE( doc.ValueGet( 0 ) == 42 );
-	REQUIRE( doc.ValueGet( 999 ) == 42 );
+	doc.OpaqueSet( 42 );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Opaque );
+	REQUIRE( doc.OpaqueGet( 0 ) == 42 );
+	REQUIRE( doc.OpaqueGet( 999 ) == 42 );
 
 	// Test float
-	doc.ValueSet( 3.14f );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.ValueGet( 0.0f ) == 3.14f );
-	REQUIRE( doc.ValueGet( 999.0f ) == 3.14f );
+	doc.OpaqueSet( 3.14f );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.OpaqueGet( 0.0f ) == 3.14f );
+	REQUIRE( doc.OpaqueGet( 999.0f ) == 3.14f );
 
 	// Test double
-	doc.ValueSet( 2.718 );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.ValueGet( 0.0 ) == 2.718 );
-	REQUIRE( doc.ValueGet( 999.0 ) == 2.718 );
+	doc.OpaqueSet( 2.718 );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.OpaqueGet( 0.0 ) == 2.718 );
+	REQUIRE( doc.OpaqueGet( 999.0 ) == 2.718 );
 
 	// Test bool
-	doc.ValueSet( true );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.ValueGet( false ) == true );
+	doc.OpaqueSet( true );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.OpaqueGet( false ) == true );
 
 	// Test uint32_t
-	doc.ValueSet( uint32_t( 4294967295 ) );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.ValueGet( uint32_t( 0 ) ) == 4294967295 );
+	doc.OpaqueSet( uint32_t( 4294967295 ) );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.OpaqueGet( uint32_t( 0 ) ) == 4294967295 );
 
 	// Test int64_t
-	doc.ValueSet( int64_t( 9223372036854775807LL ) );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.ValueGet( int64_t( 0 ) ) == 9223372036854775807LL );
+	doc.OpaqueSet( int64_t( 9223372036854775807LL ) );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.OpaqueGet( int64_t( 0 ) ) == 9223372036854775807LL );
 }
 
-TEST_CASE( "DocumentValue ValueSet ValueGet Structures", "[ae::Document][value]" )
+TEST_CASE( "DocumentValue OpaqueSet OpaqueGet Structures", "[ae::Document][opaque]" )
 {
 	ae::Document doc( "test" );
 
 	// Test ae::Vec3
 	ae::Vec3 vec( 1.0f, 2.0f, 3.0f );
-	doc.ValueSet( vec );
-	REQUIRE( doc.IsValue() );
-	ae::Vec3 retrieved = doc.ValueGet( ae::Vec3( 0.0f ) );
+	doc.OpaqueSet( vec );
+	REQUIRE( doc.IsOpaque() );
+	ae::Vec3 retrieved = doc.OpaqueGet( ae::Vec3( 0.0f ) );
 	REQUIRE( retrieved.x == 1.0f );
 	REQUIRE( retrieved.y == 2.0f );
 	REQUIRE( retrieved.z == 3.0f );
 
 	// Test ae::Color
 	ae::Color color( 1.0f, 0.5f, 0.25f, 0.75f );
-	doc.ValueSet( color );
-	REQUIRE( doc.IsValue() );
-	ae::Color retrievedColor = doc.ValueGet( ae::Color( 0.0f ) );
+	doc.OpaqueSet( color );
+	REQUIRE( doc.IsOpaque() );
+	ae::Color retrievedColor = doc.OpaqueGet( ae::Color( 0.0f ) );
 	REQUIRE( retrievedColor.r == 1.0f );
 	REQUIRE( retrievedColor.g == 0.5f );
 	REQUIRE( retrievedColor.b == 0.25f );
@@ -2422,85 +2422,85 @@ TEST_CASE( "DocumentValue ValueSet ValueGet Structures", "[ae::Document][value]"
 	};
 
 	CustomStruct custom{ 100, 3.5f, true };
-	doc.ValueSet( custom );
-	REQUIRE( doc.IsValue() );
-	CustomStruct retrievedCustom = doc.ValueGet( CustomStruct{ 0, 0.0f, false } );
+	doc.OpaqueSet( custom );
+	REQUIRE( doc.IsOpaque() );
+	CustomStruct retrievedCustom = doc.OpaqueGet( CustomStruct{ 0, 0.0f, false } );
 	REQUIRE( retrievedCustom.x == 100 );
 	REQUIRE( retrievedCustom.y == 3.5f );
 	REQUIRE( retrievedCustom.z == true );
 }
 
-TEST_CASE( "DocumentValue ValueSet TypeConversion", "[ae::Document][value]" )
+TEST_CASE( "DocumentValue OpaqueSet TypeConversion", "[ae::Document][opaque]" )
 {
 	ae::Document doc( "test" );
 
 	// Start as None type
-	REQUIRE( doc.GetType() == ae::DocumentValueType::None );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Null );
 
-	// ValueSet should automatically convert to Value type
-	doc.ValueSet( 42 );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.GetType() == ae::DocumentValueType::Value );
+	// OpaqueSet should automatically convert to Opaque type
+	doc.OpaqueSet( 42 );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Opaque );
 
-	// ValueSet should work on already Value type
-	doc.ValueSet( 100 );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.ValueGet( 0 ) == 100 );
+	// OpaqueSet should work on already Opaque type
+	doc.OpaqueSet( 100 );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.OpaqueGet( 0 ) == 100 );
 
-	// Change from String to Value
+	// Change from String to Opaque
 	doc.StringSet( "test_string" );
 	REQUIRE( doc.IsString() );
-	REQUIRE( !doc.IsValue() );
+	REQUIRE( !doc.IsOpaque() );
 
-	doc.ValueSet( 3.14f );
-	REQUIRE( doc.IsValue() );
+	doc.OpaqueSet( 3.14f );
+	REQUIRE( doc.IsOpaque() );
 	REQUIRE( !doc.IsString() );
-	REQUIRE( doc.ValueGet( 0.0f ) == 3.14f );
+	REQUIRE( doc.OpaqueGet( 0.0f ) == 3.14f );
 
-	// Change from Array to Value
+	// Change from Array to Opaque
 	doc.ArrayInitialize( 4 );
 	REQUIRE( doc.IsArray() );
-	REQUIRE( !doc.IsValue() );
+	REQUIRE( !doc.IsOpaque() );
 
-	doc.ValueSet( true );
-	REQUIRE( doc.IsValue() );
+	doc.OpaqueSet( true );
+	REQUIRE( doc.IsOpaque() );
 	REQUIRE( !doc.IsArray() );
-	REQUIRE( doc.ValueGet( false ) == true );
+	REQUIRE( doc.OpaqueGet( false ) == true );
 
-	// Change from Map to Value
-	doc.MapInitialize( 4 );
-	REQUIRE( doc.IsMap() );
-	REQUIRE( !doc.IsValue() );
+	// Change from Map to Opaque
+	doc.ObjectInitialize( 4 );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( !doc.IsOpaque() );
 
-	doc.ValueSet( 2.718 );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( !doc.IsMap() );
-	REQUIRE( doc.ValueGet( 0.0 ) == 2.718 );
+	doc.OpaqueSet( 2.718 );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( !doc.IsObject() );
+	REQUIRE( doc.OpaqueGet( 0.0 ) == 2.718 );
 }
 
-TEST_CASE( "DocumentValue ValueSet ValueGet DefaultValues", "[ae::Document][value]" )
+TEST_CASE( "DocumentValue OpaqueSet OpaqueGet DefaultValues", "[ae::Document][opaque]" )
 {
 	ae::Document doc( "test" );
 
 	// Store int, retrieve with wrong type should return default
-	doc.ValueSet( 42 );
-	REQUIRE( doc.ValueGet( 3.14f ) == 3.14f ); // Wrong type returns default
-	REQUIRE( doc.ValueGet( 2.718 ) == 2.718 ); // Wrong type returns default
-	REQUIRE( doc.ValueGet( true ) == true ); // Wrong type returns default
+	doc.OpaqueSet( 42 );
+	REQUIRE( doc.OpaqueGet( 3.14f ) == 3.14f ); // Wrong type returns default
+	REQUIRE( doc.OpaqueGet( 2.718 ) == 2.718 ); // Wrong type returns default
+	REQUIRE( doc.OpaqueGet( true ) == true ); // Wrong type returns default
 
 	// Store float, retrieve with wrong type should return default
-	doc.ValueSet( 1.5f );
-	REQUIRE( doc.ValueGet( 999 ) == 999 ); // Wrong type returns default
-	REQUIRE( doc.ValueGet( 2.718 ) == 2.718 ); // Wrong type returns default
-	REQUIRE( doc.ValueGet( false ) == false ); // Wrong type returns default
+	doc.OpaqueSet( 1.5f );
+	REQUIRE( doc.OpaqueGet( 999 ) == 999 ); // Wrong type returns default
+	REQUIRE( doc.OpaqueGet( 2.718 ) == 2.718 ); // Wrong type returns default
+	REQUIRE( doc.OpaqueGet( false ) == false ); // Wrong type returns default
 
 	// Store zero value
-	doc.ValueSet( 0 );
-	REQUIRE( doc.ValueGet( 999 ) == 0 ); // Correct type returns stored value even if zero
+	doc.OpaqueSet( 0 );
+	REQUIRE( doc.OpaqueGet( 999 ) == 0 ); // Correct type returns stored value even if zero
 
 	// Store false
-	doc.ValueSet( false );
-	REQUIRE( doc.ValueGet( true ) == false ); // Correct type returns stored value
+	doc.OpaqueSet( false );
+	REQUIRE( doc.OpaqueGet( true ) == false ); // Correct type returns stored value
 
 	// Store custom struct, retrieve with wrong type
 	struct Point
@@ -2509,94 +2509,94 @@ TEST_CASE( "DocumentValue ValueSet ValueGet DefaultValues", "[ae::Document][valu
 		float y;
 	};
 
-	doc.ValueSet( Point{ 5.0f, 10.0f } );
+	doc.OpaqueSet( Point{ 5.0f, 10.0f } );
 	Point defaultPoint{ 99.0f, 88.0f };
-	Point result = doc.ValueGet( defaultPoint );
+	Point result = doc.OpaqueGet( defaultPoint );
 	REQUIRE( result.x == 5.0f );
 	REQUIRE( result.y == 10.0f );
 
 	// Retrieve with int should return default int
-	REQUIRE( doc.ValueGet( 123 ) == 123 );
+	REQUIRE( doc.OpaqueGet( 123 ) == 123 );
 }
 
-TEST_CASE( "DocumentUndo ValueOperations", "[ae::Document][undo][value]" )
+TEST_CASE( "DocumentUndo ValueOperations", "[ae::Document][undo][opaque]" )
 {
 	ae::Document doc( "test" );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Set initial value
-	doc.ValueSet( 42 );
+	doc.OpaqueSet( 42 );
 	doc.EndUndoGroup();
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.ValueGet( 0 ) == 42 );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.OpaqueGet( 0 ) == 42 );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Change value (same type)
-	doc.ValueSet( 100 );
+	doc.OpaqueSet( 100 );
 	doc.EndUndoGroup();
-	REQUIRE( doc.ValueGet( 0 ) == 100 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 100 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore previous value
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.ValueGet( 0 ) == 42 );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.OpaqueGet( 0 ) == 42 );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
 	// Redo should restore changed value
 	REQUIRE( doc.Redo() );
-	REQUIRE( doc.ValueGet( 0 ) == 100 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 100 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Change to different type
-	doc.ValueSet( 3.14f );
+	doc.OpaqueSet( 3.14f );
 	doc.EndUndoGroup();
-	REQUIRE( doc.ValueGet( 0.0f ) == 3.14f );
+	REQUIRE( doc.OpaqueGet( 0.0f ) == 3.14f );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 
 	// Undo should restore int value
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.ValueGet( 0 ) == 100 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 100 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 }
 
-TEST_CASE( "DocumentUndo ValueCoalescing", "[ae::Document][undo][value]" )
+TEST_CASE( "DocumentUndo ValueCoalescing", "[ae::Document][undo][opaque]" )
 {
 	ae::Document doc( "test" );
 
-	// Multiple ValueSet calls in same group should coalesce
-	doc.ValueSet( 1 );
-	doc.ValueSet( 2 );
-	doc.ValueSet( 3 );
+	// Multiple OpaqueSet calls in same group should coalesce
+	doc.OpaqueSet( 1 );
+	doc.OpaqueSet( 2 );
+	doc.OpaqueSet( 3 );
 	doc.EndUndoGroup();
 
 	// Should only have one undo operation
 	REQUIRE( doc.GetUndoStackSize() == 1 );
-	REQUIRE( doc.ValueGet( 0 ) == 3 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 3 );
 
 	// Undo should go back to None type (original state)
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.GetType() == ae::DocumentValueType::None );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Null );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 
 	// Test coalescing with type changes in same group
-	doc.ValueSet( 100 );
-	doc.ValueSet( 200 );
-	doc.ValueSet( 300 );
+	doc.OpaqueSet( 100 );
+	doc.OpaqueSet( 200 );
+	doc.OpaqueSet( 300 );
 	doc.EndUndoGroup();
 
 	REQUIRE( doc.GetUndoStackSize() == 1 );
-	REQUIRE( doc.ValueGet( 0 ) == 300 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 300 );
 
 	// Now change type without ending group
-	doc.ValueSet( 3.14f );
-	REQUIRE( doc.ValueGet( 0.0f ) == 3.14f );
+	doc.OpaqueSet( 3.14f );
+	REQUIRE( doc.OpaqueGet( 0.0f ) == 3.14f );
 	doc.EndUndoGroup();
 
 	// Should have 2 operations total
@@ -2604,185 +2604,185 @@ TEST_CASE( "DocumentUndo ValueCoalescing", "[ae::Document][undo][value]" )
 
 	// Undo should restore int value
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.ValueGet( 0 ) == 300 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 300 );
 
 	// Undo again should restore None type
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.GetType() == ae::DocumentValueType::None );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Null );
 }
 
-TEST_CASE( "DocumentUndo ValueTypeChange", "[ae::Document][undo][value]" )
+TEST_CASE( "DocumentUndo ValueTypeChange", "[ae::Document][undo][opaque]" )
 {
 	ae::Document doc( "test" );
 
 	// Start as value
-	doc.ValueSet( 42 );
+	doc.OpaqueSet( 42 );
 	doc.EndUndoGroup();
-	REQUIRE( doc.IsValue() );
-	REQUIRE( doc.ValueGet( 0 ) == 42 );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( doc.OpaqueGet( 0 ) == 42 );
 
 	// Change to string
 	doc.StringSet( "test_string" );
 	doc.EndUndoGroup();
 	REQUIRE( doc.IsString() );
-	REQUIRE( !doc.IsValue() );
+	REQUIRE( !doc.IsOpaque() );
 	REQUIRE( doc.StringGet() == std::string( "test_string" ) );
 
-	// Undo should restore value type and int value
+	// Undo should restore Opaque type and int value
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.IsValue() );
+	REQUIRE( doc.IsOpaque() );
 	REQUIRE( !doc.IsString() );
-	REQUIRE( doc.ValueGet( 0 ) == 42 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 42 );
 
 	// Change to array
 	doc.ArrayInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.IsArray() );
-	REQUIRE( !doc.IsValue() );
+	REQUIRE( !doc.IsOpaque() );
 
-	// Undo should restore value type
+	// Undo should restore Opaque type
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.IsValue() );
+	REQUIRE( doc.IsOpaque() );
 	REQUIRE( !doc.IsArray() );
-	REQUIRE( doc.ValueGet( 0 ) == 42 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 42 );
 
-	// Change to map
-	doc.MapInitialize( 4 );
+	// Change to object
+	doc.ObjectInitialize( 4 );
 	doc.EndUndoGroup();
-	REQUIRE( doc.IsMap() );
-	REQUIRE( !doc.IsValue() );
+	REQUIRE( doc.IsObject() );
+	REQUIRE( !doc.IsOpaque() );
 
-	// Undo should restore value type
+	// Undo should restore Opaque type
 	REQUIRE( doc.Undo() );
-	REQUIRE( doc.IsValue() );
-	REQUIRE( !doc.IsMap() );
-	REQUIRE( doc.ValueGet( 0 ) == 42 );
+	REQUIRE( doc.IsOpaque() );
+	REQUIRE( !doc.IsObject() );
+	REQUIRE( doc.OpaqueGet( 0 ) == 42 );
 }
 
-TEST_CASE( "DocumentValue ValueSet InArrays", "[ae::Document][value][array]" )
+TEST_CASE( "DocumentValue OpaqueSet InArrays", "[ae::Document][opaque][array]" )
 {
 	ae::Document doc( "test" );
 	doc.ArrayInitialize( 4 );
 
-	// Add various value types to array
-	doc.ArrayAppend().ValueSet( 42 );
-	doc.ArrayAppend().ValueSet( 3.14f );
-	doc.ArrayAppend().ValueSet( true );
-	doc.ArrayAppend().ValueSet( ae::Vec3( 1.0f, 2.0f, 3.0f ) );
+	// Add various Opaque types to array
+	doc.ArrayAppend().OpaqueSet( 42 );
+	doc.ArrayAppend().OpaqueSet( 3.14f );
+	doc.ArrayAppend().OpaqueSet( true );
+	doc.ArrayAppend().OpaqueSet( ae::Vec3( 1.0f, 2.0f, 3.0f ) );
 
 	REQUIRE( doc.ArrayLength() == 4 );
-	REQUIRE( doc.ArrayGet( 0 ).IsValue() );
-	REQUIRE( doc.ArrayGet( 0 ).ValueGet( 0 ) == 42 );
-	REQUIRE( doc.ArrayGet( 1 ).IsValue() );
-	REQUIRE( doc.ArrayGet( 1 ).ValueGet( 0.0f ) == 3.14f );
-	REQUIRE( doc.ArrayGet( 2 ).IsValue() );
-	REQUIRE( doc.ArrayGet( 2 ).ValueGet( false ) == true );
-	REQUIRE( doc.ArrayGet( 3 ).IsValue() );
+	REQUIRE( doc.ArrayGet( 0 ).IsOpaque() );
+	REQUIRE( doc.ArrayGet( 0 ).OpaqueGet( 0 ) == 42 );
+	REQUIRE( doc.ArrayGet( 1 ).IsOpaque() );
+	REQUIRE( doc.ArrayGet( 1 ).OpaqueGet( 0.0f ) == 3.14f );
+	REQUIRE( doc.ArrayGet( 2 ).IsOpaque() );
+	REQUIRE( doc.ArrayGet( 2 ).OpaqueGet( false ) == true );
+	REQUIRE( doc.ArrayGet( 3 ).IsOpaque() );
 
-	ae::Vec3 vec = doc.ArrayGet( 3 ).ValueGet( ae::Vec3( 0.0f ) );
+	ae::Vec3 vec = doc.ArrayGet( 3 ).OpaqueGet( ae::Vec3( 0.0f ) );
 	REQUIRE( vec.x == 1.0f );
 	REQUIRE( vec.y == 2.0f );
 	REQUIRE( vec.z == 3.0f );
 }
 
-TEST_CASE( "DocumentValue ValueSet InMaps", "[ae::Document][value][map]" )
+TEST_CASE( "DocumentValue OpaqueSet InMaps", "[ae::Document][opaque][object]" )
 {
 	ae::Document doc( "test" );
-	doc.MapInitialize( 4 );
+	doc.ObjectInitialize( 4 );
 
-	// Add various value types to map
-	doc.MapSet( "int_value" ).ValueSet( 42 );
-	doc.MapSet( "float_value" ).ValueSet( 3.14f );
-	doc.MapSet( "bool_value" ).ValueSet( true );
-	doc.MapSet( "vec_value" ).ValueSet( ae::Vec3( 1.0f, 2.0f, 3.0f ) );
+	// Add various Opaque types to object
+	doc.ObjectSet( "int_value" ).OpaqueSet( 42 );
+	doc.ObjectSet( "float_value" ).OpaqueSet( 3.14f );
+	doc.ObjectSet( "bool_value" ).OpaqueSet( true );
+	doc.ObjectSet( "vec_value" ).OpaqueSet( ae::Vec3( 1.0f, 2.0f, 3.0f ) );
 
-	REQUIRE( doc.MapLength() == 4 );
+	REQUIRE( doc.ObjectLength() == 4 );
 
 	// Verify int value
-	REQUIRE( doc.MapTryGet( "int_value" ) != nullptr );
-	REQUIRE( doc.MapTryGet( "int_value" )->IsValue() );
-	REQUIRE( doc.MapTryGet( "int_value" )->ValueGet( 0 ) == 42 );
+	REQUIRE( doc.ObjectTryGet( "int_value" ) != nullptr );
+	REQUIRE( doc.ObjectTryGet( "int_value" )->IsOpaque() );
+	REQUIRE( doc.ObjectTryGet( "int_value" )->OpaqueGet( 0 ) == 42 );
 
 	// Verify float value
-	REQUIRE( doc.MapTryGet( "float_value" ) != nullptr );
-	REQUIRE( doc.MapTryGet( "float_value" )->IsValue() );
-	REQUIRE( doc.MapTryGet( "float_value" )->ValueGet( 0.0f ) == 3.14f );
+	REQUIRE( doc.ObjectTryGet( "float_value" ) != nullptr );
+	REQUIRE( doc.ObjectTryGet( "float_value" )->IsOpaque() );
+	REQUIRE( doc.ObjectTryGet( "float_value" )->OpaqueGet( 0.0f ) == 3.14f );
 
 	// Verify bool value
-	REQUIRE( doc.MapTryGet( "bool_value" ) != nullptr );
-	REQUIRE( doc.MapTryGet( "bool_value" )->IsValue() );
-	REQUIRE( doc.MapTryGet( "bool_value" )->ValueGet( false ) == true );
+	REQUIRE( doc.ObjectTryGet( "bool_value" ) != nullptr );
+	REQUIRE( doc.ObjectTryGet( "bool_value" )->IsOpaque() );
+	REQUIRE( doc.ObjectTryGet( "bool_value" )->OpaqueGet( false ) == true );
 
 	// Verify Vec3 value
-	REQUIRE( doc.MapTryGet( "vec_value" ) != nullptr );
-	REQUIRE( doc.MapTryGet( "vec_value" )->IsValue() );
-	ae::Vec3 vec = doc.MapTryGet( "vec_value" )->ValueGet( ae::Vec3( 0.0f ) );
+	REQUIRE( doc.ObjectTryGet( "vec_value" ) != nullptr );
+	REQUIRE( doc.ObjectTryGet( "vec_value" )->IsOpaque() );
+	ae::Vec3 vec = doc.ObjectTryGet( "vec_value" )->OpaqueGet( ae::Vec3( 0.0f ) );
 	REQUIRE( vec.x == 1.0f );
 	REQUIRE( vec.y == 2.0f );
 	REQUIRE( vec.z == 3.0f );
 }
 
-TEST_CASE( "DocumentValue ValueSet NegativeAndZeroValues", "[ae::Document][value]" )
+TEST_CASE( "DocumentValue OpaqueSet NegativeAndZeroValues", "[ae::Document][opaque]" )
 {
 	ae::Document doc( "test" );
 
 	// Test negative int
-	doc.ValueSet( -42 );
-	REQUIRE( doc.ValueGet( 0 ) == -42 );
+	doc.OpaqueSet( -42 );
+	REQUIRE( doc.OpaqueGet( 0 ) == -42 );
 
 	// Test negative float
-	doc.ValueSet( -3.14f );
-	REQUIRE( doc.ValueGet( 0.0f ) == -3.14f );
+	doc.OpaqueSet( -3.14f );
+	REQUIRE( doc.OpaqueGet( 0.0f ) == -3.14f );
 
 	// Test negative double
-	doc.ValueSet( -2.718 );
-	REQUIRE( doc.ValueGet( 0.0 ) == -2.718 );
+	doc.OpaqueSet( -2.718 );
+	REQUIRE( doc.OpaqueGet( 0.0 ) == -2.718 );
 
 	// Test zero int
-	doc.ValueSet( 0 );
-	REQUIRE( doc.ValueGet( 999 ) == 0 );
+	doc.OpaqueSet( 0 );
+	REQUIRE( doc.OpaqueGet( 999 ) == 0 );
 
 	// Test zero float
-	doc.ValueSet( 0.0f );
-	REQUIRE( doc.ValueGet( 999.0f ) == 0.0f );
+	doc.OpaqueSet( 0.0f );
+	REQUIRE( doc.OpaqueGet( 999.0f ) == 0.0f );
 
 	// Test false
-	doc.ValueSet( false );
-	REQUIRE( doc.ValueGet( true ) == false );
+	doc.OpaqueSet( false );
+	REQUIRE( doc.OpaqueGet( true ) == false );
 }
 
-TEST_CASE( "DocumentValue ValueSet Overwrite", "[ae::Document][value]" )
+TEST_CASE( "DocumentValue OpaqueSet Overwrite", "[ae::Document][opaque]" )
 {
 	ae::Document doc( "test" );
 
 	// Set initial value
-	doc.ValueSet( 42 );
-	REQUIRE( doc.ValueGet( 0 ) == 42 );
+	doc.OpaqueSet( 42 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 42 );
 
 	// Overwrite with same type
-	doc.ValueSet( 100 );
-	REQUIRE( doc.ValueGet( 0 ) == 100 );
+	doc.OpaqueSet( 100 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 100 );
 
 	// Overwrite with different type
-	doc.ValueSet( 3.14f );
-	REQUIRE( doc.ValueGet( 0.0f ) == 3.14f );
+	doc.OpaqueSet( 3.14f );
+	REQUIRE( doc.OpaqueGet( 0.0f ) == 3.14f );
 	// Previous int value should not be retrievable
-	REQUIRE( doc.ValueGet( 999 ) == 999 ); // Returns default
+	REQUIRE( doc.OpaqueGet( 999 ) == 999 ); // Returns default
 
 	// Overwrite with another type
-	doc.ValueSet( true );
-	REQUIRE( doc.ValueGet( false ) == true );
+	doc.OpaqueSet( true );
+	REQUIRE( doc.OpaqueGet( false ) == true );
 	// Previous float value should not be retrievable
-	REQUIRE( doc.ValueGet( 999.0f ) == 999.0f ); // Returns default
+	REQUIRE( doc.OpaqueGet( 999.0f ) == 999.0f ); // Returns default
 
 	// Overwrite with struct
 	struct Point { float x, y; };
-	doc.ValueSet( Point{ 5.0f, 10.0f } );
-	Point p = doc.ValueGet( Point{ 0.0f, 0.0f } );
+	doc.OpaqueSet( Point{ 5.0f, 10.0f } );
+	Point p = doc.OpaqueGet( Point{ 0.0f, 0.0f } );
 	REQUIRE( p.x == 5.0f );
 	REQUIRE( p.y == 10.0f );
 	// Previous bool value should not be retrievable
-	REQUIRE( doc.ValueGet( false ) == false ); // Returns default
+	REQUIRE( doc.OpaqueGet( false ) == false ); // Returns default
 }
 
 TEST_CASE( "DocumentValue StringGet TypeAssert", "[ae::Document][throws]" )
@@ -2792,8 +2792,8 @@ TEST_CASE( "DocumentValue StringGet TypeAssert", "[ae::Document][throws]" )
 	// StringGet on None type should assert
 	REQUIRE_THROWS( doc.StringGet() );
 
-	// StringGet on Value type should assert
-	doc.ValueSet( 42 );
+	// StringGet on Opaque type should assert
+	doc.OpaqueSet( 42 );
 	REQUIRE_THROWS( doc.StringGet() );
 
 	// StringGet on Array type should assert
@@ -2801,7 +2801,7 @@ TEST_CASE( "DocumentValue StringGet TypeAssert", "[ae::Document][throws]" )
 	REQUIRE_THROWS( doc.StringGet() );
 
 	// StringGet on Map type should assert
-	doc.MapInitialize( 4 );
+	doc.ObjectInitialize( 4 );
 	REQUIRE_THROWS( doc.StringGet() );
 
 	// StringGet should work on String type
@@ -2809,28 +2809,28 @@ TEST_CASE( "DocumentValue StringGet TypeAssert", "[ae::Document][throws]" )
 	REQUIRE( doc.StringGet() == std::string( "test" ) );
 }
 
-TEST_CASE( "DocumentValue ValueGet TypeAssert", "[ae::Document][throws]" )
+TEST_CASE( "DocumentValue OpaqueGet TypeAssert", "[ae::Document][throws]" )
 {
 	ae::Document doc( "test" );
 
-	// ValueGet on None type should assert
-	REQUIRE_THROWS( doc.ValueGet( 0 ) );
+	// OpaqueGet on None type should assert
+	REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
 
-	// ValueGet on String type should assert
+	// OpaqueGet on String type should assert
 	doc.StringSet( "test" );
-	REQUIRE_THROWS( doc.ValueGet( 0 ) );
+	REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
 
-	// ValueGet on Array type should assert
+	// OpaqueGet on Array type should assert
 	doc.ArrayInitialize( 4 );
-	REQUIRE_THROWS( doc.ValueGet( 0 ) );
+	REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
 
-	// ValueGet on Map type should assert
-	doc.MapInitialize( 4 );
-	REQUIRE_THROWS( doc.ValueGet( 0 ) );
+	// OpaqueGet on Map type should assert
+	doc.ObjectInitialize( 4 );
+	REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
 
-	// ValueGet should work on Value type
-	doc.ValueSet( 42 );
-	REQUIRE( doc.ValueGet( 0 ) == 42 );
+	// OpaqueGet should work on Opaque type
+	doc.OpaqueSet( 42 );
+	REQUIRE( doc.OpaqueGet( 0 ) == 42 );
 }
 
 TEST_CASE( "DocumentValue ArrayOperations TypeAssert", "[ae::Document][throws]" )
@@ -2852,8 +2852,8 @@ TEST_CASE( "DocumentValue ArrayOperations TypeAssert", "[ae::Document][throws]" 
 	REQUIRE_THROWS( doc.ArrayInsert( 0 ) );
 	REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
 
-	// Array operations on Value type should assert
-	doc.ValueSet( 42 );
+	// Array operations on Opaque type should assert
+	doc.OpaqueSet( 42 );
 	REQUIRE_THROWS( doc.ArrayLength() );
 	REQUIRE_THROWS( doc.ArrayGet( 0 ) );
 	REQUIRE_THROWS( doc.ArrayAppend() );
@@ -2861,7 +2861,7 @@ TEST_CASE( "DocumentValue ArrayOperations TypeAssert", "[ae::Document][throws]" 
 	REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
 
 	// Array operations on Map type should assert
-	doc.MapInitialize( 4 );
+	doc.ObjectInitialize( 4 );
 	REQUIRE_THROWS( doc.ArrayLength() );
 	REQUIRE_THROWS( doc.ArrayGet( 0 ) );
 	REQUIRE_THROWS( doc.ArrayAppend() );
@@ -2871,9 +2871,9 @@ TEST_CASE( "DocumentValue ArrayOperations TypeAssert", "[ae::Document][throws]" 
 	// Array operations should work on Array type
 	doc.ArrayInitialize( 4 );
 	REQUIRE( doc.ArrayLength() == 0 );
-	doc.ArrayAppend().ValueSet( 1 );
+	doc.ArrayAppend().OpaqueSet( 1 );
 	REQUIRE( doc.ArrayLength() == 1 );
-	REQUIRE( doc.ArrayGet( 0 ).ValueGet( 0 ) == 1 );
+	REQUIRE( doc.ArrayGet( 0 ).OpaqueGet( 0 ) == 1 );
 }
 
 TEST_CASE( "DocumentValue ArrayRemove BoundsAssert", "[ae::Document][throws]" )
@@ -2885,7 +2885,7 @@ TEST_CASE( "DocumentValue ArrayRemove BoundsAssert", "[ae::Document][throws]" )
 	REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
 
 	// Add element
-	doc.ArrayAppend().ValueSet( 1 );
+	doc.ArrayAppend().OpaqueSet( 1 );
 	REQUIRE( doc.ArrayLength() == 1 );
 
 	// Remove out of bounds should assert
@@ -2897,83 +2897,83 @@ TEST_CASE( "DocumentValue ArrayRemove BoundsAssert", "[ae::Document][throws]" )
 	REQUIRE( doc.ArrayLength() == 0 );
 }
 
-TEST_CASE( "DocumentValue MapOperations TypeAssert", "[ae::Document][throws]" )
+TEST_CASE( "DocumentValue ObjectOperations TypeAssert", "[ae::Document][throws]" )
 {
 	ae::Document doc( "test" );
 
-	// Map operations on None type should assert
-	REQUIRE_THROWS( doc.MapLength() );
-	REQUIRE_THROWS( doc.MapGetKey( 0 ) );
-	REQUIRE_THROWS( doc.MapGetValue( 0 ) );
-	REQUIRE_THROWS( doc.MapTryGet( "key" ) );
-	REQUIRE_THROWS( doc.MapRemove( "key" ) );
+	// Object operations on None type should assert
+	REQUIRE_THROWS( doc.ObjectLength() );
+	REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
+	REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
+	REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
+	REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
 
-	// Map operations on String type should assert
+	// Object operations on String type should assert
 	doc.StringSet( "test" );
-	REQUIRE_THROWS( doc.MapLength() );
-	REQUIRE_THROWS( doc.MapGetKey( 0 ) );
-	REQUIRE_THROWS( doc.MapGetValue( 0 ) );
-	REQUIRE_THROWS( doc.MapTryGet( "key" ) );
-	REQUIRE_THROWS( doc.MapRemove( "key" ) );
+	REQUIRE_THROWS( doc.ObjectLength() );
+	REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
+	REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
+	REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
+	REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
 
-	// Map operations on Value type should assert
-	doc.ValueSet( 42 );
-	REQUIRE_THROWS( doc.MapLength() );
-	REQUIRE_THROWS( doc.MapGetKey( 0 ) );
-	REQUIRE_THROWS( doc.MapGetValue( 0 ) );
-	REQUIRE_THROWS( doc.MapTryGet( "key" ) );
-	REQUIRE_THROWS( doc.MapRemove( "key" ) );
+	// Object operations on Opaque type should assert
+	doc.OpaqueSet( 42 );
+	REQUIRE_THROWS( doc.ObjectLength() );
+	REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
+	REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
+	REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
+	REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
 
-	// Map operations on Array type should assert
+	// Object operations on Array type should assert
 	doc.ArrayInitialize( 4 );
-	REQUIRE_THROWS( doc.MapLength() );
-	REQUIRE_THROWS( doc.MapGetKey( 0 ) );
-	REQUIRE_THROWS( doc.MapGetValue( 0 ) );
-	REQUIRE_THROWS( doc.MapTryGet( "key" ) );
-	REQUIRE_THROWS( doc.MapRemove( "key" ) );
+	REQUIRE_THROWS( doc.ObjectLength() );
+	REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
+	REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
+	REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
+	REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
 
-	// Map operations should work on Map type
-	doc.MapInitialize( 4 );
-	REQUIRE( doc.MapLength() == 0 );
-	doc.MapSet( "test" ).ValueSet( 1 );
-	REQUIRE( doc.MapLength() == 1 );
-	REQUIRE( doc.MapTryGet( "test" ) != nullptr );
-	REQUIRE( doc.MapTryGet( "test" )->ValueGet( 0 ) == 1 );
+	// Object operations should work on Object type
+	doc.ObjectInitialize( 4 );
+	REQUIRE( doc.ObjectLength() == 0 );
+	doc.ObjectSet( "test" ).OpaqueSet( 1 );
+	REQUIRE( doc.ObjectLength() == 1 );
+	REQUIRE( doc.ObjectTryGet( "test" ) != nullptr );
+	REQUIRE( doc.ObjectTryGet( "test" )->OpaqueGet( 0 ) == 1 );
 }
 
 TEST_CASE( "DocumentValue ConstOperations TypeAssert", "[ae::Document][throws]" )
 {
 	ae::Document doc( "test" );
 	doc.ArrayInitialize( 4 );
-	doc.ArrayAppend().ValueSet( 42 );
+	doc.ArrayAppend().OpaqueSet( 42 );
 
 	const ae::DocumentValue& constDoc = doc;
 
 	// Const ArrayGet should work
 	REQUIRE( constDoc.ArrayLength() == 1 );
-	REQUIRE( constDoc.ArrayGet( 0 ).ValueGet( 0 ) == 42 );
+	REQUIRE( constDoc.ArrayGet( 0 ).OpaqueGet( 0 ) == 42 );
 
-	// Change to Map
-	doc.MapInitialize( 4 );
-	doc.MapSet( "key" ).ValueSet( 100 );
+	// Change to object
+	doc.ObjectInitialize( 4 );
+	doc.ObjectSet( "key" ).OpaqueSet( 100 );
 
-	// Const MapTryGet should work
-	REQUIRE( constDoc.MapLength() == 1 );
-	const ae::DocumentValue* value = constDoc.MapTryGet( "key" );
+	// Const ObjectTryGet should work
+	REQUIRE( constDoc.ObjectLength() == 1 );
+	const ae::DocumentValue* value = constDoc.ObjectTryGet( "key" );
 	REQUIRE( value != nullptr );
-	REQUIRE( value->ValueGet( 0 ) == 100 );
+	REQUIRE( value->OpaqueGet( 0 ) == 100 );
 
-	// Const MapGetKey and MapGetValue should work
-	REQUIRE( constDoc.MapGetKey( 0 ) == std::string( "key" ) );
-	REQUIRE( constDoc.MapGetValue( 0 ).ValueGet( 0 ) == 100 );
+	// Const ObjectGetKey and MapGetValue should work
+	REQUIRE( constDoc.ObjectGetKey( 0 ) == std::string( "key" ) );
+	REQUIRE( constDoc.ObjectGetValue( 0 ).OpaqueGet( 0 ) == 100 );
 
 	// Change to String
 	doc.StringSet( "test_string" );
 	REQUIRE( constDoc.StringGet() == std::string( "test_string" ) );
 
-	// Change to Value
-	doc.ValueSet( 3.14f );
-	REQUIRE( constDoc.ValueGet( 0.0f ) == 3.14f );
+	// Change to Opaque
+	doc.OpaqueSet( 3.14f );
+	REQUIRE( constDoc.OpaqueGet( 0.0f ) == 3.14f );
 }
 
 TEST_CASE( "DocumentValue EdgeCases", "[ae::Document]" )
@@ -2986,15 +2986,15 @@ TEST_CASE( "DocumentValue EdgeCases", "[ae::Document]" )
 	REQUIRE( doc.StringGet() == std::string( "" ) );
 
 	// Test MapSet with empty key
-	doc.MapInitialize( 4 );
-	doc.MapSet( "" ).ValueSet( 42 );
-	REQUIRE( doc.MapLength() == 1 );
-	REQUIRE( doc.MapTryGet( "" ) != nullptr );
-	REQUIRE( doc.MapTryGet( "" )->ValueGet( 0 ) == 42 );
+	doc.ObjectInitialize( 4 );
+	doc.ObjectSet( "" ).OpaqueSet( 42 );
+	REQUIRE( doc.ObjectLength() == 1 );
+	REQUIRE( doc.ObjectTryGet( "" ) != nullptr );
+	REQUIRE( doc.ObjectTryGet( "" )->OpaqueGet( 0 ) == 42 );
 
 	// Test MapRemove with empty string
-	REQUIRE( doc.MapRemove( "" ) == true );
-	REQUIRE( doc.MapLength() == 0 );
+	REQUIRE( doc.ObjectRemove( "" ) == true );
+	REQUIRE( doc.ObjectLength() == 0 );
 }
 
 TEST_CASE( "DocumentValue StringSet LongStrings", "[ae::Document]" )
@@ -3025,17 +3025,17 @@ TEST_CASE( "DocumentValue StringSet LongStrings", "[ae::Document]" )
 TEST_CASE( "DocumentValue MapSet LongKeys", "[ae::Document]" )
 {
 	ae::Document doc( "test" );
-	doc.MapInitialize( 4 );
+	doc.ObjectInitialize( 4 );
 
 	// Test long key (1000 characters)
 	std::string longKey( 1000, 'k' );
-	doc.MapSet( longKey.c_str() ).ValueSet( 42 );
-	REQUIRE( doc.MapLength() == 1 );
-	REQUIRE( doc.MapTryGet( longKey.c_str() ) != nullptr );
-	REQUIRE( doc.MapTryGet( longKey.c_str() )->ValueGet( 0 ) == 42 );
+	doc.ObjectSet( longKey.c_str() ).OpaqueSet( 42 );
+	REQUIRE( doc.ObjectLength() == 1 );
+	REQUIRE( doc.ObjectTryGet( longKey.c_str() ) != nullptr );
+	REQUIRE( doc.ObjectTryGet( longKey.c_str() )->OpaqueGet( 0 ) == 42 );
 
 	// Test key with special characters
-	doc.MapSet( "key\nwith\ttabs\rand\nnewlines" ).ValueSet( 100 );
-	REQUIRE( doc.MapTryGet( "key\nwith\ttabs\rand\nnewlines" ) != nullptr );
-	REQUIRE( doc.MapTryGet( "key\nwith\ttabs\rand\nnewlines" )->ValueGet( 0 ) == 100 );
+	doc.ObjectSet( "key\nwith\ttabs\rand\nnewlines" ).OpaqueSet( 100 );
+	REQUIRE( doc.ObjectTryGet( "key\nwith\ttabs\rand\nnewlines" ) != nullptr );
+	REQUIRE( doc.ObjectTryGet( "key\nwith\ttabs\rand\nnewlines" )->OpaqueGet( 0 ) == 100 );
 }
