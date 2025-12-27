@@ -1624,7 +1624,7 @@ public:
 	bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
 	bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
 
-	Hash& HashString( const char* str );
+	Hash& HashString( const char* str ); // @TODO: constexpr
 	Hash& HashData( const void* data, uint32_t length );
 	template< typename T, uint32_t N > Hash& HashType( const T (&array)[ N ] );
 	template< typename T > Hash& HashType( const T& v );
@@ -2544,6 +2544,8 @@ enum class DocumentValueType
 {
 	Null,
 	String,
+	Number,
+	Bool,
 	Opaque,
 	Array,
 	Object
@@ -2574,6 +2576,8 @@ public:
 	DocumentValueType GetType() const { return m_type; }
 	bool IsNull() const;
 	bool IsString() const;
+	bool IsNumber() const;
+	bool IsBool() const;
 	bool IsOpaque() const;
 	bool IsArray() const;
 	bool IsObject() const;
@@ -2585,23 +2589,49 @@ public:
 	//! StringSet will be coalesced into a single undo operation. This
 	//! behavior can be circumvented by ending the current undo group between
 	//! calls.
-	//! \param str The string value to set. Can be nullptr or empty string.
+	//! \param str The string value to set. Must be null terminated.
 	void StringSet( const char* str );
 	//! Returns the basic string value. Must only be called when IsString() returns true.
 	//! \return The string value as a null-terminated C string.
 	const char* StringGet() const;
 
 	//--------------------------------------------------------------------------
-	// Opaque value
+	// Numeric value
 	//--------------------------------------------------------------------------
-	//! Sets the value to an opaque type. Note that repeated calls to
-	//! OpaqueSet will be coalesced into a single undo operation. This
+	//! Sets the value to a basic number type. Note that repeated calls to
+	//! NumberSet will be coalesced into a single undo operation. This
 	//! behavior can be circumvented by ending the current undo group between
 	//! calls.
-	//! \param value The string value to set. Can be nullptr or empty string.
+	//! \param number The number to set.
+	template< typename T > void NumberSet( T value );
+	//! Returns the number value. Must only be called when IsNumber() returns true.
+	//! \return The number value
+	template< typename T > T NumberGet() const;
+
+	//--------------------------------------------------------------------------
+	// Boolean value
+	//--------------------------------------------------------------------------
+	//! Sets the value to a bool. Note that repeated calls to
+	//! BoolSet will be coalesced into a single undo operation. This
+	//! behavior can be circumvented by ending the current undo group between
+	//! calls.
+	//! \param value The boolean value to set.
+	void BoolSet( bool value );
+	//! Returns the boolean value. Must only be called when IsBoolean() returns true.
+	//! \return The boolean value
+	bool BoolGet() const;
+
+	//--------------------------------------------------------------------------
+	// Opaque value
+	//--------------------------------------------------------------------------
+	//! Sets the value to an 'opaque' type. This function accepts small POD
+	//! types. Note that repeated calls to OpaqueSet will be coalesced into a
+	//! single undo operation. This behavior can be circumvented by ending the
+	//! current undo group between calls.
+	//! \param value The string value to set.
 	template< typename T > void OpaqueSet( const T& value );
 	//! Returns the basic string value. Must only be called when IsOpaque() returns true.
-	//! \return The string value as a null-terminated C string.
+	//! \return The opaque value
 	template< typename T > T OpaqueGet( const T& defaultValue ) const;
 
 	//--------------------------------------------------------------------------
@@ -9498,6 +9528,7 @@ Hash< U >& Hash< U >::HashType( const T& v )
 template< typename U >
 Hash< U >& Hash< U >::HashString( const char* str )
 {
+	// @TODO: constexpr
 	while( *str )
 	{
 		m_hash = m_hash ^ str[ 0 ];
@@ -11826,6 +11857,70 @@ const T* Any< Size, Alignment >::TryGet() const
 //------------------------------------------------------------------------------
 // ae::DocumentValue templated member functions
 //------------------------------------------------------------------------------
+template< typename T >
+void DocumentValue::NumberSet( T value )
+{
+	if( !IsNumber() )
+	{
+		Initialize( DocumentValueType::Number );
+	}
+	// Try to combine with previous NumberSet operation in current group
+	bool combined = false;
+	if( m_document->m_currentGroup.Length() > 0 )
+	{
+		UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
+		if( lastOp.type == UndoOpType::OpaqueSet && lastOp.target == this )
+		{
+			// Keep the original old value, just update current value
+			combined = true;
+		}
+	}
+	if( !combined )
+	{
+		UndoOp op;
+		op.type = UndoOpType::OpaqueSet;
+		op.target = this;
+		op.oldValue = m_value;
+		m_document->m_PushOp( op );
+	}
+	if constexpr( std::is_floating_point_v< T > )
+	{
+		m_value = static_cast< double >( value );
+	}
+	else if constexpr( std::is_unsigned_v< T > )
+	{
+		m_value = static_cast< uint64_t >( value );
+	}
+	else if constexpr( std::is_signed_v< T > )
+	{
+		m_value = static_cast< int64_t >( value );
+	}
+	else
+	{
+		AE_STATIC_ASSERT( std::is_arithmetic_v< T > );
+	}
+}
+
+template< typename T >
+T DocumentValue::NumberGet() const
+{
+	AE_STATIC_ASSERT( std::is_arithmetic_v< T > );
+	AE_ASSERT( IsNumber() );
+	if( const double* d = m_value.TryGet< double >() )
+	{
+		return static_cast< T >( *d );
+	}
+	else if( const uint64_t* u64 = m_value.TryGet< uint64_t >() )
+	{
+		return static_cast< T >( *u64 );
+	}
+	else if( const int64_t* i64 = m_value.TryGet< int64_t >() )
+	{
+		return static_cast< T >( *i64 );
+	}
+	return {};
+}
+
 template< typename T >
 void DocumentValue::OpaqueSet( const T& value )
 {
@@ -17304,6 +17399,8 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 				m_string.clear();
 			}
 			break;
+		case DocumentValueType::Number:
+		case DocumentValueType::Bool:
 		case DocumentValueType::Opaque:
 			if( m_value.GetType() )
 			{
@@ -17346,6 +17443,8 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 
 bool DocumentValue::IsNull() const { return ( m_type == DocumentValueType::Null ); }
 bool DocumentValue::IsString() const { return ( m_type == DocumentValueType::String ); }
+bool DocumentValue::IsNumber() const { return ( m_type == DocumentValueType::Number ); }
+bool DocumentValue::IsBool() const { return ( m_type == DocumentValueType::Bool ); }
 bool DocumentValue::IsOpaque() const { return ( m_type == DocumentValueType::Opaque ); }
 bool DocumentValue::IsArray() const { return ( m_type == DocumentValueType::Array ); }
 bool DocumentValue::IsObject() const { return ( m_type == DocumentValueType::Object ); }
@@ -17385,6 +17484,46 @@ const char* DocumentValue::StringGet() const
 {
 	AE_ASSERT( IsString() );
 	return m_string.c_str();
+}
+
+// Bool
+void DocumentValue::BoolSet( bool value )
+{
+	if( !IsBool() )
+	{
+		Initialize( DocumentValueType::Bool );
+	}
+	const bool* b = m_value.TryGet< bool >();
+	if( !b || ( *b != value ) )
+	{
+		// Try to combine with previous OpaqueSet operation in current group
+		bool combined = false;
+		if( m_document->m_currentGroup.Length() > 0 )
+		{
+			UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
+			if( lastOp.type == UndoOpType::OpaqueSet && lastOp.target == this )
+			{
+				// Keep the original old value, just update current value
+				combined = true;
+			}
+		}
+		if( !combined )
+		{
+			UndoOp op;
+			op.type = UndoOpType::OpaqueSet;
+			op.target = this;
+			op.oldValue = m_value;
+			m_document->m_PushOp( op );
+		}
+		m_value = value;
+	}
+}
+
+bool DocumentValue::BoolGet() const
+{
+	AE_ASSERT( IsBool() );
+	AE_DEBUG_ASSERT( m_value.GetType() == ae::GetTypeIdWithoutQualifiers< bool >() );
+	return m_value.Get< bool >( false );
 }
 
 // Array manipulation
@@ -17432,9 +17571,7 @@ void DocumentValue::ArrayRemove( uint32_t index )
 				child->ObjectRemove( child->m_map.GetKey( child->m_map.Length() - 1 ).c_str() );
 			}
 			break;
-		case DocumentValueType::String: break;
-		case DocumentValueType::Opaque: break;
-		case DocumentValueType::Null: break;
+		default: break;
 	}
 
 	UndoOp op;
@@ -17512,9 +17649,7 @@ bool DocumentValue::ObjectRemove( const char* key )
 				child->ObjectRemove( child->m_map.GetKey( child->m_map.Length() - 1 ).c_str() );
 			}
 			break;
-		case DocumentValueType::String: break;
-		case DocumentValueType::Opaque: break;
-		case DocumentValueType::Null: break;
+		default: break;
 	}
 
 	const int32_t index = m_map.GetIndex( key );
@@ -17745,7 +17880,7 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 		DocumentValue* target = op.target;
 		// Validate type consistency with data contents
 		AE_DEBUG_ASSERT( target->m_string.length() == 0 || target->m_type == DocumentValueType::String );
-		AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Opaque );
+		AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
 		AE_DEBUG_ASSERT( target->m_array.Length() == 0 || target->m_type == DocumentValueType::Array );
 		AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Object );
 		AE_DEBUG_ASSERT( target->m_refCount >= 0 );
@@ -30655,6 +30790,7 @@ ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 
 ae::TypeId ae::GetTypeIdFromName( const char* name )
 {
+	// @TODO: constexpr
 	// @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
 	return name[ 0 ] ? ae::Hash32().HashString( name ).Get() : ae::kInvalidTypeId;
 }

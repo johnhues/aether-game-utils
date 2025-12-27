@@ -6,6 +6,7 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //------------------------------------------------------------------------------
 // Undo/Redo Callback Tracking
@@ -1006,7 +1007,7 @@ TEST_CASE( "DocumentUndo MultiElementArrayWithDescendants", "[ae::Document][undo
 	auto& elem1_nested = elem1.ObjectSet( "nested" );
 	elem1_nested.ObjectInitialize( 2 );
 	auto& elem1_deep = elem1_nested.ObjectSet( "value" );
-	elem1_deep.OpaqueSet( 42.0 );
+	elem1_deep.NumberSet( 42.0 );
 
 	// Element 2: Array -> Map -> Bool
 	auto& elem2 = doc.ArrayAppend();
@@ -1014,7 +1015,7 @@ TEST_CASE( "DocumentUndo MultiElementArrayWithDescendants", "[ae::Document][undo
 	auto& elem2_nested = elem2.ArrayAppend();
 	elem2_nested.ObjectInitialize( 2 );
 	auto& elem2_deep = elem2_nested.ObjectSet( "flag" );
-	elem2_deep.OpaqueSet( true );
+	elem2_deep.BoolSet( true );
 
 	doc.EndUndoGroup();
 	REQUIRE( doc.ArrayLength() == 3 );
@@ -1055,8 +1056,8 @@ TEST_CASE( "DocumentUndo MultiElementArrayWithDescendants", "[ae::Document][undo
 
 	// Verify restored structure
 	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "nested" ).ArrayGet( 0 ).StringGet() == std::string( "deep0" ) );
-	REQUIRE( doc.ArrayGet( 1 ).ObjectSet( "nested" ).ObjectSet( "value" ).OpaqueGet( 0.0 ) == 42.0 );
-	REQUIRE( doc.ArrayGet( 2 ).ArrayGet( 0 ).ObjectSet( "flag" ).OpaqueGet( false ) == true );
+	REQUIRE( doc.ArrayGet( 1 ).ObjectSet( "nested" ).ObjectSet( "value" ).NumberGet< double >() == 42.0 );
+	REQUIRE( doc.ArrayGet( 2 ).ArrayGet( 0 ).ObjectSet( "flag" ).BoolGet() == true );
 
 	// Redo should destroy all elements and ALL their descendants
 	data.Reset();
@@ -1108,7 +1109,7 @@ TEST_CASE( "DocumentUndo MultiElementMapWithDescendants", "[ae::Document][undo]"
 	auto& entry_b_nested = entry_b.ObjectSet( "list" );
 	entry_b_nested.ArrayInitialize( 2 );
 	auto& entry_b_deep = entry_b_nested.ArrayAppend();
-	entry_b_deep.OpaqueSet( 99.5 );
+	entry_b_deep.NumberSet( 99.5 );
 
 	// Entry "c": Map -> Map -> Map -> Bool
 	auto& entry_c = doc.ObjectSet( "c" );
@@ -1118,7 +1119,7 @@ TEST_CASE( "DocumentUndo MultiElementMapWithDescendants", "[ae::Document][undo]"
 	auto& entry_c_level3 = entry_c_nested.ObjectSet( "level3" );
 	entry_c_level3.ObjectInitialize( 2 );
 	auto& entry_c_deep = entry_c_level3.ObjectSet( "flag" );
-	entry_c_deep.OpaqueSet( false );
+	entry_c_deep.BoolSet( false );
 
 	doc.EndUndoGroup();
 	REQUIRE( doc.ObjectLength() == 3 );
@@ -1160,8 +1161,8 @@ TEST_CASE( "DocumentUndo MultiElementMapWithDescendants", "[ae::Document][undo]"
 
 	// Verify restored structure
 	REQUIRE( doc.ObjectSet( "a" ).ArrayGet( 0 ).ObjectSet( "text" ).StringGet() == std::string( "deepA" ) );
-	REQUIRE( doc.ObjectSet( "b" ).ObjectSet( "list" ).ArrayGet( 0 ).OpaqueGet( 0.0 ) == 99.5 );
-	REQUIRE( doc.ObjectSet( "c" ).ObjectSet( "level2" ).ObjectSet( "level3" ).ObjectSet( "flag" ).OpaqueGet( false ) == false );
+	REQUIRE( doc.ObjectSet( "b" ).ObjectSet( "list" ).ArrayGet( 0 ).NumberGet< double >() == 99.5 );
+	REQUIRE( doc.ObjectSet( "c" ).ObjectSet( "level2" ).ObjectSet( "level3" ).ObjectSet( "flag" ).BoolGet() == false );
 
 	// Redo should destroy all entries and ALL their descendants
 	data.Reset();
@@ -1217,7 +1218,7 @@ TEST_CASE( "DocumentUndo MixedArrayMapDescendants", "[ae::Document][undo]" )
 	auto& level2b = level1b.ObjectSet( "keyB" );
 	level2b.ArrayInitialize( 2 );
 	auto& level3b = level2b.ArrayAppend();
-	level3b.OpaqueSet( 123.0 );
+	level3b.NumberSet( 123.0 );
 
 	doc.EndUndoGroup();
 	REQUIRE( doc.ArrayLength() == 2 );
@@ -1258,7 +1259,7 @@ TEST_CASE( "DocumentUndo MixedArrayMapDescendants", "[ae::Document][undo]" )
 
 	// Verify restored data
 	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "key1" ).ArrayGet( 0 ).ObjectSet( "key2" ).ArrayGet( 0 ).StringGet() == std::string( "veryDeep" ) );
-	REQUIRE( doc.ArrayGet( 1 ).ObjectSet( "keyB" ).ArrayGet( 0 ).OpaqueGet( 0.0 ) == 123.0 );
+	REQUIRE( doc.ArrayGet( 1 ).ObjectSet( "keyB" ).ArrayGet( 0 ).NumberGet< double >() == 123.0 );
 
 	// Redo should destroy all descendants
 	data.Reset();
@@ -2349,6 +2350,181 @@ TEST_CASE( "DocumentUndo MapOrderPerfectRestoration", "[ae::Document][undo][obje
 	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "another_new" ) );
 	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "z_last" ) ); // Should be at end now
 	REQUIRE( doc.ObjectSet( "z_last" ).StringGet() == std::string( "reinserted_string" ) );
+}
+
+TEST_CASE( "DocumentValue NumberSet NumberGet", "[ae::Document][number]" )
+{
+	ae::Document doc( "test" );
+
+	// Test int
+	doc.NumberSet( 42 );
+	REQUIRE( doc.IsNumber() );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Number );
+	REQUIRE( doc.NumberGet< int >() == 42 );
+	REQUIRE( doc.NumberGet< int32_t >() == 42 );
+	REQUIRE( doc.NumberGet< int64_t >() == 42 );
+	REQUIRE( doc.NumberGet< float >() == 42.0f );
+	REQUIRE( doc.NumberGet< double >() == 42.0 );
+
+	// Test float
+	doc.NumberSet( 3.14f );
+	REQUIRE( doc.IsNumber() );
+	REQUIRE( doc.NumberGet< float >() == 3.14f );
+	REQUIRE( doc.NumberGet< double >() == Catch::Approx( 3.14 ).epsilon( 0.01 ) );
+	REQUIRE( doc.NumberGet< int >() == 3 );
+
+	// Test double
+	doc.NumberSet( 2.718281828 );
+	REQUIRE( doc.IsNumber() );
+	REQUIRE( doc.NumberGet< double >() == 2.718281828 );
+	REQUIRE( doc.NumberGet< float >() == Catch::Approx( 2.718281828f ) );
+
+	// Test uint32_t
+	doc.NumberSet( uint32_t( 4294967295 ) );
+	REQUIRE( doc.IsNumber() );
+	REQUIRE( doc.NumberGet< uint32_t >() == 4294967295 );
+	REQUIRE( doc.NumberGet< uint64_t >() == 4294967295 );
+
+	// Test int64_t
+	doc.NumberSet( int64_t( 9223372036854775807LL ) );
+	REQUIRE( doc.IsNumber() );
+	REQUIRE( doc.NumberGet< int64_t >() == 9223372036854775807LL );
+
+	// Test negative numbers
+	doc.NumberSet( -42 );
+	REQUIRE( doc.IsNumber() );
+	REQUIRE( doc.NumberGet< int >() == -42 );
+	REQUIRE( doc.NumberGet< int64_t >() == -42 );
+	REQUIRE( doc.NumberGet< float >() == -42.0f );
+
+	// Test zero
+	doc.NumberSet( 0 );
+	REQUIRE( doc.IsNumber() );
+	REQUIRE( doc.NumberGet< int >() == 0 );
+	REQUIRE( doc.NumberGet< double >() == 0.0 );
+}
+
+TEST_CASE( "DocumentValue BoolSet BoolGet", "[ae::Document][bool]" )
+{
+	ae::Document doc( "test" );
+
+	// Test true
+	doc.BoolSet( true );
+	REQUIRE( doc.IsBool() );
+	REQUIRE( doc.GetType() == ae::DocumentValueType::Bool );
+	REQUIRE( doc.BoolGet() == true );
+
+	// Test false
+	doc.BoolSet( false );
+	REQUIRE( doc.IsBool() );
+	REQUIRE( doc.BoolGet() == false );
+
+	// Test switching back to true
+	doc.BoolSet( true );
+	REQUIRE( doc.IsBool() );
+	REQUIRE( doc.BoolGet() == true );
+}
+
+TEST_CASE( "DocumentValue Number Bool TypeTransitions", "[ae::Document]" )
+{
+	ae::Document doc( "test" );
+
+	// Start with a string
+	doc.StringSet( "hello" );
+	REQUIRE( doc.IsString() );
+
+	// Convert to number
+	doc.NumberSet( 42 );
+	REQUIRE( !doc.IsString() );
+	REQUIRE( doc.IsNumber() );
+	REQUIRE( doc.NumberGet< int >() == 42 );
+
+	// Convert to bool
+	doc.BoolSet( true );
+	REQUIRE( !doc.IsNumber() );
+	REQUIRE( doc.IsBool() );
+	REQUIRE( doc.BoolGet() == true );
+
+	// Convert to opaque
+	doc.OpaqueSet( ae::Vec3( 1, 2, 3 ) );
+	REQUIRE( !doc.IsBool() );
+	REQUIRE( doc.IsOpaque() );
+
+	// Back to number
+	doc.NumberSet( 3.14f );
+	REQUIRE( !doc.IsOpaque() );
+	REQUIRE( doc.IsNumber() );
+	REQUIRE( doc.NumberGet< float >() == 3.14f );
+}
+
+TEST_CASE( "DocumentUndo NumberSet Coalesce", "[ae::Document][undo]" )
+{
+	ae::Document doc( "test" );
+	DocumentCallbackData data;
+	auto callback = MakeDocumentCallback( data );
+
+	// Set initial number
+	doc.NumberSet( 10 );
+	doc.EndUndoGroup();
+	REQUIRE( doc.NumberGet< int >() == 10 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+
+	// Multiple NumberSet calls should coalesce
+	doc.NumberSet( 20 );
+	doc.NumberSet( 30 );
+	doc.NumberSet( 40 );
+	doc.EndUndoGroup();
+	REQUIRE( doc.NumberGet< int >() == 40 );
+	REQUIRE( doc.GetUndoStackSize() == 2 ); // Only one undo group for all three sets
+
+	// Undo should restore original value
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.NumberGet< int >() == 10 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+	REQUIRE( data.totalModifyCount == 1 );
+
+	// Redo should restore final value
+	data.Reset();
+	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.NumberGet< int >() == 40 );
+	REQUIRE( data.totalModifyCount == 1 );
+}
+
+TEST_CASE( "DocumentUndo BoolSet Coalesce", "[ae::Document][undo]" )
+{
+	ae::Document doc( "test" );
+	DocumentCallbackData data;
+	auto callback = MakeDocumentCallback( data );
+
+	// Set initial bool
+	doc.BoolSet( false );
+	doc.EndUndoGroup();
+	REQUIRE( doc.BoolGet() == false );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+
+	// Multiple BoolSet calls should coalesce
+	doc.BoolSet( true );
+	doc.BoolSet( false );
+	doc.BoolSet( true );
+	doc.EndUndoGroup();
+	REQUIRE( doc.BoolGet() == true );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+
+	// Undo should restore original value
+	data.Reset();
+	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.BoolGet() == false );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+	REQUIRE( data.totalModifyCount == 1 );
+
+	// Redo
+	data.Reset();
+	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.BoolGet() == true );
+	REQUIRE( data.totalModifyCount == 1 );
 }
 
 TEST_CASE( "DocumentValue OpaqueSet OpaqueGet BasicTypes", "[ae::Document][opaque]" )
