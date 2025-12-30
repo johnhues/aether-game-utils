@@ -8,101 +8,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
-//------------------------------------------------------------------------------
-// Undo/Redo Callback Tracking
-//------------------------------------------------------------------------------
-struct DocumentCallbackData
-{
-	// Per-object statistics
-	struct ObjectStats
-	{
-		int createCount = 0;
-		int destroyCount = 0;
-		int modifyCount = 0;
-	};
-	ae::Map< const ae::DocumentValue*, ObjectStats > objectStats = ae::Tag( "test" );
-	
-	// Global statistics
-	int totalCreateCount = 0;
-	int totalDestroyCount = 0;
-	int totalModifyCount = 0;
-	
-	// Operation tracking
-	ae::Array< ae::DocumentUndoRedoOp > operations = ae::Tag( "test" );
-	ae::Array< const ae::DocumentValue* > affectedValues = ae::Tag( "test" );
-	const ae::DocumentValue* lastValue = nullptr;
-	
-	void Reset()
-	{
-		objectStats.Clear();
-		totalCreateCount = 0;
-		totalDestroyCount = 0;
-		totalModifyCount = 0;
-		operations.Clear();
-		affectedValues.Clear();
-		lastValue = nullptr;
-	}
-	
-	void RecordOperation( ae::DocumentUndoRedoOp op, const ae::DocumentValue* value )
-	{
-		lastValue = value;
-		operations.Append( op );
-		affectedValues.Append( value );
-		
-		// Update per-object stats
-		ObjectStats* stats = objectStats.TryGet( value );
-		if( !stats )
-		{
-			objectStats.Set( value, {} );
-			stats = objectStats.TryGet( value );
-		}
-		
-		// Update counts
-		switch( op )
-		{
-			case ae::DocumentUndoRedoOp::Create:
-				stats->createCount++;
-				totalCreateCount++;
-				break;
-			case ae::DocumentUndoRedoOp::Destroy:
-				stats->destroyCount++;
-				totalDestroyCount++;
-				break;
-			case ae::DocumentUndoRedoOp::Modify:
-				stats->modifyCount++;
-				totalModifyCount++;
-				break;
-		}
-	}
-	
-	int GetObjectCreateCount( const ae::DocumentValue* value ) const
-	{
-		const ObjectStats* stats = objectStats.TryGet( value );
-		return stats ? stats->createCount : 0;
-	}
-	
-	int GetObjectDestroyCount( const ae::DocumentValue* value ) const
-	{
-		const ObjectStats* stats = objectStats.TryGet( value );
-		return stats ? stats->destroyCount : 0;
-	}
-	
-	int GetObjectModifyCount( const ae::DocumentValue* value ) const
-	{
-		const ObjectStats* stats = objectStats.TryGet( value );
-		return stats ? stats->modifyCount : 0;
-	}
-};
-
-// Global callback helper that can be reused across tests
-auto MakeDocumentCallback( DocumentCallbackData& data )
-{
-	return [&data]( ae::DocumentUndoRedoOp op, const ae::DocumentValue* value )
-	{
-		data.RecordOperation( op, value );
-	};
-}
-
 TEST_CASE( "Any DefaultConstructor", "[ae::Any]" )
 {
 	ae::Any< 16, 8 > any;
@@ -551,8 +456,6 @@ TEST_CASE( "Any ConstPointer", "[ae::Any]" )
 TEST_CASE( "DocumentUndo Value", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	DocumentCallbackData data;
-	auto callback = MakeDocumentCallback( data );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -571,45 +474,31 @@ TEST_CASE( "DocumentUndo Value", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore previous string
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.StringGet() == std::string( "initial" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( data.totalModifyCount == 1 );
-	REQUIRE( data.totalCreateCount == 0 );
-	REQUIRE( data.totalDestroyCount == 0 );
 
 	// Redo should restore changed string
-	data.Reset();
-	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.Redo() );
 	REQUIRE( doc.StringGet() == std::string( "changed" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
-	REQUIRE( data.totalModifyCount == 1 );
-	REQUIRE( data.totalCreateCount == 0 );
-	REQUIRE( data.totalDestroyCount == 0 );
 
 	// Multiple undos
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.StringGet() == std::string( "initial" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( data.totalModifyCount == 1 );
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 2 );
-	REQUIRE( data.totalModifyCount == 1 );
 	REQUIRE( doc.Undo() == false ); // No more undo available
 }
 
 TEST_CASE( "DocumentUndo TypeChange", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	DocumentCallbackData data;
-	auto callback = MakeDocumentCallback( data );
 	REQUIRE( doc.GetUndoStackSize() == 0 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
@@ -630,34 +519,22 @@ TEST_CASE( "DocumentUndo TypeChange", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore type and string
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.IsString() );
 	REQUIRE( doc.StringGet() == std::string( "test" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( data.totalCreateCount == 0 );
-	REQUIRE( data.totalDestroyCount == 0 );
-	REQUIRE( data.totalModifyCount == 1 );
-	REQUIRE( data.GetObjectModifyCount( &doc ) == 1 );
 
 	// Redo should restore array type
-	data.Reset();
-	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.Redo() );
 	REQUIRE( doc.IsArray() );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
-	REQUIRE( data.totalCreateCount == 0 );
-	REQUIRE( data.totalDestroyCount == 0 );
-	REQUIRE( data.totalModifyCount == 1 );
-	REQUIRE( data.GetObjectModifyCount( &doc ) == 1 );
 }
 
 TEST_CASE( "DocumentUndo ArrayOperations", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	DocumentCallbackData data;
-	auto callback = MakeDocumentCallback( data );
 	doc.ArrayInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
@@ -691,18 +568,13 @@ TEST_CASE( "DocumentUndo ArrayOperations", "[ae::Document][undo]" )
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 	// Undo insert
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.ArrayLength() == 3 );
 	REQUIRE( doc.ArrayGet( 0 ).StringGet() == std::string( "first" ) );
 	REQUIRE( doc.ArrayGet( 1 ).StringGet() == std::string( "second" ) );
 	REQUIRE( doc.ArrayGet( 2 ).StringGet() == std::string( "third" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( data.totalCreateCount == 0 );
-	REQUIRE( data.totalDestroyCount == 1 );
-	REQUIRE( data.totalModifyCount == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &elemInserted ) == 1 );
 
 	// Remove element
 	doc.ArrayRemove( 1 );
@@ -715,25 +587,18 @@ TEST_CASE( "DocumentUndo ArrayOperations", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo remove should restore element at correct position
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.ArrayLength() == 3 );
 	REQUIRE( doc.ArrayGet( 0 ).StringGet() == std::string( "first" ) );
 	REQUIRE( doc.ArrayGet( 1 ).StringGet() == std::string( "second" ) );
 	REQUIRE( doc.ArrayGet( 2 ).StringGet() == std::string( "third" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( data.totalCreateCount == 1 );
-	REQUIRE( data.totalDestroyCount == 0 );
-	REQUIRE( data.totalModifyCount == 0 );
-	REQUIRE( data.GetObjectCreateCount( &elem1 ) == 1 );
 }
 
 TEST_CASE( "DocumentUndo ObjectOperations", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	DocumentCallbackData data;
-	auto callback = MakeDocumentCallback( data );
 	doc.ObjectInitialize( 4 );
 	doc.EndUndoGroup();
 	REQUIRE( doc.GetUndoStackSize() == 1 );
@@ -763,8 +628,7 @@ TEST_CASE( "DocumentUndo ObjectOperations", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo remove should restore key and value
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.ObjectLength() == 2 );
 	REQUIRE( doc.ObjectGetValue( 0 ).StringGet() == std::string( "string1" ) );
 	REQUIRE( doc.ObjectGetValue( 1 ).StringGet() == std::string( "string2" ) );
@@ -772,22 +636,13 @@ TEST_CASE( "DocumentUndo ObjectOperations", "[ae::Document][undo]" )
 	REQUIRE( doc.ObjectTryGet( "key2" )->StringGet() == std::string( "string2" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( data.totalCreateCount == 1 );
-	REQUIRE( data.totalDestroyCount == 0 );
-	REQUIRE( data.totalModifyCount == 0 );
-	REQUIRE( data.GetObjectCreateCount( &val1 ) == 1 );
 
 	// Redo remove
-	data.Reset();
-	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.Redo() );
 	REQUIRE( doc.ObjectLength() == 1 );
 	REQUIRE( doc.ObjectTryGet( "key1" ) == nullptr );
 	REQUIRE( doc.GetUndoStackSize() == 3 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
-	REQUIRE( data.totalCreateCount == 0 );
-	REQUIRE( data.totalDestroyCount == 1 );
-	REQUIRE( data.totalModifyCount == 0 );
-	REQUIRE( data.GetObjectDestroyCount( &val1 ) == 1 );
 }
 
 TEST_CASE( "DocumentUndo UndoGroups", "[ae::Document][undo]" )
@@ -928,8 +783,6 @@ TEST_CASE( "DocumentUndo ValueSeparateGroups", "[ae::Document][undo]" )
 TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	DocumentCallbackData data;
-	auto callback = MakeDocumentCallback( data );
 	doc.ArrayInitialize( 4 );
 
 	// Create nested structure
@@ -950,15 +803,10 @@ TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "nested" ).StringGet() == std::string( "modified" ) );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) ); // Undo should restore deep nested string
+	REQUIRE( doc.Undo() ); // Undo should restore deep nested string
 	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "nested" ).StringGet() == std::string( "deep" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( data.totalCreateCount == 0 );
-	REQUIRE( data.totalDestroyCount == 0 );
-	REQUIRE( data.totalModifyCount == 1 );
-	REQUIRE( data.GetObjectModifyCount( &nestedValue ) == 1 );
 
 	// Remove entire nested structure
 	doc.ArrayRemove( 0 );
@@ -966,25 +814,17 @@ TEST_CASE( "DocumentUndo ComplexNesting", "[ae::Document][undo]" )
 	REQUIRE( doc.ArrayLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 2 ); // Redo stack was cleared
 	REQUIRE( doc.GetRedoStackSize() == 0 );
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) ); // Undo should restore entire nested structure
+	REQUIRE( doc.Undo() ); // Undo should restore entire nested structure
 	REQUIRE( doc.ArrayLength() == 1 );
 	REQUIRE( doc.ArrayGet( 0 ).IsObject() );
 	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "nested" ).StringGet() == std::string( "deep" ) );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( data.totalCreateCount == 2 );  // mapElem and nestedValue
-	REQUIRE( data.totalDestroyCount == 0 );
-	REQUIRE( data.totalModifyCount == 0 );
-	REQUIRE( data.GetObjectCreateCount( &mapElem ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &nestedValue ) == 1 );
 }
 
 TEST_CASE( "DocumentUndo MultiElementArrayWithDescendants", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	DocumentCallbackData data;
-	auto callback = MakeDocumentCallback( data );
 	doc.ArrayInitialize( 8 );
 
 	// Create array with multiple elements, each with deeply nested descendants
@@ -1032,27 +872,14 @@ TEST_CASE( "DocumentUndo MultiElementArrayWithDescendants", "[ae::Document][undo
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore all elements and ALL their descendants
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.ArrayLength() == 3 );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
 	// Verify Create callbacks for all descendants (not just children)
-	REQUIRE( data.totalCreateCount == 9 ); // elem0, elem0_nested, elem0_deep, elem1, elem1_nested, elem1_deep, elem2, elem2_nested, elem2_deep
-	REQUIRE( data.totalDestroyCount == 0 );
-	REQUIRE( data.totalModifyCount == 0 );
 
 	// Verify each element and its descendants
-	REQUIRE( data.GetObjectCreateCount( &elem0 ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &elem0_nested ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &elem0_deep ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &elem1 ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &elem1_nested ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &elem1_deep ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &elem2 ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &elem2_nested ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &elem2_deep ) == 1 );
 
 	// Verify restored structure
 	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "nested" ).ArrayGet( 0 ).StringGet() == std::string( "deep0" ) );
@@ -1060,33 +887,18 @@ TEST_CASE( "DocumentUndo MultiElementArrayWithDescendants", "[ae::Document][undo
 	REQUIRE( doc.ArrayGet( 2 ).ArrayGet( 0 ).ObjectSet( "flag" ).BoolGet() == true );
 
 	// Redo should destroy all elements and ALL their descendants
-	data.Reset();
-	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.Redo() );
 	REQUIRE( doc.ArrayLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Verify Destroy callbacks for all descendants
-	REQUIRE( data.totalCreateCount == 0 );
-	REQUIRE( data.totalDestroyCount == 9 );
-	REQUIRE( data.totalModifyCount == 0 );
 
-	REQUIRE( data.GetObjectDestroyCount( &elem0 ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &elem0_nested ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &elem0_deep ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &elem1 ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &elem1_nested ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &elem1_deep ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &elem2 ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &elem2_nested ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &elem2_deep ) == 1 );
 }
 
 TEST_CASE( "DocumentUndo MultiElementMapWithDescendants", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	DocumentCallbackData data;
-	auto callback = MakeDocumentCallback( data );
 	doc.ObjectInitialize( 8 );
 
 	// Create map with multiple entries, each with deeply nested descendants
@@ -1136,28 +948,14 @@ TEST_CASE( "DocumentUndo MultiElementMapWithDescendants", "[ae::Document][undo]"
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore all entries and ALL their descendants
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.ObjectLength() == 3 );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
 
 	// Verify Create callbacks for all descendants (not just children)
-	REQUIRE( data.totalCreateCount == 10 ); // entry_a, entry_a_nested, entry_a_deep, entry_b, entry_b_nested, entry_b_deep, entry_c, entry_c_nested, entry_c_level3, entry_c_deep
-	REQUIRE( data.totalDestroyCount == 0 );
-	REQUIRE( data.totalModifyCount == 0 );
 
 	// Verify each entry and its descendants
-	REQUIRE( data.GetObjectCreateCount( &entry_a ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &entry_a_nested ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &entry_a_deep ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &entry_b ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &entry_b_nested ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &entry_b_deep ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &entry_c ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &entry_c_nested ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &entry_c_level3 ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &entry_c_deep ) == 1 );
 
 	// Verify restored structure
 	REQUIRE( doc.ObjectSet( "a" ).ArrayGet( 0 ).ObjectSet( "text" ).StringGet() == std::string( "deepA" ) );
@@ -1165,34 +963,18 @@ TEST_CASE( "DocumentUndo MultiElementMapWithDescendants", "[ae::Document][undo]"
 	REQUIRE( doc.ObjectSet( "c" ).ObjectSet( "level2" ).ObjectSet( "level3" ).ObjectSet( "flag" ).BoolGet() == false );
 
 	// Redo should destroy all entries and ALL their descendants
-	data.Reset();
-	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.Redo() );
 	REQUIRE( doc.ObjectLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Verify Destroy callbacks for all descendants
-	REQUIRE( data.totalCreateCount == 0 );
-	REQUIRE( data.totalDestroyCount == 10 );
-	REQUIRE( data.totalModifyCount == 0 );
 
-	REQUIRE( data.GetObjectDestroyCount( &entry_a ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &entry_a_nested ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &entry_a_deep ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &entry_b ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &entry_b_nested ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &entry_b_deep ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &entry_c ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &entry_c_nested ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &entry_c_level3 ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &entry_c_deep ) == 1 );
 }
 
 TEST_CASE( "DocumentUndo MixedArrayMapDescendants", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	DocumentCallbackData data;
-	auto callback = MakeDocumentCallback( data );
 	doc.ArrayInitialize( 4 );
 
 	// Create a complex structure with very deep nesting
@@ -1234,63 +1016,24 @@ TEST_CASE( "DocumentUndo MixedArrayMapDescendants", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
 	// Undo should restore entire hierarchy with all descendants
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.ArrayLength() == 2 );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-
-	// All descendants should trigger Create callbacks (5 + 3 = 8 total)
-	REQUIRE( data.totalCreateCount == 8 );
-	REQUIRE( data.totalDestroyCount == 0 );
-	REQUIRE( data.totalModifyCount == 0 );
-
-	// Verify first branch (5 objects)
-	REQUIRE( data.GetObjectCreateCount( &level1 ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &level2 ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &level3 ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &level4 ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &level5 ) == 1 );
-
-	// Verify second branch (3 objects)t
-	REQUIRE( data.GetObjectCreateCount( &level1b ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &level2b ) == 1 );
-	REQUIRE( data.GetObjectCreateCount( &level3b ) == 1 );
 
 	// Verify restored data
 	REQUIRE( doc.ArrayGet( 0 ).ObjectSet( "key1" ).ArrayGet( 0 ).ObjectSet( "key2" ).ArrayGet( 0 ).StringGet() == std::string( "veryDeep" ) );
 	REQUIRE( doc.ArrayGet( 1 ).ObjectSet( "keyB" ).ArrayGet( 0 ).NumberGet< double >() == 123.0 );
 
 	// Redo should destroy all descendants
-	data.Reset();
-	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.Redo() );
 	REQUIRE( doc.ArrayLength() == 0 );
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 
-	// All descendants should trigger Destroy callbacks
-	REQUIRE( data.totalCreateCount == 0 );
-	REQUIRE( data.totalDestroyCount == 8 );
-	REQUIRE( data.totalModifyCount == 0 );
-
-	REQUIRE( data.GetObjectDestroyCount( &level1 ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &level2 ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &level3 ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &level4 ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &level5 ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &level1b ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &level2b ) == 1 );
-	REQUIRE( data.GetObjectDestroyCount( &level3b ) == 1 );
-
 	// Undo again to verify callbacks work on second undo
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.ArrayLength() == 2 );
-
-	// Should get Create callbacks again for all descendants
-	REQUIRE( data.totalCreateCount == 8 );
-	REQUIRE( data.totalDestroyCount == 0 );
-	REQUIRE( data.totalModifyCount == 0 );
 }
 
 TEST_CASE( "DocumentUndo MapIteration", "[ae::Document][undo]" )
@@ -2460,8 +2203,6 @@ TEST_CASE( "DocumentValue Number Bool TypeTransitions", "[ae::Document]" )
 TEST_CASE( "DocumentUndo NumberSet Coalesce", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	DocumentCallbackData data;
-	auto callback = MakeDocumentCallback( data );
 
 	// Set initial number
 	doc.NumberSet( 10 );
@@ -2478,25 +2219,19 @@ TEST_CASE( "DocumentUndo NumberSet Coalesce", "[ae::Document][undo]" )
 	REQUIRE( doc.GetUndoStackSize() == 2 ); // Only one undo group for all three sets
 
 	// Undo should restore original value
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.NumberGet< int >() == 10 );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( data.totalModifyCount == 1 );
 
 	// Redo should restore final value
-	data.Reset();
-	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.Redo() );
 	REQUIRE( doc.NumberGet< int >() == 40 );
-	REQUIRE( data.totalModifyCount == 1 );
 }
 
 TEST_CASE( "DocumentUndo BoolSet Coalesce", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
-	DocumentCallbackData data;
-	auto callback = MakeDocumentCallback( data );
 
 	// Set initial bool
 	doc.BoolSet( false );
@@ -2513,18 +2248,14 @@ TEST_CASE( "DocumentUndo BoolSet Coalesce", "[ae::Document][undo]" )
 	REQUIRE( doc.GetUndoStackSize() == 2 );
 
 	// Undo should restore original value
-	data.Reset();
-	REQUIRE( doc.Undo( callback ) );
+	REQUIRE( doc.Undo() );
 	REQUIRE( doc.BoolGet() == false );
 	REQUIRE( doc.GetUndoStackSize() == 1 );
 	REQUIRE( doc.GetRedoStackSize() == 1 );
-	REQUIRE( data.totalModifyCount == 1 );
 
 	// Redo
-	data.Reset();
-	REQUIRE( doc.Redo( callback ) );
+	REQUIRE( doc.Redo() );
 	REQUIRE( doc.BoolGet() == true );
-	REQUIRE( data.totalModifyCount == 1 );
 }
 
 TEST_CASE( "DocumentValue OpaqueSet OpaqueGet BasicTypes", "[ae::Document][opaque]" )
@@ -3214,4 +2945,652 @@ TEST_CASE( "DocumentValue MapSet LongKeys", "[ae::Document]" )
 	doc.ObjectSet( "key\nwith\ttabs\rand\nnewlines" ).OpaqueSet( 100 );
 	REQUIRE( doc.ObjectTryGet( "key\nwith\ttabs\rand\nnewlines" ) != nullptr );
 	REQUIRE( doc.ObjectTryGet( "key\nwith\ttabs\rand\nnewlines" )->OpaqueGet( 0 ) == 100 );
+}
+
+//------------------------------------------------------------------------------
+// ae::Document::AddUndoGroupAction tests
+//------------------------------------------------------------------------------
+TEST_CASE( "Document AddUndoGroupAction basic", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	int externalState = 0;
+	
+	// Add document change with custom action
+	doc.StringSet( "first" );
+	doc.AddUndoGroupAction( "increment external state",
+		[&externalState]() { externalState--; }, // undo
+		[&externalState]() { externalState++; }  // redo
+	);
+	doc.EndUndoGroup();
+	
+	REQUIRE( doc.StringGet() == std::string( "first" ) );
+	REQUIRE( externalState == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+	
+	// Undo should call the undo callback
+	REQUIRE( doc.Undo() );
+	REQUIRE( externalState == -1 );
+	REQUIRE( doc.GetUndoStackSize() == 0 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+	
+	// Redo should call the redo callback
+	REQUIRE( doc.Redo() );
+	REQUIRE( externalState == 0 );
+	REQUIRE( doc.StringGet() == std::string( "first" ) );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+}
+
+TEST_CASE( "Document AddUndoGroupAction execute redo immediately", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	int counter = 0;
+	
+	// The returned redo callback can be executed immediately
+	doc.StringSet( "value" );
+	const ae::DocumentCallback& redo = doc.AddUndoGroupAction( "increment",
+		[&counter]() { counter--; },
+		[&counter]() { counter++; }
+	);
+	redo(); // Execute redo immediately
+	doc.EndUndoGroup();
+	
+	REQUIRE( counter == 1 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	
+	// Undo
+	REQUIRE( doc.Undo() );
+	REQUIRE( counter == 0 );
+	
+	// Redo
+	REQUIRE( doc.Redo() );
+	REQUIRE( counter == 1 );
+}
+
+TEST_CASE( "Document AddUndoGroupAction syncing external graphics resource", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	
+	// Simulate external graphics resource (e.g., texture handle)
+	struct GraphicsResource
+	{
+		int textureId = -1;
+		ae::Vec3 color = ae::Vec3( 0.0f );
+		bool needsUpdate = false;
+	};
+	GraphicsResource resource;
+	
+	// Create a color value in the document
+	doc.ObjectInitialize( 4 );
+	auto* colorR = &doc.ObjectSet( "r" );
+	auto* colorG = &doc.ObjectSet( "g" );
+	auto* colorB = &doc.ObjectSet( "b" );
+	colorR->NumberSet( 1.0 );
+	colorG->NumberSet( 0.0 );
+	colorB->NumberSet( 0.0 );
+	
+	// Add action to sync graphics resource with document
+	doc.AddUndoGroupAction( "create red texture",
+		[&resource]() {
+			// Undo: destroy the texture
+			resource.textureId = -1;
+			resource.color = ae::Vec3( 0.0f );
+			resource.needsUpdate = false;
+		},
+		[&resource, colorR, colorG, colorB]() {
+			// Redo: create/update texture with current color
+			resource.textureId = 42;
+			resource.color = ae::Vec3(
+				(float)colorR->NumberGet< double >(),
+				(float)colorG->NumberGet< double >(),
+				(float)colorB->NumberGet< double >()
+			);
+			resource.needsUpdate = true;
+		}
+	)(); // Execute redo immediately
+	
+	doc.EndUndoGroup();
+	
+	REQUIRE( resource.textureId == 42 );
+	REQUIRE( resource.color == ae::Vec3( 1.0f, 0.0f, 0.0f ) );
+	REQUIRE( resource.needsUpdate == true );
+	
+	// Update color to green
+	resource.needsUpdate = false;
+	colorR->NumberSet( 0.0 );
+	colorG->NumberSet( 1.0 );
+	doc.AddUndoGroupAction( "update to green",
+		[&resource, oldR = 1.0, oldG = 0.0, oldB = 0.0]() {
+			resource.color = ae::Vec3( (float)oldR, (float)oldG, (float)oldB );
+			resource.needsUpdate = true;
+		},
+		[&resource, colorR, colorG, colorB]() {
+			resource.color = ae::Vec3(
+				(float)colorR->NumberGet< double >(),
+				(float)colorG->NumberGet< double >(),
+				(float)colorB->NumberGet< double >()
+			);
+			resource.needsUpdate = true;
+		}
+	)();
+	doc.EndUndoGroup();
+	
+	REQUIRE( resource.color == ae::Vec3( 0.0f, 1.0f, 0.0f ) );
+	REQUIRE( resource.needsUpdate == true );
+	
+	// Undo should restore red color
+	REQUIRE( doc.Undo() );
+	REQUIRE( resource.color == ae::Vec3( 1.0f, 0.0f, 0.0f ) );
+	REQUIRE( resource.needsUpdate == true );
+	
+	// Redo should restore green color
+	resource.needsUpdate = false;
+	REQUIRE( doc.Redo() );
+	REQUIRE( resource.color == ae::Vec3( 0.0f, 1.0f, 0.0f ) );
+	REQUIRE( resource.needsUpdate == true );
+	
+	// Undo back to beginning
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.Undo() );
+	REQUIRE( resource.textureId == -1 );
+	REQUIRE( resource.color == ae::Vec3( 0.0f, 0.0f, 0.0f ) );
+}
+
+TEST_CASE( "Document AddUndoGroupAction multiple actions in group", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	int stateA = 0;
+	int stateB = 0;
+	int stateC = 0;
+	
+	// Multiple custom actions in a single undo group
+	doc.StringSet( "test" );
+	doc.AddUndoGroupAction( "action A",
+		[&stateA]() { stateA--; },
+		[&stateA]() { stateA++; }
+	)();
+	doc.AddUndoGroupAction( "action B",
+		[&stateB]() { stateB -= 10; },
+		[&stateB]() { stateB += 10; }
+	)();
+	doc.AddUndoGroupAction( "action C",
+		[&stateC]() { stateC--; },
+		[&stateC]() { stateC++; }
+	)();
+	doc.EndUndoGroup();
+	
+	REQUIRE( stateA == 1 );
+	REQUIRE( stateB == 10 );
+	REQUIRE( stateC == 1 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	
+	// Single undo should reverse all actions in reverse order
+	REQUIRE( doc.Undo() );
+	REQUIRE( stateA == 0 );
+	REQUIRE( stateB == 0 );
+	REQUIRE( stateC == 0 );
+	
+	// Single redo should replay all actions
+	REQUIRE( doc.Redo() );
+	REQUIRE( stateA == 1 );
+	REQUIRE( stateB == 10 );
+	REQUIRE( stateC == 1 );
+}
+
+TEST_CASE( "Document AddUndoGroupAction interleaved with document ops", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	ae::Array< int, 8 > externalArray;
+	
+	// Interleave document operations with custom actions
+	doc.ArrayInitialize( 4 );
+	doc.ArrayAppend().OpaqueSet( 100 );
+	
+	// Sync external array with document
+	doc.AddUndoGroupAction( "sync external",
+		[&externalArray]() {
+			if ( externalArray.Length() > 0 )
+			{
+				externalArray.Remove( externalArray.Length() - 1 );
+			}
+		},
+		[&externalArray]() {
+			externalArray.Append( 100 );
+		}
+	)();
+	
+	doc.ArrayAppend().OpaqueSet( 200 );
+	doc.AddUndoGroupAction( "sync external 2",
+		[&externalArray]() {
+			if ( externalArray.Length() > 0 )
+			{
+				externalArray.Remove( externalArray.Length() - 1 );
+			}
+		},
+		[&externalArray]() {
+			externalArray.Append( 200 );
+		}
+	)();
+	
+	doc.EndUndoGroup();
+	
+	REQUIRE( doc.ArrayLength() == 2 );
+	REQUIRE( doc.ArrayGet( 0 ).OpaqueGet( 0 ) == 100 );
+	REQUIRE( doc.ArrayGet( 1 ).OpaqueGet( 0 ) == 200 );
+	REQUIRE( externalArray.Length() == 2 );
+	REQUIRE( externalArray[ 0 ] == 100 );
+	REQUIRE( externalArray[ 1 ] == 200 );
+	
+	// Undo should restore both document and external state
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.IsNull() ); // Back to initial null state
+	REQUIRE( externalArray.Length() == 0 );
+	
+	// Redo should restore both
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.IsArray() );
+	REQUIRE( doc.ArrayLength() == 2 );
+	REQUIRE( externalArray.Length() == 2 );
+	REQUIRE( externalArray[ 0 ] == 100 );
+	REQUIRE( externalArray[ 1 ] == 200 );
+}
+
+TEST_CASE( "Document AddUndoGroupAction capturing DocumentValue pointers", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	
+	// Create object with nested values
+	doc.ObjectInitialize( 4 );
+	auto* posX = &doc.ObjectSet( "x" );
+	auto* posY = &doc.ObjectSet( "y" );
+	posX->NumberSet( 10.0 );
+	posY->NumberSet( 20.0 );
+	
+	// External state that mirrors document
+	struct Position { double x, y; };
+	Position externalPos = { 0.0, 0.0 };
+	
+	// Safe to capture DocumentValue pointers (documented behavior)
+	doc.AddUndoGroupAction( "sync position",
+		[&externalPos]() {
+			externalPos = { 0.0, 0.0 };
+		},
+		[&externalPos, posX, posY]() {
+			// Safe because action and queue lifetimes match
+			externalPos.x = posX->NumberGet< double >();
+			externalPos.y = posY->NumberGet< double >();
+		}
+	)();
+	doc.EndUndoGroup();
+	
+	REQUIRE( externalPos.x == 10.0 );
+	REQUIRE( externalPos.y == 20.0 );
+	
+	// Modify position
+	posX->NumberSet( 30.0 );
+	posY->NumberSet( 40.0 );
+	doc.AddUndoGroupAction( "sync position update",
+		[&externalPos]() {
+			externalPos = { 10.0, 20.0 };
+		},
+		[&externalPos, posX, posY]() {
+			externalPos.x = posX->NumberGet< double >();
+			externalPos.y = posY->NumberGet< double >();
+		}
+	)();
+	doc.EndUndoGroup();
+	
+	REQUIRE( externalPos.x == 30.0 );
+	REQUIRE( externalPos.y == 40.0 );
+	
+	// Undo restores previous values
+	REQUIRE( doc.Undo() );
+	REQUIRE( posX->NumberGet< double >() == 10.0 );
+	REQUIRE( posY->NumberGet< double >() == 20.0 );
+	REQUIRE( externalPos.x == 10.0 );
+	REQUIRE( externalPos.y == 20.0 );
+	
+	// Redo applies new values
+	REQUIRE( doc.Redo() );
+	REQUIRE( posX->NumberGet< double >() == 30.0 );
+	REQUIRE( posY->NumberGet< double >() == 40.0 );
+	REQUIRE( externalPos.x == 30.0 );
+	REQUIRE( externalPos.y == 40.0 );
+}
+
+TEST_CASE( "Document AddUndoGroupAction collision mesh sync", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	
+	// Simulate collision mesh external to document
+	struct CollisionMesh
+	{
+		ae::Array< ae::Vec3, 16 > vertices;
+		bool isValid = false;
+		
+		void build( const ae::Array< ae::Vec3, 16 >& verts )
+		{
+			vertices = verts;
+			isValid = true;
+		}
+		
+		void destroy()
+		{
+			vertices.Clear();
+			isValid = false;
+		}
+	};
+	CollisionMesh collision;
+	
+	// Create vertices in document
+	doc.ArrayInitialize( 4 );
+	auto* v0 = &doc.ArrayAppend();
+	auto* v1 = &doc.ArrayAppend();
+	auto* v2 = &doc.ArrayAppend();
+	
+	v0->ArrayInitialize( 4 );
+	v0->ArrayAppend().NumberSet( 0.0 );
+	v0->ArrayAppend().NumberSet( 0.0 );
+	v0->ArrayAppend().NumberSet( 0.0 );
+	
+	v1->ArrayInitialize( 4 );
+	v1->ArrayAppend().NumberSet( 1.0 );
+	v1->ArrayAppend().NumberSet( 0.0 );
+	v1->ArrayAppend().NumberSet( 0.0 );
+	
+	v2->ArrayInitialize( 4 );
+	v2->ArrayAppend().NumberSet( 0.0 );
+	v2->ArrayAppend().NumberSet( 1.0 );
+	v2->ArrayAppend().NumberSet( 0.0 );
+	
+	// Build collision mesh from document data
+	doc.AddUndoGroupAction( "build collision",
+		[&collision]() {
+			collision.destroy();
+		},
+		[&collision, v0, v1, v2]() {
+			ae::Array< ae::Vec3, 16 > verts;
+			verts.Append( ae::Vec3(
+				(float)v0->ArrayGet( 0 ).NumberGet< double >(),
+				(float)v0->ArrayGet( 1 ).NumberGet< double >(),
+				(float)v0->ArrayGet( 2 ).NumberGet< double >()
+			) );
+			verts.Append( ae::Vec3(
+				(float)v1->ArrayGet( 0 ).NumberGet< double >(),
+				(float)v1->ArrayGet( 1 ).NumberGet< double >(),
+				(float)v1->ArrayGet( 2 ).NumberGet< double >()
+			) );
+			verts.Append( ae::Vec3(
+				(float)v2->ArrayGet( 0 ).NumberGet< double >(),
+				(float)v2->ArrayGet( 1 ).NumberGet< double >(),
+				(float)v2->ArrayGet( 2 ).NumberGet< double >()
+			) );
+			collision.build( verts );
+		}
+	)();
+	doc.EndUndoGroup();
+	
+	REQUIRE( collision.isValid == true );
+	REQUIRE( collision.vertices.Length() == 3 );
+	REQUIRE( collision.vertices[ 0 ] == ae::Vec3( 0.0f, 0.0f, 0.0f ) );
+	REQUIRE( collision.vertices[ 1 ] == ae::Vec3( 1.0f, 0.0f, 0.0f ) );
+	REQUIRE( collision.vertices[ 2 ] == ae::Vec3( 0.0f, 1.0f, 0.0f ) );
+	
+	// Undo should destroy collision mesh
+	REQUIRE( doc.Undo() );
+	REQUIRE( collision.isValid == false );
+	REQUIRE( collision.vertices.Length() == 0 );
+	
+	// Redo should rebuild it
+	REQUIRE( doc.Redo() );
+	REQUIRE( collision.isValid == true );
+	REQUIRE( collision.vertices.Length() == 3 );
+}
+
+TEST_CASE( "Document AddUndoGroupAction with ClearUndo", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	int externalCounter = 0;
+	
+	// Create some actions
+	doc.StringSet( "first" );
+	doc.AddUndoGroupAction( "action 1",
+		[&externalCounter]() { externalCounter--; },
+		[&externalCounter]() { externalCounter++; }
+	)();
+	doc.EndUndoGroup();
+	
+	doc.StringSet( "second" );
+	doc.AddUndoGroupAction( "action 2",
+		[&externalCounter]() { externalCounter--; },
+		[&externalCounter]() { externalCounter++; }
+	)();
+	doc.EndUndoGroup();
+	
+	REQUIRE( externalCounter == 2 );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	
+	// Clear undo - should not affect current state
+	doc.ClearUndo();
+	REQUIRE( doc.StringGet() == std::string( "second" ) );
+	REQUIRE( externalCounter == 2 );
+	REQUIRE( doc.GetUndoStackSize() == 0 );
+	REQUIRE( doc.GetRedoStackSize() == 0 );
+	
+	// Cannot undo after clear
+	REQUIRE( doc.Undo() == false );
+	REQUIRE( externalCounter == 2 );
+}
+
+TEST_CASE( "Document AddUndoGroupAction separate groups", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	int stateA = 0;
+	int stateB = 0;
+	
+	// First group
+	doc.StringSet( "group1" );
+	doc.AddUndoGroupAction( "group1 action",
+		[&stateA]() { stateA--; },
+		[&stateA]() { stateA++; }
+	)();
+	doc.EndUndoGroup();
+	
+	// Second group
+	doc.StringSet( "group2" );
+	doc.AddUndoGroupAction( "group2 action",
+		[&stateB]() { stateB--; },
+		[&stateB]() { stateB++; }
+	)();
+	doc.EndUndoGroup();
+	
+	REQUIRE( stateA == 1 );
+	REQUIRE( stateB == 1 );
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+	
+	// Undo second group only
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.StringGet() == std::string( "group1" ) );
+	REQUIRE( stateA == 1 );
+	REQUIRE( stateB == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 1 );
+	REQUIRE( doc.GetRedoStackSize() == 1 );
+	
+	// Undo first group
+	REQUIRE( doc.Undo() );
+	REQUIRE( stateA == 0 );
+	REQUIRE( stateB == 0 );
+	REQUIRE( doc.GetUndoStackSize() == 0 );
+	REQUIRE( doc.GetRedoStackSize() == 2 );
+	
+	// Redo first group
+	REQUIRE( doc.Redo() );
+	REQUIRE( stateA == 1 );
+	REQUIRE( stateB == 0 );
+	
+	// Redo second group
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.StringGet() == std::string( "group2" ) );
+	REQUIRE( stateA == 1 );
+	REQUIRE( stateB == 1 );
+}
+
+TEST_CASE( "Document AddUndoGroupAction state consistency", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	
+	// Test that custom actions are called in sequence with document operations
+	int externalCounter = 0;
+	
+	// First operation
+	doc.StringSet( "first" );
+	doc.AddUndoGroupAction( "set to 10",
+		[&externalCounter]() { externalCounter = 0; },
+		[&externalCounter]() { externalCounter = 10; }
+	)();
+	doc.EndUndoGroup();
+	REQUIRE( doc.StringGet() == std::string( "first" ) );
+	REQUIRE( externalCounter == 10 );
+	
+	// Second operation
+	doc.StringSet( "second" );
+	doc.AddUndoGroupAction( "set to 20",
+		[&externalCounter]() { externalCounter = 10; },
+		[&externalCounter]() { externalCounter = 20; }
+	)();
+	doc.EndUndoGroup();
+	REQUIRE( doc.StringGet() == std::string( "second" ) );
+	REQUIRE( externalCounter == 20 );
+	
+	// Undo second - both document and external state should revert
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.StringGet() == std::string( "first" ) );
+	REQUIRE( externalCounter == 10 );
+	
+	// Redo second - both should advance
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.StringGet() == std::string( "second" ) );
+	REQUIRE( externalCounter == 20 );
+}
+
+TEST_CASE( "Document AddUndoGroupAction complex resource management", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	
+	// Simulate complex resource with dependencies
+	struct ComplexResource
+	{
+		struct SubResource
+		{
+			int id = -1;
+			ae::Str64 name;
+		};
+		
+		ae::Map< ae::Str64, SubResource, 8 > resources;
+		ae::Array< int, 8 > activeIds;
+		
+		void add( const char* name, int id )
+		{
+			SubResource sub;
+			sub.id = id;
+			sub.name = name;
+			resources.Set( name, sub );
+			activeIds.Append( id );
+		}
+		
+		void remove( const char* name )
+		{
+			if ( const SubResource* sub = resources.TryGet( name ) )
+			{
+				for ( uint32_t i = 0; i < activeIds.Length(); i++ )
+				{
+					if ( activeIds[ i ] == sub->id )
+					{
+						activeIds.Remove( i );
+						break;
+					}
+				}
+				resources.Remove( name );
+			}
+		}
+		
+		void clear()
+		{
+			resources.Clear();
+			activeIds.Clear();
+		}
+	};
+	ComplexResource resource;
+	
+	// Build document structure
+	doc.ObjectInitialize( 4 );
+	auto* objects = &doc.ObjectSet( "objects" );
+	objects->ArrayInitialize( 4 );
+	doc.EndUndoGroup(); // Establish baseline state
+	
+	// Add first object
+	auto* obj1 = &objects->ArrayAppend();
+	obj1->ObjectInitialize( 4 );
+	obj1->ObjectSet( "name" ).StringSet( "player" );
+	obj1->ObjectSet( "id" ).OpaqueSet( 100 );
+	
+	doc.AddUndoGroupAction( "add player resource",
+		[&resource]() {
+			resource.remove( "player" );
+		},
+		[&resource, obj1]() {
+			const char* name = obj1->ObjectTryGet( "name" )->StringGet();
+			int id = obj1->ObjectTryGet( "id" )->OpaqueGet( 0 );
+			resource.add( name, id );
+		}
+	)();
+	doc.EndUndoGroup();
+	
+	REQUIRE( resource.resources.Length() == 1 );
+	REQUIRE( resource.activeIds.Length() == 1 );
+	REQUIRE( resource.activeIds[ 0 ] == 100 );
+	
+	// Add second object
+	auto* obj2 = &objects->ArrayAppend();
+	obj2->ObjectInitialize( 4 );
+	obj2->ObjectSet( "name" ).StringSet( "enemy" );
+	obj2->ObjectSet( "id" ).OpaqueSet( 200 );
+	
+	doc.AddUndoGroupAction( "add enemy resource",
+		[&resource]() {
+			resource.remove( "enemy" );
+		},
+		[&resource, obj2]() {
+			const char* name = obj2->ObjectTryGet( "name" )->StringGet();
+			int id = obj2->ObjectTryGet( "id" )->OpaqueGet( 0 );
+			resource.add( name, id );
+		}
+	)();
+	doc.EndUndoGroup();
+	
+	REQUIRE( resource.resources.Length() == 2 );
+	REQUIRE( resource.activeIds.Length() == 2 );
+	REQUIRE( resource.resources.Get( "player" ).id == 100 );
+	REQUIRE( resource.resources.Get( "enemy" ).id == 200 );
+	
+	// Undo second object
+	REQUIRE( doc.Undo() );
+	REQUIRE( objects->ArrayLength() == 1 );
+	REQUIRE( resource.resources.Length() == 1 );
+	REQUIRE( resource.activeIds.Length() == 1 );
+	REQUIRE( resource.resources.Get( "player" ).id == 100 );
+	
+	// Undo first object
+	REQUIRE( doc.Undo() );
+	REQUIRE( objects->ArrayLength() == 0 );
+	REQUIRE( resource.resources.Length() == 0 );
+	REQUIRE( resource.activeIds.Length() == 0 );
+	
+	// Redo both
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.Redo() );
+	REQUIRE( objects->ArrayLength() == 2 );
+	REQUIRE( resource.resources.Length() == 2 );
+	REQUIRE( resource.activeIds.Length() == 2 );
 }

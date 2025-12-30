@@ -2537,6 +2537,43 @@ private:
 	alignas( Alignment ) std::byte m_data[ Size ];
 };
 
+
+//------------------------------------------------------------------------------
+// ae::Function class
+//------------------------------------------------------------------------------
+// Unimplemented ae::Function forward declaration, to handle degenerate function signatures.
+template< typename Signature, size_t MaxSize = 32 > class Function;
+// The lambda capture invoker is stateless so it's trivially copyable. Small
+// captures like a few pointers/ints work.
+// Usage:
+/*
+	int total = 0;
+	ae::Function< int( int ) > increment = [ &total ]( int v ) { return total += v; };
+	const int one = increment( 1 );
+	const int two = increment( 1 );
+	const int three = increment( 1 );
+	const int ten = increment( 7 );
+*/
+template< typename R, typename... Args, size_t MaxSize >
+class Function< R( Args... ), MaxSize >
+{
+public:
+	Function();
+	template< typename F > Function( F&& f );
+	R operator()( Args... args ) const;
+	explicit operator bool() const;
+
+private:
+	using InvokerType = R ( * )( const void*, Args... );
+	InvokerType m_invoker;
+	alignas( void* ) uint8_t m_storage[ MaxSize ];
+};
+
+//------------------------------------------------------------------------------
+// ae::DocumentCallback
+//------------------------------------------------------------------------------
+using DocumentCallback = ae::Function< void(), 64 >;
+
 //------------------------------------------------------------------------------
 // ae::DocumentValueType
 //------------------------------------------------------------------------------
@@ -2568,6 +2605,8 @@ class DocumentValue
 {
 public:
 	DocumentValue( class Document* document, const ae::Tag& tag );
+	class Document& GetDocument() { return *m_document; }
+	const class Document& GetDocument() const { return *m_document; }
 
 	//--------------------------------------------------------------------------
 	// Type functions
@@ -2583,7 +2622,7 @@ public:
 	bool IsObject() const;
 
 	//--------------------------------------------------------------------------
-	// String value
+	// Value functions
 	//--------------------------------------------------------------------------
 	//! Sets the value to a basic string type. Note that repeated calls to
 	//! StringSet will be coalesced into a single undo operation. This
@@ -2594,10 +2633,6 @@ public:
 	//! Returns the basic string value. Must only be called when IsString() returns true.
 	//! \return The string value as a null-terminated C string.
 	const char* StringGet() const;
-
-	//--------------------------------------------------------------------------
-	// Numeric value
-	//--------------------------------------------------------------------------
 	//! Sets the value to a basic number type. Note that repeated calls to
 	//! NumberSet will be coalesced into a single undo operation. This
 	//! behavior can be circumvented by ending the current undo group between
@@ -2607,10 +2642,6 @@ public:
 	//! Returns the number value. Must only be called when IsNumber() returns true.
 	//! \return The number value
 	template< typename T > T NumberGet() const;
-
-	//--------------------------------------------------------------------------
-	// Boolean value
-	//--------------------------------------------------------------------------
 	//! Sets the value to a bool. Note that repeated calls to
 	//! BoolSet will be coalesced into a single undo operation. This
 	//! behavior can be circumvented by ending the current undo group between
@@ -2620,18 +2651,14 @@ public:
 	//! Returns the boolean value. Must only be called when IsBoolean() returns true.
 	//! \return The boolean value
 	bool BoolGet() const;
-
-	//--------------------------------------------------------------------------
-	// Opaque value
-	//--------------------------------------------------------------------------
 	//! Sets the value to an 'opaque' type. This function accepts small POD
 	//! types. Note that repeated calls to OpaqueSet will be coalesced into a
 	//! single undo operation. This behavior can be circumvented by ending the
 	//! current undo group between calls.
 	//! \param value The string value to set.
 	template< typename T > void OpaqueSet( const T& value );
-	//! Returns the basic string value. Must only be called when IsOpaque() returns true.
-	//! \return The opaque value
+	//! Returns ... Must only be called when IsOpaque() returns true.
+	//! \return The opaque value, or defaultValue otherwise
 	template< typename T > T OpaqueGet( const T& defaultValue ) const;
 
 	//--------------------------------------------------------------------------
@@ -2650,6 +2677,8 @@ public:
 	//! Removes the DocumentValue at the specified index from the array.
 	//! \param index The index to remove. Must be < ArrayLength().
 	void ArrayRemove( uint32_t index );
+	//! Resets this DocumentValue to an empty array
+	void ArrayClear();
 	//--------------------------------------------------------------------------
 	// Array iteration
 	//--------------------------------------------------------------------------
@@ -2680,6 +2709,8 @@ public:
 	//! \param key The string key to remove.
 	//! \return True if the key was found and removed, false if the key didn't exist.
 	bool ObjectRemove( const char* key );
+	//! Resets this DocumentValue to an empty object
+	void ObjectClear();
 	//--------------------------------------------------------------------------
 	// Object queries
 	//--------------------------------------------------------------------------
@@ -2714,6 +2745,7 @@ protected:
 	friend class Document;
 	enum class UndoOpType
 	{
+		Action,
 		SetType,
 		StringSet,
 		OpaqueSet,
@@ -2721,6 +2753,12 @@ protected:
 		ArrayRemove,
 		ObjectSet,
 		ObjectRemove
+	};
+	struct Action
+	{
+		std::string name;
+		DocumentCallback undo;
+		DocumentCallback redo;
 	};
 	struct UndoOp
 	{
@@ -2730,8 +2768,9 @@ protected:
 		std::string key;
 		DocumentValueType oldType = DocumentValueType::Null;
 		std::string oldString;
-		ae::Any< 64, 16 > oldValue;
+		ae::Any< 128, 16 > oldValue;
 		class DocumentValue* oldChild = nullptr;
+		Action action;
 	};
 	DocumentValue() = delete;
 	DocumentValue( const DocumentValue& ) = delete;
@@ -2740,7 +2779,7 @@ protected:
 	DocumentValueType m_type = DocumentValueType::Null;
 	int32_t m_refCount = 0; // References from undo stack only
 	std::string m_string;
-	ae::Any< 64, 16 > m_value;
+	ae::Any< 128, 16 > m_value;
 	ae::Array< DocumentValue* > m_array;
 	ae::Map< std::string, DocumentValue*, 0, ae::Hash32, ae::MapMode::Stable > m_map;
 };
@@ -2754,19 +2793,35 @@ public:
 	Document( const ae::Tag& tag );
 	~Document();
 
+	//! \param name A user identifier for this action, This value has no effect,
+	//! and is stored for tracking and display only.
+	//! \param undo The function to call when this group is being processed by
+	//! ae::Document::Undo(). It's safe to provide ae::DocumentValue pointers
+	//! to this function as the action and queue lifetimes are the same. It will
+	//! be called in sequence with all other document operations (which are
+	//! applied in reverse order during undo), because of this the state of all
+	//! ae::DocumentValue's will exactly match their state when the action was
+	//! originally added.
+	//! \param redo The function to call when this group is being processed by
+	//! ae::Document::Redo(). This value is returned for convenience. It's safe
+	//! to provide ae::DocumentValue pointers to this function as the action and
+	//! queue lifetimes are the same. It will be called in sequence with all
+	//! other document operations, because of this the state of all ae::DocumentValue's
+	//! will exactly match their state when the action was originally added.
+	//! \return The given 'redo' callback, so it can optionally be executed
+	//! while being added to the document.
+	const DocumentCallback& AddUndoGroupAction( const char* name, const DocumentCallback& undo, const DocumentCallback& redo );
 	bool EndUndoGroup();
 	void ClearUndo();
-	//! \param callback Should match the signature void(*)( DocumentUndoRedoOp, const DocumentValue* )
-	template< typename Fn = nullptr_t > bool Undo( Fn callback = nullptr );
-	//! \param callback Should match the signature void(*)( DocumentUndoRedoOp, const DocumentValue* )
-	template< typename Fn = nullptr_t > bool Redo( Fn callback = nullptr );
+	bool Undo();
+	bool Redo();
 	uint32_t GetUndoStackSize() const { return m_undoStack.Length() + ( m_currentGroup.Length() ? 1 : 0 ); }
 	uint32_t GetRedoStackSize() const { return m_redoStack.Length(); }
 
 private:
 	friend class DocumentValue;
 	using OpStack = ae::Array< ae::Array< UndoOp > >;
-	bool m_UndoRedo( OpStack& source, OpStack& target, void(*fn)( DocumentUndoRedoOp, const DocumentValue*, void* ), void* userData );
+	bool m_UndoRedo( OpStack& source, OpStack& target );
 	void m_PushOp( const UndoOp& op );
 	void m_AddRef( DocumentValue* value );
 	void m_RemoveRef( DocumentValue* value );
@@ -11855,6 +11910,33 @@ const T* Any< Size, Alignment >::TryGet() const
 }
 
 //------------------------------------------------------------------------------
+// ae::Function templated member functions
+//------------------------------------------------------------------------------
+template< typename R, typename... Args, size_t MaxSize >
+Function< R( Args... ), MaxSize >::Function() : m_invoker( nullptr )
+{
+}
+template< typename R, typename... Args, size_t MaxSize >
+template< typename F >
+Function< R( Args... ), MaxSize >::Function( F&& f )
+{
+	static_assert( sizeof( F ) <= MaxSize, "Lambda too large" );
+	static_assert( std::is_trivially_copyable< F >::value, "Lambda must be trivially copyable" );
+	memcpy( m_storage, &f, sizeof( F ) );
+	m_invoker = []( const void* ptr, Args... args ) -> R { return ( *reinterpret_cast< const F* >( ptr ) )( args... ); };
+}
+template< typename R, typename... Args, size_t MaxSize >
+R Function< R( Args... ), MaxSize >::operator()( Args... args ) const
+{
+	return m_invoker( m_storage, args... );
+}
+template< typename R, typename... Args, size_t MaxSize >
+Function< R( Args... ), MaxSize >::operator bool() const
+{
+	return m_invoker != nullptr;
+}
+
+//------------------------------------------------------------------------------
 // ae::DocumentValue templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
@@ -11955,38 +12037,6 @@ T DocumentValue::OpaqueGet( const T& defaultValue ) const
 {
 	AE_ASSERT( IsOpaque() );
 	return m_value.Get( defaultValue );
-}
-
-//------------------------------------------------------------------------------
-// ae::Document templated member functions
-//------------------------------------------------------------------------------
-template< typename Fn >
-bool Document::Undo( Fn callback )
-{
-	EndUndoGroup(); // Finalize current group
-	if constexpr( std::is_same_v< Fn, nullptr_t > )
-	{
-		return m_UndoRedo( m_undoStack, m_redoStack, nullptr, nullptr );
-	}
-	else
-	{
-		auto callbackWrapper = []( DocumentUndoRedoOp op, const DocumentValue* value, void* fn ) { ( *(decltype( callback )*)fn )( op, value ); };
-		return m_UndoRedo( m_undoStack, m_redoStack, callbackWrapper, &callback );
-	}
-}
-
-template< typename Fn >
-bool Document::Redo( Fn callback )
-{
-	if constexpr( std::is_same_v< Fn, nullptr_t > )
-	{
-		return m_UndoRedo( m_redoStack, m_undoStack, nullptr, nullptr );
-	}
-	else
-	{
-		auto callbackWrapper = []( DocumentUndoRedoOp op, const DocumentValue* value, void* fn ) { ( *(decltype( callback )*)fn )( op, value ); };
-		return m_UndoRedo( m_redoStack, m_undoStack, callbackWrapper, &callback );
-	}
 }
 
 //------------------------------------------------------------------------------
@@ -17585,7 +17635,10 @@ void DocumentValue::ArrayRemove( uint32_t index )
 	// Increment reference count - now only kept alive by undo stack
 	m_document->m_AddRef( child );
 }
-
+void DocumentValue::ArrayClear()
+{
+	Initialize( DocumentValueType::Array );
+}
 // Array iteration
 uint32_t DocumentValue::ArrayLength() const
 {
@@ -17666,8 +17719,11 @@ bool DocumentValue::ObjectRemove( const char* key )
 	m_document->m_AddRef( child );
 	return true;
 }
-
-// Map queries
+void DocumentValue::ObjectClear()
+{
+	Initialize( DocumentValueType::Object );
+}
+// Object queries
 DocumentValue* DocumentValue::ObjectTryGet( const char* key )
 {
 	AE_ASSERT( IsObject() );
@@ -17707,6 +17763,16 @@ const DocumentValue& DocumentValue::ObjectGetValue( uint32_t index ) const
 Document::Document( const ae::Tag& tag ) : DocumentValue( this, tag ), m_tag( tag ), m_values( tag ), m_undoStack( tag ), m_redoStack( tag ), m_currentGroup( tag ) {}
 Document::~Document() { m_values.DeleteAll(); }
 
+const DocumentCallback& Document::AddUndoGroupAction( const char* name, const DocumentCallback& undo, const DocumentCallback& redo )
+{
+	UndoOp& op = m_currentGroup.Append( {} );
+	op.type = UndoOpType::Action;
+	op.action.name = name;
+	op.action.undo = undo;
+	op.action.redo = redo;
+	return op.action.redo;
+}
+
 bool Document::EndUndoGroup()
 {
 	if( m_currentGroup.Length() > 0 )
@@ -17743,8 +17809,19 @@ void Document::ClearUndo()
 	m_currentGroup.Clear();
 }
 
+bool Document::Undo()
+{
+	EndUndoGroup(); // Finalize current group
+	return m_UndoRedo( m_undoStack, m_redoStack );
+}
+
+bool Document::Redo()
+{
+	return m_UndoRedo( m_redoStack, m_undoStack );
+}
+
 // Private member functions
-bool Document::m_UndoRedo( OpStack& source, OpStack& target, void ( *fn )( DocumentUndoRedoOp, const DocumentValue*, void* ), void* userData )
+bool Document::m_UndoRedo( OpStack& source, OpStack& target )
 {
 	// @TODO: Make sure that no operations are performed during callbacks
 	AE_DEBUG_ASSERT( m_currentGroup.Length() == 0 ); // Can't undo/redo during an active group
@@ -17763,6 +17840,18 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target, void ( *fn )( Docum
 		reverseOp.target = op.target;
 		switch( op.type )
 		{
+			case UndoOpType::Action:
+				reverseOp.type = UndoOpType::Action;
+				reverseOp.action = op.action;
+				if( &source == &m_undoStack )
+				{
+					op.action.undo();
+				}
+				else
+				{
+					op.action.redo();
+				}
+				break;
 			case UndoOpType::SetType:
 				reverseOp.type = UndoOpType::SetType;
 				reverseOp.oldType = op.target->m_type;
@@ -17778,19 +17867,11 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target, void ( *fn )( Docum
 				reverseOp.type = UndoOpType::StringSet;
 				reverseOp.oldString = op.target->m_string;
 				op.target->m_string = op.oldString;
-				if( fn )
-				{
-					fn( DocumentUndoRedoOp::Modify, op.target, userData );
-				}
 				break;
 			case UndoOpType::OpaqueSet:
 				reverseOp.type = UndoOpType::OpaqueSet;
 				reverseOp.oldValue = op.target->m_value;
 				op.target->m_value = op.oldValue;
-				if( fn )
-				{
-					fn( DocumentUndoRedoOp::Modify, op.target, userData );
-				}
 				break;
 			case UndoOpType::ArrayInsert:
 				reverseOp.type = UndoOpType::ArrayRemove;
@@ -17798,19 +17879,11 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target, void ( *fn )( Docum
 				op.target->m_array.Insert( op.index, op.oldChild );
 				AE_DEBUG_ASSERT( op.oldChild->m_refCount == 1 );
 				op.oldChild->m_refCount = 0; // Object back in document tree, reset to document ownership
-				if( fn )
-				{
-					fn( DocumentUndoRedoOp::Create, op.oldChild, userData );
-				}
 				break;
 			case UndoOpType::ArrayRemove:
 				reverseOp.type = UndoOpType::ArrayInsert;
 				reverseOp.index = op.index;
 				reverseOp.oldChild = op.target->m_array[ op.index ];
-				if( fn )
-				{
-					fn( DocumentUndoRedoOp::Destroy, reverseOp.oldChild, userData );
-				}
 				op.target->m_array.Remove( op.index );
 				m_AddRef( reverseOp.oldChild ); // Object removed from document, add reference
 				break;
@@ -17820,10 +17893,6 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target, void ( *fn )( Docum
 				op.target->m_map.Set( op.key, op.oldChild, op.index );
 				AE_DEBUG_ASSERT( op.oldChild->m_refCount == 1 );
 				op.oldChild->m_refCount = 0; // Object back in document tree, reset to document ownership
-				if( fn )
-				{
-					fn( DocumentUndoRedoOp::Create, op.oldChild, userData );
-				}
 				break;
 			case UndoOpType::ObjectRemove:
 				reverseOp.type = UndoOpType::ObjectSet;
@@ -17832,10 +17901,6 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target, void ( *fn )( Docum
 				if( reverseOp.oldChild )
 				{
 					m_AddRef( reverseOp.oldChild ); // Object removed from document, add reference
-					if( fn )
-					{
-						fn( DocumentUndoRedoOp::Destroy, reverseOp.oldChild, userData );
-					}
 				}
 				op.target->m_map.Remove( op.key, nullptr );
 				break;
@@ -17877,13 +17942,15 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 {
 	for( const UndoOp& op : operations )
 	{
-		DocumentValue* target = op.target;
-		// Validate type consistency with data contents
-		AE_DEBUG_ASSERT( target->m_string.length() == 0 || target->m_type == DocumentValueType::String );
-		AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
-		AE_DEBUG_ASSERT( target->m_array.Length() == 0 || target->m_type == DocumentValueType::Array );
-		AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Object );
-		AE_DEBUG_ASSERT( target->m_refCount >= 0 );
+		if( DocumentValue* target = op.target )
+		{
+			// Validate type consistency with data contents
+			AE_DEBUG_ASSERT( target->m_string.length() == 0 || target->m_type == DocumentValueType::String );
+			AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
+			AE_DEBUG_ASSERT( target->m_array.Length() == 0 || target->m_type == DocumentValueType::Array );
+			AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Object );
+			AE_DEBUG_ASSERT( target->m_refCount >= 0 );
+		}
 	}
 }
 
