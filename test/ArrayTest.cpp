@@ -465,7 +465,194 @@ TEST_CASE( "initial size of dynamic array is exact when specified", "[ae::Array]
 	}
 }
 
-// @TODO: Add specific Find() FindFn() FindLast() and FindLastFn() tests
+TEST_CASE( "array Find() returns first matching element", "[ae::Array]" )
+{
+	ae::Array< int > array = TAG_TEST;
+	for( uint32_t i = 0; i < 10; i++ )
+	{
+		array.Append( i );
+		array.Append( i ); // Duplicate each value
+	}
+	REQUIRE( array.Length() == 20 );
+	// array: [0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9]
+
+	SECTION( "finds first occurrence of duplicates" )
+	{
+		REQUIRE( array.Find( 0 ) == 0 );
+		REQUIRE( array.Find( 5 ) == 10 );
+		REQUIRE( array.Find( 9 ) == 18 );
+	}
+
+	SECTION( "returns -1 when not found" )
+	{
+		REQUIRE( array.Find( 100 ) == -1 );
+		REQUIRE( array.Find( -1 ) == -1 );
+	}
+
+	SECTION( "finds elements in order" )
+	{
+		for( uint32_t i = 0; i < 10; i++ )
+		{
+			REQUIRE( array.Find( i ) == i * 2 );
+		}
+	}
+}
+
+TEST_CASE( "array FindLast() returns last matching element", "[ae::Array]" )
+{
+	ae::Array< int > array = TAG_TEST;
+	for( uint32_t i = 0; i < 10; i++ )
+	{
+		array.Append( i );
+		array.Append( i ); // Duplicate each value
+	}
+	REQUIRE( array.Length() == 20 );
+	// array: [0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9]
+
+	SECTION( "finds last occurrence of duplicates" )
+	{
+		REQUIRE( array.FindLast( 0 ) == 1 );
+		REQUIRE( array.FindLast( 5 ) == 11 );
+		REQUIRE( array.FindLast( 9 ) == 19 );
+	}
+
+	SECTION( "returns -1 when not found" )
+	{
+		REQUIRE( array.FindLast( 100 ) == -1 );
+		REQUIRE( array.FindLast( -1 ) == -1 );
+	}
+
+	SECTION( "finds last elements in order" )
+	{
+		for( uint32_t i = 0; i < 10; i++ )
+		{
+			REQUIRE( array.FindLast( i ) == i * 2 + 1 );
+		}
+	}
+
+	SECTION( "works with single occurrence" )
+	{
+		ae::Array< int > singleArray = TAG_TEST;
+		singleArray.Append( 42 );
+		REQUIRE( singleArray.FindLast( 42 ) == 0 );
+	}
+}
+
+TEST_CASE( "array FindFn() returns first matching element by predicate", "[ae::Array]" )
+{
+	ae::Array< int > array = TAG_TEST;
+	for( uint32_t i = 0; i < 20; i++ )
+	{
+		array.Append( i );
+	}
+	REQUIRE( array.Length() == 20 );
+
+	SECTION( "finds first even number" )
+	{
+		int32_t idx = array.FindFn( []( int val ) { return val % 2 == 0; } );
+		REQUIRE( idx == 0 );
+		REQUIRE( array[ idx ] == 0 );
+	}
+
+	SECTION( "finds first odd number" )
+	{
+		int32_t idx = array.FindFn( []( int val ) { return val % 2 == 1; } );
+		REQUIRE( idx == 1 );
+		REQUIRE( array[ idx ] == 1 );
+	}
+
+	SECTION( "finds first number greater than 10" )
+	{
+		int32_t idx = array.FindFn( []( int val ) { return val > 10; } );
+		REQUIRE( idx == 11 );
+		REQUIRE( array[ idx ] == 11 );
+	}
+
+	SECTION( "returns -1 when no match" )
+	{
+		int32_t idx = array.FindFn( []( int val ) { return val > 100; } );
+		REQUIRE( idx == -1 );
+	}
+
+	SECTION( "works with empty array" )
+	{
+		ae::Array< int > empty = TAG_TEST;
+		int32_t idx = empty.FindFn( []( int val ) { return val == 0; } );
+		REQUIRE( idx == -1 );
+	}
+
+	SECTION( "finds with complex predicate" )
+	{
+		int32_t idx = array.FindFn( []( int val ) { return val > 5 && val < 8; } );
+		REQUIRE( idx == 6 );
+		REQUIRE( array[ idx ] == 6 );
+	}
+}
+
+TEST_CASE( "array FindLastFn() returns last matching element by predicate", "[ae::Array]" )
+{
+	ae::Array< int > array = TAG_TEST;
+	for( uint32_t i = 0; i < 20; i++ )
+	{
+		array.Append( i );
+	}
+	REQUIRE( array.Length() == 20 );
+
+	SECTION( "finds last even number" )
+	{
+		int32_t idx = array.FindLastFn( []( int val ) { return val % 2 == 0; } );
+		REQUIRE( idx == 18 );
+		REQUIRE( array[ idx ] == 18 );
+	}
+
+	SECTION( "finds last odd number" )
+	{
+		int32_t idx = array.FindLastFn( []( int val ) { return val % 2 == 1; } );
+		REQUIRE( idx == 19 );
+		REQUIRE( array[ idx ] == 19 );
+	}
+
+	SECTION( "finds last number less than 10" )
+	{
+		int32_t idx = array.FindLastFn( []( int val ) { return val < 10; } );
+		REQUIRE( idx == 9 );
+		REQUIRE( array[ idx ] == 9 );
+	}
+
+	SECTION( "returns -1 when no match" )
+	{
+		int32_t idx = array.FindLastFn( []( int val ) { return val > 100; } );
+		REQUIRE( idx == -1 );
+	}
+
+	SECTION( "works with empty array" )
+	{
+		ae::Array< int > empty = TAG_TEST;
+		int32_t idx = empty.FindLastFn( []( int val ) { return val == 0; } );
+		REQUIRE( idx == -1 );
+	}
+
+	SECTION( "finds with complex predicate" )
+	{
+		int32_t idx = array.FindLastFn( []( int val ) { return val > 5 && val < 8; } );
+		REQUIRE( idx == 7 );
+		REQUIRE( array[ idx ] == 7 );
+	}
+
+	SECTION( "finds last matching in array with duplicates" )
+	{
+		ae::Array< int > dupArray = TAG_TEST;
+		dupArray.Append( 1 );
+		dupArray.Append( 5 );
+		dupArray.Append( 3 );
+		dupArray.Append( 5 );
+		dupArray.Append( 2 );
+		dupArray.Append( 5 );
+		int32_t idx = dupArray.FindLastFn( []( int val ) { return val == 5; } );
+		REQUIRE( idx == 5 );
+		REQUIRE( dupArray[ idx ] == 5 );
+	}
+}
 
 TEST_CASE( "arrays elements can be removed by value", "[ae::Array]" )
 {
