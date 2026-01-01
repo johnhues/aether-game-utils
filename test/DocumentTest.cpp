@@ -2948,6 +2948,223 @@ TEST_CASE( "DocumentValue MapSet LongKeys", "[ae::Document]" )
 }
 
 //------------------------------------------------------------------------------
+// Map ordering restoration tests
+//------------------------------------------------------------------------------
+TEST_CASE( "DocumentUndo MapOrderingMultipleOperations", "[ae::Document][undo][object][order]" )
+{
+	ae::Document doc( "test" );
+	doc.ObjectInitialize( 10 );
+	doc.EndUndoGroup();
+	
+	// Add elements in specific order
+	doc.ObjectSet( "first" ).StringSet( "1" );
+	doc.ObjectSet( "second" ).StringSet( "2" );
+	doc.ObjectSet( "third" ).StringSet( "3" );
+	doc.EndUndoGroup();
+	
+	// Capture original order
+	ae::Array< ae::Str64, 10 > order1;
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+	{
+		order1.Append( doc.ObjectGetKey( i ) );
+	}
+	REQUIRE( order1.Length() == 3 );
+	REQUIRE( order1[ 0 ] == "first" );
+	REQUIRE( order1[ 1 ] == "second" );
+	REQUIRE( order1[ 2 ] == "third" );
+	
+	// Modify values (should not affect order)
+	doc.ObjectSet( "first" ).StringSet( "one" );
+	doc.ObjectSet( "third" ).StringSet( "three" );
+	doc.EndUndoGroup();
+	
+	// Verify order unchanged
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+	{
+		REQUIRE( std::string( doc.ObjectGetKey( i ) ) == std::string( order1[ i ].c_str() ) );
+	}
+	
+	// Add more elements
+	doc.ObjectSet( "fourth" ).StringSet( "4" );
+	doc.ObjectSet( "fifth" ).StringSet( "5" );
+	doc.EndUndoGroup();
+	
+	ae::Array< ae::Str64, 10 > order2;
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+	{
+		order2.Append( doc.ObjectGetKey( i ) );
+	}
+	REQUIRE( order2.Length() == 5 );
+	
+	// Undo additions
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.ObjectLength() == 3 );
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+	{
+		REQUIRE( std::string( doc.ObjectGetKey( i ) ) == std::string( order1[ i ].c_str() ) );
+	}
+	
+	// Redo additions - order should be restored exactly
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.ObjectLength() == 5 );
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+	{
+		REQUIRE( std::string( doc.ObjectGetKey( i ) ) == std::string( order2[ i ].c_str() ) );
+	}
+}
+
+TEST_CASE( "DocumentUndo MapOrderingWithRemoval", "[ae::Document][undo][object][order]" )
+{
+	ae::Document doc( "test" );
+	doc.ObjectInitialize( 10 );
+	
+	// Build initial state with 5 elements
+	doc.ObjectSet( "a" ).StringSet( "A" );
+	doc.ObjectSet( "b" ).StringSet( "B" );
+	doc.ObjectSet( "c" ).StringSet( "C" );
+	doc.ObjectSet( "d" ).StringSet( "D" );
+	doc.ObjectSet( "e" ).StringSet( "E" );
+	doc.EndUndoGroup();
+	
+	// Capture initial order
+	ae::Array< ae::Str64, 10 > initialOrder;
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+	{
+		initialOrder.Append( doc.ObjectGetKey( i ) );
+	}
+	REQUIRE( initialOrder.Length() == 5 );
+	
+	// Remove middle element
+	REQUIRE( doc.ObjectRemove( "c" ) );
+	doc.EndUndoGroup();
+	
+	REQUIRE( doc.ObjectLength() == 4 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "a" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "b" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "d" ) ); // c was removed
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "e" ) );
+	
+	// Remove first element
+	REQUIRE( doc.ObjectRemove( "a" ) );
+	doc.EndUndoGroup();
+	
+	REQUIRE( doc.ObjectLength() == 3 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "b" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "d" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "e" ) );
+	
+	// Remove last element
+	REQUIRE( doc.ObjectRemove( "e" ) );
+	doc.EndUndoGroup();
+	
+	REQUIRE( doc.ObjectLength() == 2 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "b" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "d" ) );
+	
+	// Undo all removals in reverse order
+	REQUIRE( doc.Undo() ); // Restore "e"
+	REQUIRE( doc.ObjectLength() == 3 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "b" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "d" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "e" ) );
+	
+	REQUIRE( doc.Undo() ); // Restore "a"
+	REQUIRE( doc.ObjectLength() == 4 );
+	REQUIRE( doc.ObjectGetKey( 0 ) == std::string( "a" ) );
+	REQUIRE( doc.ObjectGetKey( 1 ) == std::string( "b" ) );
+	REQUIRE( doc.ObjectGetKey( 2 ) == std::string( "d" ) );
+	REQUIRE( doc.ObjectGetKey( 3 ) == std::string( "e" ) );
+	
+	REQUIRE( doc.Undo() ); // Restore "c"
+	REQUIRE( doc.ObjectLength() == 5 );
+	
+	// Verify exact original order is restored
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+	{
+		REQUIRE( std::string( doc.ObjectGetKey( i ) ) == std::string( initialOrder[ i ].c_str() ) );
+	}
+}
+
+TEST_CASE( "DocumentUndo MapOrderingComplexSequence", "[ae::Document][undo][object][order]" )
+{
+	ae::Document doc( "test" );
+	doc.ObjectInitialize( 10 );
+	
+	// Step 1: Add initial elements
+	doc.ObjectSet( "one" ).NumberSet( 1 );
+	doc.ObjectSet( "two" ).NumberSet( 2 );
+	doc.ObjectSet( "three" ).NumberSet( 3 );
+	doc.EndUndoGroup();
+	
+	ae::Array< ae::Str64, 20 > step1Order;
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+		step1Order.Append( doc.ObjectGetKey( i ) );
+	
+	// Step 2: Remove one, add two new
+	doc.ObjectRemove( "two" );
+	doc.ObjectSet( "four" ).NumberSet( 4 );
+	doc.ObjectSet( "five" ).NumberSet( 5 );
+	doc.EndUndoGroup();
+	
+	ae::Array< ae::Str64, 20 > step2Order;
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+		step2Order.Append( doc.ObjectGetKey( i ) );
+	REQUIRE( step2Order.Length() == 4 );
+	
+	// Step 3: Modify existing and add new
+	doc.ObjectSet( "one" ).NumberSet( 100 );
+	doc.ObjectSet( "six" ).NumberSet( 6 );
+	doc.EndUndoGroup();
+	
+	ae::Array< ae::Str64, 20 > step3Order;
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+		step3Order.Append( doc.ObjectGetKey( i ) );
+	REQUIRE( step3Order.Length() == 5 );
+	
+	// Step 4: Remove multiple
+	doc.ObjectRemove( "one" );
+	doc.ObjectRemove( "five" );
+	doc.EndUndoGroup();
+	
+	ae::Array< ae::Str64, 20 > step4Order;
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+		step4Order.Append( doc.ObjectGetKey( i ) );
+	REQUIRE( step4Order.Length() == 3 );
+	
+	// Now undo all the way back and verify order at each step
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.ObjectLength() == step3Order.Length() );
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+		REQUIRE( std::string( doc.ObjectGetKey( i ) ) == std::string( step3Order[ i ].c_str() ) );
+	
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.ObjectLength() == step2Order.Length() );
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+		REQUIRE( std::string( doc.ObjectGetKey( i ) ) == std::string( step2Order[ i ].c_str() ) );
+	
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.ObjectLength() == step1Order.Length() );
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+		REQUIRE( std::string( doc.ObjectGetKey( i ) ) == std::string( step1Order[ i ].c_str() ) );
+	
+	// Redo all the way forward and verify order at each step
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.ObjectLength() == step2Order.Length() );
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+		REQUIRE( std::string( doc.ObjectGetKey( i ) ) == std::string( step2Order[ i ].c_str() ) );
+	
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.ObjectLength() == step3Order.Length() );
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+		REQUIRE( std::string( doc.ObjectGetKey( i ) ) == std::string( step3Order[ i ].c_str() ) );
+	
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.ObjectLength() == step4Order.Length() );
+	for ( uint32_t i = 0; i < doc.ObjectLength(); i++ )
+		REQUIRE( std::string( doc.ObjectGetKey( i ) ) == std::string( step4Order[ i ].c_str() ) );
+}
+
+//------------------------------------------------------------------------------
 // ae::Document::AddUndoGroupAction tests
 //------------------------------------------------------------------------------
 TEST_CASE( "Document AddUndoGroupAction basic", "[ae::Document][AddUndoGroupAction]" )

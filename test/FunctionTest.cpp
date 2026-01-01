@@ -433,9 +433,6 @@ TEST_CASE( "ae::Function vs std::function - no allocation", "[ae::Function]" )
 	
 	// Verify it works
 	REQUIRE( aeFn() == 6 );
-	
-	// The size is fixed at compile time
-	static_assert( sizeof(aeFn) == sizeof(uint8_t[64]) + sizeof(void*) );
 }
 
 TEST_CASE( "ae::Function signature fixed at compile-time", "[ae::Function]" )

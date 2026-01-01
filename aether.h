@@ -2572,7 +2572,7 @@ private:
 //------------------------------------------------------------------------------
 // ae::DocumentCallback
 //------------------------------------------------------------------------------
-using DocumentCallback = ae::Function< void(), 64 >;
+using DocumentCallback = ae::Function< void(), 96 >;
 
 //------------------------------------------------------------------------------
 // ae::DocumentValueType
@@ -17673,9 +17673,8 @@ DocumentValue& DocumentValue::ObjectSet( const char* key )
 		op.type = UndoOpType::ObjectRemove; // Reverse operation
 		op.target = this;
 		op.key = key;
-		op.index = m_map.Length(); // New element will be appended at this index
 		m_document->m_PushOp( op );
-		return *m_map.Set( key, m_document->m_values.New( m_document, m_document->m_tag ) );
+		return *m_map.Set( key, m_document->m_values.New( m_document, m_document->m_tag ), m_map.Length() ); // Insert at the end
 	}
 	return *child;
 }
@@ -17888,6 +17887,7 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target )
 				m_AddRef( reverseOp.oldChild ); // Object removed from document, add reference
 				break;
 			case UndoOpType::ObjectSet:
+				AE_DEBUG_ASSERT( op.index >= 0 ); // Use index for stable reinsertion
 				reverseOp.type = UndoOpType::ObjectRemove;
 				reverseOp.key = op.key;
 				op.target->m_map.Set( op.key, op.oldChild, op.index );
@@ -17895,14 +17895,16 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target )
 				op.oldChild->m_refCount = 0; // Object back in document tree, reset to document ownership
 				break;
 			case UndoOpType::ObjectRemove:
+				AE_DEBUG_ASSERT( op.index == -1 ); // Use key instead of index for removal
 				reverseOp.type = UndoOpType::ObjectSet;
 				reverseOp.key = op.key;
-				reverseOp.oldChild = op.target->m_map.Get( op.key, nullptr ); // @TODO: Why is this alowed to be missing?
+				reverseOp.index = op.target->m_map.GetIndex( op.key );
+				reverseOp.oldChild = op.target->m_map.GetValue( reverseOp.index );
 				if( reverseOp.oldChild )
 				{
 					m_AddRef( reverseOp.oldChild ); // Object removed from document, add reference
 				}
-				op.target->m_map.Remove( op.key, nullptr );
+				op.target->m_map.RemoveIndex( reverseOp.index );
 				break;
 		}
 		reverseGroup.Append( reverseOp );
