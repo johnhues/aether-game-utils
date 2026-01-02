@@ -370,6 +370,7 @@ private:
 	uint32_t m_GetSelectionLength() const { return m_docSelection->ArrayLength(); }
 	ae::Entity m_GetSelectedEntity( uint32_t index ) const { return m_docSelection->ArrayGet( index ).NumberGet< ae::Entity >(); }
 	int32_t m_FindInSelection( ae::Entity entity ) const;
+	void m_SelectAll();
 	void m_ClearSelection();
 	void m_RemoveFromSelection( ae::Entity entity );
 	void m_AddToSelection( ae::Entity entity );
@@ -2550,6 +2551,12 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				} },
 			{ "Focus", {}, ae::Key::F, []( EditorProgram* program ) { program->editor.ActiveRefocus( program ); }, true },
 			{ "Hide", {}, ae::Key::H, []( EditorProgram* program ) { program->editor.m_HideSelected(); } },
+			{ "Select All", {}, ae::Key::A,
+				[]( EditorProgram* program )
+				{
+					program->editor.m_SelectAll();
+					program->editor.m_doc.EndUndoGroup();
+				} },
 			{ "Select none", {}, ae::Key::Escape,
 				[]( EditorProgram* program )
 				{
@@ -2668,7 +2675,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 			if( command.ignoreModifiers || ( modifierCount == command.modifiers.Length() ) ) // Exact match only
 			{
 				const int32_t currentIdx = (int32_t)( &command - commands );
-				const bool doRepeat = command.continuous || ( command.repeat && ( currentIdx == m_lastCommandIdx ) && ( ae::GetTime() - m_lastCommandTime ) >= 0.35 );
+				const bool doRepeat = command.continuous || ( command.repeat && ( currentIdx == m_lastCommandIdx ) && ( ae::GetTime() - m_lastCommandTime ) >= 0.175 );
 				if( ( program->input.GetPress( command.key ) ) || ( doRepeat && program->input.Get( command.key ) ) )
 				{
 					const bool allPressed = [ & ]()
@@ -3057,16 +3064,16 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 							}
 						}
 					}
+					const bool isSelected = ( m_FindInSelection( editorObj->GetEntity() ) >= 0 );
+					if( isSelected )
+					{
+						name += " +";
+					}
 					if( hasSelectedDescendant( hasSelectedDescendant, editorObj ) )
 					{
 						name += "*";
 					}
-					const bool isSelected = ( m_FindInSelection( editorObj->GetEntity() ) >= 0 );
-					const ImGuiTreeNodeFlags flags =
-					( hasChildren ? 0 : ImGuiTreeNodeFlags_Leaf ) |
-					( isSelected ? ImGuiTreeNodeFlags_Selected : 0 ) |
-					ImGuiTreeNodeFlags_SpanFullWidth |
-					ImGuiTreeNodeFlags_OpenOnArrow;
+					const ImGuiTreeNodeFlags flags = ( hasChildren ? 0 : ImGuiTreeNodeFlags_Leaf ) | ( isSelected ? ImGuiTreeNodeFlags_Selected : 0 ) | ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_OpenOnArrow;
 					name += "###";
 					name += ae::ToString( editorObj->GetEntity() ).c_str();
 					const SelectionModifier selectionModifier = m_GetSelectionModifier( program );
@@ -4004,6 +4011,18 @@ int32_t EditorServer::m_FindInSelection( ae::Entity entity ) const
 		}
 	}
 	return -1;
+}
+
+void EditorServer::m_SelectAll()
+{
+	if( m_docObjects->ObjectLength() != m_docSelection->ArrayLength() )
+	{
+		m_ClearSelection();
+		for( const auto& _obj : m_objects )
+		{
+			m_docSelection->ArrayAppend().NumberSet( _obj.key );
+		}
+	}
 }
 
 void EditorServer::m_ClearSelection()
