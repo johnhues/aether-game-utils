@@ -267,3 +267,181 @@ TEST_CASE( "FromString fail", "[aeString]" )
 	REQUIRE( ae::FromString( ".", false ) == false );
 	REQUIRE( ae::FromString( ".", true ) == true );
 }
+
+TEST_CASE( "Str::Append", "[aeString]" )
+{
+	SECTION( "append const char*" )
+	{
+		ae::Str32 str = "Hello";
+		str.Append( " World" );
+		REQUIRE( str == "Hello World" );
+		REQUIRE( str.Length() == 11 );
+	}
+
+	SECTION( "append Str" )
+	{
+		ae::Str32 str = "Hello";
+		ae::Str16 suffix = " World";
+		str.Append( suffix );
+		REQUIRE( str == "Hello World" );
+		REQUIRE( str.Length() == 11 );
+	}
+
+	SECTION( "append empty string" )
+	{
+		ae::Str32 str = "Hello";
+		str.Append( "" );
+		REQUIRE( str == "Hello" );
+		REQUIRE( str.Length() == 5 );
+	}
+}
+
+TEST_CASE( "Str::Insert basic functionality", "[aeString]" )
+{
+	SECTION( "insert at beginning" )
+	{
+		ae::Str32 str = "World";
+		str.Insert( 0, "Hello " );
+		REQUIRE( str == "Hello World" );
+		REQUIRE( str.Length() == 11 );
+	}
+
+	SECTION( "insert at end" )
+	{
+		ae::Str32 str = "Hello";
+		str.Insert( 5, " World" );
+		REQUIRE( str == "Hello World" );
+		REQUIRE( str.Length() == 11 );
+	}
+
+	SECTION( "insert in middle" )
+	{
+		ae::Str32 str = "HellWorld";
+		str.Insert( 4, "o " );
+		REQUIRE( str == "Hello World" );
+		REQUIRE( str.Length() == 11 );
+	}
+
+	SECTION( "insert empty string" )
+	{
+		ae::Str32 str = "Hello";
+		str.Insert( 2, "" );
+		REQUIRE( str == "Hello" );
+		REQUIRE( str.Length() == 5 );
+	}
+
+	SECTION( "insert Str object" )
+	{
+		ae::Str32 str = "Hello";
+		ae::Str16 insert = " World";
+		str.Insert( 5, insert );
+		REQUIRE( str == "Hello World" );
+		REQUIRE( str.Length() == 11 );
+	}
+}
+
+TEST_CASE( "Str::Insert multiple operations", "[aeString]" )
+{
+	ae::Str64 str = "";
+	str.Insert( 0, "fox" );
+	REQUIRE( str == "fox" );
+	REQUIRE( str.Length() == 3 );
+	
+	str.Insert( 0, "The " );
+	REQUIRE( str == "The fox" );
+	REQUIRE( str.Length() == 7 );
+	
+	str.Insert( 4, "quick " );
+	REQUIRE( str == "The quick fox" );
+	REQUIRE( str.Length() == 13 );
+	
+	str.Insert( 10, "brown " );
+	REQUIRE( str == "The quick brown fox" );
+	REQUIRE( str.Length() == 19 );
+	
+	str.Insert( 19, " jumps" );
+	REQUIRE( str == "The quick brown fox jumps" );
+	REQUIRE( str.Length() == 25 );
+}
+
+TEST_CASE( "Str self-append handling", "[aeString]" )
+{
+	SECTION( "append string to itself using c_str" )
+	{
+		ae::Str32 str = "Hello";
+		str += str.c_str();
+		REQUIRE( str == "HelloHello" );
+		REQUIRE( str.Length() == 10 );
+	}
+
+	SECTION( "append string to itself using operator" )
+	{
+		ae::Str32 str = "Hello";
+		str += str;
+		REQUIRE( str == "HelloHello" );
+		REQUIRE( str.Length() == 10 );
+	}
+
+	SECTION( "append substring to itself" )
+	{
+		ae::Str32 str = "Hello";
+		str += &str.c_str()[1]; // Append "ello"
+		REQUIRE( str == "Helloello" );
+		REQUIRE( str.Length() == 9 );
+	}
+
+	SECTION( "multiple self-appends" )
+	{
+		ae::Str32 str = "A";
+		str += str; // "AA"
+		REQUIRE( str == "AA" );
+		str += str; // "AAAA"
+		REQUIRE( str == "AAAA" );
+		str += str; // "AAAAAAAA"
+		REQUIRE( str == "AAAAAAAA" );
+		REQUIRE( str.Length() == 8 );
+	}
+}
+
+TEST_CASE( "Str self-insert handling", "[aeString]" )
+{
+	SECTION( "insert string into itself using c_str at beginning" )
+	{
+		ae::Str32 str = "Hello";
+		str.Insert( 0, str.c_str() );
+		REQUIRE( str == "HelloHello" );
+		REQUIRE( str.Length() == 10 );
+	}
+
+	SECTION( "insert string into itself using c_str in middle" )
+	{
+		ae::Str32 str = "Hello";
+		str.Insert( 2, str.c_str() );
+		REQUIRE( str == "HeHellollo" );
+		REQUIRE( str.Length() == 10 );
+	}
+
+	SECTION( "insert string into itself using c_str at end" )
+	{
+		ae::Str32 str = "Hello";
+		str.Insert( 5, str.c_str() );
+		REQUIRE( str == "HelloHello" );
+		REQUIRE( str.Length() == 10 );
+	}
+
+	SECTION( "insert substring into itself" )
+	{
+		ae::Str32 str = "Hello";
+		str.Insert( 2, &str.c_str()[1] ); // Insert "ello" at position 2
+		REQUIRE( str == "Heellollo" );
+		REQUIRE( str.Length() == 9 );
+	}
+
+	SECTION( "insert Str object into itself" )
+	{
+		ae::Str32 str = "Hello";
+		str.Insert( 2, str );
+		REQUIRE( str == "HeHellollo" );
+		REQUIRE( str.Length() == 10 );
+	}
+}
