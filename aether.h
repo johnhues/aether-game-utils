@@ -1532,9 +1532,10 @@ public:
 	char operator[]( uint32_t i ) const;
 	const char* c_str() const;
 
-	template< uint32_t N2 >
-	void Append( const Str<N2>& str );
+	template< uint32_t N2 > void Append( const Str< N2 >& str );
 	void Append( const char* str );
+	template< uint32_t N2 > void Insert( uint32_t index, const Str< N2 >& str );
+	void Insert( uint32_t index, const char* str );
 	void Trim( uint32_t len );
 
 	uint32_t Length() const;
@@ -9205,9 +9206,21 @@ Str<N> Str< N >::operator +( const Str<N2>& str ) const
 template< uint32_t N >
 void Str< N >::operator +=( const char* str )
 {
-	uint32_t len = (uint32_t)strlen( str );
+	const uint32_t len = (uint32_t)strlen( str );
 	AE_ASSERT_MSG( m_length + len <= (uint16_t)MaxLength(), "'#' + '#' > #", m_str, str, MaxLength() );
-	memcpy( m_str + m_length, str, len + 1u );
+	// Check if str points into our own buffer (e.g., str += str.c_str())
+	const bool isSelf = ( str >= m_str && str <= m_str + m_length );
+	if( isSelf )
+	{
+		// Make a temporary copy to avoid corruption
+		char temp[ MaxLength() + 1u ];
+		memcpy( temp, str, len + 1u );
+		memcpy( m_str + m_length, temp, len + 1u );
+	}
+	else
+	{
+		memcpy( m_str + m_length, str, len + 1u );
+	}
 	m_length += len;
 }
 
@@ -9215,9 +9228,7 @@ template< uint32_t N >
 template< uint32_t N2 >
 void Str< N >::operator +=( const Str<N2>& str )
 {
-	AE_ASSERT_MSG( m_length + str.m_length <= (uint16_t)MaxLength(), "'#' + '#' > #", m_str, str, MaxLength() );
-	memcpy( m_str + m_length, str.c_str(), str.m_length + 1u );
-	m_length += str.m_length;
+	*this += str.c_str();
 }
 
 template< uint32_t N >
@@ -9377,6 +9388,45 @@ template< uint32_t N >
 void Str< N >::Append( const char* str )
 {
 	*this += str;
+}
+
+template< uint32_t N >
+template< uint32_t N2 >
+void Str< N >::Insert( uint32_t index, const Str<N2>& str )
+{
+	Insert( index, str.c_str() );
+}
+
+template< uint32_t N >
+void Str< N >::Insert( uint32_t index, const char* str )
+{
+	AE_ASSERT( index <= m_length );
+	const uint32_t len = (uint32_t)strlen( str );
+	AE_ASSERT_MSG( m_length + len <= (uint16_t)MaxLength(), "'#' insert '#' at # > #", m_str, str, index, MaxLength() );
+	if( len == 0 )
+	{
+		return;
+	}
+	// Check if str points into our own buffer (e.g., Insert(2, c_str()))
+	const bool isSelf = ( str >= m_str && str <= m_str + m_length );
+	if( isSelf )
+	{
+		// Make a temporary copy to avoid corruption during memmove
+		char temp[ MaxLength() + 1u ];
+		memcpy( temp, str, len + 1u );
+		// Move existing characters to make room
+		memmove( m_str + index + len, m_str + index, m_length - index + 1u ); // +1 for null terminator
+		// Copy from temporary buffer
+		memcpy( m_str + index, temp, len );
+	}
+	else
+	{
+		// Move existing characters to make room
+		memmove( m_str + index + len, m_str + index, m_length - index + 1u ); // +1 for null terminator
+		// Copy new string into the gap
+		memcpy( m_str + index, str, len );
+	}
+	m_length += len;
 }
 
 template< uint32_t N >
