@@ -3234,10 +3234,13 @@ ae::Array< ae::Screen, 16 > GetScreens();
 class Window
 {
 public:
+	// @TODO: Surface?
 	Window();
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
+	// @TODO: InitializeFullscreen
 	bool Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor, bool rememberPosition );
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
+	// @TODO: InitializeWindowed
 	bool Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor, bool rememberPosition );
 	void Terminate();
 
