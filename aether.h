@@ -6876,6 +6876,47 @@ void PatchVTable( T* obj, Args... ctorArgs )
 //
 //
 //------------------------------------------------------------------------------
+// Internal safer c-string functions
+//------------------------------------------------------------------------------
+inline size_t _strlcat( char* dst, const char* src, size_t size )
+{
+	size_t dstlen = strlen( dst );
+	size -= dstlen + 1;
+
+	if( !size )
+	{
+		return dstlen;
+	}
+
+	size_t srclen = strlen( src );
+	if( srclen > size )
+	{
+		srclen = size;
+	}
+
+	memcpy( dst + dstlen, src, srclen );
+	dst[ dstlen + srclen ] = '\0';
+
+	return ( dstlen + srclen );
+}
+
+inline size_t _strlcpy( char* dst, const char* src, size_t size )
+{
+	size--;
+
+	size_t srclen = strlen( src );
+	if( srclen > size )
+	{
+		srclen = size;
+	}
+
+	memcpy( dst, src, srclen );
+	dst[ srclen ] = '\0';
+
+	return srclen;
+}
+
+//------------------------------------------------------------------------------
 // Internal ae::_DefaultAllocator
 //------------------------------------------------------------------------------
 class _DefaultAllocator : public Allocator
@@ -11899,31 +11940,37 @@ Any< Size, Alignment >::Any( const T& value )
 	*this = value;
 }
 
+// Internal. Intended for use with static asserts within disabled constexpr
+// branches so they are not evaluated at compile time. The compiler will(...can)
+// evaluate static asserts within disabled constexpr branches unless they depend
+// on a template parameter.
+template< typename... > inline constexpr bool _False = false;
+
 template< uint32_t Size, uint32_t Alignment >
 template< typename T >
 void Any< Size, Alignment >::operator=( const T& value )
 {
 	if constexpr( !std::is_trivially_destructible_v< T > )
 	{
-		AE_STATIC_FAIL( "T must be trivially destructible" );
+		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T must be trivially destructible" );
 	}
 	else if constexpr( !std::is_trivially_copyable_v< T > )
 	{
-		AE_STATIC_FAIL( "T must be trivially copyable" );
+		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T must be trivially copyable" );
 	}
 	else if constexpr( sizeof( T ) > Size )
 	{
-		AE_STATIC_FAIL( "T is too large to store in DocumentValue" );
+		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T is too large to store in DocumentValue" );
 	}
 	else if constexpr( alignof( T ) > Alignment )
 	{
-		AE_STATIC_FAIL( "T has too large an alignment to store in DocumentValue" );
+		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T has too large an alignment to store in DocumentValue" );
 	}
 	else if constexpr( std::is_same_v< T, char* > ||
 		std::is_same_v< T, const char* > ||
 		( std::is_array_v< T > && std::is_same_v< std::remove_extent_t< T >, char > ) )
 	{
-		AE_STATIC_FAIL( "ae::Any is not compatible with c-strings" );
+		AE_STATIC_ASSERT_MSG( ae::_False< T >, "ae::Any is not compatible with c-strings" );
 	}
 	else
 	{
@@ -21299,7 +21346,7 @@ bool FileSystem::CreateFolder( const char* folderPath )
 	return success && !error;
 #elif _AE_LINUX_
 	char path[ PATH_MAX + 1 ];
-	size_t pathLength = strlcpy( path, folderPath, PATH_MAX );
+	size_t pathLength = ae::_strlcpy( path, folderPath, PATH_MAX );
 	if( pathLength >= PATH_MAX )
 	{
 		return false;
@@ -21365,12 +21412,12 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 		{
 			return "";
 		}
-		size_t pathLength = strlcpy( path, homeDir, PATH_MAX );
+		size_t pathLength = ae::_strlcpy( path, homeDir, PATH_MAX );
 		if( pathLength >= PATH_MAX )
 		{
 			return "";
 		}
-		pathLength = strlcat( path, filePath + 1, PATH_MAX );
+		pathLength = ae::_strlcat( path, filePath + 1, PATH_MAX );
 		if( pathLength >= PATH_MAX )
 		{
 			return "";
@@ -21395,8 +21442,8 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 		CFURLRef resourcesURL = CFBundleCopyResourcesDirectoryURL( CFBundleGetMainBundle() );
 		CFURLGetFileSystemRepresentation( resourcesURL, TRUE, (UInt8*)path, PATH_MAX );
 		CFRelease( resourcesURL );
-		strlcat( path, "/", sizeof(path) );
-		strlcat( path, filePath, sizeof(path) );
+		ae::_strlcat( path, "/", sizeof(path) );
+		ae::_strlcat( path, filePath, sizeof(path) );
 		return path;
 	}
 	else
@@ -21422,12 +21469,12 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 		{
 			return "";
 		}
-		size_t pathLength = strlcpy( path, homeDir, PATH_MAX );
+		size_t pathLength = ae::_strlcpy( path, homeDir, PATH_MAX );
 		if( pathLength >= PATH_MAX )
 		{
 			return "";
 		}
-		pathLength = strlcat( path, filePath + 1, PATH_MAX );
+		pathLength = ae::_strlcat( path, filePath + 1, PATH_MAX );
 		if( pathLength >= PATH_MAX )
 		{
 			return "";
@@ -21458,7 +21505,7 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 		result[ 0 ] = 0;
 		GetModuleFileNameA( nullptr, result, sizeof( result ) );
 		const_cast< char* >( GetFileNameFromPath( result ) )[ 0 ] = 0;
-		strlcat( result, filePath, sizeof( result ) );
+		ae::_strlcat( result, filePath, sizeof( result ) );
 
 		char buf[ _MAX_PATH ];
 		// 'Naturalize' path to remove relative path elements
