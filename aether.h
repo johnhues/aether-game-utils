@@ -538,6 +538,7 @@ inline float Mod( float f, float n );
 
 inline int32_t Ceil( float f );
 inline int32_t Floor( float f );
+inline int32_t Floor( int32_t value, int32_t divisor );
 inline int32_t Round( float f );
 
 inline float Abs( float x );
@@ -5860,26 +5861,6 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// Internal ae::IsosurfaceExtractor types
-// @TODO: Move to IsosurfaceExtractor::VoxelIndex, and friend this gethash?
-//------------------------------------------------------------------------------
-struct VoxelIndex
-{
-	VoxelIndex() {}
-	VoxelIndex( int32_t x, int32_t y, int32_t z ) : x( x ), y( y ), z( z ) {}
-	bool operator==( const VoxelIndex& other ) const { return x == other.x && y == other.y && z == other.z; }
-	int32_t x;
-	int32_t y;
-	int32_t z;
-};
-template<> inline uint32_t GetHash32( const VoxelIndex& index )
-{
-	// Create a hash using the index as a seed to prevent large consecutive map
-	// entries, where collisions become very expensive to handle.
-	constexpr uint32_t uint32MaxGridSize = 1625; // UINT32_MAX ^ (1/3)
-	return ae::Hash32().HashType( index.x + uint32MaxGridSize * ( index.y + index.z * uint32MaxGridSize ) ).Get();
-}
-//------------------------------------------------------------------------------
 // ae::IsosurfaceExtractor types
 //------------------------------------------------------------------------------
 struct IsosurfaceVertex
@@ -6008,6 +5989,17 @@ private:
 	const ae::Int3 offsets_EDGE_TOP_RIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 0, 1 } };
 	const ae::Int3 offsets_EDGE_SIDE_FRONTRIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 1, 0 } };
 	static constexpr uint16_t mask[ 3 ] = { EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT };
+	static constexpr uint32_t kBrickMapSize = 4;
+	static constexpr uint32_t kBrickMapSizePlus = kBrickMapSize + 1;
+	struct Index
+	{
+		Index() {}
+		inline Index( int32_t x, int32_t y, int32_t z ) : x( x ), y( y ), z( z ) {}
+		inline operator ae::Int3() const { return { x, y, z }; }
+		inline bool operator==( const Index& other ) const { return x == other.x && y == other.y && z == other.z; }
+		inline uint32_t GetHash32() const { return ae::Hash32().HashType( x + 1625 * ( y + z * 1625 ) ).Get(); } // UINT32_MAX ^ (1/3) Create a hash using the index as a seed to prevent large consecutive map entries, where collisions become very expensive to handle.
+		int32_t x, y, z;
+	};
 	struct Voxel
 	{
 		// 3 planes whose intersections are used to position vertices within voxel
@@ -6017,9 +6009,28 @@ private:
 		IsosurfaceIndex index = kInvalidIsosurfaceIndex;
 		uint16_t edgeBits = 0;
 	};
+	struct Brick
+	{
+		void Initialize( Index index, const class IsosurfaceParams& params, class IsosurfaceStatus* status );
+		static inline Index Index( int32_t x, int32_t y, int32_t z ) { return { ae::Floor( x, kBrickMapSize ), ae::Floor( y, kBrickMapSize ), ae::Floor( z, kBrickMapSize ) }; }
+		static inline std::pair< IsosurfaceExtractor::Index, ae::Vec3 > Index( ae::Vec3 v )
+		{
+			const ae::Int3 brick = ( v / kBrickMapSize ).FloorCopy();
+			return { { brick.x, brick.y, brick.z }, ( v - ae::Vec3( brick * kBrickMapSize ) ) };
+		}
+		static inline std::pair< IsosurfaceExtractor::Index, ae::Int3 > Index( ae::Int3 v )
+		{
+			const ae::Int3 brick = Index( v.x, v.y, v.z );
+			return { { brick.x, brick.y, brick.z }, ( v - ae::Int3( brick * kBrickMapSize ) ) };
+		}
+		inline IsosurfaceValue Sample( ae::Vec3 localPos ) const;
+		inline IsosurfaceValue Sample( ae::Int3 localPos ) const;
+		float errorMargin;
+		float samples[ kBrickMapSizePlus ][ kBrickMapSizePlus ][ kBrickMapSizePlus ];
+	};
 	bool m_GenerateVerts( ae::Int3 center, uint32_t halfSize );
 	bool m_DoVoxel( int32_t x, int32_t y, int32_t z );
-	inline IsosurfaceValue m_DualSample( ae::Int3 pos );
+	inline IsosurfaceValue m_DualSample( ae::Int3 pos, bool cache = true );
 	inline IsosurfaceValue m_Sample( ae::Vec3 pos );
 	bool m_UpdateStatus();
 	IsosurfaceParams m_params;
@@ -6030,8 +6041,8 @@ private:
 	double m_startMeshTime = 0.0;
 	IsosurfaceStatus m_status;
 	IsosurfaceStatus m_statusPrev;
-	ae::Map< VoxelIndex, Voxel > m_voxels;
-	ae::Map< VoxelIndex, IsosurfaceValue > m_dualSamples;
+	ae::Map< Index, Voxel > m_voxels;
+	ae::Map< Index, Brick > m_brickMap;
 };
 
 //! \defgroup Meta
@@ -7463,56 +7474,6 @@ constexpr auto Max( const T0& v0, const T1& v1, const TTT&... tail )
 	else { return Max( Max( v0, v1 ), tail... ); }
 }
 
-inline ae::Vec2 Min( ae::Vec2 v0, ae::Vec2 v1 )
-{
-	return ae::Vec2( Min( v0.x, v1.x ), Min( v0.y, v1.y ) );
-}
-
-inline ae::Vec3 Min( ae::Vec3 v0, ae::Vec3 v1 )
-{
-	return ae::Vec3( Min( v0.x, v1.x ), Min( v0.y, v1.y ), Min( v0.z, v1.z ) );
-}
-
-inline ae::Vec4 Min( ae::Vec4 v0, ae::Vec4 v1 )
-{
-	return ae::Vec4( Min( v0.x, v1.x ), Min( v0.y, v1.y ), Min( v0.z, v1.z ), Min( v0.w, v1.w ) );
-}
-
-inline ae::Vec2 Max( ae::Vec2 v0, ae::Vec2 v1 )
-{
-	return ae::Vec2( Max( v0.x, v1.x ), Max( v0.y, v1.y ) );
-}
-
-inline ae::Vec3 Max( ae::Vec3 v0, ae::Vec3 v1 )
-{
-	return ae::Vec3( Max( v0.x, v1.x ), Max( v0.y, v1.y ), Max( v0.z, v1.z ) );
-}
-
-inline ae::Vec4 Max( ae::Vec4 v0, ae::Vec4 v1 )
-{
-	return ae::Vec4( Max( v0.x, v1.x ), Max( v0.y, v1.y ), Max( v0.z, v1.z ), Max( v0.w, v1.w ) );
-}
-
-inline ae::Int2 Min( ae::Int2 v0, ae::Int2 v1 )
-{
-	return ae::Int2( Min( v0.x, v1.x ), Min( v0.y, v1.y ) );
-}
-
-inline ae::Int3 Min( ae::Int3 v0, ae::Int3 v1 )
-{
-	return ae::Int3( Min( v0.x, v1.x ), Min( v0.y, v1.y ), Min( v0.z, v1.z ) );
-}
-
-inline ae::Int2 Max( ae::Int2 v0, ae::Int2 v1 )
-{
-	return ae::Int2( Max( v0.x, v1.x ), Max( v0.y, v1.y ) );
-}
-
-inline ae::Int3 Max( ae::Int3 v0, ae::Int3 v1 )
-{
-	return ae::Int3( Max( v0.x, v1.x ), Max( v0.y, v1.y ), Max( v0.z, v1.z ) );
-}
-
 template< typename T >
 inline T Clip( T x, T min, T max )
 {
@@ -7522,6 +7483,50 @@ inline T Clip( T x, T min, T max )
 inline float Clip01( float x )
 {
 	return Clip( x, 0.0f, 1.0f );
+}
+
+template< typename T, typename = decltype( std::declval< T >().data ) >
+constexpr T Min( const T& v0, const T& v1 )
+{
+	T result;
+	for( uint32_t i = 0; i < countof(T::data); i++ )
+	{
+		result.data[ i ] = ae::Min( v0.data[ i ], v1.data[ i ] );
+	}
+	return result;
+}
+
+template< typename T, typename = decltype( std::declval< T >().data ) >
+constexpr T Max( const T& v0, const T& v1 )
+{
+	T result;
+	for( uint32_t i = 0; i < countof(T::data); i++ )
+	{
+		result.data[ i ] = ae::Max( v0.data[ i ], v1.data[ i ] );
+	}
+	return result;
+}
+
+template< typename T, typename = decltype( std::declval< T >().data ) >
+constexpr T Clip( const T& v, const T& min, const T& max )
+{
+	T result;
+	for( uint32_t i = 0; i < countof(T::data); i++ )
+	{
+		result.data[ i ] = ae::Clip( v.data[ i ], min.data[ i ], max.data[ i ] );
+	}
+	return result;
+}
+
+template< typename T, typename = decltype( std::declval< T >().data ) >
+constexpr T Clip01( const T& v )
+{
+	T result;
+	for( uint32_t i = 0; i < countof(T::data); i++ )
+	{
+		result.data[ i ] = ae::Clip01( v.data[ i ] );
+	}
+	return result;
 }
 
 inline float DegToRad( float degrees )
@@ -7556,6 +7561,11 @@ inline int32_t Floor( float f )
 		else return i;
 	}
 	else return static_cast<int>(f);
+}
+
+inline int32_t Floor( int32_t value, int32_t divisor )
+{
+	return ( value >= 0 ) ? ( value / divisor ) : ( ( value - divisor + 1 ) / divisor );
 }
 
 inline int32_t Round( float f )
@@ -10380,6 +10390,7 @@ void HashMap< Key, N, Hash >::Reserve( uint32_t size )
 	const uint32_t prevLength = m_length;
 	m_length = 0;
 	m_size = size;
+	// @TODO: Support 'Entry' having no default constructor
 	m_entries = ae::NewArray< Entry >( m_tag, m_size );
 	if( prevEntries )
 	{
@@ -29617,17 +29628,18 @@ IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) :
 	vertices( tag ),
 	indices( tag ),
 	m_voxels( tag ),
-	m_dualSamples( tag )
+	m_brickMap( tag )
 {
 	Reset();
 }
 
 void IsosurfaceExtractor::Reserve( uint32_t vertexCount, uint32_t indexCount )
 {
+	const float vertsPerBrick = kBrickMapSize * kBrickMapSize * kBrickMapSize / kBrickMapSize;
 	vertices.Reserve( vertexCount );
 	indices.Reserve( indexCount );
 	m_voxels.Reserve( vertexCount * 1.25f ); // Leave 20% of array free
-	m_dualSamples.Reserve( vertexCount * 1.25f ); // Leave 20% of array free
+	m_brickMap.Reserve( ( vertexCount / vertsPerBrick ) * 1.25f ); // Leave 20% of array free
 }
 
 void IsosurfaceExtractor::Reset()
@@ -29639,7 +29651,62 @@ void IsosurfaceExtractor::Reset()
 	m_status = {};
 	m_statusPrev = {};
 	m_voxels.Clear();
-	m_dualSamples.Clear();
+	m_brickMap.Clear();
+}
+
+void IsosurfaceExtractor::Brick::Initialize( IsosurfaceExtractor::Index index, const IsosurfaceParams& params, IsosurfaceStatus* status )
+{
+	errorMargin = 0.0f;
+	const ae::Int3 corner = ae::Int3( index ) * kBrickMapSize;
+	for( ae::Int3 iter( 0 ); iter.x < kBrickMapSizePlus; iter.x++ )
+	{
+		for( iter.y = 0; iter.y < kBrickMapSizePlus; iter.y++ )
+		{
+			for( iter.z = 0; iter.z < kBrickMapSizePlus; iter.z++ )
+			{
+				const ae::Vec3 samplePos = ae::Vec3( corner + iter );
+				const IsosurfaceValue sample = params.sampleFn( params.userData, samplePos );
+				samples[ iter.x ][ iter.y ][ iter.z ] = sample.distance;
+				errorMargin = ae::Max( errorMargin, sample.distanceErrorMargin );
+			}
+		}
+	}
+	status->sampleRawCount += kBrickMapSizePlus * kBrickMapSizePlus * kBrickMapSizePlus;
+}
+
+IsosurfaceValue IsosurfaceExtractor::Brick::Sample( ae::Vec3 _p ) const
+{
+	AE_DEBUG_ASSERT( _p.x >= 0.0f && _p.x <= 1.0f );
+	AE_DEBUG_ASSERT( _p.y >= 0.0f && _p.y <= 1.0f );
+	AE_DEBUG_ASSERT( _p.z >= 0.0f && _p.z <= 1.0f );
+	const ae::Int3 p = _p.FloorCopy();
+	AE_DEBUG_ASSERT( p.x >= 0 && p.x <= kBrickMapSize );
+	AE_DEBUG_ASSERT( p.y >= 0 && p.y <= kBrickMapSize );
+	AE_DEBUG_ASSERT( p.z >= 0 && p.z <= kBrickMapSize );
+	const ae::Vec3 d = ( _p - ae::Vec3( p ) );
+	const float c011 = samples[ p.x ][ p.y ][ p.z ];
+	const float c111 = samples[ p.x + 1 ][ p.y ][ p.z ];
+	const float c001 = samples[ p.x ][ p.y + 1 ][ p.z ];
+	const float c101 = samples[ p.x + 1 ][ p.y + 1 ][ p.z ];
+	const float c01 = ae::Lerp( c001, c101, d.x );
+	const float c11 = ae::Lerp( c011, c111, d.x );
+	const float c1 = ae::Lerp( c11, c01, d.y );
+	const float c010 = samples[ p.x ][ p.y ][ p.z + 1 ];
+	const float c110 = samples[ p.x + 1 ][ p.y ][ p.z + 1 ];
+	const float c000 = samples[ p.x ][ p.y + 1 ][ p.z + 1 ];
+	const float c100 = samples[ p.x + 1 ][ p.y + 1 ][ p.z + 1 ];
+	const float c00 = ae::Lerp( c000, c100, d.x );
+	const float c10 = ae::Lerp( c010, c110, d.x );
+	const float c0 = ae::Lerp( c10, c00, d.y );
+	return { ae::Lerp( c1, c0, d.z ), errorMargin };
+}
+
+IsosurfaceValue IsosurfaceExtractor::Brick::Sample( ae::Int3 p ) const
+{
+	AE_DEBUG_ASSERT( p.x >= 0 && p.x <= kBrickMapSize );
+	AE_DEBUG_ASSERT( p.y >= 0 && p.y <= kBrickMapSize );
+	AE_DEBUG_ASSERT( p.z >= 0 && p.z <= kBrickMapSize );
+	return { samples[ p.x ][ p.y ][ p.z ], errorMargin };
 }
 
 bool IsosurfaceExtractor::m_GenerateVerts( ae::Int3 center, uint32_t halfSize )
@@ -29655,7 +29722,7 @@ bool IsosurfaceExtractor::m_GenerateVerts( ae::Int3 center, uint32_t halfSize )
 		}
 	}
 
-	const ae::IsosurfaceValue sample = m_DualSample( center );
+	const ae::IsosurfaceValue sample = m_DualSample( center, false );
 	const float diagonalHalfSize = sqrtf( halfSize * halfSize * 3.0f );
 	const float surfaceDistance = ae::Abs( sample.distance ) - sample.distanceErrorMargin;
 	if( diagonalHalfSize < surfaceDistance )
@@ -29990,26 +30057,60 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 	return true;
 }
 
-IsosurfaceValue IsosurfaceExtractor::m_DualSample( ae::Int3 pos )
+IsosurfaceValue IsosurfaceExtractor::m_DualSample( ae::Int3 pos, bool cache )
 {
-	const VoxelIndex v( pos.x, pos.y, pos.z );
-	IsosurfaceValue* sample = m_dualSamples.TryGet( v );
-	if( sample )
+	IsosurfaceValue v;
+	const auto[ brickIndex, localIndex ] = Brick::Index( pos );
+	const Brick* brick = cache ? m_brickMap.TryGet( brickIndex ) : nullptr;
+	if( brick )
 	{
 		m_status.sampleCacheCount++;
-		return *sample;
+		v = brick->Sample( localIndex );
 	}
 	else
 	{
 		m_status.sampleRawCount++;
-		return m_dualSamples.Set( v, m_Sample( ae::Vec3( pos ) ) );
+		v = m_params.sampleFn( m_params.userData, ae::Vec3( pos ) );
+		if( cache )
+		{
+			Brick* newBrick = &m_brickMap.Set( brickIndex, {} );
+			newBrick->Initialize( brickIndex, m_params, &m_status );
+		}
 	}
+	// This nudge is needed to prevent the SDF from ever being exactly on
+	// the voxel grid boundaries (imagine a plane at the origin with a
+	// normal facing along a cardinal axis, do the vertices belong to the
+	// voxels on the front or back of the plane?). Without this nudge, any
+	// vertices exactly on the grid boundary would be skipped resulting in
+	// holes in the mesh.
+	if( v.distance == 0.0f ) { v.distance += 0.0001f; }
+	return v;
 }
 
 IsosurfaceValue IsosurfaceExtractor::m_Sample( ae::Vec3 pos )
 {
-	m_status.sampleRawCount++;
-	IsosurfaceValue v = m_params.sampleFn( m_params.userData, ( pos ) );
+	IsosurfaceValue v;
+	const auto[ brickIndex, localIndex ] = Brick::Index( pos );
+	const Brick* brick = [&, &i = brickIndex]()
+	{
+		Brick* b = m_brickMap.TryGet( i );
+		if( !b )
+		{
+			b = &m_brickMap.Set( i, {} );
+			b->Initialize( i, m_params, &m_status );
+		}
+		return b;
+	}();
+	if( brick->errorMargin > 1.0f )
+	{
+		m_status.sampleCacheCount++;
+		v = brick->Sample( localIndex );
+	}
+	else
+	{
+		m_status.sampleRawCount++;
+		v = m_params.sampleFn( m_params.userData, pos );
+	}
 	// This nudge is needed to prevent the SDF from ever being exactly on
 	// the voxel grid boundaries (imagine a plane at the origin with a
 	// normal facing along a cardinal axis, do the vertices belong to the

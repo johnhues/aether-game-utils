@@ -150,7 +150,7 @@ void LogStatus( const ae::IsosurfaceStatus& status )
 		meshTime
 	);
 	uint32_t timeIndex = 0;
-	while( maxTime < 1.0 )
+	while( maxTime && maxTime < 1.0 )
 	{
 		elapsedTime *= 1000.0;
 		voxelTime *= 1000.0;
@@ -196,7 +196,7 @@ void LogStatus( const ae::IsosurfaceStatus& status )
 		voxelMissCount, counts[ countIndex ],
 		voxelCheckCount, counts[ countIndex ]
 	);
-	AE_INFO( "Samples/Vert:# Voxel:## Samples:## Cached:##",
+	AE_INFO( "Samples/Vert:# Voxel:## Raw:## Cached:##",
 		samplesPerVert,
 		voxelWorkingSize, counts[ countIndex ],
 		sampleRawCount, counts[ countIndex ],
@@ -283,7 +283,7 @@ int main()
 	bool debugLinesEnabled = false;
 	bool tightBoundsEnabled = true;
 	bool dualContouringEnabled = false;
-	const ae::Color color = ae::Color::HSV(0.5f, 0.8f, 0.5f );
+	const ae::Color color = ae::Color::AetherTeal();
 	ae::Vec3 translation;
 	ae::Vec3 rotation;
 	ae::Vec3 scale;
@@ -304,17 +304,17 @@ int main()
 		const ae::Matrix4 worldToProj = viewToProj * worldToView;
 		const ae::Vec2 mousePosition = (ae::Vec2)input.mouse.position;
 		const ae::Vec4 ndc(
-			( (float)mousePosition.x / (float)render.GetWidth() ) * 2.0f - 1.0f,
-			( (float)mousePosition.y / (float)render.GetHeight() ) * 2.0f - 1.0f,
+			( (float)mousePosition.x / (float)window.GetWidth() ) * 2.0f - 1.0f,
+			( (float)mousePosition.y / (float)window.GetHeight() ) * 2.0f - 1.0f,
 			0.0f,
 			1.0f
 		);
 		const ae::Vec4 clipPos = worldToProj.GetInverse() * ndc;
 		const ae::Vec3 worldPos = ( clipPos.GetXYZ() / clipPos.w );
-		const ae::Vec3 rayDir = ( worldPos - camera.GetPosition() ).SafeNormalizeCopy();
+		const ae::Vec3 ray = ( worldPos - camera.GetPosition() ).SafeNormalizeCopy() * 10000.0f;
 		const ae::RaycastResult result = collisionMesh.Raycast( {
 			.source=camera.GetPosition(),
-			.ray=( rayDir * 10000.0f ),
+			.ray=ray,
 		} );
 		input.Pump();
 		camera.Update( &input, dt );
@@ -323,7 +323,7 @@ int main()
 		if( result.hits.Length() && ( camera.GetMode() == ae::DebugCamera::Mode::None ) )
 		{
 			debugLines.AddSphere( result.hits[ 0 ].position, 5.0f, ae::Color::Red(), 12 );
-			if( input.GetMousePressLeft() )
+			if( input.GetMouseReleaseLeft() )
 			{
 				camera.Refocus( result.hits[ 0 ].position );
 			}
@@ -389,11 +389,15 @@ int main()
 			// Generate
 			const auto surfaceFn = [&inverseTransform, &scale]( ae::Vec3 _p )
 			{
-				const float smooth = 2.5f; // World space because scale is applied separately from transform
-				const ae::Vec3 p = inverseTransform.TransformPoint3x4( _p );
-				float r = SDFBox( p, ae::Vec3( 0.5f, 0.25f, 0.25f ) * scale, smooth );
-				r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.5f, 0.25f ) * scale, smooth ), smooth );
-				r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.25f, 0.5f ) * scale, smooth ), smooth );
+				float r;
+				// for( uint32_t i = 0; i < 100; i++ )
+				{
+					const float smooth = 2.5f; // World space because scale is applied separately from transform
+					const ae::Vec3 p = inverseTransform.TransformPoint3x4( _p );
+					r = SDFBox( p, ae::Vec3( 0.5f, 0.25f, 0.25f ) * scale, smooth );
+					r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.5f, 0.25f ) * scale, smooth ), smooth );
+					r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.25f, 0.5f ) * scale, smooth ), smooth );
+				}
 				return r;
 			};
 			const bool success = extractor->Generate( {
@@ -466,11 +470,11 @@ int main()
 		debugLines.AddLine( ae::Vec3( -1, 0, 0 ) * 1000.0f, ae::Vec3( 1, 0, 0 ) * 1000.0f, ae::Color::AetherRed() );
 		debugLines.AddLine( ae::Vec3( 0, -1, 0 ) * 1000.0f, ae::Vec3( 0, 1, 0 ) * 1000.0f, ae::Color::AetherGreen() );
 		debugLines.AddLine( ae::Vec3( 0, 0, -1 ) * 1000.0f, ae::Vec3( 0, 0, 1 ) * 1000.0f, ae::Color::AetherBlue() );
-		debugLines.AddOBB( transform * ae::Matrix4::Scaling( 1.0f ), ae::Color::AetherPurple() );
+		debugLines.AddOBB( ae::OBB( transform ), color );
 		
 		ae::UniformList uniforms;
 		uniforms.Set( "u_worldToProj", worldToProj );
-		debugLines.AddAABB( region.GetCenter(), region.GetHalfSize(), color );
+		debugLines.AddAABB( region.GetCenter(), region.GetHalfSize(), ae::Color::AetherPurple() );
 		if( extractor->indices.Length() )
 		{
 			uniforms.Set( "u_light", ae::Vec2( (float)directionalLightEnabled, (float)ambientLightEnabled ) );
