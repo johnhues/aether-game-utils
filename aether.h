@@ -5891,6 +5891,8 @@ struct IsosurfaceStatus
 	uint64_t indexCount = 0; //!< The max number of indices to generate or 0 for no limit.
 	uint64_t sampleRawCount = 0; //!< The number of samples done against IsosurfaceParams::samplefn
 	uint64_t sampleCacheCount = 0; //!< The number of samples against the cache instead of IsosurfaceParams::samplefn
+	uint64_t sampleBrickMissCount = 0; //! The number of raw samples that were done for 'empty' bricks
+	uint64_t sampleBrickCount = 0; //!< The number of raw samples that were done for all bricks
 	uint64_t voxelCheckCount = 0; //!< The number of voxels processed
 	uint64_t voxelMissCount = 0; //!< The number of voxels processed resulting in no vertex
 	uint64_t voxelWorkingSize = 0; //!< The number of "duals" stored for work on edges
@@ -5936,6 +5938,9 @@ struct IsosurfaceParams
 	//! Optional: If set this will be populated with the internal octree used
 	//! for accelerating mesh generation, by minimizing calls to \p sampleFn.
 	ae::Array< ae::AABB >* octree = nullptr;
+	//! Optional: If set this will be populated with the internal brick map used
+	//! for accelerating mesh generation, by minimizing calls to \p sampleFn.
+	ae::Array< ae::AABB >* brickMap = nullptr;
 	//! Optional: If set this will be populated with problematic points in the
 	//! SDF that may result in unwanted visual noise in the final mesh.
 	ae::Array< ae::Vec3 >* errors = nullptr;
@@ -5989,7 +5994,7 @@ private:
 	const ae::Int3 offsets_EDGE_TOP_RIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 0, 1 } };
 	const ae::Int3 offsets_EDGE_SIDE_FRONTRIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 1, 0 } };
 	static constexpr uint16_t mask[ 3 ] = { EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT };
-	static constexpr uint32_t kBrickMapSize = 4;
+	static constexpr uint32_t kBrickMapSize = 8;
 	static constexpr uint32_t kBrickMapSizePlus = kBrickMapSize + 1;
 	struct Index
 	{
@@ -6011,7 +6016,7 @@ private:
 	};
 	struct Brick
 	{
-		void Initialize( Index index, const class IsosurfaceParams& params, class IsosurfaceStatus* status );
+		void Initialize( Index index, const struct IsosurfaceParams& params, struct IsosurfaceStatus* status );
 		static inline Index Index( int32_t x, int32_t y, int32_t z ) { return { ae::Floor( x, kBrickMapSize ), ae::Floor( y, kBrickMapSize ), ae::Floor( z, kBrickMapSize ) }; }
 		static inline std::pair< IsosurfaceExtractor::Index, ae::Vec3 > Index( ae::Vec3 v )
 		{
@@ -29656,6 +29661,7 @@ void IsosurfaceExtractor::Reset()
 
 void IsosurfaceExtractor::Brick::Initialize( IsosurfaceExtractor::Index index, const IsosurfaceParams& params, IsosurfaceStatus* status )
 {
+	bool miss = true;
 	errorMargin = 0.0f;
 	const ae::Int3 corner = ae::Int3( index ) * kBrickMapSize;
 	for( ae::Int3 iter( 0 ); iter.x < kBrickMapSizePlus; iter.x++ )
@@ -29668,10 +29674,24 @@ void IsosurfaceExtractor::Brick::Initialize( IsosurfaceExtractor::Index index, c
 				const IsosurfaceValue sample = params.sampleFn( params.userData, samplePos );
 				samples[ iter.x ][ iter.y ][ iter.z ] = sample.distance;
 				errorMargin = ae::Max( errorMargin, sample.distanceErrorMargin );
+				if( std::signbit( samples[ 0 ][ 0 ][ 0 ] ) != std::signbit( sample.distance ) )
+				{
+					miss = false;
+				}
 			}
 		}
 	}
-	status->sampleRawCount += kBrickMapSizePlus * kBrickMapSizePlus * kBrickMapSizePlus;
+	constexpr uint32_t samples = kBrickMapSizePlus * kBrickMapSizePlus * kBrickMapSizePlus;
+	status->sampleRawCount += samples;
+	status->sampleBrickCount += samples;
+	if( miss )
+	{
+		status->sampleBrickMissCount += samples;
+	}
+	if( params.brickMap )
+	{
+		params.brickMap->Append( ae::AABB( ae::Vec3( corner ), ae::Vec3( corner + ae::Int3( kBrickMapSize ) ) ) );
+	}
 }
 
 IsosurfaceValue IsosurfaceExtractor::Brick::Sample( ae::Vec3 _p ) const
@@ -30166,6 +30186,18 @@ bool IsosurfaceExtractor::Generate( const ae::IsosurfaceParams& _params )
 	if( m_params.maxIndices == 0 )
 	{
 		m_params.maxIndices = ae::MaxValue< uint32_t >();
+	}
+	if( m_params.octree )
+	{
+		m_params.octree->Clear();
+	}
+	if( m_params.brickMap )
+	{
+		m_params.brickMap->Clear();
+	}
+	if( m_params.errors )
+	{
+		m_params.errors->Clear();
 	}
 	if( !ae::IsDebuggerAttached() )
 	{

@@ -138,6 +138,8 @@ void LogStatus( const ae::IsosurfaceStatus& status )
 	float voxelWorkingSize = status.voxelWorkingSize;
 	float sampleRawCount = status.sampleRawCount;
 	float sampleCacheCount = status.sampleCacheCount;
+	float sampleBrickCount = status.sampleBrickCount;
+	float sampleBrickMissCount = status.sampleBrickMissCount;
 	float voxelMissCount = status.voxelMissCount;
 	float voxelCheckCount = status.voxelCheckCount;
 	const float samplesPerVert = vertCount ? ( sampleRawCount / vertCount ) : 0.0f;
@@ -168,6 +170,8 @@ void LogStatus( const ae::IsosurfaceStatus& status )
 		voxelWorkingSize,
 		sampleRawCount,
 		sampleCacheCount,
+		sampleBrickCount,
+		sampleBrickMissCount,
 		voxelMissCount,
 		voxelCheckCount
 	);
@@ -179,6 +183,8 @@ void LogStatus( const ae::IsosurfaceStatus& status )
 		voxelWorkingSize /= 1000.0f;
 		sampleRawCount /= 1000.0f;
 		sampleCacheCount /= 1000.0f;
+		sampleBrickCount /= 1000.0f;
+		sampleBrickMissCount /= 1000.0f;
 		voxelMissCount /= 1000.0f;
 		voxelCheckCount /= 1000.0f;
 		
@@ -196,11 +202,13 @@ void LogStatus( const ae::IsosurfaceStatus& status )
 		voxelMissCount, counts[ countIndex ],
 		voxelCheckCount, counts[ countIndex ]
 	);
-	AE_INFO( "Samples/Vert:# Voxel:## Raw:## Cached:##",
+	AE_INFO( "Samples/Vert:# Voxel:## Raw:## Cached:## BrickMiss:#%",
 		samplesPerVert,
 		voxelWorkingSize, counts[ countIndex ],
 		sampleRawCount, counts[ countIndex ],
-		sampleCacheCount, counts[ countIndex ]
+		sampleCacheCount, counts[ countIndex ],
+		( sampleBrickMissCount / (float)sampleBrickCount ) * 100.0f
+		
 	);
 
 	// Mesh index ratio warning
@@ -272,6 +280,7 @@ int main()
 
 	ae::VertexBuffer sdfVertexBuffer;
 	ae::Array< ae::AABB > octree = TAG_ISOSURFACE;
+	ae::Array< ae::AABB > brickMap = TAG_ISOSURFACE;
 	ae::Array< ae::Vec3 > errors = TAG_ISOSURFACE;
 	ae::IsosurfaceExtractor* extractor = ae::New< ae::IsosurfaceExtractor >( TAG_ISOSURFACE, TAG_ISOSURFACE );
 	ae::CollisionMesh<> collisionMesh = TAG_ISOSURFACE;
@@ -280,9 +289,12 @@ int main()
 	bool wireframeMeshEnabled = false;
 	bool ambientLightEnabled = true;
 	bool directionalLightEnabled = true;
-	bool debugLinesEnabled = false;
+	bool octreeEnabled = false;
+	bool brickMapEnabled = false;
 	bool tightBoundsEnabled = true;
 	bool dualContouringEnabled = false;
+	double executionTime = 0.0;
+	uint32_t executionCount = 0;
 	const ae::Color color = ae::Color::AetherTeal();
 	ae::Vec3 translation;
 	ae::Vec3 rotation;
@@ -333,9 +345,10 @@ int main()
 		if( input.GetPress( ae::Key::Num2 ) ) { wireframeMeshEnabled = !wireframeMeshEnabled; }
 		if( input.GetPress( ae::Key::Num3 ) ) { ambientLightEnabled = !ambientLightEnabled; }
 		if( input.GetPress( ae::Key::Num4 ) ) { directionalLightEnabled = !directionalLightEnabled; }
-		if( input.GetPress( ae::Key::Num5 ) ) { debugLinesEnabled = !debugLinesEnabled; }
-		if( input.GetPress( ae::Key::Num6 ) ) { tightBoundsEnabled = !tightBoundsEnabled; }
-		if( input.GetPress( ae::Key::Num7 ) ) { dualContouringEnabled = !dualContouringEnabled; prevTransform = ae::Matrix4::Scaling( 0.0f ); }
+		if( input.GetPress( ae::Key::Num5 ) ) { octreeEnabled = !octreeEnabled; }
+		if( input.GetPress( ae::Key::Num6 ) ) { brickMapEnabled = !brickMapEnabled; }
+		if( input.GetPress( ae::Key::Num7 ) ) { tightBoundsEnabled = !tightBoundsEnabled; }
+		if( input.GetPress( ae::Key::Num8 ) ) { dualContouringEnabled = !dualContouringEnabled; prevTransform = ae::Matrix4::Scaling( 0.0f ); }
 		// Reset
 		if( input.GetPress( ae::Key::R ) ) { ResetTransform(); }
 		// Translation
@@ -360,14 +373,16 @@ int main()
 		scale = ae::Max( ae::Vec3( 0.01f ), scale );
 
 		window.SetTitle( ae::Str256::Format(
-			"SDF to Mesh [1]opaque:# [2]wireframe:# [3]ambient:# [4]directional:# [5]debug:# [6]bounds:# [7]dual:#",
+			"SDF to Mesh [1]opaque:# [2]wireframe:# [3]ambient:# [4]directional:# [5]octree:# [6]brickMap:# [7]bounds:# [8]dual:# Ave:#ms",
 			(uint32_t)opaqueMeshEnabled,
 			(uint32_t)wireframeMeshEnabled,
 			(uint32_t)ambientLightEnabled,
 			(uint32_t)directionalLightEnabled,
-			(uint32_t)debugLinesEnabled,
+			(uint32_t)octreeEnabled,
+			(uint32_t)brickMapEnabled,
 			(uint32_t)tightBoundsEnabled,
-			(uint32_t)dualContouringEnabled
+			(uint32_t)dualContouringEnabled,
+			(uint32_t)( executionCount ? ( executionTime / executionCount ) * 1000.0 : 0.0 )
 		).c_str() );
 
 		const ae::Quaternion orientation = // ZYX rotation
@@ -381,6 +396,7 @@ int main()
 			const ae::Matrix4 transformNoScale = transform.GetScaleRemoved();
 			const ae::Matrix4 inverseTransform = transformNoScale.GetInverse();
 			octree.Clear();
+			brickMap.Clear();
 			errors.Clear();
 			collisionMesh.Clear();
 			collisionMeshDirty = true;
@@ -421,6 +437,7 @@ int main()
 				.maxIndices=0,
 				.dualContouring=dualContouringEnabled,
 				.octree=&octree,
+				.brickMap=&brickMap,
 				.errors=&errors
 			} );
 			if( extractor->vertices.Length() )
@@ -450,6 +467,8 @@ int main()
 			}
 
 			LogStatus( extractor->GetStatus() );
+			executionTime += extractor->GetStatus().elapsedTime;
+			executionCount++;
 		}
 		else if( collisionMeshDirty )
 		{
@@ -487,7 +506,7 @@ int main()
 			sdfVertexBuffer.Bind( &shader, uniforms );
 			sdfVertexBuffer.Draw( 0, extractor->indices.Length() / 3 );
 		}
-		if( debugLinesEnabled )
+		if( octreeEnabled )
 		{
 			for( ae::AABB octant : octree )
 			{
@@ -495,6 +514,13 @@ int main()
 				frexp( octant.GetHalfSize().Length(), &exponent );
 				const float distance01 = ae::Delerp01( 8.0f, 0.0f, exponent );
 				debugLines.AddAABB( octant, ae::Color::AetherWhite().Lerp( ae::Color::AetherRed(), distance01 ) );
+			}
+		}
+		if( brickMapEnabled )
+		{
+			for( ae::AABB brick : brickMap )
+			{
+				debugLines.AddAABB( brick, ae::Color::AetherOrange() );
 			}
 		}
 		for( ae::Vec3 error : errors )

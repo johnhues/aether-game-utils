@@ -140,6 +140,7 @@ function(add_ae_library NAME LIB_TYPE)
 			-Werror=uninitialized
 			-Werror=pointer-to-int-cast
 			-Werror=reorder-ctor
+			-Werror=mismatched-tags
 			-fmacro-backtrace-limit=0
 		)
 		if((CMAKE_CXX_COMPILER_ID MATCHES "AppleClang"))
