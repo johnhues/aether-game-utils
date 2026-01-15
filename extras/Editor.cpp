@@ -100,6 +100,10 @@ const float kEditorViewDistance = 25000.0f;
 #define JSON_ROTATION_NAME "rotation"
 #define JSON_SCALE_NAME "scale"
 #define JSON_ENTITY_COMPONENTS_NAME "components"
+#define DOCUMENT_ENTITY_PARENT_MEMBER "parent"
+#define DOCUMENT_ENTITY_CHILDREN_MEMBER "children"
+#define DOCUMENT_ENTITY_COMPONENTS_MEMBER "components"
+#define DOCUMENT_ENTITY_COMPONENT_TYPE_MEMBER "@type"
 
 enum class PickingType
 {
@@ -191,6 +195,17 @@ struct JsonScene
 };
 
 //------------------------------------------------------------------------------
+// DocumentScene class
+//------------------------------------------------------------------------------
+class DocumentScene
+{
+	DocumentScene( const ae::Tag& tag );
+	~DocumentScene();
+private:
+	ae::DocumentValue* m_scene = nullptr;
+};
+
+//------------------------------------------------------------------------------
 // EditorNetMsg
 //------------------------------------------------------------------------------
 enum class EditorNetMsg : uint8_t
@@ -252,27 +267,41 @@ public:
 class EditorServerObject
 {
 public:
-	EditorServerObject( ae::DocumentValue* object ) : m_object( object ) {}
+	EditorServerObject( ae::DocumentValue* object ) : m_object( object ) { AE_ASSERT( m_object ); }
 	
 	ae::Entity GetEntity() const;
 	const char* GetName() const;
 	void SetName( const char* name );
 	bool SetTransform( const ae::Matrix4& transform, class EditorProgram* program );
 	ae::Matrix4 GetTransform() const;
+
+	ae::Entity GetParentEntity() const { return m_parent; }
+	void SetParent( EditorServer* server_REMOVE,EditorServerObject* parent );
 	
 	void HandleVarChange( class EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var );
 
 	ae::OBB GetOBB( class EditorProgram* program ) const;
 	ae::AABB GetAABB( class EditorProgram* program ) const;
+
+	ae::DocumentValue& GetDocumentValue() { return *m_object; }
+	const ae::DocumentValue& GetDocumentValue() const { return *m_object; }
+	ae::DocumentValue* GetComponentByType( const char* typeName );
+	const ae::DocumentValue* GetComponentByType( const char* typeName ) const;
+	ae::DocumentValue* GetComponentByType( const ae::ClassType* type );
+	const ae::DocumentValue* GetComponentByType( const ae::ClassType* type ) const;
+	uint32_t GetComponentCount() const;
+	ae::DocumentValue& GetComponentByIndex( uint32_t index );
+	const ae::DocumentValue& GetComponentByIndex( uint32_t index ) const;
+	const ae::ClassType* GetComponentTypeByIndex( uint32_t index ) const;
 	
 	bool hidden = false;
 	bool renderDisabled = false;
 	
-	ae::Entity parent = ae::kNullEntity;
 	ae::List< EditorServerObject > children;
 	ae::ListNode< EditorServerObject > childNode = this;
-
+	
 private:
+	ae::Entity m_parent = ae::kNullEntity;
 	ae::DocumentValue* m_object = nullptr;
 };
 
@@ -376,8 +405,8 @@ private:
 	void m_AddToSelection( ae::Entity entity );
 	ae::Array< ae::Entity > m_GetTreeFromEntities( const ae::Entity* entities, uint32_t count ) const;
 	// UI helpers
-	bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var );
-	bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
+	bool m_ShowVar( class EditorProgram* program, ae::DocumentValue* docValue, ae::Object* component, const ae::ClassVar* var );
+	bool m_ShowVarValue( class EditorProgram* program, ae::DocumentValue* varDocValue, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
 	bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
 	ae::Entity m_PickObject( class EditorProgram* program, ae::Vec3* hitOut, ae::Vec3* normalOut );
 	ae::Color m_GetColor( ae::Entity entity, bool objectLineColor ) const;
@@ -676,24 +705,26 @@ void EditorProgram::Initialize()
 	debugLines.SetXRayEnabled( false );
 	fileSystem.Initialize( params.dataDir.c_str(), "ae", "editor" );
 	
-	const char* kVertShader = "\
-		AE_UNIFORM mat4 u_worldToProj;\
-		AE_UNIFORM vec4 u_color;\
-		AE_IN_HIGHP vec4 a_position;\
-		AE_IN_HIGHP vec4 a_color;\
-		AE_OUT_HIGHP vec4 v_color;\
-		void main()\
-		{\
-			v_color = a_color * u_color;\
-			gl_Position = u_worldToProj * a_position;\
-		}";
+	const char* kVertShader = R"glsl(
+		AE_UNIFORM mat4 u_worldToProj;
+		AE_UNIFORM vec4 u_color;
+		AE_IN_HIGHP vec4 a_position;
+		AE_IN_HIGHP vec4 a_color;
+		AE_OUT_HIGHP vec4 v_color;
+		void main()
+		{
+			v_color = a_color * u_color;
+			gl_Position = u_worldToProj * a_position;
+		}
+	)glsl";
 
-	const char* kFragShader = "\
-		AE_IN_HIGHP vec4 v_color;\
-		void main()\
-		{\
-			AE_COLOR = v_color;\
-		}";
+	const char* kFragShader = R"glsl(
+		AE_IN_HIGHP vec4 v_color;
+		void main()
+		{
+			AE_COLOR = v_color;
+		}
+	)glsl";
 	m_introShader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	m_introShader.SetDepthTest( true );
 	m_introShader.SetDepthWrite( true );
@@ -707,14 +738,14 @@ void EditorProgram::Initialize()
 	};
 	Vertex kCubeVerts[] =
 	{
-		{ ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::PicoRed().GetLinearRGBA() },
-		{ ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::PicoOrange().GetLinearRGBA() },
-		{ ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::PicoYellow().GetLinearRGBA() },
-		{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
-		{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::PicoGreen().GetLinearRGBA() },
-		{ ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
-		{ ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::PicoPink().GetLinearRGBA() },
-		{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::PicoBlue().GetLinearRGBA() },
+		{ ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
 	};
 	uint16_t kCubeIndices[] =
 	{
@@ -731,7 +762,7 @@ void EditorProgram::Initialize()
 	m_introMesh.UploadVertices( 0, kCubeVerts, countof( kCubeVerts ) );
 	m_introMesh.UploadIndices( 0, kCubeIndices, countof( kCubeIndices ) );
 	
-	const char* meshVertShader = R"(
+	const char* meshVertShader = R"glsl(
 		AE_UNIFORM mat4 u_localToProj;
 		AE_UNIFORM mat4 u_localToWorld;
 		AE_UNIFORM mat4 u_normalToWorld;
@@ -744,8 +775,9 @@ void EditorProgram::Initialize()
 			v_position = ( u_localToWorld * a_position ).xyz;
 			v_normal = ( u_normalToWorld * a_normal ).xyz;
 			gl_Position = u_localToProj * a_position;
-		})";
-	const char* meshFragShader = R"(
+		}
+	)glsl";
+	const char* meshFragShader = R"glsl(
 		AE_UNIFORM vec3 u_cameraPos;
 		AE_UNIFORM vec3 u_lightDir;
 		AE_UNIFORM vec4 u_color;
@@ -774,7 +806,8 @@ void EditorProgram::Initialize()
 
 			AE_COLOR.rgb = u_color.rgb * light;
 			AE_COLOR.a = u_color.a;
-		})";
+		}
+	)glsl";
 	m_meshShader.Initialize( meshVertShader, meshFragShader, nullptr, 0 );
 	m_meshShader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
@@ -797,7 +830,7 @@ void EditorProgram::Initialize()
 	m_quad.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( QuadVertex, uv ) );
 	m_quad.UploadVertices( 0, quadVerts, countof( quadVerts ) );
 	
-	const char* iconVertexShader = R"(
+	const char* iconVertexShader = R"glsl(
 		AE_UNIFORM mat4 u_worldToProj;
 		AE_IN_HIGHP vec4 a_position;
 		AE_IN_HIGHP vec2 a_uv;
@@ -806,8 +839,9 @@ void EditorProgram::Initialize()
 		{
 			v_uv = a_uv;
 			gl_Position = u_worldToProj * a_position;
-		})";
-	const char* iconFragShader = R"(
+		}
+	)glsl";
+	const char* iconFragShader = R"glsl(
 		AE_UNIFORM sampler2D u_tex;
 		AE_UNIFORM vec4 u_color;
 		AE_IN_HIGHP vec2 v_uv;
@@ -822,7 +856,8 @@ void EditorProgram::Initialize()
 			float r = 0.4 + 0.6 * AE_TEXTURE2D( u_tex, v_uv ).r;
 			AE_COLOR.rgb = u_color.rgb * r * a;
 			AE_COLOR.a = a;
-		})";
+		}
+	)glsl";
 	m_iconShader.Initialize( iconVertexShader, iconFragShader, nullptr, 0 );
 	m_iconShader.SetDepthTest( true );
 	m_iconShader.SetDepthWrite( false );
@@ -831,7 +866,7 @@ void EditorProgram::Initialize()
 	m_iconShader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
 	AE_STATIC_ASSERT( sizeof(kCogTextureData) == kCogTextureDataSize * kCogTextureDataSize );
-	m_cogTexture.Initialize( kCogTextureData, kCogTextureDataSize, kCogTextureDataSize, ae::Texture::Format::R8, ae::Texture::Type::UInt8, ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp, true );
+	m_cogTexture.Initialize( kCogTextureData, kCogTextureDataSize, kCogTextureDataSize, ae::Texture::Format::R8, ae::Texture::Type::UInt8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Clamp, true );
 
 	editor.Initialize( this );
 }
@@ -1435,9 +1470,17 @@ bool EditorServerObject::SetTransform( const ae::Matrix4& _transform, EditorProg
 	const ae::Matrix4 oldTransform = m_object->ObjectTryGet( "transform" )->OpaqueGet( ae::Matrix4::Identity() );
 	if( oldTransform != _transform )
 	{
+		// @TODO: This uses way too much memory when dragging objects around,
+		// but otherwise works perfectly. Only consecutive operations on the
+		// same object are merged, but that is never the case when dragging
+		// more than one object. Maybe its fine if memory usage per action
+		// is minimized?
 		m_object->ObjectTryGet( "transform" )->OpaqueSet( _transform );
-		program->editor.HandleTransformChange( program, GetEntity(), _transform );
-		
+
+		const DocumentCallback fn = [ program, e = GetEntity(), _transform ]() { program->editor.HandleTransformChange( program, e, _transform ); };
+		m_object->GetDocument().AddUndoGroupAction( "Transform", fn, fn );
+		fn();
+
 		EditorServerObject* child = children.GetFirst();
 		const ae::Matrix4 relative = _transform * oldTransform.GetInverse();
 		while( child )
@@ -1455,9 +1498,41 @@ ae::Matrix4 EditorServerObject::GetTransform() const
 	return m_object->ObjectTryGet( "transform" )->OpaqueGet( ae::Matrix4::Identity() );
 }
 
+void EditorServerObject::SetParent( EditorServer* server, EditorServerObject* parent )
+{
+	const ae::Entity oldParent = GetParentEntity();
+	if( oldParent && ( !parent || oldParent != parent->GetEntity() ) )
+	{
+		this->childNode.Remove(); // @TODO: Remove
+		m_parent = ae::kNullEntity; // @TODO: Remove
+		// Clear reference to parent
+		GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_PARENT_MEMBER )->NumberSet( ae::kNullEntity );
+		// Remove this as child
+		ae::DocumentValue* parentValue = &server->GetObjectAssert( oldParent )->GetDocumentValue();
+		ae::DocumentValue* parentChildren = parentValue->ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
+		for( uint32_t i = 0; i < parentChildren->ArrayLength(); i++ )
+		{
+			if( parentChildren->ArrayGet( i ).NumberGet< ae::Entity >() == GetEntity() )
+			{
+				parentChildren->ArrayRemove( i );
+				break;
+			}
+		}
+	}
+
+	if( parent )
+	{
+		m_parent = parent->GetEntity(); // @TODO: Remove
+		parent->children.Append( this->childNode ); // @TODO: Remove
+		GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_PARENT_MEMBER )->NumberSet( parent->GetEntity() );
+		parent->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER )->ArrayAppend().NumberSet( GetEntity() );
+	}
+}
+
 void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var )
 {
 	renderDisabled = program->editor.GetRenderDisabled( component->GetEntity() );
+	
 	program->editor.BroadcastVarChange( var, component );
 
 	EditorEvent event;
@@ -1500,6 +1575,48 @@ ae::AABB EditorServerObject::GetAABB( EditorProgram* program ) const
 	return GetOBB( program ).GetAABB();
 }
 
+ae::DocumentValue* EditorServerObject::GetComponentByType( const char* typeName )
+{
+	return AE_CALL_CONST_MEMBER_FUNCTION( GetComponentByType( typeName ) );
+}
+
+const ae::DocumentValue* EditorServerObject::GetComponentByType( const char* typeName ) const
+{
+	return GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_COMPONENTS_MEMBER )->ObjectTryGet( typeName );
+}
+
+ae::DocumentValue* EditorServerObject::GetComponentByType( const ae::ClassType* type )
+{
+	return AE_CALL_CONST_MEMBER_FUNCTION( GetComponentByType( type ) );
+}
+
+const ae::DocumentValue* EditorServerObject::GetComponentByType( const ae::ClassType* type ) const
+{
+	return type ? GetComponentByType( type->GetName() ) : nullptr;
+}
+
+uint32_t EditorServerObject::GetComponentCount() const
+{
+	return GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_COMPONENTS_MEMBER )->ObjectLength();
+}
+
+ae::DocumentValue& EditorServerObject::GetComponentByIndex( uint32_t index )
+{
+	return GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_COMPONENTS_MEMBER )->ObjectGetValue( index );
+}
+
+const ae::DocumentValue& EditorServerObject::GetComponentByIndex( uint32_t index ) const
+{
+	return GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_COMPONENTS_MEMBER )->ObjectGetValue( index );
+}
+
+const ae::ClassType* EditorServerObject::GetComponentTypeByIndex( uint32_t index ) const
+{
+	const ae::DocumentValue* typeValue = GetComponentByIndex( index ).ObjectTryGet( DOCUMENT_ENTITY_COMPONENT_TYPE_MEMBER );
+	AE_ASSERT( typeValue );
+	return ae::GetClassTypeByName( typeValue->StringGet() );
+}
+
 //------------------------------------------------------------------------------
 // EditorConnection member functions
 //------------------------------------------------------------------------------
@@ -1520,7 +1637,6 @@ void EditorConnection::Destroy( EditorServer* editor )
 EditorServer::~EditorServer()
 {
 	AE_DEBUG_ASSERT( !m_objects.Length() );
-	// AE_DEBUG_ASSERT( !m_registry.GetEntityCount() ); // @TODO
 	AE_DEBUG_ASSERT( !m_connections.Length() );
 }
 
@@ -1618,7 +1734,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 
 	m_doc.ClearUndo();
 
-	if( !program->MakeWritable( m_pendingLevel->GetUrl() ) )
+	if( !program->MakeWritable( m_pendingLevel->GetURL() ) )
 	{
 		const ae::Str512 msg = ae::Str512::Format( "File may not be writable '#'", m_pendingLevel->GetURL() );
 		AE_WARN( msg.c_str() );
@@ -1680,8 +1796,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		{
 			const ae::Entity parent = entityMap.Get( sceneEntity.parentId, sceneEntity.parentId );
 			EditorServerObject* parentObject = GetObjectAssert( parent );
-			object->parent = parentObject->GetEntity();
-			parentObject->children.Append( object->childNode );
+			object->SetParent( this, parentObject );
 		}
 		for( const JsonComponent* sceneComponent : sceneEntity.components )
 		{
@@ -1697,8 +1812,8 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		// @TODO: Explicitly handle setting transform vars?
 	}
 
-	AE_INFO( "Loaded level '#'", m_pendingLevel->GetUrl() );
-	m_SetLevelPath( program, m_pendingLevel->GetUrl() );
+	AE_INFO( "Loaded level '#'", m_pendingLevel->GetURL() );
+	m_SetLevelPath( program, m_pendingLevel->GetURL() );
 	m_doc.ClearUndo();
 }
 
@@ -2089,12 +2204,14 @@ void EditorServer::ShowMenuBar( EditorProgram* program )
 		if( ImGui::MenuItem( "Parent" ) )
 		{
 			m_ParentSelected( program );
+			m_doc.EndUndoGroup();
 		}
 		ImGui::EndDisabled();
 		ImGui::BeginDisabled( !m_docSelection->ArrayLength() );
 		if( ImGui::MenuItem( "Unparent" ) )
 		{
 			m_UnparentSelected( program );
+			m_doc.EndUndoGroup();
 		}
 		ImGui::EndDisabled();
 
@@ -2563,8 +2680,18 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 					program->editor.m_docSelection->ArrayClear();
 					program->editor.m_doc.EndUndoGroup();
 				} },
-			{ "Parent", {}, ae::Key::P, []( EditorProgram* program ) { program->editor.m_ParentSelected( program ); } },
-			{ "Unparent", { ae::Key::Shift }, ae::Key::P, []( EditorProgram* program ) { program->editor.m_UnparentSelected( program ); } },
+			{ "Parent", {}, ae::Key::P,
+				[]( EditorProgram* program )
+				{
+					program->editor.m_ParentSelected( program );
+					program->editor.m_doc.EndUndoGroup();
+				} },
+			{ "Unparent", { ae::Key::Shift }, ae::Key::P,
+				[]( EditorProgram* program )
+				{
+					program->editor.m_UnparentSelected( program );
+					program->editor.m_doc.EndUndoGroup();
+				} },
 			{ "Zen", {}, ae::Key::Num0, []( EditorProgram* program ) { program->editor.m_mode = 0; } },
 			{ "Object properties", {}, ae::Key::Num1, []( EditorProgram* program ) { program->editor.m_mode = 1; } },
 			{ "Object list", {}, ae::Key::Num2, []( EditorProgram* program ) { program->editor.m_mode = 2; } },
@@ -2735,6 +2862,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 			mode,
 			transform.data ) && !ImGuizmo::IsUsing() )
 		{
+			// @TODO: Only call this once after 
 			m_doc.EndUndoGroup();
 		}
 		else if( selectedObject->SetTransform( transform, program ) )
@@ -2742,7 +2870,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 			const ae::Matrix4 change = ( mode == ImGuizmo::LOCAL ) ? prevTransform.GetInverse() * transform : transform * prevTransform.GetInverse();
 			for( uint32_t i = 0; i < m_docSelection->ArrayLength(); i++ )
 			{
-				ae::Entity entity = m_docSelection->ArrayGet( i ).NumberGet< ae::Entity >();
+				const ae::Entity entity = m_docSelection->ArrayGet( i ).NumberGet< ae::Entity >();
 				if( entity == firstEntity )
 				{
 					continue;
@@ -2828,6 +2956,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 		{
 			ae::Entity firstEntity = m_GetSelectedEntity( 0 );
 			EditorServerObject* selectedObject = GetObjectAssert( firstEntity );
+			ae::DocumentValue* selectedDocObject = GetDocumentObject( firstEntity );
 			{
 				char name[ 128 ];
 				strlcpy( name, selectedObject->GetName(), countof(name) );
@@ -2855,22 +2984,24 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 					ImGui::OpenPopup( "add_component_popup" );
 				}
 				ImGui::SameLine();
-				ImGui::BeginDisabled( !selectedObject->parent );
+				ImGui::BeginDisabled( !selectedObject->GetParentEntity() );
 				if( ImGui::Button( "Select Parent" ) )
 				{
 					m_ClearSelection();
-					m_AddToSelection( selectedObject->parent );
+					m_AddToSelection( selectedObject->GetParentEntity() );
 				}
 				ImGui::EndDisabled();
 			}
 			
 			ae::Component* deleteComponent = nullptr;
-			const uint32_t componentTypesCount = m_registry.GetTypeCount();
-			for( uint32_t i = 0; i < componentTypesCount; i++ )
+			ae::DocumentValue* componentsDocValue = selectedDocObject->ObjectTryGet( DOCUMENT_ENTITY_COMPONENTS_MEMBER );
+			const uint32_t componentCount = componentsDocValue->ObjectLength();
+			for( uint32_t i = 0; i < componentCount; i++ )
 			{
-				const ae::ClassType* componentType = m_registry.GetTypeByIndex( i );
-				ae::Component* component = m_registry.TryGetComponent( selectedObject->GetEntity(), componentType );
-				if( component )
+				ae::DocumentValue* componentDocValue = &componentsDocValue->ObjectGetValue( i );
+				const char* typeName = componentDocValue->ObjectTryGet( DOCUMENT_ENTITY_COMPONENT_TYPE_MEMBER )->StringGet();
+				const ae::ClassType* componentType = ae::GetClassTypeByName( typeName );
+				ae::Component* component = &m_registry.GetComponent( selectedObject->GetEntity(), componentType );
 				{
 					ImGui::Separator();
 					if( ImGui::TreeNodeEx( componentType->GetName(), ImGuiTreeNodeFlags_DefaultOpen ) )
@@ -2884,9 +3015,11 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 								for( uint32_t i = 0; i < varCount; i++ )
 								{
 									const ae::ClassVar* var = type->GetVarByIndex( i, false );
-									if( m_ShowVar( program, component, var ) )
+									if( m_ShowVar( program, componentDocValue, component, var ) )
 									{
+										// Wrap variable change in undo group for undo/redo support
 										selectedObject->HandleVarChange( program, component, type, var );
+										m_doc.EndUndoGroup();
 									}
 								}
 							}
@@ -2963,33 +3096,49 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				{
 					ImGui::SetItemDefaultFocus();
 				}
-				const uint32_t componentTypesCount = m_registry.GetTypeCount();
-				for( uint32_t i = 0; i < componentTypesCount; i++ )
+				const uint32_t typeCount = ae::GetClassTypeCount();
+				for( uint32_t i = 0; i < typeCount; i++ )
 				{
-					const ae::ClassType* type = m_registry.GetTypeByIndex( i );
-					const bool isSelected = ( m_objectListType == type );
-					if( ImGui::Selectable( type->GetName(), isSelected ) )
+					const ae::ClassType* type = ae::GetClassTypeByIndex( i );
+					if( !type->attributes.Has< EditorTypeAttribute >() || !type->IsType< ae::Component >() )
 					{
-						m_objectListType = type;
+						continue;
 					}
-					if( isSelected )
+					const bool anyOfTypeExist = [ & ]()
 					{
-						ImGui::SetItemDefaultFocus();
+						for( const auto& [ _, obj ] : m_objects )
+						{
+							if( obj->GetComponentByType( type ) )
+							{
+								return true;
+							}
+						}
+						return false;
+					}();
+					if( anyOfTypeExist )
+					{
+						if( ImGui::Selectable( type->GetName(), m_objectListType == type ) )
+						{
+							m_objectListType = type;
+						}
+						if( m_objectListType == type )
+						{
+							ImGui::SetItemDefaultFocus();
+						}
 					}
 				}
 				ImGui::EndCombo();
 			}
 			if( ImGui::BeginListBox( "##listbox", ImVec2( -FLT_MIN, -FLT_MIN ) ) )
 			{
-				auto showObj = [&]( auto& showObj, const EditorServerObject* editorObj ) -> void
+				auto showObj = [ & ]( auto& showObj, const EditorServerObject* editorObj ) -> void
 				{
-					auto hasDescendantWithType = [&]( auto& hasDescendantWithType, const EditorServerObject* obj ) -> bool
+					auto hasDescendantWithType = [ & ]( auto& hasDescendantWithType, const EditorServerObject* obj ) -> bool
 					{
 						const EditorServerObject* childObj = obj->children.GetFirst();
 						while( childObj )
 						{
-							if( m_registry.TryGetComponent( childObj->GetEntity(), m_objectListType ) ||
-								hasDescendantWithType( hasDescendantWithType, childObj ) )
+							if( childObj->GetComponentByType( m_objectListType ) || hasDescendantWithType( hasDescendantWithType, childObj ) )
 							{
 								return true;
 							}
@@ -2997,13 +3146,12 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 						}
 						return false;
 					};
-					auto hasSelectedDescendant = [&]( auto& hasSelectedDescendant, const EditorServerObject* obj ) -> bool
+					auto hasSelectedDescendant = [ & ]( auto& hasSelectedDescendant, const EditorServerObject* obj ) -> bool
 					{
 						const EditorServerObject* childObj = obj->children.GetFirst();
 						while( childObj )
 						{
-							if( m_FindInSelection( childObj->GetEntity() ) >= 0 ||
-								hasSelectedDescendant( hasSelectedDescendant, childObj ) )
+							if( m_FindInSelection( childObj->GetEntity() ) >= 0 || hasSelectedDescendant( hasSelectedDescendant, childObj ) )
 							{
 								return true;
 							}
@@ -3012,10 +3160,8 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 						return false;
 					};
 
-					const ae::Component* typeComponent = m_objectListType ? m_registry.TryGetComponent( editorObj->GetEntity(), m_objectListType ) : nullptr;
 					const bool hasChildren = editorObj->children.Length();
-					bool isLeaf = !hasChildren;
-					if( m_objectListType && !typeComponent && !hasDescendantWithType( hasDescendantWithType, editorObj ) )
+					if( m_objectListType && !editorObj->GetComponentByType( m_objectListType ) && !hasDescendantWithType( hasDescendantWithType, editorObj ) )
 					{
 						return;
 					}
@@ -3023,40 +3169,30 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 					ae::Str64 name = editorObj->GetName();
 					if( !name.Length() )
 					{
-						uint32_t entityComponentCount = 0;
-						const ae::ClassType* onlyComponentType = nullptr;
-						const uint32_t componentTypeCount = m_registry.GetTypeCount();
-						for( uint32_t i = 0; i < componentTypeCount; i++ )
+						const uint32_t componentCount = editorObj->GetComponentCount();
+						for( uint32_t i = 0; i < componentCount && !name.Length(); i++ )
 						{
-							const ae::ClassType* componentType = m_registry.GetTypeByIndex( i );
-							if( const ae::Component* component = m_registry.TryGetComponent( editorObj->GetEntity(), componentType ) )
+							const ae::DocumentValue* component = &editorObj->GetComponentByIndex( i );
+							const ae::ClassType* componentType = editorObj->GetComponentTypeByIndex( i );
+							const uint32_t typeVarCount = componentType->GetVarCount( true );
+							for( uint32_t j = 0; j < typeVarCount && !name.Length(); j++ )
 							{
-								onlyComponentType = !entityComponentCount ? componentType : nullptr;
-								entityComponentCount++;
-								const uint32_t typeVarCount = componentType->GetVarCount( true );
-								for( uint32_t j = 0; j < typeVarCount; j++ )
+								const ae::ClassVar* classVar = componentType->GetVarByIndex( j, true );
+								const ae::BasicType* varType = classVar->GetOuterVarType().AsVarType< ae::BasicType >();
+								if( varType && classVar->attributes.Has< EditorDisplayNameAttribute >() )
 								{
-									const ae::ClassVar* var = componentType->GetVarByIndex( j, true );
-									const ae::BasicType* varType = var->GetOuterVarType().AsVarType< ae::BasicType >();
-									if( varType && var->attributes.Has< EditorDisplayNameAttribute >() )
-									{
-										ae::ConstDataPointer varPtr( var, component );
-										if( varPtr )
-										{
-											name = varType->GetVarDataAsString( varPtr ).c_str();
-											i = (uint32_t)-2;
-											j = (uint32_t)-2;
-											break; // Break both loops
-										}
-									}
+									const ae::DocumentValue* var = component->ObjectTryGet( classVar->GetName() );
+									AE_ASSERT( var );
+									name = var->StringGet();
+									break;
 								}
 							}
 						}
 						if( !name.Length() )
 						{
-							if( onlyComponentType )
+							if( editorObj->GetComponentCount() == 1 )
 							{
-								name = onlyComponentType->GetName();
+								name = editorObj->GetComponentTypeByIndex( 0 )->GetName();
 							}
 							else
 							{
@@ -3138,13 +3274,13 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 						ImGui::TreePop();
 					}
 				};
-				
+
 				const uint32_t docObjectCount = m_docObjects->ObjectLength();
 				for( uint32_t i = 0; i < docObjectCount; i++ )
 				{
 					const ae::DocumentValue& docObject = m_docObjects->ObjectGetValue( i );
 					const EditorServerObject* editorObj = m_objects.Get( docObject.ObjectTryGet( "id" )->NumberGet< ae::Entity >() );
-					if( editorObj && !editorObj->parent )
+					if( editorObj && !editorObj->GetParentEntity() )
 					{
 						showObj( showObj, editorObj );
 					}
@@ -3161,8 +3297,6 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 
 EditorServerObject* EditorServer::CreateObject( EditorProgram* program, Entity entity, const ae::Matrix4& transform, const char* name, bool undo )
 {
-	// @TODO: Remove m_registry. ae::Registry doesn't support reusing entity ids
-	// entity = m_registry.CreateEntity( entity, name );
 	if( undo && entity <= m_lastEntity )
 	{
 		m_lastEntity++;
@@ -3179,8 +3313,10 @@ EditorServerObject* EditorServer::CreateObject( EditorProgram* program, Entity e
 		docObject->ObjectInitialize( 4 );
 		docObject->ObjectSet( "id" ).NumberSet( entity );
 		docObject->ObjectSet( "name" ).StringSet( name ? name : "" );
+		docObject->ObjectSet( DOCUMENT_ENTITY_PARENT_MEMBER ).NumberSet( ae::kNullEntity );
+		docObject->ObjectSet( DOCUMENT_ENTITY_CHILDREN_MEMBER ).ArrayInitialize();
 		docObject->ObjectSet( "transform" ).OpaqueSet( transform );
-		docObject->ObjectSet( "components" ).ArrayInitialize();
+		docObject->ObjectSet( DOCUMENT_ENTITY_COMPONENTS_MEMBER ).ObjectInitialize();
 		docObject->GetDocument().AddUndoGroupAction( "Create Object", [ this, program, entity ]() { DestroyObject( program, entity, false ); }, action );
 	}
 	action();
@@ -3193,6 +3329,7 @@ void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity, boo
 	{
 		const ae::DocumentCallback action = [ this, entity ]()
 		{
+			// @TODO: m_RemoveFromSelection( entity )?
 			// @TODO: Delete components
 			// @TODO: Delete descendants
 			EditorServerObject* editorObject = nullptr;
@@ -3246,18 +3383,31 @@ ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerO
 	component = m_registry.AddComponent( obj->GetEntity(), type );
 
 	{
-		const auto hack = ae::ToString( obj->GetEntity() );
-		ae::DocumentValue* objDocValue = m_docObjects->ObjectTryGet( hack.c_str() );
+		ae::DocumentValue* objDocValue = m_docObjects->ObjectTryGet( ae::ToString( obj->GetEntity() ).c_str() );
 		AE_ASSERT( objDocValue );
-		ae::DocumentValue* component = &objDocValue->ObjectSet( "components" ).ArrayAppend();
+		ae::DocumentValue* component = &objDocValue->ObjectSet( DOCUMENT_ENTITY_COMPONENTS_MEMBER ).ObjectSet( type->GetName() );
 		component->ObjectInitialize();
-		component->ObjectSet( "@type" ).StringSet( type->GetName() );
+		component->ObjectSet( DOCUMENT_ENTITY_COMPONENT_TYPE_MEMBER ).StringSet( type->GetName() );
 		const uint32_t varCount = type->GetVarCount( true );
 		for( uint32_t i = 0; i < varCount; i++ )
 		{
 			const ae::ClassVar* var = type->GetVarByIndex( i, true );
-			// @TODO: This could be anything here, arrays of arrays
-			component->ObjectSet( var->GetName() ).StringSet( "" );
+			ae::DocumentValue* varDocValue = &component->ObjectSet( var->GetName() );
+			// @TODO: Handle arrays to match m_ShowVar()
+			if( var->IsArray() )
+			{
+				varDocValue->ArrayInitialize();
+				const uint32_t fixedLength = var->IsArrayFixedLength() ? var->GetArrayMaxLength() : 0;
+				for( uint32_t j = 0; j < fixedLength; j++ )
+				{
+					varDocValue->ArrayAppend().StringSet( "" ); // @TODO: Default value
+				}
+			}
+			else
+			{
+				// @TODO: This could be any type here
+				varDocValue->StringSet( "" ); // @TODO: Default value
+			}
 		}
 	}
 
@@ -3351,6 +3501,7 @@ ae::AABB EditorServer::GetSelectedAABB( EditorProgram* program ) const
 
 void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity entity, const ae::Matrix4& transform )
 {
+	// @TODO: How to make sure this is called when undoing?
 	EditorServerObject* editorObject = GetObjectAssert( entity );
 
 	EditorEvent event;
@@ -3373,6 +3524,7 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 					if( specialVar.SetObjectValue( transform, component, var ) )
 					{
 						editorObject->HandleVarChange( program, component, componentType, var );
+						// Note: Undo group for transform changes is managed by the caller (e.g., ImGuizmo manipulation)
 					}
 				}
 			}
@@ -3627,9 +3779,9 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 	const auto transformStr = ae::ToString( transform );
 	transformJson.SetString( transformStr.c_str(), allocator );
 	jsonEntity->AddMember( JSON_TRANSFORM_NAME, transformJson, allocator );
-	if( levelObject->parent )
+	if( levelObject->GetParentEntity() )
 	{
-		jsonEntity->AddMember( JSON_PARENT_ID_NAME, (uint32_t)levelObject->parent, allocator );
+		jsonEntity->AddMember( JSON_PARENT_ID_NAME, (uint32_t)levelObject->GetParentEntity(), allocator );
 	}
 
 	// Components
@@ -3764,8 +3916,7 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 		{
 			const ae::Entity parent = entityMap.Get( sceneEntity.parentId, sceneEntity.parentId );
 			EditorServerObject* parentObject = GetObjectAssert( parent );
-			object->parent = parentObject->GetEntity();
-			parentObject->children.Append( object->childNode );
+			object->SetParent( this, parentObject );
 		}
 
 		for( const JsonComponent* sceneComponent : sceneEntity.components )
@@ -3845,7 +3996,7 @@ void EditorServer::m_ParentSelected( EditorProgram* program )
 			{
 				return true;
 			}
-			current = current->parent ? TryGetObject( current->parent ) : nullptr;
+			current = current->GetParentEntity() ? TryGetObject( current->GetParentEntity() ) : nullptr;
 		}
 		return false;
 	};
@@ -3862,8 +4013,7 @@ void EditorServer::m_ParentSelected( EditorProgram* program )
 			AE_WARN( "Cannot set '#' parent, it is a descendant of '#'", parentObject->GetEntity(), childObject->GetEntity() );
 			continue;
 		}
-		childObject->parent = parentObject->GetEntity();
-		parentObject->children.Append( childObject->childNode );
+		childObject->SetParent( this, parentObject );
 		AE_INFO( "Set '#' as the parent of '#'", parentObject->GetEntity(), childObject->GetEntity() );
 	}
 }
@@ -3878,10 +4028,9 @@ void EditorServer::m_UnparentSelected( EditorProgram* program )
 			AE_FAIL_MSG( "Could not find child object #", m_GetSelectedEntity( i ) );
 			continue;
 		}
-		if( childObject->childNode.GetList() )
+		if( childObject->GetParentEntity() )
 		{
-			childObject->parent = ae::kNullEntity;
-			childObject->childNode.Remove();
+			childObject->SetParent( this, nullptr );
 			AE_INFO( "Unparented #", childObject->GetEntity() );
 		}
 	}
@@ -4078,24 +4227,29 @@ ae::Array< ae::Entity > EditorServer::m_GetTreeFromEntities( const ae::Entity* e
 	return result;
 }
 
-bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, const ae::ClassVar* var )
+bool EditorServer::m_ShowVar( EditorProgram* program, ae::DocumentValue* docValue, ae::Object* component, const ae::ClassVar* var )
 {
 	if( GetSpecialMemberVar( var ) )
 	{
 		return false;
 	}
+
+	ae::DocumentValue* varDocValue = docValue->ObjectTryGet( var->GetName() );
+	AE_ASSERT( varDocValue );
+
 	bool changed = false;
 	ImGui::PushID( var->GetName() );
 	if( var->IsArray() )
 	{
-		uint32_t arrayLength = var->GetArrayLength( component );
+		const uint32_t arrayLength = varDocValue->ArrayLength();
+		AE_ASSERT( arrayLength == var->GetArrayLength( component ) ); // @TODO: Remove
 		ImGui::Text( "%s", var->GetName() );
 		ImVec2 size( ImGui::GetContentRegionAvail().x, 8 * ImGui::GetTextLineHeightWithSpacing() );
 		ImGui::BeginChild( "ChildL", size, true, 0 );
 		for( int i = 0; i < arrayLength; i++ )
 		{
 			ImGui::PushID( i );
-			changed |= m_ShowVarValue( program, component, var, i );
+			changed |= m_ShowVarValue( program, &varDocValue->ArrayGet( i ), component, var, i );
 			ImGui::PopID();
 		}
 		ImGui::EndChild();
@@ -4105,6 +4259,7 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, con
 			ImGui::BeginDisabled( arrayMaxLength );
 			if( ImGui::Button( "Add" ) )
 			{
+				// @TODO: varDocValue
 				var->SetArrayLength( component, arrayLength + 1 );
 				changed = true;
 			}
@@ -4113,6 +4268,7 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, con
 			ImGui::BeginDisabled( !arrayLength );
 			if( ImGui::Button( "Remove" ) )
 			{
+				// @TODO: varDocValue
 				var->SetArrayLength( component, arrayLength - 1 );
 				changed = true;
 			}
@@ -4121,56 +4277,61 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, con
 	}
 	else
 	{
-		changed |= m_ShowVarValue( program, component, var );
+		changed |= m_ShowVarValue( program, varDocValue, component, var );
 	}
 	ImGui::PopID();
 	return changed;
 }
 
-bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx )
+bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* varDocValue, ae::Object* component, const ae::ClassVar* var, int32_t idx )
 {
-	ae::Str64 varName = ( idx < 0 ) ? var->GetName() : ae::Str64::Format( "#", idx );
+	const ae::Str64 varName = ( idx < 0 ) ? var->GetName() : ae::Str64::Format( "#", idx );
 	switch( var->GetType() )
 	{
 		case ae::BasicType::Enum:
 		{
-			auto currentStr = var->GetObjectValueAsString( component, idx );
-			auto valueStr = aeImGui_Enum( var->GetEnumType(), varName.c_str(), currentStr.c_str() );
-			if( var->SetObjectValueFromString( component, valueStr.c_str(), idx ) )
+			const char* currentStr = varDocValue->StringGet();
+			const auto result = aeImGui_Enum( var->GetEnumType(), varName.c_str(), currentStr );
+			if( result != currentStr )
 			{
-				return ( currentStr != valueStr.c_str() );
+				varDocValue->StringSet( result.c_str() );
+				var->SetObjectValueFromString( component, result.c_str(), idx );
+				return true;
 			}
 			return false;
 		}
 		case ae::BasicType::Bool:
 		{
-			bool b = false;
-			var->GetObjectValue( component, &b, idx );
+			bool b = ae::FromString( varDocValue->StringGet(), false );
 			if( ImGui::Checkbox( varName.c_str(), &b ) )
 			{
-				return var->SetObjectValue( component, b, idx );
+				varDocValue->StringSet( ae::ToString( b ).c_str() );
+				var->SetObjectValue( component, b, idx ); // @TODO: Remove
+				return true;
 			}
 			return false;
 		}
 		case ae::BasicType::Float:
 		{
-			float f = 0.0f;
-			var->GetObjectValue( component, &f, idx );
+			float f = ae::FromString( varDocValue->StringGet(), 0.0f );
 			if( ImGui::InputFloat( varName.c_str(), &f ) )
 			{
-				return var->SetObjectValue( component, f, idx );
+				varDocValue->StringSet( ae::ToString( f ).c_str() );
+				var->SetObjectValue( component, f, idx );
+				return true;
 			}
 			return false;
 		}
 		case ae::BasicType::String:
 		{
 			char buf[ 256 ];
-			auto val = var->GetObjectValueAsString( component, idx );
-			ae::_strlcpy( buf, val.c_str(), sizeof(buf) );
+			ae::_strlcpy( buf, varDocValue->StringGet(), sizeof(buf) );
 			ImGui::Text( "%s", varName.c_str() );
 			if( ImGui::InputTextMultiline( varName.c_str(), buf, sizeof(buf), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4 ), 0 ) )
 			{
-				return var->SetObjectValueFromString( component, buf, idx );
+				varDocValue->StringSet( buf );
+				var->SetObjectValueFromString( component, buf, idx );
+				return true;
 			}
 			return false;
 		}
@@ -4366,7 +4527,7 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) co
 	const bool isSelected = ( m_FindInSelection( entity ) >= 0 );
 	const bool isChildOfSelected = [&]() -> bool
 	{
-		ae::Entity current = editorObj->parent;
+		ae::Entity current = editorObj->GetParentEntity();
 		while( current )
 		{
 			if( m_FindInSelection( current ) >= 0 )
@@ -4374,7 +4535,7 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) co
 				return true;
 			}
 			const EditorServerObject* currentObj = TryGetObject( current );
-			current = currentObj ? currentObj->parent : ae::kNullEntity;
+			current = currentObj ? currentObj->GetParentEntity() : ae::kNullEntity;
 		}
 		return false;
 	}();
