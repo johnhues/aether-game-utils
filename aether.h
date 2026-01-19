@@ -33,7 +33,7 @@
 // Recommendations:
 // For bigger projects it's worth defining AE_MAIN in it's own module to limit
 // the number of dependencies brought into your own code. For instance
-// 'Windows.h' is included with AE_MAIN and this can easily cause naming
+// 'windows.h' is included with AE_MAIN and this can easily cause naming
 // conflicts with gameplay/engine code. The following example could be compiled
 // into a single file/module and linked with the application.
 // Usage inside of a cpp/mm file could be something like:
@@ -156,6 +156,8 @@
 #define _AE_OSX_ 0
 #define _AE_APPLE_ 0
 #define _AE_WINDOWS_ 0
+#define _AE_MSVC_ 0
+#define _AE_MINGW_ 0
 #define _AE_LINUX_ 0
 #define _AE_EMSCRIPTEN_ 0
 #if defined(__EMSCRIPTEN__)
@@ -174,9 +176,16 @@
 	#endif
 	#undef _AE_APPLE_
 	#define _AE_APPLE_ 1
-#elif defined(_MSC_VER)
+#elif defined(_WIN32) || defined(_WIN64)
 	#undef _AE_WINDOWS_
 	#define _AE_WINDOWS_ 1
+	#if defined(__MINGW32__) || defined(__MINGW64__)
+		#undef _AE_MINGW_
+		#define _AE_MINGW_ 1
+	#else
+		#undef _AE_MSVC_
+		#define _AE_MSVC_ 1
+	#endif
 #elif defined(__linux__)
 	#undef _AE_LINUX_
 	#define _AE_LINUX_ 1
@@ -187,7 +196,7 @@
 //------------------------------------------------------------------------------
 // Warnings
 //------------------------------------------------------------------------------
-#if _AE_WINDOWS_
+#if _AE_MSVC_
 	#define AE_POP_WARNINGS
 	#pragma warning( push )
 	#pragma warning( disable : 4018 ) // signed/unsigned mismatch
@@ -312,7 +321,7 @@ namespace ae {
 	#define AE_ALIGN( _x )
 #endif
 
-#if _AE_WINDOWS_
+#if _AE_MSVC_
 	#define AE_PACK( ... ) __pragma( pack(push, 1) ) __VA_ARGS__ __pragma( pack(pop))
 #else
 	#define AE_PACK( ... ) __VA_ARGS__ __attribute__((__packed__))
@@ -359,12 +368,12 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 #define _AE_DYNAMIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
 #define _AE_PAGED_POOL template< bool P = Paged, typename = std::enable_if_t< P > >
-#if !_AE_WINDOWS_
-	#define AE_DISABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Winvalid-offsetof\"")
-	#define AE_ENABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic pop")
-#else
+#if _AE_MSVC_
 	#define AE_DISABLE_INVALID_OFFSET_WARNING
 	#define AE_ENABLE_INVALID_OFFSET_WARNING
+#else
+	#define AE_DISABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Winvalid-offsetof\"")
+	#define AE_ENABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic pop")
 #endif
 #define AE_DISABLE_COPY_ASSIGNMENT( _t ) _t( const _t& ) = delete; _t& operator=( const _t& ) = delete
 
@@ -685,7 +694,7 @@ struct VecT
 	bool IsNAN() const;
 };
 
-#if _AE_WINDOWS_
+#if _AE_MSVC_
 	#pragma warning(disable:26495) // Vecs are left uninitialized for performance
 #endif
 
@@ -1444,7 +1453,7 @@ private:
 	template< typename T > Color SRGBA( T r, T g, T b, T a ) = delete;
 };
 
-#if _AE_WINDOWS_
+#if _AE_MSVC_
 	#pragma warning(default:26495) // Re-enable uninitialized variable warning
 #endif
 
@@ -1809,7 +1818,7 @@ private:
 	ae::Tag m_tag;
 	// clang-format off
 	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT; // NOLINT WarnOnSizeOfPointerToAggregate
-#if _AE_LINUX_
+#if _AE_LINUX_ || _AE_WINDOWS_
 	struct Storage { AlignedStorageT data[ N ]; };
 	Storage m_storage;
 #else
@@ -1902,7 +1911,7 @@ private:
 	uint32_t m_size;
 	uint32_t m_length;
 	// clang-format off
-#if _AE_LINUX_
+#if _AE_LINUX_|| _AE_WINDOWS_
 	struct Storage { Entry data[ N ]; };
 	Storage m_storage;
 #else
@@ -2372,7 +2381,7 @@ private:
 		AlignedStorageT objects[ N ];
 	};
 	
-#if _AE_LINUX_
+#if _AE_LINUX_|| _AE_WINDOWS_
 	template< bool Allocate > struct ConditionalPage {
 		Page* Get() { return Allocate ? nullptr : page; }
 		const Page* Get() const { return Allocate ? nullptr : page; }
@@ -4022,8 +4031,8 @@ private:
 //------------------------------------------------------------------------------
 // @TODO: Graphics globals. Should be parameters to modules that need them.
 //------------------------------------------------------------------------------
-extern uint32_t GLMajorVersion;
-extern uint32_t GLMinorVersion;
+extern int32_t GLMajorVersion;
+extern int32_t GLMinorVersion;
 // Caller enables this externally.  The renderer, Shader, math aren't tied to one another
 // enough to pass this locally.  glClipControl is also not accessible in ES or GL 4.1, so
 // doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
@@ -6017,15 +6026,15 @@ private:
 	struct Brick
 	{
 		void Initialize( Index index, const struct IsosurfaceParams& params, struct IsosurfaceStatus* status );
-		static inline Index Index( int32_t x, int32_t y, int32_t z ) { return { ae::Floor( x, kBrickMapSize ), ae::Floor( y, kBrickMapSize ), ae::Floor( z, kBrickMapSize ) }; }
-		static inline std::pair< IsosurfaceExtractor::Index, ae::Vec3 > Index( ae::Vec3 v )
+		static inline Index MakeIndex( int32_t x, int32_t y, int32_t z ) { return { ae::Floor( x, kBrickMapSize ), ae::Floor( y, kBrickMapSize ), ae::Floor( z, kBrickMapSize ) }; }
+		static inline std::pair< IsosurfaceExtractor::Index, ae::Vec3 > MakeIndex( ae::Vec3 v )
 		{
 			const ae::Int3 brick = ( v / kBrickMapSize ).FloorCopy();
 			return { { brick.x, brick.y, brick.z }, ( v - ae::Vec3( brick * kBrickMapSize ) ) };
 		}
-		static inline std::pair< IsosurfaceExtractor::Index, ae::Int3 > Index( ae::Int3 v )
+		static inline std::pair< IsosurfaceExtractor::Index, ae::Int3 > MakeIndex( ae::Int3 v )
 		{
-			const ae::Int3 brick = Index( v.x, v.y, v.z );
+			const ae::Int3 brick = MakeIndex( v.x, v.y, v.z );
 			return { { brick.x, brick.y, brick.z }, ( v - ae::Int3( brick * kBrickMapSize ) ) };
 		}
 		inline IsosurfaceValue Sample( ae::Vec3 localPos ) const;
@@ -8168,7 +8177,7 @@ inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
 	return os << v[ count - 1 ];
 }
 
-#if _AE_WINDOWS_
+#if _AE_MSVC_
 	#pragma warning(disable:26495) // Hide incorrect Vec2 initialization warning due to union
 #endif
 
@@ -8716,7 +8725,7 @@ inline Color Color::SetValue( float value ) const
 inline float Color::SRGBToRGB( float x ) { return powf( x , 2.2f ); }
 inline float Color::RGBToSRGB( float x ) { return powf( x, 1.0f / 2.2f ); }
 
-#if _AE_WINDOWS_
+#if _AE_MSVC_
 	#pragma warning(default:26495) // Re-enable uninitialized variable warning
 #endif
 
@@ -11622,7 +11631,7 @@ void ObjectPool< T, N, Paged >::Delete( T* obj )
 	if( !obj ) { return; }
 	if( (intptr_t)obj % alignof(T) != 0 ) { return; } // @TODO: Should this be an assert?
 
-	int32_t index;
+	int32_t index = 0;
 	Page* page = m_pages.GetFirst();
 	while( page )
 	{
@@ -13904,12 +13913,12 @@ struct _VarCreator
 		m_var.m_owner = typeCreator.Get();
 		m_var.m_varType = *ae::TypeT< V >::Get();
 		m_var.m_name = varName;
-#if !_AE_WINDOWS_
+#if !_AE_MSVC_
 	#pragma clang diagnostic push
 	#pragma clang diagnostic ignored "-Winvalid-offsetof"
 #endif
 		m_var.m_offset = Offset; // @TODO: Verify var is not member of base class
-#if !_AE_WINDOWS_
+#if !_AE_MSVC_
 	#pragma clang diagnostic pop
 #endif
 		typeCreator.Get()->m_AddVar( &m_var );
@@ -14605,30 +14614,35 @@ T* ae::Cast( C* obj )
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
 	#define WIN32_LEAN_AND_MEAN 1
-	#include <Windows.h>
-	#include <Windowsx.h>
-	#include <Winuser.h>
+	// Be caeful with include case-sensitivity here for MinGW/cross-compiling
+	#include <windows.h>
+	#include <windowsx.h>
+	#include <winuser.h>
 	#include <shellapi.h>
-	#include <Shlobj_core.h>
+	#include <shlobj.h>
 	#include <commdlg.h>
-	#include "processthreadsapi.h" // For GetCurrentProcessId()
-	#include <filesystem> // @HACK: Shouldn't need this just for Windows
+	#include <processthreadsapi.h> // For GetCurrentProcessId()
 	#include <timeapi.h>
 	#include <xinput.h>
-	#pragma comment (lib, "Comdlg32.lib")
-	#pragma comment (lib, "Gdi32.lib")
-	#pragma comment (lib, "Imm32.lib")
-	#pragma comment (lib, "Ole32.lib")
-	#pragma comment (lib, "Setupapi.lib")
-	#pragma comment (lib, "Shell32.lib")
-	#pragma comment (lib, "User32.lib")
-	#pragma comment (lib, "version.lib")
-	#pragma comment (lib, "Winmm.lib")
-	#pragma comment (lib, "Ws2_32.lib")
-	#pragma comment (lib, "XInput.lib")
-	#pragma comment (lib, "OpenGL32.lib")
+	#if _AE_MSVC_
+		#pragma comment (lib, "Comdlg32.lib")
+		#pragma comment (lib, "Gdi32.lib")
+		#pragma comment (lib, "Imm32.lib")
+		#pragma comment (lib, "Ole32.lib")
+		#pragma comment (lib, "Setupapi.lib")
+		#pragma comment (lib, "Shell32.lib")
+		#pragma comment (lib, "User32.lib")
+		#pragma comment (lib, "version.lib")
+		#pragma comment (lib, "Winmm.lib")
+		#pragma comment (lib, "Ws2_32.lib")
+		#pragma comment (lib, "XInput.lib")
+		#pragma comment (lib, "OpenGL32.lib")
+	#endif
 	#ifndef AE_USE_OPENAL
 		#define AE_USE_OPENAL 0
+	#endif
+	#ifdef RGB
+		#undef RGB
 	#endif
 #elif _AE_APPLE_
 	#include <sys/sysctl.h>
@@ -14675,8 +14689,9 @@ T* ae::Cast( C* obj )
 #include <random>
 // Socket
 #if _AE_WINDOWS_
-	#include <WinSock2.h>
-	#include <WS2tcpip.h>
+	// Be caeful with include case-sensitivity here for MinGW/cross-compiling
+	#include <winsock2.h>
+	#include <ws2tcpip.h>
 	typedef uint16_t _ae_sa_family_t;
 	typedef char _ae_sock_err_t;
 	typedef WSAPOLLFD _ae_poll_fd_t;
@@ -17011,6 +17026,7 @@ void _LogImpl( ae::LogSeverity severity, const char* filePath, uint32_t line, co
 	if( s_logStdOut )
 	{
 		printf( os.str().c_str() ); // std out
+		printf( "\n" );
 	}
 	else
 	{
@@ -19528,7 +19544,7 @@ void Input::Pump()
 	XInputEnable( m_window->GetFocused() );
 #pragma warning( pop )
 	MSG msg; // Get messages for current thread
-	while( PeekMessage( &msg, NULL, NULL, NULL, PM_REMOVE ) )
+	while( PeekMessage( &msg, NULL, 0, 0, PM_REMOVE ) )
 	{
 		if( msg.message == WM_QUIT )
 		{
@@ -22741,6 +22757,7 @@ ae::Socket* ListenerSocket::Accept()
 		
 		int newSock = -1;
 		sockaddr_storage sockAddr;
+		memset( &sockAddr, 0, sizeof(sockAddr) );
 		socklen_t sockAddrLen = sizeof(sockAddr);
 		if( m_protocol == ae::Socket::Protocol::TCP )
 		{
@@ -22884,8 +22901,8 @@ uint32_t ListenerSocket::GetConnectionCount() const
 #if _AE_WINDOWS_
 	#pragma comment (lib, "opengl32.lib")
 	#pragma comment (lib, "glu32.lib")
-	#include <gl/GL.h>
-	#include <gl/GLU.h>
+	#include <GL/gl.h>
+	#include <GL/glu.h>
 #elif _AE_EMSCRIPTEN_
 	#include <GLES3/gl3.h>
 #elif _AE_LINUX_
@@ -22902,20 +22919,31 @@ uint32_t ListenerSocket::GetConnectionCount() const
 namespace ae
 {
 #if _AE_IOS_ || _AE_EMSCRIPTEN_
-	uint32_t GLMajorVersion = 3;
-	uint32_t GLMinorVersion = 0;
+	int32_t GLMajorVersion = 3;
+	int32_t GLMinorVersion = 0;
 #else
-	uint32_t GLMajorVersion = 4;
-	uint32_t GLMinorVersion = 1;
+	int32_t GLMajorVersion = 4;
+	int32_t GLMinorVersion = 1;
 #endif
 bool ReverseZ = false;
 }  // ae end
+
+#ifndef AE_GL_DEBUG_MODE
+	#define AE_GL_DEBUG_MODE 0
+#endif
 
 #if _AE_WINDOWS_
 // OpenGL function pointers
 typedef char GLchar;
 typedef intptr_t GLsizeiptr;
 typedef intptr_t GLintptr;
+
+#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+#define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+#define WGL_CONTEXT_FLAGS_ARB 0x2094
+#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
 
 // GL_VERSION_1_2
 #define GL_TEXTURE_3D                     0x806F
@@ -22985,6 +23013,7 @@ typedef void ( *GLDEBUGPROC )(GLenum source,GLenum type,GLuint id,GLenum severit
 #define GL_DEBUG_SEVERITY_MEDIUM          0x9147
 #define GL_DEBUG_SEVERITY_LOW             0x9148
 // WGL extensions
+HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList ) = nullptr;
 bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
 int ( *wglGetSwapIntervalEXT ) () = nullptr;
 // OpenGL Shader Functions
@@ -23114,11 +23143,6 @@ void CheckFramebufferComplete( GLuint framebuffer )
 		AE_FAIL_MSG( "GL FBO Error: (#) #", fboStatus, errStr );
 	}
 }
-
-#if _AE_DEBUG_ && !_AE_APPLE_ && !_AE_EMSCRIPTEN_
-	// Apple platforms only support OpenGL 4.1 and lower
-	#define AE_GL_DEBUG_MODE 1
-#endif
 
 #if AE_GL_DEBUG_MODE
 void OpenGLDebugCallback( GLenum source,
@@ -23639,7 +23663,6 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
 	const uint32_t kPrependMax = 16;
 	ae::Array< const char*, kPrependMax + _kMaxShaderDefines * 2 + 1 > shaderSource;// x2 max defines to make room for newlines. Plus one for actual shader.
-	shaderSource.Append( "// System\n" );
 
 	// Version
 	ae::Str32 glVersionStr = "#version ";
@@ -25186,9 +25209,9 @@ GraphicsDevice::~GraphicsDevice()
 }
 
 #if _AE_WINDOWS_
-#define LOAD_OPENGL_FN( _glfn )\
-_glfn = (decltype(_glfn))wglGetProcAddress( #_glfn );\
-AE_ASSERT_MSG( _glfn, "Failed to load OpenGL function '" #_glfn "'" );
+	#define LOAD_OPENGL_FN( _glfn )\
+		_glfn = (decltype(_glfn))wglGetProcAddress( #_glfn );\
+		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
 #endif
 
 void GraphicsDevice::Initialize( class Window* window )
@@ -25210,18 +25233,39 @@ void GraphicsDevice::Initialize( class Window* window )
 #endif
 
 #if _AE_WINDOWS_
+	uint32_t glFnLoadFailed = 0;
 	// Create OpenGL context
 	HWND hWnd = (HWND)m_window->window;
 	AE_ASSERT_MSG( hWnd, "ae::Window must be initialized" );
 	HDC hdc = GetDC( hWnd );
 	AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
-	HGLRC hglrc = wglCreateContext( hdc );
-	AE_ASSERT_MSG( hglrc, "Failed to create the OpenGL Rendering Context" );
-	if( !wglMakeCurrent( hdc, hglrc ) )
+
+	HGLRC dummyCtx = wglCreateContext( hdc );
+	AE_ASSERT_MSG( dummyCtx, "Failed to create dummy OpenGL Rendering Context" );
+	wglMakeCurrent( hdc, dummyCtx );
+	
+	int attribs[] = 
+	{
+		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion,
+		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion,
+		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+		0
+	};
+	LOAD_OPENGL_FN( wglCreateContextAttribsARB );
+	HGLRC ctx = wglCreateContextAttribsARB( hdc, 0, attribs );
+	AE_ASSERT_MSG( ctx, "Failed to create extended OpenGL Rendering Context" );
+
+	wglMakeCurrent( nullptr, nullptr );
+	wglDeleteContext( dummyCtx );
+	wglMakeCurrent( hdc, ctx );
+	
+	AE_ASSERT_MSG( ctx, "Failed to create the OpenGL Rendering Context" );
+	if( !wglMakeCurrent( hdc, ctx ) )
 	{
 		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
 	}
-	m_context = hglrc;
+	m_context = ctx;
 #elif _AE_OSX_ 
 	m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
 #elif _AE_EMSCRIPTEN_
@@ -25290,8 +25334,14 @@ void GraphicsDevice::Initialize( class Window* window )
 	LOAD_OPENGL_FN( glVertexAttribDivisor );
 	LOAD_OPENGL_FN( glDrawElementsInstanced );
 	LOAD_OPENGL_FN( glDrawArraysInstanced );
+#if AE_GL_DEBUG_MODE
 	// Debug functions
 	LOAD_OPENGL_FN( glDebugMessageCallback );
+#endif
+	if( glFnLoadFailed )
+	{
+		AE_FAIL_MSG( "Failed to load # OpenGL function#.", glFnLoadFailed, ( glFnLoadFailed == 1 ) ? "" : "s" );
+	}
 	AE_CHECK_GL_ERROR();
 #endif
 
@@ -26396,7 +26446,7 @@ void SpriteRenderer::AddText( uint32_t group, const char* text, const SpriteFont
 		const char c = *text;
 		const bool isSpace = IsSpace( c );
 		ae::Rect quad, uv;
-		float advance;
+		float advance = 0.0f;
 		font->GetGlyph( *text, &quad, &uv, &advance, fontSize ); // @TODO: Check return value and skip
 		if( !isSpace )
 		{
@@ -30080,7 +30130,7 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 IsosurfaceValue IsosurfaceExtractor::m_DualSample( ae::Int3 pos, bool cache )
 {
 	IsosurfaceValue v;
-	const auto[ brickIndex, localIndex ] = Brick::Index( pos );
+	const auto[ brickIndex, localIndex ] = Brick::MakeIndex( pos );
 	const Brick* brick = cache ? m_brickMap.TryGet( brickIndex ) : nullptr;
 	if( brick )
 	{
@@ -30110,7 +30160,7 @@ IsosurfaceValue IsosurfaceExtractor::m_DualSample( ae::Int3 pos, bool cache )
 IsosurfaceValue IsosurfaceExtractor::m_Sample( ae::Vec3 pos )
 {
 	IsosurfaceValue v;
-	const auto[ brickIndex, localIndex ] = Brick::Index( pos );
+	const auto[ brickIndex, localIndex ] = Brick::MakeIndex( pos );
 	const Brick* brick = [&, &i = brickIndex]()
 	{
 		Brick* b = m_brickMap.TryGet( i );
@@ -31598,7 +31648,7 @@ void ae::AttributeList::m_Add( Attribute* attribute )
 // Warnings
 //------------------------------------------------------------------------------
 #ifdef AE_POP_WARNINGS
-	#if _AE_WINDOWS_
+	#if _AE_MSVC_
 		#pragma warning( pop )
 	#elif _AE_APPLE_
 		#pragma clang diagnostic pop

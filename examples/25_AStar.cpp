@@ -45,12 +45,30 @@ void BuildGraph( ae::Array< AStarNode >& nodes, ae::Array< const AStarNode* >& g
 	const uint32_t nodeCount = 12;
 	const uint32_t goalCount = 3;
 	const uint32_t neighborCount = 3;
+	
+	// Generate nodes with collision checking
+	const float minDistance = kNodeRadius * 2.5f;
 	for( uint32_t i = 0; i < nodeCount; i++ )
 	{
-		const float angle = ae::Random( 0.0f, ae::TWO_PI );
-		float t = ae::Sqrt( ae::Random( 0.0f, 1.0f ) ) * kPathMaxRadius;
-		AStarNode& node = nodes.Append( AStarNode( TAG_EXAMPLE ) );
-		node.pos = ae::Vec3( ae::Cos( angle ) * t, ae::Sin( angle ) * t, 0.0f );
+		std::optional< ae::Vec3 > pos;
+		for( uint32_t attempt = 0; attempt < 100 && !pos.has_value(); attempt++ )
+		{
+			const float angle = ae::Random( 0.0f, ae::TWO_PI );
+			const float radius = ae::Sqrt( ae::Random( 0.0f, 1.0f ) ) * kPathMaxRadius;
+			pos = ae::Vec3( ae::Cos( angle ) * radius, ae::Sin( angle ) * radius, 0.0f );
+			for( const AStarNode& existing : nodes )
+			{
+				if( ( existing.pos - *pos ).Length() < minDistance )
+				{
+					pos.reset();
+					break;
+				}
+			}
+		}
+		if( pos.has_value() )
+		{
+			nodes.Append( AStarNode( TAG_EXAMPLE ) ).pos = *pos;
+		}
 	}
 	for( uint32_t i = 0; i < goalCount; i++ )
 	{
@@ -68,8 +86,8 @@ void BuildGraph( ae::Array< AStarNode >& nodes, ae::Array< const AStarNode* >& g
 	{
 		struct AStarNodePair
 		{
-			AStarNode* node;
-			float dist;
+			AStarNode* node = nullptr;
+			float dist = 0.0f;
 		};
 		ae::Array< AStarNodePair, nodeCount > neighbors;
 		for( AStarNode& neighbor : nodes )
@@ -77,7 +95,7 @@ void BuildGraph( ae::Array< AStarNode >& nodes, ae::Array< const AStarNode* >& g
 			if( &node == &neighbor ) { continue; }
 			neighbors.Append( { &neighbor, ( node.pos - neighbor.pos ).Length() } );
 		}
-		std::partial_sort( neighbors.begin(), neighbors.begin() + neighborCount, neighbors.end(), []( const AStarNodePair& a, const AStarNodePair& b ) { return a.dist < b.dist; } );
+		std::sort( neighbors.begin(), neighbors.end(), []( const AStarNodePair& a, const AStarNodePair& b ) { return a.dist < b.dist; } );
 		for( uint32_t i = 0; i < neighborCount; i++ )
 		{
 			Pair( &node, neighbors[ i ].node );

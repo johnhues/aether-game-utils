@@ -59,7 +59,7 @@ function(ae_add_shared_library)
 	if(ADD_SHARED_LIB_INCLUDE_DIRS)
 		target_include_directories(${ADD_SHARED_LIB_NAME} PRIVATE ${ADD_SHARED_LIB_INCLUDE_DIRS})
 	endif()
-	if(MSVC)
+	if(WIN32)
 		set_target_properties(${ADD_SHARED_LIB_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS YES)
 	elseif(APPLE)
 		if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
@@ -135,7 +135,7 @@ function(ae_add_bundle BUNDLE_NAME)
 	target_link_libraries(${AEAB_TARGET_NAME} PRIVATE "${AEAB_LIBS};${AEAB_PACKAGE_LIBS}")
 	target_include_directories(${AEAB_TARGET_NAME} PRIVATE "${AEAB_INCLUDE_DIRS}")
 
-	if(WIN32)
+	if(MSVC)
 		set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
 			LINK_FLAGS "/ENTRY:mainCRTStartup" # Use main instead of WinMain
 		)

@@ -28,6 +28,7 @@ if(NOT ${AE_LEAN_AND_MEAN})
 	if (NOT GENERATOR_IS_MULTI_CONFIG AND (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
 		set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 	endif()
+	message("Build type: ${CMAKE_BUILD_TYPE}")
 
 	# Enable generation of compile_commands.json for intellisense and clangd
 	set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -50,7 +51,7 @@ set(AE_NAMESPACE aether-game-utils)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT ${AE_LEAN_AND_MEAN})
-	if(MSVC)
+	if(WIN32)
 		add_definitions(-D_UNICODE -DUNICODE) # use unicode
 		add_definitions(-D_CRT_SECURE_NO_WARNINGS) # disable standard library warnings on windows
 	endif()
@@ -87,6 +88,16 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 	endif()
 endif()
 
+if(NOT ${AE_LEAN_AND_MEAN})
+	message("Compiler Information:")
+	message("  CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
+	message("  CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
+	message("  CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
+	message("  CMAKE_C_COMPILER: ${CMAKE_C_COMPILER}")
+	message("  CMAKE_C_COMPILER_ID: ${CMAKE_C_COMPILER_ID}")
+	message("  CMAKE_C_COMPILER_VERSION: ${CMAKE_C_COMPILER_VERSION}")
+endif()
+
 message("")
 
 # ae library
@@ -113,9 +124,9 @@ function(add_ae_library NAME LIB_TYPE)
 	target_include_directories(${NAME} PUBLIC "${AE_ROOT_DIR}")
 	if(APPLE)
 		target_sources(${NAME} PRIVATE "${AE_ROOT_DIR}/aether.h" "${AE_ROOT_DIR}/aether.mm")
-		if (AE_USE_MODULES)
+		if(AE_USE_MODULES)
 			target_compile_definitions(${NAME} PUBLIC AE_USE_MODULES)
-			target_compile_options(${NAME} PUBLIC "-fmodules;-fcxx-modules")
+			target_compile_options(${NAME} PUBLIC -fmodules -fcxx-modules)
 		else()
 			find_library(AE_OPENAL_LIBRARY OpenAL REQUIRED)
 			find_library(AE_CARBON_LIBRARY Carbon REQUIRED)
@@ -124,13 +135,17 @@ function(add_ae_library NAME LIB_TYPE)
 			target_link_libraries(${NAME} PUBLIC ${AE_OPENAL_LIBRARY} ${AE_CARBON_LIBRARY} ${AE_APPKIT_LIBRARY} ${AE_GAMECONTROLLER_LIBRARY})
 		endif()
 		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_SKIP_INSTALL "YES") # See Professional CMake 24.7. Creating And Exporting Archives
-	elseif(MSVC)
-		target_link_libraries(${NAME} PUBLIC version Winmm Imm32 Setupapi Ws2_32)
 	else()
-		if(UNIX)
+		target_sources(${NAME} PRIVATE "${AE_ROOT_DIR}/aether.h" "${AE_ROOT_DIR}/aether.cpp")
+		if(MINGW)
+			target_link_libraries(${NAME} PUBLIC -static-libgcc -static-libstdc++)
+			target_link_libraries(${NAME} PUBLIC comdlg32 gdi32 imm32 ole32 setupapi shell32 user32 version winmm ws2_32 xinput opengl32)
+			target_link_options(${NAME} PUBLIC -static) # For libwinpthread-1.dll
+		elseif(MSVC)
+			target_link_libraries(${NAME} PUBLIC version winmm imm32 setupapi ws2_32)
+		elseif(UNIX)
 			target_compile_options(${NAME} PRIVATE -fPIC) # Fixes errors linking static ae into shared libraries: relocation against symbol 'X' which may bind externally 
 		endif()
-		target_sources(${NAME} PRIVATE "${AE_ROOT_DIR}/aether.h" "${AE_ROOT_DIR}/aether.cpp")
 	endif()
 	if(NOT ${AE_LEAN_AND_MEAN} AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU|AppleClang"))
 		target_compile_options(${NAME} PUBLIC
@@ -138,28 +153,39 @@ function(add_ae_library NAME LIB_TYPE)
 			-Werror=implicit-fallthrough
 			-Werror=narrowing
 			-Werror=uninitialized
-			-Werror=pointer-to-int-cast
-			-Werror=reorder-ctor
+			-Werror=reorder
 			-Werror=mismatched-tags
-			-fmacro-backtrace-limit=0
+			# -Werror=old-style-cast @TODO: Maybe use this? Benefits tbd
 		)
+		if((CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
+			target_compile_options(${NAME} PUBLIC
+				-fmacro-backtrace-limit=0
+			)
+		endif()
 		if((CMAKE_CXX_COMPILER_ID MATCHES "AppleClang"))
 			target_compile_options(${NAME} PUBLIC
 				-Werror=implicit-int-conversion
 			)
+		endif()
+		if(MINGW)
+			target_compile_options(${NAME} PUBLIC -msse4.2)
 		endif()
 	endif()
 	message("  ${NAME} properties:")
 	ae_print_target_properties(${NAME} PREFIX "    ")
 	message("")
 endfunction()
-add_ae_library(ae STATIC) # static library
-add_ae_library(ae_shared SHARED) # shared library (for hot loading)
-set_target_properties(ae_shared PROPERTIES OUTPUT_NAME ae)
+# static library
+add_ae_library(ae STATIC)
 if(NOT ${AE_LEAN_AND_MEAN})
-	# Disable exceptions (not used in aether outside of unit tests)
 	target_compile_options(ae PUBLIC -fno-exceptions)
-	target_compile_options(ae_shared PUBLIC -fno-exceptions)
+endif()
+# shared library (needed for hotloading)
+if(NOT EMSCRIPTEN)
+	add_ae_library(ae_shared SHARED)
+	if(NOT ${AE_LEAN_AND_MEAN})
+		target_compile_options(ae_shared PUBLIC -fno-exceptions)
+	endif()
 endif()
 
 # Examples, extra utilities, and tests

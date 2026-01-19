@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+set(FETCHCONTENT_QUIET OFF)
 Include(FetchContent)
 Include(${AE_ROOT_DIR}/AddBundle.cmake)
 
@@ -13,6 +14,7 @@ if(NOT imgui_FOUND)
 		imgui
 		GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
 		GIT_TAG 7a4fe3d930fcc93d9579df06f046d0738ef06391
+		GIT_PROGRESS TRUE
 	)
 	FetchContent_MakeAvailable(imgui)
 endif()
@@ -23,6 +25,7 @@ if(NOT imguizmo_FOUND)
 		imguizmo
 		GIT_REPOSITORY "https://github.com/johnhues/ImGuizmo.git"
 		GIT_TAG 6e1ea45af646c06bee0e70d93d8cc5d3f2ae45c2
+		GIT_PROGRESS TRUE
 	)
 	FetchContent_MakeAvailable(imguizmo)
 endif()
@@ -34,6 +37,7 @@ if(NOT rapidjson_FOUND)
 		GIT_REPOSITORY "https://github.com/Tencent/rapidjson.git"
 		GIT_TAG 27c3a8dc0e2c9218fe94986d249a12b5ed838f1d
 		SOURCE_SUBDIR "NO-SUBDIRECTORY" # Use a non-existent subdirectory name to skip add_subdirectory()
+		GIT_PROGRESS TRUE
 	)
 	FetchContent_MakeAvailable(rapidjson)
 	file(GLOB_RECURSE rapidjson_SOURCES CONFIGURE_DEPENDS "${rapidjson_SOURCE_DIR}/include/*")
@@ -184,7 +188,7 @@ ae_add_bundle("Platformer2D"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "09_Platformer2D.cpp"
 	RESOURCES "${AE_EXAMPLE_RESOURCES}"
-	LIBS "ae_extras"
+	LIBS "ae;ae_extras"
 )
 
 # Splines
@@ -284,7 +288,7 @@ ae_add_bundle("Small Engine"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "18_SmallEngine.h;18_SmallEngine.cpp;18_Game.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/MeshEditorPlugin.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
 	RESOURCES "${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/tall_tree.obj;data/BlobCube.obj;data/level.tga;data/font.tga"
-	LIBS "ae_extras;imgui;imguizmo;rapidjson"
+	LIBS "ae;ae_extras;imgui;imguizmo;rapidjson"
 )
 
 # Mouse
@@ -337,6 +341,9 @@ ae_add_bundle("Read Me"
 if(APPLE)
 	set_source_files_properties("22_ReadMe.cpp" PROPERTIES COMPILE_FLAGS "-x objective-c++")
 	target_compile_options("22_read_me" PUBLIC "-fmodules;-fcxx-modules")
+elseif(MINGW)
+	target_link_libraries("22_read_me" PUBLIC -static-libgcc -static-libstdc++)
+	target_link_libraries("22_read_me" PUBLIC comdlg32 gdi32 imm32 ole32 setupapi shell32 user32 version winmm ws2_32 xinput opengl32)
 elseif(EMSCRIPTEN)
 elseif(UNIX)
 	target_link_libraries("22_read_me" PUBLIC GL)

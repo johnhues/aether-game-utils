@@ -42,21 +42,21 @@ enum class SerializeEnum
 //------------------------------------------------------------------------------
 // TestStruct
 //------------------------------------------------------------------------------
-AE_PACK( struct TestStruct
+struct TestStruct
 {
-	uint8_t uint8 = 0;
-	uint16_t uint16 = 0;
-	uint32_t uint32 = 0;
-	uint64_t uint64 = 0;
-	int8_t int8 = 0;
-	int16_t int16 = 0;
-	int32_t int32 = 0;
-	int64_t int64 = 0;
-	float f = 0.0f;
-	double d = 0.0;
-	bool b = false;
-	SerializeEnum e = SerializeEnum::Zero;
-	uint32_t rawData[ 6 ] = { 0 };
+	uint8_t uint8;
+	uint16_t uint16;
+	uint32_t uint32;
+	uint64_t uint64;
+	int8_t int8;
+	int16_t int16;
+	int32_t int32;
+	int64_t int64;
+	float f;
+	double d;
+	bool b;
+	SerializeEnum e;
+	uint32_t rawData[ 6 ];
 
 	void Initialize()
 	{
@@ -80,7 +80,7 @@ AE_PACK( struct TestStruct
 		rawData[ 5 ] = 0x45464748;
 	}
 
-	void DoSerialize( ae::BinaryStream* stream )
+	void Serialize( ae::BinaryStream* stream )
 	{
 		stream->SerializeUInt8( uint8 );
 		stream->SerializeUInt16( uint16 );
@@ -96,24 +96,7 @@ AE_PACK( struct TestStruct
 		stream->SerializeEnum( e );
 		stream->SerializeRaw( rawData, sizeof(rawData) );
 	}
-
-	void DoSerialize( ae::BinaryWriter* stream ) const
-	{
-		stream->SerializeUInt8( uint8 );
-		stream->SerializeUInt16( uint16 );
-		stream->SerializeUInt32( uint32 );
-		stream->SerializeUInt64( uint64 );
-		stream->SerializeInt8( int8 );
-		stream->SerializeInt16( int16 );
-		stream->SerializeInt32( int32 );
-		stream->SerializeInt64( int64 );
-		stream->SerializeFloat( f );
-		stream->SerializeDouble( d );
-		stream->SerializeBool( b );
-		stream->SerializeEnum( e );
-		stream->SerializeRaw( rawData, sizeof(rawData) );
-	}
-} );
+};
 
 //------------------------------------------------------------------------------
 // MemberSerializeClass
@@ -332,45 +315,34 @@ TEST_CASE( "BinaryReader( const Array< uint8_t >& data )", "[ae::BinaryStream]" 
 	}
 }
 
-TEST_CASE( "BinaryStream writer serialize basic values", "ae::BinaryStream" )
-{
-	TestStruct _test;
-	_test.Initialize();
-
-	ae::Array< uint8_t > buffer = TAG_TEST;
-	ae::BinaryWriter wStream( &buffer );
-	const TestStruct& test = _test;
-	test.DoSerialize( &wStream );
-	REQUIRE( wStream.IsValid() );
-	REQUIRE( wStream.GetOffset() == sizeof(TestStruct) );
-	REQUIRE( buffer.Data() == wStream.GetData() );
-	REQUIRE( buffer.Length() == sizeof(TestStruct) );
-
-	for( uint32_t i = 0; i < sizeof(TestStruct); i++ )
-	{
-		REQUIRE( buffer[ i ] == reinterpret_cast< const uint8_t* >( &test )[ i ] );
-	}
-}
-
 TEST_CASE( "BinaryStream reader serialize basic values", "ae::BinaryStream" )
 {
-	TestStruct test0;
-	test0.Initialize();
-	ae::Array< uint8_t > buffer = TAG_TEST;
-	buffer.AppendArray( reinterpret_cast< const uint8_t* >( &test0 ), sizeof(TestStruct) );
+	ae::Array< uint8_t > wStreamBuffer = TAG_TEST;
+	ae::BinaryWriter wStream = &wStreamBuffer;
 
+	// Write
+	TestStruct test0;
+	AE_STATIC_ASSERT( std::is_pod_v< TestStruct > );
+	memset( &test0, 0, sizeof(TestStruct) ); // Clear padding for memcmp
+	test0.Initialize();
+
+	wStream.SerializeObject( test0 );
+	REQUIRE( wStream.IsValid() );
+
+	// Read
 	TestStruct test1;
-	ae::BinaryReader rStream( buffer );
+	AE_STATIC_ASSERT( std::is_pod_v< TestStruct > );
+	memset( &test1, 0, sizeof(TestStruct) ); // Clear padding for memcmp
+	
+	ae::BinaryReader rStream( wStreamBuffer.Data(), wStreamBuffer.Length() );
 	REQUIRE( rStream.IsValid() );
-	REQUIRE( rStream.GetData() == buffer.Data() );
+	REQUIRE( rStream.GetData() == wStreamBuffer.Data() );
 	REQUIRE( rStream.GetOffset() == 0 );
-	REQUIRE( rStream.GetSize() == buffer.Size() );
-	REQUIRE( rStream.PeekReadData() == buffer.Data() );
-	REQUIRE( rStream.GetRemainingBytes() == buffer.Length() );
-	test1.DoSerialize( &rStream );
+	REQUIRE( rStream.GetSize() == wStreamBuffer.Length() );
+	REQUIRE( rStream.PeekReadData() == wStreamBuffer.Data() );
+	REQUIRE( rStream.GetRemainingBytes() == wStreamBuffer.Length() );
+	rStream.SerializeObject( test1 );
 	REQUIRE( rStream.IsValid() );
-	REQUIRE( rStream.GetOffset() == sizeof(TestStruct) );
-	REQUIRE( rStream.PeekReadData() == buffer.Data() + sizeof(TestStruct) );
 	REQUIRE( rStream.GetRemainingBytes() == 0 );
 	REQUIRE( memcmp( &test0, &test1, sizeof(TestStruct) ) == 0 );
 }

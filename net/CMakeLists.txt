@@ -14,11 +14,15 @@ FetchContent_Declare(
 	GIT_REPOSITORY "https://github.com/lsalzman/enet.git"
 	GIT_TAG cf735e639e5c9e3d2d84d71f1dbf789e8c2f3fd0
 	SOURCE_SUBDIR "NO-SUBDIRECTORY" # Use a non-existent subdirectory name to skip add_subdirectory()
+	GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(enet)
 add_library(enet STATIC "")
 set_target_properties(enet PROPERTIES DEBUG_POSTFIX "d")
 target_include_directories(enet PUBLIC ${enet_SOURCE_DIR}/include)
+if(WIN32)
+	target_link_libraries(enet PUBLIC ws2_32 winmm)
+endif()
 target_sources(enet PRIVATE
 	${enet_SOURCE_DIR}/callbacks.c
 	${enet_SOURCE_DIR}/compress.c

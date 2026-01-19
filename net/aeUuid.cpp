@@ -40,7 +40,7 @@ THE SOFTWARE.
 	#define GUID_CFUUID
 #endif
 
-#ifdef _MSC_VER
+#if defined(_WIN32) || defined(_WIN64)
 	#define GUID_WINDOWS
 #endif
 

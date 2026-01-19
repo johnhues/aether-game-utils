@@ -1,4 +1,4 @@
-name: Ubuntu g++
+name: Ubuntu MinGW
 on: [push]
 jobs:
   build-and-test:
@@ -8,7 +8,7 @@ jobs:
       - name: Install Packages
         run: |
           sudo apt update -qq
-          sudo apt install -y --no-install-recommends ca-certificates gpg wget libgl1-mesa-dev uuid-dev g++
+          sudo apt install -y --no-install-recommends ca-certificates gpg wget mingw-w64 wine64
           test -f /usr/share/doc/kitware-archive-keyring/copyright || wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
           echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ noble main' | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
           sudo apt update -qq
@@ -17,8 +17,8 @@ jobs:
       - name: Create Build Directory
         run: cmake -E make_directory build
       - name: Configure
-        run: CC=gcc CXX=g++ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
+        run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=.github/toolchains/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
       - name: Build
         run: make -C build all -j$(nproc)
       - name: Test
-        run: build/test/test
+        run: wine64 build/test/test.exe

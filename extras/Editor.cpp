@@ -3853,7 +3853,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 		{
 			char buf[ 256 ];
 			auto val = var->GetObjectValueAsString( component, idx );
-			strlcpy( buf, val.c_str(), sizeof(buf) );
+			ae::_strlcpy( buf, val.c_str(), sizeof(buf) );
 			ImGui::Text( "%s", varName.c_str() );
 			if( ImGui::InputTextMultiline( varName.c_str(), buf, sizeof(buf), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4 ), 0 ) )
 			{
@@ -4486,12 +4486,12 @@ void Editor::m_Fork()
 	PROCESS_INFORMATION procInfo;
 	char args[ 256 ];
 	args[ 0 ] = 0;
-	strlcat( args, m_params->argv[ 0 ], sizeof(args) );
-	strlcat( args, " --editor", sizeof(args) );
+	ae::_strlcat( args, m_params->argv[ 0 ], sizeof(args) );
+	ae::_strlcat( args, " --editor", sizeof(args) );
 	if( levelPath[ 0 ] )
 	{
-		strlcat( args, " --level ", sizeof(args) );
-		strlcat( args, levelPath, sizeof(args) );
+		ae::_strlcat( args, " --level ", sizeof(args) );
+		ae::_strlcat( args, levelPath, sizeof(args) );
 	}
 	CreateProcessA(
 		m_params->argv[ 0 ],
