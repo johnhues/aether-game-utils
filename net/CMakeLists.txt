@@ -39,9 +39,6 @@ target_sources(enet PRIVATE
 add_library(ae_net STATIC "")
 set_target_properties(ae_net PROPERTIES DEBUG_POSTFIX "d")
 target_link_libraries(ae_net ae enet)
-if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
-	target_link_libraries(ae_net uuid)
-endif()
 target_include_directories(ae_net PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_sources(ae_net PRIVATE
 	include/ae/aeNet.h

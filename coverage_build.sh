@@ -18,6 +18,6 @@ wine build_mingw/test/test.exe
 # cmake --build build_emscripten
 # node build_emscripten/test/test.js
 
-# act -W .github/workflows/ubuntu_clang.yml --container-architecture linux/amd64
-# act -W .github/workflows/ubuntu_gcc.yml --container-architecture linux/amd64
-# act -W .github/workflows/ubuntu_mingw.yml --container-architecture linux/amd64
+act -W .github/workflows/ubuntu_clang.yml --container-architecture linux/amd64
+act -W .github/workflows/ubuntu_gcc.yml --container-architecture linux/amd64
+act -W .github/workflows/ubuntu_mingw.yml --container-architecture linux/amd64

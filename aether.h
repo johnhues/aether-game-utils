@@ -17380,76 +17380,6 @@ void TimeStep::Tick()
 //------------------------------------------------------------------------------
 // ae::UUID member functions
 //------------------------------------------------------------------------------
-} // namespace ae
-#if _AE_APPLE_
-
-#include <CoreFoundation/CFUUID.h>
-ae::UUID ae::UUID::Generate()
-{
-	ae::UUID r;
-	auto newId = CFUUIDCreate( NULL );
-	auto bytes = CFUUIDGetUUIDBytes( newId );
-	CFRelease( newId );
-	r.data[ 0 ] = bytes.byte0;
-	r.data[ 1 ] = bytes.byte1;
-	r.data[ 2 ] = bytes.byte2;
-	r.data[ 3 ] = bytes.byte3;
-	r.data[ 4 ] = bytes.byte4;
-	r.data[ 5 ] = bytes.byte5;
-	r.data[ 6 ] = bytes.byte6;
-	r.data[ 7 ] = bytes.byte7;
-	r.data[ 8 ] = bytes.byte8;
-	r.data[ 9 ] = bytes.byte9;
-	r.data[ 10 ] = bytes.byte10;
-	r.data[ 11 ] = bytes.byte11;
-	r.data[ 12 ] = bytes.byte12;
-	r.data[ 13 ] = bytes.byte13;
-	r.data[ 14 ] = bytes.byte14;
-	r.data[ 15 ] = bytes.byte15;
-	return r;
-}
-
-#elif _AE_WINDOWS_
-
-#include <objbase.h>
-ae::UUID ae::UUID::Generate()
-{
-	ae::UUID r;
-	GUID newId;
-	CoCreateGuid( &newId );
-	r.data[ 0 ] = (uint8_t)( ( newId.Data1 >> 24 ) & 0xFF );
-	r.data[ 1 ] = (uint8_t)( ( newId.Data1 >> 16 ) & 0xFF );
-	r.data[ 2 ] = (uint8_t)( ( newId.Data1 >> 8 ) & 0xFF );
-	r.data[ 3 ] = (uint8_t)( ( newId.Data1 ) & 0xff );
-	r.data[ 4 ] = (uint8_t)( ( newId.Data2 >> 8 ) & 0xFF );
-	r.data[ 5 ] = (uint8_t)( ( newId.Data2 ) & 0xff );
-	r.data[ 6 ] = (uint8_t)( ( newId.Data3 >> 8 ) & 0xFF );
-	r.data[ 7 ] = (uint8_t)( ( newId.Data3 ) & 0xFF );
-	r.data[ 8 ] = newId.Data4[ 0 ];
-	r.data[ 9 ] = newId.Data4[ 1 ];
-	r.data[ 10 ] = newId.Data4[ 2 ];
-	r.data[ 11 ] = newId.Data4[ 3 ];
-	r.data[ 12 ] = newId.Data4[ 4 ];
-	r.data[ 13 ] = newId.Data4[ 5 ];
-	r.data[ 14 ] = newId.Data4[ 6 ];
-	r.data[ 15 ] = newId.Data4[ 7 ];
-	return r;
-}
-
-#elif _AE_LINUX_ || _AE_EMSCRIPTEN_
-
-#include <uuid/uuid.h>
-ae::UUID UUID::Generate()
-{
-	ae::UUID r;
-	uuid_t newId;
-	uuid_generate( newId );
-	memcpy( r.data, newId, 16 );
-	return r;
-}
-
-#else
-
 ae::UUID ae::UUID::Generate()
 {
 	ae::UUID r;
@@ -17468,28 +17398,25 @@ ae::UUID ae::UUID::Generate()
 	const uint16_t ra = static_cast< uint16_t >( dis( gen ) & 0x0FFFULL ); // 12-bit rand_a
 	const uint64_t rb = ( dis( gen ) & 0x3FFFFFFFFFFFFFFFULL ); // 62-bit rand_b
 	// High 64 bits: [timestamp_ms(48)] [version(4)] [rand_a(12)] — big-endian byte order
-	r.uuid[ 0 ] = static_cast< uint8_t >( ( ms48 >> 40 ) & 0xFF );
-	r.uuid[ 1 ] = static_cast< uint8_t >( ( ms48 >> 32 ) & 0xFF );
-	r.uuid[ 2 ] = static_cast< uint8_t >( ( ms48 >> 24 ) & 0xFF );
-	r.uuid[ 3 ] = static_cast< uint8_t >( ( ms48 >> 16 ) & 0xFF );
-	r.uuid[ 4 ] = static_cast< uint8_t >( ( ms48 >> 8 ) & 0xFF );
-	r.uuid[ 5 ] = static_cast< uint8_t >( ( ms48 ) & 0xFF );
-	r.uuid[ 6 ] = static_cast< uint8_t >( ( 0x7u << 4 ) | ( ( ra >> 8 ) & 0x0F ) );
-	r.uuid[ 7 ] = static_cast< uint8_t >( ra & 0xFF );
+	r.data[ 0 ] = static_cast< uint8_t >( ( ms48 >> 40 ) & 0xFF );
+	r.data[ 1 ] = static_cast< uint8_t >( ( ms48 >> 32 ) & 0xFF );
+	r.data[ 2 ] = static_cast< uint8_t >( ( ms48 >> 24 ) & 0xFF );
+	r.data[ 3 ] = static_cast< uint8_t >( ( ms48 >> 16 ) & 0xFF );
+	r.data[ 4 ] = static_cast< uint8_t >( ( ms48 >> 8 ) & 0xFF );
+	r.data[ 5 ] = static_cast< uint8_t >( ( ms48 ) & 0xFF );
+	r.data[ 6 ] = static_cast< uint8_t >( ( 0x7u << 4 ) | ( ( ra >> 8 ) & 0x0F ) );
+	r.data[ 7 ] = static_cast< uint8_t >( ra & 0xFF );
 	// Low 64 bits: [variant(2)=10] [rand_b(62)] — big-endian byte order
-	r.uuid[ 8 ]  = static_cast< uint8_t >( 0x80 | ( ( rb >> 56 ) & 0x3F ) );
-	r.uuid[ 9 ]  = static_cast< uint8_t >( ( rb >> 48 ) & 0xFF );
-	r.uuid[ 10 ] = static_cast< uint8_t >( ( rb >> 40 ) & 0xFF );
-	r.uuid[ 11 ] = static_cast< uint8_t >( ( rb >> 32 ) & 0xFF );
-	r.uuid[ 12 ] = static_cast< uint8_t >( ( rb >> 24 ) & 0xFF );
-	r.uuid[ 13 ] = static_cast< uint8_t >( ( rb >> 16 ) & 0xFF );
-	r.uuid[ 14 ] = static_cast< uint8_t >( ( rb >> 8 ) & 0xFF );
-	r.uuid[ 15 ] = static_cast< uint8_t >( rb & 0xFF );
+	r.data[ 8 ]  = static_cast< uint8_t >( 0x80 | ( ( rb >> 56 ) & 0x3F ) );
+	r.data[ 9 ]  = static_cast< uint8_t >( ( rb >> 48 ) & 0xFF );
+	r.data[ 10 ] = static_cast< uint8_t >( ( rb >> 40 ) & 0xFF );
+	r.data[ 11 ] = static_cast< uint8_t >( ( rb >> 32 ) & 0xFF );
+	r.data[ 12 ] = static_cast< uint8_t >( ( rb >> 24 ) & 0xFF );
+	r.data[ 13 ] = static_cast< uint8_t >( ( rb >> 16 ) & 0xFF );
+	r.data[ 14 ] = static_cast< uint8_t >( ( rb >> 8 ) & 0xFF );
+	r.data[ 15 ] = static_cast< uint8_t >( rb & 0xFF );
 	return r;
 }
-
-#endif
-namespace ae {
 
 bool UUID::operator==( const UUID& other ) const { return memcmp( data, other.data, sizeof( data ) ) == 0; }
 bool UUID::operator!=( const UUID& other ) const { return memcmp( data, other.data, sizeof( data ) ) != 0; }
