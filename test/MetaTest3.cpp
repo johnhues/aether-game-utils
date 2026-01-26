@@ -54,3 +54,5 @@ AE_REGISTER_CLASS_VAR( SomeClass, enumTest );
 AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( SomeClass, enumTest, prop0, val0 );
 AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( SomeClass, enumTest, prop1, val0 );
 AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( SomeClass, enumTest, prop1, val1 );
+
+AE_REGISTER_CLASS_VAR( SomeClass, uuidMember );

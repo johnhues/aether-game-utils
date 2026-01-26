@@ -256,14 +256,21 @@ TEST_CASE( "Aggregate vars", "[aeMeta]" )
 
 TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 {
-	SomeClass _c;
-	_c.intMember = 123;
-	_c.boolMember = true;
-	_c.enumTest = TestEnumClass::Five;
-	const SomeClass& c = _c;
+	const SomeClass c = []()
+	{
+		SomeClass r;
+		r.intMember = 123;
+		r.boolMember = true;
+		r.enumTest = TestEnumClass::Five;
+		for( uint32_t i = 0; i < 16; ++i )
+		{
+			r.uuidMember.data[ i ] = (uint8_t)i;
+		}
+		return r;
+	}();
 	const ae::ClassType* type = ae::GetClassTypeFromObject( &c );
 	REQUIRE( type );
-	REQUIRE( type->GetVarCount( false ) == 3 );
+	REQUIRE( type->GetVarCount( false ) == 4 );
 
 	{
 		int32_t intMember = 0;
@@ -273,7 +280,7 @@ TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 		REQUIRE( intVarType );
 		REQUIRE( intVarType->GetType() == ae::BasicType::Int32 );
 		REQUIRE( intVar->GetObjectValue< int32_t >( &c, &intMember ) );
-		REQUIRE( intMember == 123 );
+		REQUIRE( intMember == c.intMember );
 	}
 	{
 		bool boolMember = false;
@@ -283,7 +290,7 @@ TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 		REQUIRE( boolVarType );
 		REQUIRE( boolVarType->GetType() == ae::BasicType::Bool );
 		REQUIRE( boolVar->GetObjectValue< bool >( &c, &boolMember ) );
-		REQUIRE( boolMember == true );
+		REQUIRE( boolMember == c.boolMember );
 	}
 	{
 		TestEnumClass enumTest = TestEnumClass::Zero;
@@ -293,7 +300,21 @@ TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 		REQUIRE( enumVarType );
 		REQUIRE( ae::Str32( "TestEnumClass" ) == enumVarType->GetName() );
 		REQUIRE( enumVar->GetObjectValue< TestEnumClass >( &c, &enumTest ) );
-		REQUIRE( enumTest == TestEnumClass::Five );
+		REQUIRE( enumTest == c.enumTest );
+	}
+	{
+		ae::UUID uuid;
+		const ae::ClassVar* uuidVar = type->GetVarByName( "uuidMember", false );
+		REQUIRE( uuidVar );
+		const ae::BasicType* uuidVarType = uuidVar->GetOuterVarType().AsVarType< ae::BasicType >();
+		REQUIRE( uuidVarType );
+		REQUIRE( uuidVarType->GetType() == ae::BasicType::UUID );
+		REQUIRE( uuidVar->GetObjectValue< ae::UUID >( &c, &uuid ) );
+		REQUIRE( uuid == c.uuidMember );
+		const ae::Str64 uuidStrExpected = "00010203-0405-0607-0809-0a0b0c0d0e0f";
+		REQUIRE( ae::ToString( uuid ) == uuidStrExpected );
+		const auto strActual = uuidVar->GetObjectValueAsString( &c );
+		REQUIRE( strActual == uuidStrExpected );
 	}
 }
 

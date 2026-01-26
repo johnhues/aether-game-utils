@@ -1577,6 +1577,20 @@ using Str256 = Str< 256 >;
 using Str512 = Str< 512 >;
 
 //------------------------------------------------------------------------------
+// ae::UUID struct
+//------------------------------------------------------------------------------
+struct UUID
+{
+	UUID() = default;
+	static UUID Generate();
+
+	bool operator==( const UUID& other ) const;
+	bool operator!=( const UUID& other ) const;
+
+	uint8_t data[ 16 ] = { 0 };
+};
+
+//------------------------------------------------------------------------------
 // ae::Pair class
 //------------------------------------------------------------------------------
 template< typename K, typename V >
@@ -6438,6 +6452,7 @@ public:
 		Quaternion,
 		Matrix4,
 		Color,
+		UUID,
 
 		Class, // @TODO: Remove
 		Enum, // @TODO: Remove
@@ -8921,6 +8936,14 @@ inline std::string ToString( ae::Matrix4 v )
 	return std::string( str, length );
 }
 
+template<>
+inline std::string ToString( ae::UUID v )
+{
+	char str[ 37 ];
+	sprintf( str, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", v.data[ 0 ], v.data[ 1 ], v.data[ 2 ], v.data[ 3 ], v.data[ 4 ], v.data[ 5 ], v.data[ 6 ], v.data[ 7 ], v.data[ 8 ], v.data[ 9 ], v.data[ 10 ], v.data[ 11 ], v.data[ 12 ], v.data[ 13 ], v.data[ 14 ], v.data[ 15 ] );
+	return std::string( str, 36 );
+}
+
 //------------------------------------------------------------------------------
 // ae::FromString functions
 //------------------------------------------------------------------------------
@@ -9158,6 +9181,19 @@ inline bool FromString( const char* str, const bool& defaultValue )
 	// @TODO: Check int first
 	if( sscanf( str, "%f", &f ) == 1 ) { return (bool)f; }
 	return defaultValue;
+}
+
+template<>
+inline ae::UUID FromString( const char* str, const ae::UUID& defaultValue )
+{
+	ae::UUID r = defaultValue;
+#define _aescn8 "%2" SCNx8
+	sscanf( str, _aescn8 _aescn8 _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 _aescn8 _aescn8 _aescn8 _aescn8,
+		&r.data[ 0 ], &r.data[ 1 ], &r.data[ 2 ], &r.data[ 3 ], &r.data[ 4 ], &r.data[ 5 ], &r.data[ 6 ], &r.data[ 7 ],
+		&r.data[ 8 ], &r.data[ 9 ], &r.data[ 10 ], &r.data[ 11 ], &r.data[ 12 ], &r.data[ 13 ], &r.data[ 14 ], &r.data[ 15 ]
+	);
+#undef _aescn8
+	return r;
 }
 
 //------------------------------------------------------------------------------
@@ -9550,6 +9586,38 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
 		head++;
 	}
 	m_Format( head, args... );
+}
+
+template< uint32_t N >
+inline bool operator==( const std::string& str0, const ae::Str< N >& str1 )
+{
+	return str0 == str1.c_str();
+}
+
+template< uint32_t N >
+inline bool operator!=( const std::string& str0, const ae::Str< N >& str1 )
+{
+	return str0 != str1.c_str();
+}
+
+//------------------------------------------------------------------------------
+// ae::UUID functions
+//------------------------------------------------------------------------------
+template<> inline uint32_t GetHash32( const ae::UUID& e )
+{
+	return ae::Hash32().HashData( e.data, sizeof(e.data) ).Get();
+}
+
+std::ostream& operator<<( std::ostream& os, const ae::UUID& uuid );
+
+inline void Serialize( ae::BinaryStream* stream, ae::UUID* uuid )
+{
+	stream->SerializeRaw( uuid->data, sizeof( uuid->data ) );
+}
+
+inline void Serialize( ae::BinaryWriter* stream, const ae::UUID* uuid )
+{
+	stream->SerializeRaw( uuid->data, sizeof( uuid->data ) );
 }
 
 //------------------------------------------------------------------------------
@@ -13677,6 +13745,7 @@ _ae_DefineBasicVarType( ae::Str64, String, uint32_t GetMaxLength() const overrid
 _ae_DefineBasicVarType( ae::Str128, String, uint32_t GetMaxLength() const override { return ae::Str128::MaxLength(); } );
 _ae_DefineBasicVarType( ae::Str256, String, uint32_t GetMaxLength() const override { return ae::Str256::MaxLength(); } );
 _ae_DefineBasicVarType( ae::Str512, String, uint32_t GetMaxLength() const override { return ae::Str512::MaxLength(); } );
+_ae_DefineBasicVarType( ae::UUID, UUID );
 
 namespace ae {
 
@@ -17306,6 +17375,128 @@ void TimeStep::Tick()
 	}
 	
 	m_stepCount++;
+}
+
+//------------------------------------------------------------------------------
+// ae::UUID member functions
+//------------------------------------------------------------------------------
+} // namespace ae
+#if _AE_APPLE_
+
+#include <CoreFoundation/CFUUID.h>
+ae::UUID ae::UUID::Generate()
+{
+	ae::UUID r;
+	auto newId = CFUUIDCreate( NULL );
+	auto bytes = CFUUIDGetUUIDBytes( newId );
+	CFRelease( newId );
+	r.data[ 0 ] = bytes.byte0;
+	r.data[ 1 ] = bytes.byte1;
+	r.data[ 2 ] = bytes.byte2;
+	r.data[ 3 ] = bytes.byte3;
+	r.data[ 4 ] = bytes.byte4;
+	r.data[ 5 ] = bytes.byte5;
+	r.data[ 6 ] = bytes.byte6;
+	r.data[ 7 ] = bytes.byte7;
+	r.data[ 8 ] = bytes.byte8;
+	r.data[ 9 ] = bytes.byte9;
+	r.data[ 10 ] = bytes.byte10;
+	r.data[ 11 ] = bytes.byte11;
+	r.data[ 12 ] = bytes.byte12;
+	r.data[ 13 ] = bytes.byte13;
+	r.data[ 14 ] = bytes.byte14;
+	r.data[ 15 ] = bytes.byte15;
+	return r;
+}
+
+#elif _AE_WINDOWS_
+
+#include <objbase.h>
+ae::UUID ae::UUID::Generate()
+{
+	ae::UUID r;
+	GUID newId;
+	CoCreateGuid( &newId );
+	r.data[ 0 ] = (uint8_t)( ( newId.Data1 >> 24 ) & 0xFF );
+	r.data[ 1 ] = (uint8_t)( ( newId.Data1 >> 16 ) & 0xFF );
+	r.data[ 2 ] = (uint8_t)( ( newId.Data1 >> 8 ) & 0xFF );
+	r.data[ 3 ] = (uint8_t)( ( newId.Data1 ) & 0xff );
+	r.data[ 4 ] = (uint8_t)( ( newId.Data2 >> 8 ) & 0xFF );
+	r.data[ 5 ] = (uint8_t)( ( newId.Data2 ) & 0xff );
+	r.data[ 6 ] = (uint8_t)( ( newId.Data3 >> 8 ) & 0xFF );
+	r.data[ 7 ] = (uint8_t)( ( newId.Data3 ) & 0xFF );
+	r.data[ 8 ] = newId.Data4[ 0 ];
+	r.data[ 9 ] = newId.Data4[ 1 ];
+	r.data[ 10 ] = newId.Data4[ 2 ];
+	r.data[ 11 ] = newId.Data4[ 3 ];
+	r.data[ 12 ] = newId.Data4[ 4 ];
+	r.data[ 13 ] = newId.Data4[ 5 ];
+	r.data[ 14 ] = newId.Data4[ 6 ];
+	r.data[ 15 ] = newId.Data4[ 7 ];
+	return r;
+}
+
+#elif _AE_LINUX_ || _AE_EMSCRIPTEN_
+
+#include <uuid/uuid.h>
+ae::UUID UUID::Generate()
+{
+	ae::UUID r;
+	uuid_t newId;
+	uuid_generate( newId );
+	memcpy( r.data, newId, 16 );
+	return r;
+}
+
+#else
+
+ae::UUID ae::UUID::Generate()
+{
+	ae::UUID r;
+	// UUID v7:
+	// 48 bits: timestamp_ms
+	// 4 bits: version (0111 = 7)
+	// 12 bits: rand_a (sub-millisecond precision/randomness)
+	// 2 bits: variant (10)
+	// 62 bits: rand_b
+	std::random_device rd;
+	std::mt19937_64 gen( rd() );
+	std::uniform_int_distribution< uint64_t > dis;
+	const auto now = std::chrono::system_clock::now();
+	const uint64_t ms = std::chrono::duration_cast< std::chrono::milliseconds >( now.time_since_epoch() ).count();
+	const uint64_t ms48 = ( ms & 0x0000FFFFFFFFFFFFULL );
+	const uint16_t ra = static_cast< uint16_t >( dis( gen ) & 0x0FFFULL ); // 12-bit rand_a
+	const uint64_t rb = ( dis( gen ) & 0x3FFFFFFFFFFFFFFFULL ); // 62-bit rand_b
+	// High 64 bits: [timestamp_ms(48)] [version(4)] [rand_a(12)] — big-endian byte order
+	r.uuid[ 0 ] = static_cast< uint8_t >( ( ms48 >> 40 ) & 0xFF );
+	r.uuid[ 1 ] = static_cast< uint8_t >( ( ms48 >> 32 ) & 0xFF );
+	r.uuid[ 2 ] = static_cast< uint8_t >( ( ms48 >> 24 ) & 0xFF );
+	r.uuid[ 3 ] = static_cast< uint8_t >( ( ms48 >> 16 ) & 0xFF );
+	r.uuid[ 4 ] = static_cast< uint8_t >( ( ms48 >> 8 ) & 0xFF );
+	r.uuid[ 5 ] = static_cast< uint8_t >( ( ms48 ) & 0xFF );
+	r.uuid[ 6 ] = static_cast< uint8_t >( ( 0x7u << 4 ) | ( ( ra >> 8 ) & 0x0F ) );
+	r.uuid[ 7 ] = static_cast< uint8_t >( ra & 0xFF );
+	// Low 64 bits: [variant(2)=10] [rand_b(62)] — big-endian byte order
+	r.uuid[ 8 ]  = static_cast< uint8_t >( 0x80 | ( ( rb >> 56 ) & 0x3F ) );
+	r.uuid[ 9 ]  = static_cast< uint8_t >( ( rb >> 48 ) & 0xFF );
+	r.uuid[ 10 ] = static_cast< uint8_t >( ( rb >> 40 ) & 0xFF );
+	r.uuid[ 11 ] = static_cast< uint8_t >( ( rb >> 32 ) & 0xFF );
+	r.uuid[ 12 ] = static_cast< uint8_t >( ( rb >> 24 ) & 0xFF );
+	r.uuid[ 13 ] = static_cast< uint8_t >( ( rb >> 16 ) & 0xFF );
+	r.uuid[ 14 ] = static_cast< uint8_t >( ( rb >> 8 ) & 0xFF );
+	r.uuid[ 15 ] = static_cast< uint8_t >( rb & 0xFF );
+	return r;
+}
+
+#endif
+namespace ae {
+
+bool UUID::operator==( const UUID& other ) const { return memcmp( data, other.data, sizeof( data ) ) == 0; }
+bool UUID::operator!=( const UUID& other ) const { return memcmp( data, other.data, sizeof( data ) ) != 0; }
+
+std::ostream& operator<<( std::ostream& os, const ae::UUID& uuid )
+{
+	return os << ae::ToString( uuid );
 }
 
 //------------------------------------------------------------------------------
@@ -31043,6 +31234,7 @@ const char* ae::ClassVar::GetTypeName() const
 		case ae::BasicType::Quaternion: return "ae::Quaternion";
 		case ae::BasicType::Color: return "ae::Color";
 		case ae::BasicType::Matrix4: return "ae::Matrix4";
+		case ae::BasicType::UUID: return "ae::UUID";
 		case ae::BasicType::String: return "String";
 		case ae::BasicType::Class:
 		{
@@ -31222,6 +31414,7 @@ std::string ae::BasicType::GetVarDataAsString( ae::ConstDataPointer _varData ) c
 		case BasicType::Quaternion: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Quaternion* >( varData ) ).c_str();
 		case BasicType::Matrix4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
 		case BasicType::Color: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
+		case BasicType::UUID: return ae::Str64::Format( "#", *reinterpret_cast< const ae::UUID* >( varData ) ).c_str();
 		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
 		case BasicType::Enum: AE_FAIL(); break; // @TODO: Remove
 		case BasicType::Pointer: AE_FAIL(); break; // @TODO: Remove
@@ -31381,6 +31574,12 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Color) );
 			*(ae::Color*)varData = ae::FromString( value, ae::Color::Black() );
+			return true;
+		}
+		case BasicType::UUID:
+		{
+			AE_ASSERT( typeSize == sizeof(ae::UUID) );
+			*(ae::UUID*)varData = ae::FromString< ae::UUID >( value, ae::UUID() );
 			return true;
 		}
 		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove

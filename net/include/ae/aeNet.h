@@ -28,7 +28,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "ae/aeUuid.h"
 
 //------------------------------------------------------------------------------
 // Client / server constants
@@ -72,7 +71,7 @@ struct SendInfo
 //------------------------------------------------------------------------------
 struct AetherPlayer
 {
-  AetherUuid uuid = AetherUuid::Zero();
+  ae::UUID uuid;
   void* userData = nullptr;
   bool alive = false;
 
@@ -101,7 +100,7 @@ struct AetherClient
   bool m_isConnecting;
 };
 
-AetherClient* AetherClient_New( AetherUuid uuid, const char* ip, uint16_t port );
+AetherClient* AetherClient_New( ae::UUID uuid, const char* ip, uint16_t port );
 void AetherClient_Delete( AetherClient* );
 
 void AetherClient_Connect( AetherClient* _ac );
@@ -168,12 +167,12 @@ struct AetherServerHeader
 struct AetherClientHeader
 {
   AetherMsgId msgId;
-  AetherUuid uuid;
+  ae::UUID uuid;
 };
 
 struct AetherMsgConnect
 {
-  AetherUuid uuid;
+  ae::UUID uuid;
 };
 
 const int32_t kNetChannelReliable = 0;

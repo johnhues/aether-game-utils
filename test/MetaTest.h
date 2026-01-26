@@ -65,6 +65,7 @@ public:
 	int32_t intMember;
 	bool boolMember;
 	TestEnumClass enumTest;
+	ae::UUID uuidMember;
 };
 
 
@@ -79,6 +80,7 @@ namespace Namespace0 {
 			int32_t intMember;
 			bool boolMember;
 			TestEnumClass enumTest;
+			ae::UUID uuidMember;
 		};
 	}
 }

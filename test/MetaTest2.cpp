@@ -68,6 +68,8 @@ AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, Namespac
 AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop1, val0 );
 AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop1, val1 );
 
+AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, Namespace1, NamespaceClass), uuidMember );
+
 //------------------------------------------------------------------------------
 // AggregateClass
 //------------------------------------------------------------------------------

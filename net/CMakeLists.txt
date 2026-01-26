@@ -46,9 +46,7 @@ target_include_directories(ae_net PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_sources(ae_net PRIVATE
 	include/ae/aeNet.h
 	include/ae/EmSocket.h
-	include/ae/aeUuid.h
 	aeNetClient.cpp
 	aeNetServer.cpp
-	aeUuid.cpp
 	EmSocket.cpp
 )

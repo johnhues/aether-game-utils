@@ -42,7 +42,7 @@ int main()
     return 1;
   }
   ae::NetObjectServer netObjectServer;
-  ae::Map< AetherUuid, ae::NetObjectConnection* > netObjectConnections = TAG_EXAMPLE;
+  ae::Map< ae::UUID, ae::NetObjectConnection* > netObjectConnections = TAG_EXAMPLE;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
   double nextSend = 0.0;
 
@@ -58,7 +58,7 @@ int main()
     ServerReceiveInfo receiveInfo;
     while( AetherServer_Receive( server, &receiveInfo ) )
     {
-      AetherUuid playerId = receiveInfo.player->uuid;
+      ae::UUID playerId = receiveInfo.player->uuid;
       int32_t objIdx = gameObjects.FindFn( [ playerId ]( const GameObject& o ){ return o.playerId == playerId; } );
       GameObject* obj = ( objIdx >= 0 ) ? &gameObjects[ objIdx ] : nullptr;
       
