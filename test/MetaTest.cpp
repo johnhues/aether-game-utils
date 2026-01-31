@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "MetaTest.h"
+#include "TestUtils.h"
 #include <catch2/catch_test_macros.hpp>
 
 //------------------------------------------------------------------------------
@@ -114,8 +115,8 @@ TEST_CASE( "Class properties", "[aeMeta]" )
 
 	REQUIRE( !type->HasProperty( "someProp3" ) );
 	REQUIRE( type->GetPropertyIndex( "someProp3" ) == -1 );
-	REQUIRE_THROWS( type->GetPropertyName( 3 ) );
-	REQUIRE_THROWS( type->GetPropertyValueCount( 3 ) );
+	AE_REQUIRE_THROWS( type->GetPropertyName( 3 ) );
+	AE_REQUIRE_THROWS( type->GetPropertyValueCount( 3 ) );
 }
 
 TEST_CASE( "Class vars", "[aeMeta]" )
@@ -336,11 +337,11 @@ TEST_CASE( "Null DataPointer", "[aeMeta]" )
 	REQUIRE( !dataVarType );
 	REQUIRE( !dataClassVar0 );
 	REQUIRE( !dataClassVar1 );
-	REQUIRE_THROWS( dataDefault.GetVarType() );
-	REQUIRE_THROWS( dataTemplate.GetVarType() );
-	REQUIRE_THROWS( dataVarType.GetVarType() );
-	REQUIRE_THROWS( dataClassVar0.GetVarType() );
-	REQUIRE_THROWS( dataClassVar1.GetVarType() );
+	AE_REQUIRE_THROWS( dataDefault.GetVarType() );
+	AE_REQUIRE_THROWS( dataTemplate.GetVarType() );
+	AE_REQUIRE_THROWS( dataVarType.GetVarType() );
+	AE_REQUIRE_THROWS( dataClassVar0.GetVarType() );
+	AE_REQUIRE_THROWS( dataClassVar1.GetVarType() );
 	
 	ae::ConstDataPointer constDataDefault;
 	ae::ConstDataPointer constDataTemplate( (ArrayClass*)nullptr );
@@ -352,11 +353,11 @@ TEST_CASE( "Null DataPointer", "[aeMeta]" )
 	REQUIRE( !constDataVarType );
 	REQUIRE( !constDataClassVar0 );
 	REQUIRE( !constDataClassVar1 );
-	REQUIRE_THROWS( constDataDefault.GetVarType() );
-	REQUIRE_THROWS( constDataTemplate.GetVarType() );
-	REQUIRE_THROWS( constDataVarType.GetVarType() );
-	REQUIRE_THROWS( constDataClassVar0.GetVarType() );
-	REQUIRE_THROWS( constDataClassVar1.GetVarType() );
+	AE_REQUIRE_THROWS( constDataDefault.GetVarType() );
+	AE_REQUIRE_THROWS( constDataTemplate.GetVarType() );
+	AE_REQUIRE_THROWS( constDataVarType.GetVarType() );
+	AE_REQUIRE_THROWS( constDataClassVar0.GetVarType() );
+	AE_REQUIRE_THROWS( constDataClassVar1.GetVarType() );
 }
 
 TEST_CASE( "Array vars", "[aeMeta]" )

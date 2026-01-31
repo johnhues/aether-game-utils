@@ -30,20 +30,37 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+
+// Push warning disables for imgui includes
+#if _AE_EMSCRIPTEN_
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wnontrivial-memcall"
+#elif _AE_WINDOWS_
+	#pragma warning( push )
+	#pragma warning( disable : 4244 ) // conversion from 'float' to 'int32_t'
+#endif
+
+// ImGui config
 #ifndef IMGUI_DEFINE_MATH_OPERATORS
 	#define IMGUI_DEFINE_MATH_OPERATORS
 #endif
-#include "imgui.h"
-#include "imgui_internal.h" // For advanced imgui features like docking
-#if _AE_WINDOWS_
-	#pragma warning( push )
-	#pragma warning( disable : 4244 ) // conversion from 'float' to 'int32_t'
-#elif _AE_APPLE_
+#if _AE_APPLE_
 	#define GL_SILENCE_DEPRECATION
 #elif _AE_LINUX_
 	#define GL_GLEXT_PROTOTYPES 1
 #endif
+
+// Include imgui
+#include "imgui.h"
+#include "imgui_internal.h" // For advanced imgui features like docking
 #include "imgui_impl_opengl3.h"
+
+// Pop warning disables for imgui includes
+#if _AE_EMSCRIPTEN_
+	#pragma GCC diagnostic pop
+#elif _AE_WINDOWS_
+	#pragma warning( pop )
+#endif
 
 //------------------------------------------------------------------------------
 // Imgui helpers
@@ -162,9 +179,5 @@ bool aeImGui::InputText( const char* label, ae::Str< N >* str, ImGuiInputTextFla
 	size_t maxSize = ae::Str< N >::MaxLength() + 1;
 	return ImGui::InputText( label, buffer, maxSize, flags, aeImGui::m_StringCallback< N >, (void*)str );
 }
-
-#if _AE_WINDOWS_
-	#pragma warning( pop )
-#endif
 
 #endif

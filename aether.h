@@ -52,6 +52,50 @@
 #define AE_AETHER_H
 
 //------------------------------------------------------------------------------
+// Platform defines
+//------------------------------------------------------------------------------
+#define _AE_IOS_ 0
+#define _AE_OSX_ 0
+#define _AE_APPLE_ 0
+#define _AE_WINDOWS_ 0
+#define _AE_MSVC_ 0
+#define _AE_MINGW_ 0
+#define _AE_LINUX_ 0
+#define _AE_EMSCRIPTEN_ 0
+#if defined(__EMSCRIPTEN__)
+	#undef _AE_EMSCRIPTEN_
+	#define _AE_EMSCRIPTEN_ 1
+#elif defined(__APPLE__)
+	#include "TargetConditionals.h"
+	#if TARGET_OS_IPHONE
+		#undef _AE_IOS_
+		#define _AE_IOS_ 1
+	#elif TARGET_OS_MAC
+		#undef _AE_OSX_
+		#define _AE_OSX_ 1
+	#else
+		#error "Platform not supported"
+	#endif
+	#undef _AE_APPLE_
+	#define _AE_APPLE_ 1
+#elif defined(_WIN32) || defined(_WIN64)
+	#undef _AE_WINDOWS_
+	#define _AE_WINDOWS_ 1
+	#if defined(__MINGW32__) || defined(__MINGW64__)
+		#undef _AE_MINGW_
+		#define _AE_MINGW_ 1
+	#else
+		#undef _AE_MSVC_
+		#define _AE_MSVC_ 1
+	#endif
+#elif defined(__linux__)
+	#undef _AE_LINUX_
+	#define _AE_LINUX_ 1
+#else
+	#error "Platform not supported"
+#endif
+
+//------------------------------------------------------------------------------
 // AE_CONFIG_FILE define
 //------------------------------------------------------------------------------
 //! The path to a user defined configuration header file, something like
@@ -147,50 +191,6 @@
 #endif
 #ifndef AE_HASH64_FNV1A_PRIME_CONFIG
 	#define AE_HASH64_FNV1A_PRIME_CONFIG 0x100000001B3ull
-#endif
-
-//------------------------------------------------------------------------------
-// Platform defines
-//------------------------------------------------------------------------------
-#define _AE_IOS_ 0
-#define _AE_OSX_ 0
-#define _AE_APPLE_ 0
-#define _AE_WINDOWS_ 0
-#define _AE_MSVC_ 0
-#define _AE_MINGW_ 0
-#define _AE_LINUX_ 0
-#define _AE_EMSCRIPTEN_ 0
-#if defined(__EMSCRIPTEN__)
-	#undef _AE_EMSCRIPTEN_
-	#define _AE_EMSCRIPTEN_ 1
-#elif defined(__APPLE__)
-	#include "TargetConditionals.h"
-	#if TARGET_OS_IPHONE
-		#undef _AE_IOS_
-		#define _AE_IOS_ 1
-	#elif TARGET_OS_MAC
-		#undef _AE_OSX_
-		#define _AE_OSX_ 1
-	#else
-		#error "Platform not supported"
-	#endif
-	#undef _AE_APPLE_
-	#define _AE_APPLE_ 1
-#elif defined(_WIN32) || defined(_WIN64)
-	#undef _AE_WINDOWS_
-	#define _AE_WINDOWS_ 1
-	#if defined(__MINGW32__) || defined(__MINGW64__)
-		#undef _AE_MINGW_
-		#define _AE_MINGW_ 1
-	#else
-		#undef _AE_MSVC_
-		#define _AE_MSVC_ 1
-	#endif
-#elif defined(__linux__)
-	#undef _AE_LINUX_
-	#define _AE_LINUX_ 1
-#else
-	#error "Platform not supported"
 #endif
 
 //------------------------------------------------------------------------------
@@ -301,8 +301,10 @@ namespace ae {
 		#define AE_BREAK() assert( 0 )
 	#elif defined( __aarch64__ )
 		#define AE_BREAK() asm( "brk #0" )
-	#else
+	#elif defined( __x86_64__ ) || defined( __i386__ ) || defined( _M_X64 ) || defined( _M_IX86 )
 		#define AE_BREAK() asm( "int $3" )
+	#else
+		#define AE_BREAK() assert( 0 )
 	#endif
 #endif
 
@@ -463,8 +465,10 @@ Allocator* GetGlobalAllocator();
 //! must be specified and should represent the allocation type. All 'args' are
 //! passed to the constructor of T. All arrays allocated with this function
 //! should be freed with ae::Delete(). Uses ae::GetGlobalAllocator() and
-//! ae::Allocator::Allocate() internally.
-template< typename T, typename ... Args > T* NewArray( ae::Tag tag, uint32_t count, Args&& ... args );
+//! ae::Allocator::Allocate() internally. Note that individual array elements
+//! are constructed with the same arguments, so perfect forwarding to each
+//! element is not supported.
+template< typename T, typename ... Args > T* NewArray( ae::Tag tag, uint32_t count, const Args& ... args );
 //! Allocates and constructs a single element of type T. an ae::Tag must be specified
 //! and should represent the allocation type. All 'args' are passed to the constructor
 //! of T. All allocations should be freed with ae::Delete(). Uses ae::GetGlobalAllocator()
@@ -1553,6 +1557,11 @@ public:
 	bool Empty() const;
 	static constexpr uint32_t MaxLength() { return N - 3u; } // Leave room for length var and null terminator
 
+	//! Define conversion functions etc for ae::Str< N >. See AE_CONFIG_FILE for more info.
+#ifdef AE_STR_CLASS_CONFIG
+	AE_STR_CLASS_CONFIG
+#endif
+
 private:
 	template< uint32_t N2 > friend class Str;
 	template< uint32_t N2 > friend bool operator ==( const char*, const Str< N2 >& );
@@ -1586,6 +1595,11 @@ struct UUID
 
 	bool operator==( const UUID& other ) const;
 	bool operator!=( const UUID& other ) const;
+
+	//! Define conversion functions etc for ae::UUID. See AE_CONFIG_FILE for more info.
+#ifdef AE_UUID_CLASS_CONFIG
+	AE_UUID_CLASS_CONFIG
+#endif
 
 	uint8_t data[ 16 ] = { 0 };
 };
@@ -2591,7 +2605,7 @@ public:
 private:
 	using InvokerType = R ( * )( const void*, Args... );
 	InvokerType m_invoker;
-	alignas( void* ) uint8_t m_storage[ MaxSize ];
+	alignas( std::max_align_t ) uint8_t m_storage[ MaxSize ];
 };
 
 //------------------------------------------------------------------------------
@@ -3132,7 +3146,7 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 //------------------------------------------------------------------------------
 // Static assertion functions
 //------------------------------------------------------------------------------
-#define AE_STATIC_ASSERT( _x ) static_assert( _x, "static assert" )
+#define AE_STATIC_ASSERT( _x ) static_assert( _x, #_x )
 #define AE_STATIC_ASSERT_MSG( _x, _m ) static_assert( _x, _m )
 #define AE_STATIC_FAIL( _m ) static_assert( 0, _m )
 
@@ -5837,6 +5851,7 @@ public:
 	// Internal
 	enum class EventType : uint8_t
 	{
+		None,
 		Connect,
 		Create,
 		Destroy,
@@ -7242,13 +7257,6 @@ std::string _Log( ae::LogSeverity severity, const char* filePath, uint32_t line,
 //------------------------------------------------------------------------------
 // C++ style allocation functions
 //------------------------------------------------------------------------------
-#if _AE_EMSCRIPTEN_
-// @NOTE: Max alignment is 8 bytes https://github.com/emscripten-core/emscripten/issues/10072
-const uint32_t _kDefaultAlignment = 8;
-#else
-const uint32_t _kDefaultAlignment = 16;
-#endif
-const uint32_t _kHeaderSize = 16;
 struct _Header
 {
 	uint32_t check;
@@ -7256,22 +7264,26 @@ struct _Header
 	uint32_t size;
 	uint32_t typeSize;
 };
+const uint32_t _kHeaderSize = sizeof( _Header );
+const uint32_t _kHeaderAlignment = alignof( _Header );
 
 template< typename T, typename ... Args >
-T* NewArray( ae::Tag tag, uint32_t count, Args&& ... args )
+T* NewArray( ae::Tag tag, uint32_t count, const Args& ... args )
 {
-	AE_STATIC_ASSERT( alignof( T ) <= _kDefaultAlignment );
-	AE_STATIC_ASSERT( sizeof( T ) % alignof( T ) == 0 ); // All elements in array should have correct alignment
-
-	uint32_t size = _kHeaderSize + sizeof( T ) * count;
-	uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
-	AE_ASSERT_MSG( (intptr_t)base % _kDefaultAlignment == 0, "Alignment off by # bytes", (intptr_t)base % _kDefaultAlignment );
+	constexpr uint32_t alignment = ( alignof( T ) > _kHeaderAlignment ? alignof( T ) : _kHeaderAlignment );
+	const uint32_t size = _kHeaderSize + sizeof( T ) * count;
+	uint8_t* base = (uint8_t*)ae::Allocate( tag, size, alignment );
+	if( !base )
+	{
+		AE_DEBUG_FAIL_MSG( "Failed to allocate # bytes with alignment # (#)", size, alignment, tag );
+		return nullptr;
+	}
+	AE_DEBUG_ASSERT_MSG( (intptr_t)base % alignment == 0, "Alignment off by # bytes", (intptr_t)base % alignment );
 #if _AE_DEBUG_
 	memset( (void*)base, 0xCD, size );
 #endif
 
 	AE_STATIC_ASSERT( sizeof( _Header ) <= _kHeaderSize );
-	AE_STATIC_ASSERT( _kHeaderSize % _kDefaultAlignment == 0 );
 
 	_Header* header = (_Header*)base;
 	header->check = 0xBDBD;
@@ -7280,25 +7292,29 @@ T* NewArray( ae::Tag tag, uint32_t count, Args&& ... args )
 	header->typeSize = sizeof( T );
 
 	T* result = (T*)( base + _kHeaderSize );
-	if( !std::is_trivially_constructible< T >::value )
+	AE_DEBUG_ASSERT( (intptr_t)result % alignment == 0 );
+	if constexpr( sizeof...(Args) || !std::is_trivially_constructible< T >::value )
 	{
 		for( uint32_t i = 0; i < count; i++ )
 		{
 			new( &result[ i ] ) T( args ... ); // Can't std::forward args multiple times
 		}
 	}
-	
 	return result;
 }
 
 template< typename T, typename ... Args >
 T* New( ae::Tag tag, Args&& ... args )
 {
-	AE_STATIC_ASSERT( alignof( T ) <= _kDefaultAlignment );
-
-	uint32_t size = _kHeaderSize + sizeof( T );
-	uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
-	AE_ASSERT_MSG( (intptr_t)base % _kDefaultAlignment == 0, "Alignment off by # bytes", (intptr_t)base % _kDefaultAlignment );
+	constexpr uint32_t alignment = ( alignof( T ) > _kHeaderAlignment ? alignof( T ) : _kHeaderAlignment );
+	constexpr uint32_t size = _kHeaderSize + sizeof( T );
+	uint8_t* base = (uint8_t*)ae::Allocate( tag, size, alignment );
+	if( !base )
+	{
+		AE_DEBUG_FAIL_MSG( "Failed to allocate # bytes with alignment # (#)", size, alignment, tag );
+		return nullptr;
+	}
+	AE_ASSERT_MSG( (intptr_t)base % alignment == 0, "Alignment off by # bytes", (intptr_t)base % alignment );
 #if _AE_DEBUG_
 	memset( (void*)base, 0xCD, size );
 #endif
@@ -7309,7 +7325,13 @@ T* New( ae::Tag tag, Args&& ... args )
 	header->size = size;
 	header->typeSize = sizeof( T );
 
-	return new( (T*)( base + _kHeaderSize ) ) T( std::forward< Args >( args ) ... );
+	T* result = (T*)( base + _kHeaderSize );
+	AE_DEBUG_ASSERT( (intptr_t)result % alignment == 0 );
+	if constexpr( sizeof...(Args) || !std::is_trivially_constructible< T >::value )
+	{
+		new( result ) T( std::forward< Args >( args ) ... );
+	}
+	return result;
 }
 
 template< typename T >
@@ -7320,16 +7342,16 @@ void Delete( T* obj )
 		return;
 	}
 
-	AE_ASSERT( (intptr_t)obj % _kDefaultAlignment == 0 );
+	AE_ASSERT( (intptr_t)obj % alignof( T ) == 0 );
 	uint8_t* base = (uint8_t*)obj - _kHeaderSize;
 
-	_Header* header = (_Header*)( base );
+	const _Header* header = (_Header*)( base );
 	AE_ASSERT( header->check == 0xBDBD );
 	AE_ASSERT_MSG( sizeof( T ) <= header->typeSize, "Released type T '#' does not match allocated type of size #", ae::GetTypeName< T >(), header->typeSize );
 
 	if( !std::is_trivially_destructible< T >::value )
 	{
-		uint32_t count = header->count;
+		const uint32_t count = header->count;
 		for( uint32_t i = 0; i < count; i++ )
 		{
 			T* o = (T*)( (uint8_t*)obj + header->typeSize * i );
@@ -7340,7 +7362,6 @@ void Delete( T* obj )
 #if _AE_DEBUG_
 	memset( (void*)base, 0xDD, header->size );
 #endif
-
 	ae::Free( base );
 }
 
@@ -17167,29 +17188,40 @@ _DefaultAllocator::~_DefaultAllocator()
 
 void* _DefaultAllocator::Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment )
 {
-	alignment = ae::Max( 2u, alignment );
+	void* result = nullptr;
 #if _AE_WINDOWS_
-	void* result = _aligned_malloc( bytes, alignment );
-#elif _AE_OSX_
-	void* result = malloc( bytes ); // @HACK: macosx clang c++11 does not have aligned alloc
-#elif _AE_EMSCRIPTEN_
-	void* result = malloc( bytes ); // Emscripten malloc always uses 8 byte alignment https://github.com/emscripten-core/emscripten/issues/10072
+	alignment = ae::NextPowerOfTwo( alignment );
+	result = _aligned_malloc( bytes, alignment );
 #else
-	void* result = aligned_alloc( alignment, bytes );
-#endif
-#if AE_MEMORY_CHECKS
-	std::lock_guard< std::mutex > lock( m_allocLock );
-	auto iter = m_allocations.find( result );
-	if( iter == m_allocations.end() )
+	if( alignment <= alignof( std::max_align_t ) )
 	{
-		m_allocations.insert( { result, AllocInfo( tag, bytes, AllocStatus::Allocated ) } );
+		result = std::malloc( bytes );
 	}
 	else
 	{
-		AE_ASSERT_MSG( iter->second.status == AllocStatus::Freed, "Memory already allocated: #", result );
-		iter->second.tag = tag;
-		iter->second.bytes = bytes;
-		iter->second.status = AllocStatus::Allocated;
+		const uint32_t minAlignment = (uint32_t)sizeof( void* );
+		alignment = ae::Max( alignment, minAlignment );
+		alignment = ae::NextPowerOfTwo( alignment );
+		bytes = ( ( bytes + alignment - 1 ) / alignment ) * alignment; // Multiple of alignment
+		result = std::aligned_alloc( alignment, bytes );
+	}
+#endif
+#if AE_MEMORY_CHECKS
+	if( result )
+	{
+		std::lock_guard< std::mutex > lock( m_allocLock );
+		auto iter = m_allocations.find( result );
+		if( iter == m_allocations.end() )
+		{
+			m_allocations.insert( { result, AllocInfo( tag, bytes, AllocStatus::Allocated ) } );
+		}
+		else
+		{
+			AE_ASSERT_MSG( iter->second.status == AllocStatus::Freed, "Memory already allocated: #", result );
+			iter->second.tag = tag;
+			iter->second.bytes = bytes;
+			iter->second.status = AllocStatus::Allocated;
+		}
 	}
 #endif
 	return result;
@@ -17207,7 +17239,27 @@ void* _DefaultAllocator::Reallocate( void* data, uint32_t bytes, uint32_t alignm
 #if _AE_WINDOWS_
 	void* result = _aligned_realloc( data, bytes, alignment );
 #else
-	void* result = realloc( data, bytes );
+	void* result = nullptr;
+	if( alignment > alignof( std::max_align_t ) )
+	{
+#if AE_MEMORY_CHECKS
+		const uint32_t oldBytes = iter->second.bytes;
+		result = Allocate( iter->second.tag, bytes, alignment );
+		if( result && data )
+		{
+			iter->second.status = AllocStatus::Freed;
+			memcpy( result, data, ae::Min( oldBytes, bytes ) );
+			ae::Free( data );
+		}
+#else
+		AE_DEBUG_ASSERT_MSG( alignment <= alignof( std::max_align_t ), "Reallocate alignment # exceeds platform max alignment #; result may be misaligned", alignment, (uint32_t)alignof( std::max_align_t ) );
+		result = std::realloc( data, bytes );
+#endif
+	}
+	else
+	{
+		result = std::realloc( data, bytes );
+	}
 #endif
 #if AE_MEMORY_CHECKS
 	if( result != data )
@@ -17238,7 +17290,7 @@ void _DefaultAllocator::Free( void* data )
 #if _AE_WINDOWS_
 	_aligned_free( data );
 #else
-	free( data );
+	std::free( data ); // Note that this is used with std::aligned_alloc and std::malloc
 #endif
 }
 
@@ -29323,7 +29375,7 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 	ae::BinaryReader rStream( data, length );
 	while( rStream.GetOffset() < rStream.GetSize() )
 	{
-		NetObjectConnection::EventType type;
+		NetObjectConnection::EventType type = NetObjectConnection::EventType::None;
 		rStream.SerializeEnum( type );
 		if( !rStream.IsValid() )
 		{
@@ -29457,6 +29509,11 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 
 					rStream.DiscardReadData( dataLen );
 				}
+				break;
+			}
+			default:
+			{
+				rStream.Invalidate();
 				break;
 			}
 		}

@@ -27,14 +27,35 @@
 // Headers
 //------------------------------------------------------------------------------
 #include <cstdint>
+#include <cstdio>
+#include <cassert>
 
 //------------------------------------------------------------------------------
 // Config defines
 //------------------------------------------------------------------------------
+extern bool s_intentionalAssert;
 #define AE_ASSERT_IMPL aeAssertImpl
 inline void aeAssertImpl( const char* msgStr )
 {
-	throw "assert"; // Throw exceptions so unit tests can validate assertions
+	if( s_intentionalAssert )
+	{
+		throw msgStr; // Throw exceptions so unit tests can validate assertions
+	}
+	else
+	{
+		printf( "%s\n", msgStr );
+	#if _AE_WINDOWS_
+		__debugbreak();
+	#elif _AE_APPLE_
+		__builtin_debugtrap();
+	#elif _AE_EMSCRIPTEN_
+		assert( 0 );
+	#elif defined( __aarch64__ )
+		asm( "brk #0" );
+	#else
+		asm( "int $3" );
+	#endif
+	}
 }
 
 #define AE_MEMORY_CHECKS 1 // Enable strict memory checks for unit tests

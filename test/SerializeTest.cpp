@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+#include "TestUtils.h"
 #include <catch2/catch_test_macros.hpp>
 
 //------------------------------------------------------------------------------
@@ -433,10 +434,10 @@ TEST_CASE( "C string test with buffer length 0", "ae::BinaryStream" )
 	ae::BinaryWriter wStream( &buffer );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == 0 );
-	REQUIRE_THROWS( wStream.SerializeString( str, 0 ) );
+	AE_REQUIRE_THROWS( wStream.SerializeString( str, 0 ) );
 
 	ae::BinaryReader rStream( buffer );
-	REQUIRE_THROWS( rStream.SerializeString( str, 0 ) );
+	AE_REQUIRE_THROWS( rStream.SerializeString( str, 0 ) );
 }
 
 TEST_CASE( "C string target buffer too small", "ae::BinaryStream" )

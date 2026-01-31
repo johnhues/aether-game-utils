@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+#include "TestUtils.h"
 #include <catch2/catch_test_macros.hpp>
 
 //------------------------------------------------------------------------------
@@ -111,7 +112,7 @@ TEST_CASE( "Log message tagging", "[ae::Log]" )
 	
 	s_runningTestIndex++;
 	ae::PushLogTag( "AssertTag" );
-	REQUIRE_THROWS( [](){ AE_ASSERT_MSG( false, "Test [#]", s_runningTestIndex ); }() );
+	AE_REQUIRE_THROWS( [](){ AE_ASSERT_MSG( false, "Test [#]", s_runningTestIndex ); }() );
 	ae::PopLogTag();
 
 	s_runningTestIndex = -1;

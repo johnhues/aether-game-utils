@@ -65,6 +65,11 @@ public:
 	// static int32_t validCount; // @TODO: Current minus moved from objects
 };
 
+#define AE_REQUIRE_THROWS( expr )\
+	s_intentionalAssert = true;\
+	REQUIRE_THROWS( expr );\
+	s_intentionalAssert = false;
+
 } // ae end
 
 #endif

@@ -231,7 +231,6 @@ function(ae_add_bundle BUNDLE_NAME)
 			list(APPEND _AE_EM_LINKER_FLAGS
 				"-s SAFE_HEAP=1" # Enable safe heap mode
 				"-s ASSERTIONS=1" # Enable assertions
-				"-s DEMANGLE_SUPPORT=1"
 				"-s STACK_OVERFLOW_CHECK=1"
 				"-O0"
 				"-frtti"

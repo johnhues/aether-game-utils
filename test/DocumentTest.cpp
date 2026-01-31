@@ -5,6 +5,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+#include "TestUtils.h"
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
@@ -2697,19 +2698,19 @@ TEST_CASE( "DocumentValue StringGet TypeAssert", "[ae::Document][throws]" )
 	ae::Document doc( "test" );
 
 	// StringGet on None type should assert
-	REQUIRE_THROWS( doc.StringGet() );
+	AE_REQUIRE_THROWS( doc.StringGet() );
 
 	// StringGet on Opaque type should assert
 	doc.OpaqueSet( 42 );
-	REQUIRE_THROWS( doc.StringGet() );
+	AE_REQUIRE_THROWS( doc.StringGet() );
 
 	// StringGet on Array type should assert
 	doc.ArrayInitialize( 4 );
-	REQUIRE_THROWS( doc.StringGet() );
+	AE_REQUIRE_THROWS( doc.StringGet() );
 
 	// StringGet on Map type should assert
 	doc.ObjectInitialize( 4 );
-	REQUIRE_THROWS( doc.StringGet() );
+	AE_REQUIRE_THROWS( doc.StringGet() );
 
 	// StringGet should work on String type
 	doc.StringSet( "test" );
@@ -2721,19 +2722,19 @@ TEST_CASE( "DocumentValue OpaqueGet TypeAssert", "[ae::Document][throws]" )
 	ae::Document doc( "test" );
 
 	// OpaqueGet on None type should assert
-	REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
+	AE_REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
 
 	// OpaqueGet on String type should assert
 	doc.StringSet( "test" );
-	REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
+	AE_REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
 
 	// OpaqueGet on Array type should assert
 	doc.ArrayInitialize( 4 );
-	REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
+	AE_REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
 
 	// OpaqueGet on Map type should assert
 	doc.ObjectInitialize( 4 );
-	REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
+	AE_REQUIRE_THROWS( doc.OpaqueGet( 0 ) );
 
 	// OpaqueGet should work on Opaque type
 	doc.OpaqueSet( 42 );
@@ -2745,35 +2746,35 @@ TEST_CASE( "DocumentValue ArrayOperations TypeAssert", "[ae::Document][throws]" 
 	ae::Document doc( "test" );
 
 	// Array operations on None type should assert
-	REQUIRE_THROWS( doc.ArrayLength() );
-	REQUIRE_THROWS( doc.ArrayGet( 0 ) );
-	REQUIRE_THROWS( doc.ArrayAppend() );
-	REQUIRE_THROWS( doc.ArrayInsert( 0 ) );
-	REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayLength() );
+	AE_REQUIRE_THROWS( doc.ArrayGet( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayAppend() );
+	AE_REQUIRE_THROWS( doc.ArrayInsert( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
 
 	// Array operations on String type should assert
 	doc.StringSet( "test" );
-	REQUIRE_THROWS( doc.ArrayLength() );
-	REQUIRE_THROWS( doc.ArrayGet( 0 ) );
-	REQUIRE_THROWS( doc.ArrayAppend() );
-	REQUIRE_THROWS( doc.ArrayInsert( 0 ) );
-	REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayLength() );
+	AE_REQUIRE_THROWS( doc.ArrayGet( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayAppend() );
+	AE_REQUIRE_THROWS( doc.ArrayInsert( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
 
 	// Array operations on Opaque type should assert
 	doc.OpaqueSet( 42 );
-	REQUIRE_THROWS( doc.ArrayLength() );
-	REQUIRE_THROWS( doc.ArrayGet( 0 ) );
-	REQUIRE_THROWS( doc.ArrayAppend() );
-	REQUIRE_THROWS( doc.ArrayInsert( 0 ) );
-	REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayLength() );
+	AE_REQUIRE_THROWS( doc.ArrayGet( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayAppend() );
+	AE_REQUIRE_THROWS( doc.ArrayInsert( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
 
 	// Array operations on Map type should assert
 	doc.ObjectInitialize( 4 );
-	REQUIRE_THROWS( doc.ArrayLength() );
-	REQUIRE_THROWS( doc.ArrayGet( 0 ) );
-	REQUIRE_THROWS( doc.ArrayAppend() );
-	REQUIRE_THROWS( doc.ArrayInsert( 0 ) );
-	REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayLength() );
+	AE_REQUIRE_THROWS( doc.ArrayGet( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayAppend() );
+	AE_REQUIRE_THROWS( doc.ArrayInsert( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
 
 	// Array operations should work on Array type
 	doc.ArrayInitialize( 4 );
@@ -2789,15 +2790,15 @@ TEST_CASE( "DocumentValue ArrayRemove BoundsAssert", "[ae::Document][throws]" )
 	doc.ArrayInitialize( 4 );
 
 	// Remove on empty array should assert
-	REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
+	AE_REQUIRE_THROWS( doc.ArrayRemove( 0 ) );
 
 	// Add element
 	doc.ArrayAppend().OpaqueSet( 1 );
 	REQUIRE( doc.ArrayLength() == 1 );
 
 	// Remove out of bounds should assert
-	REQUIRE_THROWS( doc.ArrayRemove( 1 ) );
-	REQUIRE_THROWS( doc.ArrayRemove( 100 ) );
+	AE_REQUIRE_THROWS( doc.ArrayRemove( 1 ) );
+	AE_REQUIRE_THROWS( doc.ArrayRemove( 100 ) );
 
 	// Remove valid index should work
 	doc.ArrayRemove( 0 );
@@ -2809,35 +2810,35 @@ TEST_CASE( "DocumentValue ObjectOperations TypeAssert", "[ae::Document][throws]"
 	ae::Document doc( "test" );
 
 	// Object operations on None type should assert
-	REQUIRE_THROWS( doc.ObjectLength() );
-	REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
-	REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
-	REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
-	REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
+	AE_REQUIRE_THROWS( doc.ObjectLength() );
+	AE_REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
+	AE_REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
+	AE_REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
+	AE_REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
 
 	// Object operations on String type should assert
 	doc.StringSet( "test" );
-	REQUIRE_THROWS( doc.ObjectLength() );
-	REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
-	REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
-	REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
-	REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
+	AE_REQUIRE_THROWS( doc.ObjectLength() );
+	AE_REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
+	AE_REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
+	AE_REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
+	AE_REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
 
 	// Object operations on Opaque type should assert
 	doc.OpaqueSet( 42 );
-	REQUIRE_THROWS( doc.ObjectLength() );
-	REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
-	REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
-	REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
-	REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
+	AE_REQUIRE_THROWS( doc.ObjectLength() );
+	AE_REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
+	AE_REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
+	AE_REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
+	AE_REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
 
 	// Object operations on Array type should assert
 	doc.ArrayInitialize( 4 );
-	REQUIRE_THROWS( doc.ObjectLength() );
-	REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
-	REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
-	REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
-	REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
+	AE_REQUIRE_THROWS( doc.ObjectLength() );
+	AE_REQUIRE_THROWS( doc.ObjectGetKey( 0 ) );
+	AE_REQUIRE_THROWS( doc.ObjectGetValue( 0 ) );
+	AE_REQUIRE_THROWS( doc.ObjectTryGet( "key" ) );
+	AE_REQUIRE_THROWS( doc.ObjectRemove( "key" ) );
 
 	// Object operations should work on Object type
 	doc.ObjectInitialize( 4 );
