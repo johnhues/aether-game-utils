@@ -4014,7 +4014,7 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 			float hitT = INFINITY;
 			ae::Vec3 hitPos( 0.0f );
 			const ae::Sphere sphere( editorObj->GetTransform().GetTranslation(), 0.5f );
-			if( sphere.IntersectRay( mouseRaySrc, mouseRay, &hitPos, &hitT ) )
+			if( sphere.IntersectRay( mouseRaySrc, mouseRay, &hitPos, nullptr, &hitT ) )
 			{
 				raycastParams.userData = nullptr;
 				raycastParams.transform = ae::Matrix4::Identity();

@@ -1084,6 +1084,25 @@ struct AE_ALIGN( 16 ) Int3 : public IntT< Int3 >
 };
 
 //------------------------------------------------------------------------------
+// ae::Triangle class
+//------------------------------------------------------------------------------
+class Triangle
+{
+public:
+	Triangle() = default;
+	Triangle( Vec3 p0, Vec3 p1, Vec3 p2 );
+	Triangle( Vec3 (&v)[ 3 ] );
+	explicit Triangle( const Vec3* p012 );
+
+	bool IntersectRay( Vec3 source, Vec3 ray, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
+	Vec3 ClosestPoint( Vec3 p ) const;
+	Vec3 CounterClockwiseNormal() const;
+	Vec3 ClockwiseNormal() const;
+
+	Vec3 vertices[ 3 ] = { Vec3( 0.0f ), Vec3( 0.0f ), Vec3( 0.0f ) };
+};
+
+//------------------------------------------------------------------------------
 // ae::Sphere class
 //------------------------------------------------------------------------------
 class Sphere
@@ -1094,9 +1113,8 @@ public:
 	explicit Sphere( const class OBB& obb );
 	void Expand( ae::Vec3 p );
 
-	// @TODO: IntersectLine() which should have hit0Out and hit1Out
-	bool IntersectRay( ae::Vec3 origin, ae::Vec3 direction, ae::Vec3* pOut = nullptr, float* tOut = nullptr ) const;
-	bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const;
+	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
+	bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* hitOut = nullptr ) const;
 	ae::Vec3 GetNearestPointOnSurface( ae::Vec3 p, float* signedDistOut = nullptr ) const;
 
 	ae::Vec3 center = ae::Vec3( 0.0f );
@@ -1318,12 +1336,6 @@ private:
 	Vec3 m_axes[ 3 ];
 	Vec3 m_halfSize;
 };
-
-//------------------------------------------------------------------------------
-// Geometry helpers
-//------------------------------------------------------------------------------
-bool IntersectRayTriangle( ae::Vec3 p, ae::Vec3 ray, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c, bool ccw, bool cw, ae::Vec3* pOut, ae::Vec3* nOut, float* tOut );
-Vec3 ClosestPointOnTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c );
 
 //! @} End Math defgroup
 
@@ -1818,10 +1830,26 @@ public:
 	//! Does not affect the size of the array.
 	void Clear();
 
-	//! Performs bounds checking in debug mode. Use 'GetData()' to get raw array.
+	//! Performs bounds checking in debug mode, use 'GetData()' instead to
+	//! safely get the raw array.
 	const T& operator[]( int32_t index ) const;
-	//! Performs bounds checking in debug mode. Use 'GetData()' to get raw array.
+	//! Performs bounds checking in debug mode, use 'GetData()' instead to
+	//! safely get the raw array.
 	T& operator[]( int32_t index );
+	//! Returns the first element in the array. Performs bounds checking in
+	//! debug mode, use 'GetData()' instead to safely get the raw array.
+	const T& First() const;
+	//! Returns the first element in the array. Performs bounds checking in
+	//! debug mode, use 'GetData()' instead to safely get the raw array.
+	T& First();
+	//! Returns the last element. Performs bounds checking in debug mode.
+	const T& Last() const;
+	//! Returns the last element. Performs bounds checking in debug mode.
+	T& Last();
+	//! Returns true when it is no longer safe to append to this array.
+	_AE_STATIC_STORAGE bool Full() { return m_length == m_size; }
+	//! It is always safe to append to dynamic arrays, barring system memory limits.
+	_AE_DYNAMIC_STORAGE bool Full(...) const { return false; }
 
 	//! Returns a pointer to the first element of the array, but can return null
 	//! when the array length is zero
@@ -4908,11 +4936,6 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::CatmullRom @TODO: Implement, and Spline should use internally.
-//------------------------------------------------------------------------------
-ae::Vec3 CatmullRom( ae::Vec3 p0, ae::Vec3 p1, ae::Vec3 p2, ae::Vec3 p3, float t );
-
-//------------------------------------------------------------------------------
 // ae::Spline class
 //------------------------------------------------------------------------------
 class Spline
@@ -5009,10 +5032,13 @@ struct RaycastResult
 		ae::Vec3 normal = ae::Vec3( 0.0f );
 		float distance = 0.0f;
 		const void* userData = nullptr;
-		CollisionExtra extra;
+		CollisionExtra extra = {};
 	};
 	ae::Array< Hit, 8 > hits;
-	
+
+	bool EarlyOut( const RaycastParams& params, ae::Sphere sphere ) const;
+	bool EarlyOut( const RaycastParams& params, ae::OBB obb ) const;
+	void Accumulate( const RaycastParams& params, Hit hit );
 	static void Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next );
 };
 
@@ -5087,7 +5113,7 @@ public:
 	//! sizes are maintained.
 	void Clear();
 
-	RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult = RaycastResult() ) const;
+	RaycastResult Raycast( const RaycastParams& params, RaycastResult prevResult = RaycastResult() ) const;
 	PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
 	// @TODO: GetClosestPoint()
 	ae::AABB GetAABB() const { return m_bvh.GetAABB(); }
@@ -10452,6 +10478,30 @@ T& Array< T, N >::operator[]( int32_t index )
 	return m_array[ index ];
 }
 
+template< typename T, uint32_t N >
+const T& Array< T, N >::First() const
+{
+	return operator[]( 0 );
+}
+
+template< typename T, uint32_t N >
+T& Array< T, N >::First()
+{
+	return operator[]( 0 );
+}
+
+template< typename T, uint32_t N >
+const T& Array< T, N >::Last() const
+{
+	return operator[]( (int32_t)m_length - 1 );
+}
+
+template< typename T, uint32_t N >
+T& Array< T, N >::Last()
+{
+	return operator[]( (int32_t)m_length - 1 );
+}
+
 //------------------------------------------------------------------------------
 // ae::HashMap member functions
 //------------------------------------------------------------------------------
@@ -12670,52 +12720,34 @@ void CollisionMesh< V, T, B >::Clear()
 }
 
 template< uint32_t V, uint32_t T, uint32_t B >
-RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const
+RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, RaycastResult result ) const
 {
-	// Early out for parameters that will give no results
-	if( params.maxHits == 0 || !m_bvh.GetRoot() )
+	// Early out
 	{
-		return prevResult;
-	}
-	
-	// Sphere/OBB check in world space
-	{
-		float t = 0.0f;
-		
-		// Sphere
-		ae::Vec3 aabbMin = ( params.transform * ae::Vec4( m_aabb.GetMin(), 1.0f ) ).GetXYZ();
-		ae::Vec3 aabbMax = ( params.transform * ae::Vec4( m_aabb.GetMax(), 1.0f ) ).GetXYZ();
-		ae::Sphere sphere( ( aabbMin + aabbMax ) * 0.5f, ( aabbMax - aabbMin ).Length() * 0.5f );
-		if( !sphere.IntersectRay( params.source, params.ray, nullptr, &t ) )
+		// No results
+		if( params.maxHits == 0 || !m_bvh.GetRoot() )
 		{
-			return prevResult; // Early out if ray doesn't touch sphere
+			return result;
 		}
-		else if( params.maxHits == prevResult.hits.Length() && prevResult.hits[ prevResult.hits.Length() - 1 ].distance < t )
+		// Sphere/OBB check in world space
+		const ae::Vec3 aabbMin = ( params.transform * ae::Vec4( m_aabb.GetMin(), 1.0f ) ).GetXYZ();
+		const ae::Vec3 aabbMax = ( params.transform * ae::Vec4( m_aabb.GetMax(), 1.0f ) ).GetXYZ();
+		const ae::Sphere sphere( ( aabbMin + aabbMax ) * 0.5f, ( aabbMax - aabbMin ).Length() * 0.5f );
+		if( result.EarlyOut( params, sphere ) )
 		{
-			return prevResult; // Early out if sphere is farther away than previous hits
+			return result; // Early out if previous hits already closer than sphere
 		}
-		
-		// OBB
-		ae::OBB obb( params.transform * m_aabb.GetTransform() );
+		const ae::OBB obb( params.transform * m_aabb.GetTransform() );
+		if( result.EarlyOut( params, obb ) )
+		{
+			return result; // Early out if previous hits already closer than obb
+		}
 		if( ae::DebugLines* debug = params.debug )
 		{
-			// Ray intersects obb
-			debug->AddOBB( obb, params.debugColor );
-		}
-		if( !obb.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
-		{
-			if( ae::DebugLines* debug = params.debug )
-			{
-				debug->AddLine( params.source, params.source + params.ray, params.debugColor );
-			}
-			return prevResult; // Early out if ray doesn't touch obb
-		}
-		else if( params.maxHits == prevResult.hits.Length() && prevResult.hits[ prevResult.hits.Length() - 1 ].distance < t )
-		{
-			return prevResult; // Early out if obb is farther away than previous hits
+			debug->AddOBB( obb, params.debugColor ); // Ray intersects obb
 		}
 	}
-	
+
 	const ae::Matrix4 invTransform = params.transform.GetInverse();
 	const ae::Matrix4 normalTransform = invTransform.GetTranspose();
 	const ae::Vec3 source( invTransform * ae::Vec4( params.source, 1.0f ) );
@@ -12723,11 +12755,7 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 	const ae::Vec3 ray = rayEnd - source;
 	const bool ccw = params.hitCounterclockwise;
 	const bool cw = params.hitClockwise;
-	
-	RaycastResult result;
-	uint32_t hitCount  = 0;
-	RaycastResult::Hit hits[ result.hits.Size() + 1 ];
-	const uint32_t maxHits = ae::Min( params.maxHits, result.hits.Size() );
+
 	auto bvhFn = [&]( auto&& bvhFn, const ae::BVH< BVHTri, B >* bvh, const BVHNode* current ) -> void
 	{
 		if( !current->aabb.IntersectRay( source, ray ) )
@@ -12748,26 +12776,19 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 				ae::Vec3 a = m_positions[ idx0 ];
 				ae::Vec3 b = m_positions[ leaf->data[ i ].idx[ 1 ] ];
 				ae::Vec3 c = m_positions[ leaf->data[ i ].idx[ 2 ] ];
-				if( IntersectRayTriangle( source, ray, a, b, c, ccw, cw, &p, &n, nullptr ) )
+				if( Triangle( a, b, c ).IntersectRay( source, ray, ccw, cw, &p, &n, nullptr ) )
 				{
-					RaycastResult::Hit& outHit = hits[ hitCount ];
-					hitCount++;
-					AE_ASSERT( hitCount <= maxHits + 1 ); // Allow one extra hit, then sort and remove last hit below
-
-					// Undo local space transforms
-					outHit.position = ae::Vec3( params.transform * ae::Vec4( p, 1.0f ) );
-					outHit.normal = ae::Vec3( normalTransform * ae::Vec4( n, 0.0f ) );
-					outHit.distance = ( outHit.position - params.source ).Length(); // Calculate here because transform might not have uniform scale
-					outHit.userData = params.userData;
-					outHit.extra = m_collisionExtras[ idx0 ];
-
-					if( hitCount > maxHits )
+					RaycastResult::Hit hit;
+					hit.position = ae::Vec3( params.transform * ae::Vec4( p, 1.0f ) ); // Undo local space transforms
+					hit.normal = ae::Vec3( normalTransform * ae::Vec4( n, 0.0f ) ).SafeNormalizeCopy(); // SafeNormalizeCopy
+					hit.distance = ( hit.position - params.source ).Length(); // Calculate here because transform might not have uniform scale
+					hit.userData = params.userData;
+					hit.extra = m_collisionExtras[ idx0 ];
+					result.Accumulate( params, hit );
+					if( ae::DebugLines* debug = params.debug )
 					{
-						std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b )
-						{
-							return a.distance < b.distance;
-						});
-						hitCount = maxHits;
+						debug->AddCircle( hit.position, hit.normal, 0.25f, params.debugColor, 8 );
+						debug->AddLine( hit.position, hit.position + hit.normal, params.debugColor );
 					}
 				}
 			}
@@ -12785,30 +12806,6 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 		}
 	};
 	bvhFn( bvhFn, &m_bvh, m_bvh.GetRoot() );
-	
-	if( ae::DebugLines* debug = params.debug )
-	{
-		ae::Vec3 rayEnd = hitCount ? hits[ hitCount - 1 ].position : params.source + params.ray;
-		debug->AddLine( params.source, rayEnd, params.debugColor );
-		
-		for( uint32_t i = 0; i < hitCount; i++ )
-		{
-			const RaycastResult::Hit* hit = &hits[ i ];
-			const ae::Vec3 p = hit->position;
-			const ae::Vec3 n = hit->normal;
-			float s = ( hitCount > 1 ) ? ( i / ( hitCount - 1.0f ) ) : 1.0f;
-			debug->AddCircle( p, n, ae::Lerp( 0.25f, 0.3f, s ), params.debugColor, 8 );
-			debug->AddLine( p, p + n, params.debugColor );
-		}
-	}
-	
-	std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b ) { return a.distance < b.distance; } );
-	for( uint32_t i = 0; i < hitCount; i++ )
-	{
-		hits[ i ].normal.SafeNormalize();
-		result.hits.Append( hits[ i ] );
-	}
-	RaycastResult::Accumulate( params, prevResult, &result );
 	return result;
 }
 
@@ -16148,13 +16145,14 @@ void Sphere::Expand( ae::Vec3 p0 )
 	}
 }
 
-bool Sphere::IntersectRay( Vec3 origin, Vec3 direction, Vec3* pOut, float* tOut ) const
+bool Sphere::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut, float* tOut ) const
 {
-	direction.SafeNormalize();
+	const Vec3 direction = ray.SafeNormalizeCopy();
+	const float rayLength = ray.Length();
 
-	Vec3 m = origin - center;
-	float b = m.Dot( direction );
-	float c = m.Dot( m ) - radius * radius;
+	const Vec3 m = source - center;
+	const float b = m.Dot( direction );
+	const float c = m.Dot( m ) - radius * radius;
 	// Exit if r's origin outside s (c > 0) and r pointing away from s (b > 0)
 	if( c > 0.0f && b > 0.0f )
 	{
@@ -16162,13 +16160,12 @@ bool Sphere::IntersectRay( Vec3 origin, Vec3 direction, Vec3* pOut, float* tOut 
 	}
 
 	// A negative discriminant corresponds to ray missing sphere
-	float discr = b * b - c;
+	const float discr = b * b - c;
 	if( discr < 0.0f )
 	{
 		return false;
 	}
 
-	// @TODO: This check should be against the ray segment, and so should be limited here
 	// Ray now found to intersect sphere, compute smallest t value of intersection
 	float t = -b - sqrtf( discr );
 	if( t < 0.0f )
@@ -16176,28 +16173,38 @@ bool Sphere::IntersectRay( Vec3 origin, Vec3 direction, Vec3* pOut, float* tOut 
 		t = 0.0f; // If t is negative, ray started inside sphere so clamp t to zero
 	}
 	
+	// Check if hit is within ray length
+	if( t > rayLength )
+	{
+		return false;
+	}
+	
 	if( tOut )
 	{
 		*tOut = t;
 	}
-	if( pOut )
+	if( hitOut )
 	{
-		*pOut = origin + direction * t;
+		*hitOut = source + direction * t;
+	}
+	if( normalOut )
+	{
+		*normalOut = ( *hitOut - center ).SafeNormalizeCopy();
 	}
 
 	return true;
 }
 
-bool Sphere::IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const
+bool Sphere::IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* hitOut ) const
 {
-	ae::Vec3 closest = ClosestPointOnTriangle( center, t0, t1, t2 );
+	ae::Vec3 closest = Triangle( t0, t1, t2 ).ClosestPoint( center );
 	if( ( closest - center ).LengthSquared() <= radius * radius )
 	{
-	if( outNearestIntersectionPoint )
-	{
-		*outNearestIntersectionPoint = closest;
-	}
-	return true;
+		if( hitOut )
+		{
+			*hitOut = closest;
+		}
+		return true;
 	}
 	return false;
 }
@@ -16211,6 +16218,29 @@ ae::Vec3 Sphere::GetNearestPointOnSurface( ae::Vec3 p, float* signedDistOut ) co
 		*signedDistOut = ( d - radius );
 	}
 	return center + v * radius;
+}
+
+//------------------------------------------------------------------------------
+// ae::Triangle member functions
+//------------------------------------------------------------------------------
+Triangle::Triangle( Vec3 p0, Vec3 p1, Vec3 p2 ) : vertices{ p0, p1, p2 } {}
+
+Triangle::Triangle( Vec3 ( &v )[ 3 ] ) : vertices{ v[ 0 ], v[ 1 ], v[ 2 ] } {}
+
+Triangle::Triangle( const Vec3* p012 ) : vertices{ p012[ 0 ], p012[ 1 ], p012[ 2 ] } {}
+
+Vec3 Triangle::CounterClockwiseNormal() const
+{
+	const Vec3 edge1 = vertices[ 1 ] - vertices[ 0 ];
+	const Vec3 edge2 = vertices[ 2 ] - vertices[ 0 ];
+	return edge1.Cross( edge2 ).SafeNormalizeCopy();
+}
+
+Vec3 Triangle::ClockwiseNormal() const
+{
+	const Vec3 edge1 = vertices[ 2 ] - vertices[ 0 ];
+	const Vec3 edge2 = vertices[ 1 ] - vertices[ 0 ];
+	return edge1.Cross( edge2 ).SafeNormalizeCopy();
 }
 
 //------------------------------------------------------------------------------
@@ -16897,13 +16927,13 @@ AABB OBB::GetAABB() const
 }
 
 //------------------------------------------------------------------------------
-// Geometry helpers
+// ae::Triangle member functions @TODO: move
 //------------------------------------------------------------------------------
-bool IntersectRayTriangle( Vec3 p, Vec3 ray, Vec3 a, Vec3 b, Vec3 c, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut )
+bool Triangle::IntersectRay( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut ) const
 {
 	// Möller–Trumbore ray-triangle intersection
-	const ae::Vec3 edge1 = b - a;
-	const ae::Vec3 edge2 = c - a;
+	const ae::Vec3 edge1 = vertices[ 1 ] - vertices[ 0 ];
+	const ae::Vec3 edge2 = vertices[ 2 ] - vertices[ 0 ];
 	const float epsilon = 1e-8f;
 	const ae::Vec3 h = ray.Cross( edge2 );
 	const float det = edge1.Dot( h );
@@ -16924,7 +16954,7 @@ bool IntersectRayTriangle( Vec3 p, Vec3 ray, Vec3 a, Vec3 b, Vec3 c, bool ccw, b
 	}
 
 	const float invDet = 1.0f / det;
-	const ae::Vec3 s = p - a;
+	const ae::Vec3 s = p - vertices[ 0 ];
 	const float u = s.Dot( h ) * invDet;
 	if( u < 0.0f || u > 1.0f )
 	{
@@ -16961,56 +16991,67 @@ bool IntersectRayTriangle( Vec3 p, Vec3 ray, Vec3 a, Vec3 b, Vec3 c, bool ccw, b
 	return true;
 }
 
-ae::Vec3 ClosestPointOnTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c )
+ae::Vec3 Triangle::ClosestPoint( ae::Vec3 p ) const
 {
-	ae::Vec3 ab = b - a;
-	ae::Vec3 ac = c - a;
-	ae::Vec3 bc = c - b;
-	
+	const ae::Vec3 ab = vertices[ 1 ] - vertices[ 0 ];
+	const ae::Vec3 ac = vertices[ 2 ] - vertices[ 0 ];
+	const ae::Vec3 bc = vertices[ 2 ] - vertices[ 1 ];
+	const ae::Vec3 pa = vertices[ 0 ] - p;
+	const ae::Vec3 pb = vertices[ 1 ] - p;
+	const ae::Vec3 pc = vertices[ 2 ] - p;
 	// Compute parametric position s for projection P’ of P on AB,
 	// P’ = A + s*AB, s = snom/(snom+sdenom)
-	float snom = (p - a).Dot( ab );
-	float sdenom = (p - b).Dot(a - b);
-	
+	const float snom = ( -pa ).Dot( ab );
+	const float sdenom = ( -pb ).Dot( -ab );
 	// Compute parametric position t for projection P’ of P on AC,
 	// P’ = A + t*AC, s = tnom/(tnom+tdenom)
-	float tnom = (p - a).Dot( ac );
-	float tdenom = (p - c).Dot( a - c);
-	if(snom <= 0.0f && tnom <= 0.0f) return a; // Vertex region early out
-	
+	const float tnom = ( -pa ).Dot( ac );
+	const float tdenom = ( -pc ).Dot( -ac );
+	if( snom <= 0.0f && tnom <= 0.0f )
+	{
+		return vertices[ 0 ]; // Vertex region early out
+	}
 	// Compute parametric position u for projection P’ of P on BC,
 	// P’ = B + u*BC, u = unom/(unom+udenom)
-	float unom = (p - b).Dot( bc ), udenom = (p - c).Dot(b - c);
-	if(sdenom <= 0.0f && unom <= 0.0f) return b; // Vertex region early out
-	if(tdenom <= 0.0f && udenom <= 0.0f) return c; // Vertex region early out
-	
+	const float unom = ( -pb ).Dot( bc ), udenom = ( -pc ).Dot( -bc );
+	if( sdenom <= 0.0f && unom <= 0.0f )
+	{
+		return vertices[ 1 ]; // Vertex region early out
+	}
+	if( tdenom <= 0.0f && udenom <= 0.0f )
+	{
+		return vertices[ 2 ]; // Vertex region early out
+	}
 	// P is outside (or on) AB if the triple scalar product [N PA PB] <= 0
-	ae::Vec3 n = (b - a).Cross(c - a);
-	float vc = n.Dot((a - p).Cross(b - p));
+	const ae::Vec3 n = ab.Cross( ac );
+	const float vc = n.Dot( pa.Cross( pb ) );
 	// If P outside AB and within feature region of AB,
 	// return projection of P onto AB
-	if(vc <= 0.0f && snom >= 0.0f && sdenom >= 0.0f)
-		return a + snom / (snom + sdenom) * ab;
-	
+	if( vc <= 0.0f && snom >= 0.0f && sdenom >= 0.0f )
+	{
+		return vertices[ 0 ] + snom / ( snom + sdenom ) * ab;
+	}
 	// P is outside (or on) BC if the triple scalar product [N PB PC] <= 0
-	float va = n.Dot((b - p).Cross(c - p));
+	const float va = n.Dot( pb.Cross( pc ) );
 	// If P outside BC and within feature region of BC,
 	// return projection of P onto BC
-	if(va <= 0.0f && unom >= 0.0f && udenom >= 0.0f)
-	return b + unom / (unom + udenom) * bc;
-	
+	if( va <= 0.0f && unom >= 0.0f && udenom >= 0.0f )
+	{
+		return vertices[ 1 ] + unom / ( unom + udenom ) * bc;
+	}
 	// P is outside (or on) CA if the triple scalar product [N PC PA] <= 0
-	float vb = n.Dot((c - p).Cross(a - p));
+	const float vb = n.Dot( pc.Cross( pa ) );
 	// If P outside CA and within feature region of CA,
 	// return projection of P onto CA
-	if(vb <= 0.0f && tnom >= 0.0f && tdenom >= 0.0f)
-		return a + tnom / (tnom + tdenom) * ac;
-
+	if( vb <= 0.0f && tnom >= 0.0f && tdenom >= 0.0f )
+	{
+		return vertices[ 0 ] + tnom / ( tnom + tdenom ) * ac;
+	}
 	// P must project inside face region. Compute Q using barycentric coordinates
-	float u = va / (va + vb + vc);
-	float v = vb / (va + vb + vc);
-	float w=1.0f-u-v; //=vc/(va+vb+vc)
-	return u * a + v * b + w * c;
+	const float u = va / ( va + vb + vc );
+	const float v = vb / ( va + vb + vc );
+	const float w = 1.0f - u - v; //=vc/(va+vb+vc)
+	return u * vertices[ 0 ] + v * vertices[ 1 ] + w * vertices[ 2 ];
 }
 
 //------------------------------------------------------------------------------
@@ -27328,6 +27369,44 @@ float Spline::Segment::GetMinDistance( ae::Vec3 p, ae::Vec3* pOut, float* tOut )
 //------------------------------------------------------------------------------
 // ae::RaycastResult member functions
 //------------------------------------------------------------------------------
+bool RaycastResult::EarlyOut( const RaycastParams& params, ae::Sphere sphere ) const
+{
+	float t = 0.0f;
+	if( !sphere.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
+	{
+		return true; // Early out if ray doesn't touch sphere
+	}
+	const float distance = params.ray.Length() * t;
+	if( ( params.maxHits == hits.Length() ) && hits.Length() && hits.Last().distance < distance )
+	{
+		return true; // Early out if sphere is farther away than previous hits
+	}
+	return false;
+}
+
+bool RaycastResult::EarlyOut( const RaycastParams& params, ae::OBB obb ) const
+{
+	float t = 0.0f;
+	if( !obb.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
+	{
+		return true; // Early out if ray doesn't touch obb
+	}
+	const float distance = params.ray.Length() * t;
+	if( ( params.maxHits == hits.Length() ) && hits.Length() && hits.Last().distance < distance )
+	{
+		return true; // Early out if obb is farther away than previous hits
+	}
+	return false;
+}
+
+void RaycastResult::Accumulate( const RaycastParams& params, Hit hit )
+{
+	RaycastResult result;
+	result.hits.Append( hit );
+	Accumulate( params, *this, &result );
+	*this = result;
+}
+
 void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next )
 {
 	if( !next )
