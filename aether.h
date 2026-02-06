@@ -16198,13 +16198,14 @@ bool Sphere::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut,
 	{
 		*tOut = t;
 	}
+	const ae::Vec3 hit = source + direction * t;
 	if( hitOut )
 	{
-		*hitOut = source + direction * t;
+		*hitOut = hit;
 	}
 	if( normalOut )
 	{
-		*normalOut = ( *hitOut - center ).SafeNormalizeCopy();
+		*normalOut = ( hit - center ).SafeNormalizeCopy();
 	}
 
 	return true;
