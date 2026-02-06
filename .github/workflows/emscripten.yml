@@ -13,8 +13,8 @@ jobs:
       - name: Create Build Directory
         run: cmake -E make_directory build
       - name: Configure
-        run: source /opt/emsdk/emsdk_env.sh && emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
+        run: . /opt/emsdk/emsdk_env.sh && emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
       - name: Build
-        run: source /opt/emsdk/emsdk_env.sh && emmake make -C build all -j$(nproc)
+        run: . /opt/emsdk/emsdk_env.sh && emmake make -C build all -j$(nproc)
       - name: Test
         run: node build/test/test.js
