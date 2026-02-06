@@ -1956,6 +1956,7 @@ public:
 
 private:
 	bool m_Insert( Key key, typename Hash::UInt hash, int32_t index );
+	bool m_IsEqual( const Key& a, const Key& b ) const;
 	struct Entry
 	{
 		Key newKey;
@@ -10635,7 +10636,7 @@ bool HashMap< Key, N, Hash >::Set( Key key, uint32_t index )
 			{
 				break;
 			}
-			else if( e->newKey == key )
+			else if( m_IsEqual( e->newKey, key ) )
 			{
 				e->hash = hash;
 				e->index = index;
@@ -10675,7 +10676,7 @@ int32_t HashMap< Key, N, Hash >::Remove( Key key )
 			{
 				return -1;
 			}
-			else if( e->newKey == key )
+			else if( m_IsEqual( e->newKey, key ) )
 			{
 				entry = e;
 				break;
@@ -10756,7 +10757,7 @@ int32_t HashMap< Key, N, Hash >::Get( Key key ) const
 			{
 				return -1;
 			}
-			else if( e->newKey == key )
+			else if( m_IsEqual( e->newKey, key ) )
 			{
 				return e->index;
 			}
@@ -10816,6 +10817,20 @@ bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32
 	}
 	return false;
 };
+
+template< typename Key, uint32_t N, typename Hash >
+bool HashMap< Key, N, Hash >::m_IsEqual( const Key& a, const Key& b ) const
+{
+	using KeyDecayed = std::decay_t< Key >;
+	if constexpr( std::is_same_v< KeyDecayed, char* > || std::is_same_v< KeyDecayed, const char* > )
+	{
+		return std::strcmp( a, b ) == 0;
+	}
+	else
+	{
+		return a == b;
+	}
+}
 
 //------------------------------------------------------------------------------
 // ae::Map member functions
