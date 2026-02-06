@@ -3,17 +3,13 @@ on: [push]
 jobs:
   build-and-test:
       runs-on: ubuntu-latest
+      container:
+        image: ghcr.io/johnhues/aether-build:latest
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       steps:
       - uses: actions/checkout@v4
-      - name: Install Packages
-        run: |
-          sudo apt update -qq
-          sudo apt install -y --no-install-recommends ca-certificates gpg wget mingw-w64 wine
-          test -f /usr/share/doc/kitware-archive-keyring/copyright || wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
-          echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ noble main' | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
-          sudo apt update -qq
-          test -f /usr/share/doc/kitware-archive-keyring/copyright || sudo rm /usr/share/keyrings/kitware-archive-keyring.gpg
-          sudo apt install -y --no-install-recommends kitware-archive-keyring cmake
       - name: Create Build Directory
         run: cmake -E make_directory build
       - name: Configure
