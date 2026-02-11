@@ -253,31 +253,29 @@ ae_add_bundle("OBJViewer"
 	LIBS "ae"
 )
 
-if(AE_LOADERS_OFBX)
-	# SkinnedMesh
-	ae_add_bundle("SkinnedMesh"
-		TARGET_NAME "16_skinned_mesh"
-		BUNDLE_ID "ae.16_skinned_mesh"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
-		MAJOR_MINOR_PATCH_VERSION "0.0.0"
-		ICNS_FILE "data/Icon.icns"
-		SRC_FILES "16_SkinnedMesh.cpp"
-		RESOURCES "${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
-		LIBS "ae;ae_loaders"
-	)
+# SkinnedMesh
+ae_add_bundle("SkinnedMesh"
+	TARGET_NAME "16_skinned_mesh"
+	BUNDLE_ID "ae.16_skinned_mesh"
+	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "16_SkinnedMesh.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
+	LIBS "ae;ae_loaders"
+)
 
-	# IK
-	ae_add_bundle("IK"
-		TARGET_NAME "17_ik"
-		BUNDLE_ID "ae.17_ik"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
-		MAJOR_MINOR_PATCH_VERSION "0.0.0"
-		ICNS_FILE "data/Icon.icns"
-		SRC_FILES "17_IK.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
-		RESOURCES "${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
-		LIBS "ae;ae_loaders;ae_extras;imgui;imguizmo"
-	)
-endif()
+# IK
+ae_add_bundle("IK"
+	TARGET_NAME "17_ik"
+	BUNDLE_ID "ae.17_ik"
+	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "17_IK.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
+	LIBS "ae;ae_loaders;ae_extras;imgui;imguizmo"
+)
 
 if(AE_DEPRECATED) # @TODO: Fix deprecated ClassType/ClassVar usage
 	# Small Engine

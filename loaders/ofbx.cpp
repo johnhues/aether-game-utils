@@ -25,7 +25,9 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 #include "ae/loaders.h"
+AE_PUSH_DISABLE_ALL_WARNINGS()
 #include "ofbx.h"
+AE_POP_DISABLE_ALL_WARNINGS()
 namespace ae {
 
 //------------------------------------------------------------------------------

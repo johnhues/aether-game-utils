@@ -178,7 +178,9 @@ int main()
 	// const char* rightFootBoneName = "QuickRigCharacter_RightFoot";
 
 	const char* rightHandBoneName = "QuickRigCharacter_RightHand";
-	const char* anchorBoneName = "QuickRigCharacter_RightShoulder";
+	const char* rightForearmBoneName = "QuickRigCharacter_RightForeArm";
+	const char* rightArmBoneName = "QuickRigCharacter_RightArm";
+	const char* rightShoulderBoneName = "QuickRigCharacter_RightShoulder";
 
 	ae::Skeleton currentPose = TAG_ALL;
 	ae::Array< ae::IKConstraints > ikConstraints = TAG_ALL;
@@ -199,6 +201,29 @@ int main()
 			constraints.horizontalAxis = ae::Axis::NegativeZ;
 			constraints.bendAxis = ae::Axis::NegativeY;
 		}
+		
+		if( strcmp( bone->name.c_str(), rightShoulderBoneName ) == 0 )
+		{
+			// constraints.rotationLimits[ 0 ] = 0.23f;
+			// constraints.rotationLimits[ 1 ] = 0.23f;
+			// constraints.rotationLimits[ 2 ] = 0.23f;
+			// constraints.rotationLimits[ 3 ] = 0.23f;
+		}
+		else if( strcmp( bone->name.c_str(), rightArmBoneName ) == 0 )
+		{
+			// constraints.rotationLimits[ 0 ] = 1.5f;
+			// constraints.rotationLimits[ 1 ] = 1.5f;
+			// constraints.rotationLimits[ 2 ] = 0.29f;
+			// constraints.rotationLimits[ 3 ] = 0.29f;
+		}
+		else if( strcmp( bone->name.c_str(), rightForearmBoneName ) == 0 )
+		{
+			// constraints.rotationLimits[ 0 ] = 1.5f;
+			// constraints.rotationLimits[ 1 ] = 0.29f;
+			// constraints.rotationLimits[ 2 ] = 0.29f;
+			// constraints.rotationLimits[ 3 ] = 0.29f;
+		}
+
 		ikConstraints.Append( constraints );
 	}
 	{
@@ -237,7 +262,7 @@ int main()
 	bool drawSkeleton = true;
 	bool autoIK = true;
 	bool fromBindPose = true;
-	bool drawIK = false;
+	bool drawIK = true;
 	int32_t iterCount = 5;
 	float ikJointScale = 0.1f;
 	bool rotationIK = true;
@@ -432,7 +457,7 @@ int main()
 			{
 				ik.chain.Insert( 0, b->index );
 				ik.joints.Insert( 0, ikConstraints[ b->index ] );
-				if( b->name == anchorBoneName )
+				if( b->name == rightShoulderBoneName )
 				{
 					break;
 				}

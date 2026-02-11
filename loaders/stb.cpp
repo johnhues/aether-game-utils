@@ -25,7 +25,9 @@
 //------------------------------------------------------------------------------
 #include "ae/loaders.h"
 #define STB_IMAGE_IMPLEMENTATION
+AE_PUSH_DISABLE_ALL_WARNINGS()
 #include "stb_image.h"
+AE_POP_DISABLE_ALL_WARNINGS()
 
 namespace ae {
 
@@ -69,7 +71,8 @@ void stbLoadPng( ae::Texture2D* texture, const uint8_t* data, uint32_t dataLen, 
       }
       break;
     case STBI_grey_alpha:
-      AE_FAIL();
+      // @TODO: Better support for this case
+      format = isSRGB ? ae::Texture::Format::RGBA8_SRGB : ae::Texture::Format::RGBA8;
       break;
     case STBI_rgb:
       format = isSRGB ? ae::Texture::Format::RGB8_SRGB : ae::Texture::Format::RGB8;

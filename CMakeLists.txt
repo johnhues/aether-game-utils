@@ -12,8 +12,6 @@ else()
 	option(AE_LEAN_AND_MEAN "Disables building tests and examples" ON)
 endif()
 option(AE_EXTRAS "Enables experimental utilities" OFF)
-option(AE_LOADERS_OFBX "Enables aether FBX loader and ofbx dependency" OFF)
-option(AE_LOADERS_STB "Enables aether PNG loader and stb dependency" OFF)
 option(AE_DEPRECATED "Enables deprecated features" OFF)
 
 # Configuration for building ae on its own

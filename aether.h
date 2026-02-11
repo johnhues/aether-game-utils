@@ -353,6 +353,27 @@ namespace ae {
 #endif
 
 //------------------------------------------------------------------------------
+//! AE_PUSH_DISABLE_ALL_WARNINGS/AE_POP_DISABLE_ALL_WARNINGS utility macros
+//! To disable warnings from external headers. Usage:
+//! AE_PUSH_DISABLE_ALL_WARNINGS
+//! #include "external_header.h"
+//! AE_POP_DISABLE_ALL_WARNINGS
+//------------------------------------------------------------------------------
+#if defined( _MSC_VER )
+	#define AE_PUSH_DISABLE_ALL_WARNINGS() #pragma warning( push, 0 )
+	#define AE_POP_DISABLE_ALL_WARNINGS() #pragma warning( pop )
+#elif defined( __clang__ )
+	#define AE_PUSH_DISABLE_ALL_WARNINGS() _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Weverything\"")
+	#define AE_POP_DISABLE_ALL_WARNINGS() _Pragma("clang diagnostic pop")
+#elif defined( __GNUC__ )
+	#define AE_PUSH_DISABLE_ALL_WARNINGS() _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wall\"") _Pragma("GCC diagnostic ignored \"-Wextra\"")
+	#define AE_POP_DISABLE_ALL_WARNINGS() _Pragma("GCC diagnostic pop")
+#else
+	#define AE_PUSH_DISABLE_ALL_WARNINGS()
+	#define AE_POP_DISABLE_ALL_WARNINGS()
+#endif
+
+//------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
 template< typename T, int N > char( &_CountOfHelper( T(&)[ N ] ) )[ N ];
@@ -5337,7 +5358,7 @@ struct IK
 	//! Used as the starting point for the IK.
 	ae::Skeleton pose;
 	//! If false, the IK will not respect joint limits
-	bool enableRotationLimits = true;
+	bool enableRotationLimits = false;
 
 	ae::DebugLines* debugLines = nullptr;
 	ae::Matrix4 debugModelToWorld = ae::Matrix4::Identity();
@@ -20367,7 +20388,12 @@ void Input::Pump()
 	}
 #undef AE_UPDATE_KEY
 #elif _AE_OSX_
-	if( [(NSWindow*)m_window->window isMainWindow] )
+	if( !m_window->GetFocused() )
+	{
+		// Clear old keys so a "release" event is not registered when focus is lost
+		memset( m_keys, 0, sizeof(m_keys) );
+	}
+	else
 	{
 #define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk / 32 ].bigEndianValue & ( 1 << ( _vk % 32 ) )
 		KeyMap keyStates;
@@ -27137,9 +27163,9 @@ namespace ae {
 //------------------------------------------------------------------------------
 // ae::DebugCamera member functions
 //------------------------------------------------------------------------------
-DebugCamera::DebugCamera( ae::Axis upAxis )
+DebugCamera::DebugCamera( ae::Axis upAxis ) :
+	m_worldUp( upAxis )
 {
-	m_worldUp = upAxis;
 	AE_ASSERT_MSG( m_worldUp == ae::Axis::Y || m_worldUp == ae::Axis::Z, "Only +Y and +Z world up axes are supported" );
 	m_Precalculate();
 }
@@ -27153,23 +27179,20 @@ void DebugCamera::SetDistanceLimits( float min, float max )
 
 void DebugCamera::Update( ae::Input* input, float dt )
 {
-	if( !m_inputEnabled )
-	{
-		input = nullptr;
-	}
+	AE_ASSERT_MSG( input, "Input system is required to update debug camera" );
 
 	// Input
-	const ae::Vec2 movement = input ? ae::Vec2( input->mouse.movement ) : ae::Vec2( 0.0f );
-	const ae::Vec2 scroll = input ? input->mouse.scrollMomentum * 0.01f : ae::Vec2( 0.0f );
-	const bool alt = input ? input->Get( ae::Key::LeftAlt ) : false;
-	const bool shift = input ? input->Get( ae::Key::LeftShift ) : false;
-	const bool control = input ? input->Get( ae::Key::LeftControl ) : false;
-	const bool command = input ? input->Get( ae::Key::LeftSuper ) : false;
-	const bool modifier = input ? ( ( control || command ) && ( !control || !command ) ) : false; // Either but not both
-	const bool usingTouch = input ? input->mouse.usingTouch : false;
-	const bool lmb = ( input && !usingTouch ) ? input->mouse.leftButton : false;
-	const bool mmb = ( input && !usingTouch ) ? input->mouse.middleButton : false;
-	const bool rmb = ( input && !usingTouch ) ? input->mouse.rightButton : false;
+	const ae::Vec2 movement = m_inputEnabled ? ae::Vec2( input->mouse.movement ) : ae::Vec2( 0.0f );
+	const ae::Vec2 scroll = m_inputEnabled ? input->mouse.scrollMomentum * 0.01f : ae::Vec2( 0.0f );
+	const bool alt = m_inputEnabled ? input->Get( ae::Key::LeftAlt ) : false;
+	const bool shift = m_inputEnabled ? input->Get( ae::Key::LeftShift ) : false;
+	const bool control = m_inputEnabled ? input->Get( ae::Key::LeftControl ) : false;
+	const bool command = m_inputEnabled ? input->Get( ae::Key::LeftSuper ) : false;
+	const bool modifier = m_inputEnabled ? ( ( control || command ) && ( !control || !command ) ) : false; // Either but not both
+	const bool usingTouch = m_inputEnabled ? input->mouse.usingTouch : false;
+	const bool lmb = ( m_inputEnabled && !usingTouch ) ? input->mouse.leftButton : false;
+	const bool mmb = ( m_inputEnabled && !usingTouch ) ? input->mouse.middleButton : false;
+	const bool rmb = ( m_inputEnabled && !usingTouch ) ? input->mouse.rightButton : false;
 	const bool isTouching = usingTouch && ( input->mouse.leftButton || input->mouse.middleButton || input->mouse.rightButton );
 	const bool isTouchScrolling = usingTouch && scroll.LengthSquared();
 
@@ -27217,10 +27240,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 		if( nextMode != Mode::None )
 		{
 			m_mode = nextMode;
-			if( input )
-			{
-				input->SetMouseCaptured( true );
-			}
+			input->SetMouseCaptured( true );
 		}
 		else if( !m_preventModeExitImm )
 		{
@@ -27231,10 +27251,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 			else
 			{
 				m_mode = Mode::None;
-				if( input )
-				{
-					input->SetMouseCaptured( false );
-				}
+				input->SetMouseCaptured( false );
 			}
 		}
 		m_moveAccum = 0.0f;
@@ -28468,7 +28485,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					// that it doesn't "move" in local space
 					childBone->modelPos = currentBone->modelPos + currentBone->modelToBoneRot.Rotate( currentPrimaryAxis ) * childBone->length;
 
-					// // (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
+					// (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
 					const ae::Quaternion currentBindModelToBone = bindPose->GetBoneByIndex( chain[ i ] )->modelToBone.GetRotation();
 					const ae::Quaternion parentBindModelToBone = bindPose->GetBoneByIndex( chain[ i - 1 ] )->modelToBone.GetRotation();
 					const ae::Quaternion bindRelative = currentBindModelToBone.RelativeCopy( parentBindModelToBone );
