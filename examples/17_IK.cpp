@@ -262,8 +262,9 @@ int main()
 	bool drawSkeleton = true;
 	bool autoIK = true;
 	bool fromBindPose = true;
+	bool autoOrientation = true;
 	bool drawIK = true;
-	int32_t iterCount = 5;
+	int32_t iterCount = 1;
 	float ikJointScale = 0.1f;
 	bool rotationIK = true;
 	enum class TestJointId
@@ -314,7 +315,7 @@ int main()
 
 		bool shouldStep = false;
 		ImGui::SetNextWindowPos( ImVec2( 0, 0 ), ImGuiCond_FirstUseEver );
-		ImGui::SetNextWindowSize( ImVec2( 200, 300 ), ImGuiCond_FirstUseEver );
+		ImGui::SetNextWindowSize( ImVec2( 350, io.DisplaySize.y ), ImGuiCond_FirstUseEver );
 		if( ImGui::Begin( "Options" ) )
 		{
 			ImGui::Checkbox( "Draw Mesh", &drawMesh );
@@ -329,6 +330,7 @@ int main()
 			}
 			ImGui::EndDisabled();
 			ImGui::Checkbox( "From Bind Pose", &fromBindPose );
+			ImGui::Checkbox( "Auto Orientation", &autoOrientation );
 			ImGui::SliderInt( "Iterations", &iterCount, 0, 10 );
 			ImGui::SliderFloat( "Joint Scale", &ikJointScale, 0.01f, 1.0f );
 			ImGui::Checkbox( "IK Rotation Limits", &rotationIK );
@@ -453,18 +455,12 @@ int main()
 		{
 			ae::IK ik = TAG_ALL;
 			const ae::Bone* extentBone = currentPose.GetBoneByName( rightHandBoneName );
-			for( auto b = extentBone; b; b = b->parent )
+			ik.extentTargets.Set( extentBone->index, targetTransform.GetTranslation() );
+			if( !autoOrientation )
 			{
-				ik.chain.Insert( 0, b->index );
-				ik.joints.Insert( 0, ikConstraints[ b->index ] );
-				if( b->name == rightShoulderBoneName )
-				{
-					break;
-				}
+				ik.extentOrientations.Set( extentBone->index, targetTransform.GetRotation() );
 			}
-			// ae::IKChain* chain = &ik.chains.Append();
-			// chain->bones.Append( { extentBone->transform, extentBone->parent->transform.GetTranslation() } );
-			ik.targetTransform = targetTransform;
+			ik.joints = ikConstraints;
 			ik.bindPose = &skin.GetBindPose();
 			ik.pose.Initialize( &currentPose );
 			ik.debugLines = drawIK ? &debugLines : nullptr;

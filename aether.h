@@ -5346,9 +5346,11 @@ struct IK
 	void Run( uint32_t iterationCount, ae::Skeleton* poseOut );
 
 	const ae::Tag tag;
-	ae::Matrix4 targetTransform = ae::Matrix4::Identity();
-	//! Bone indices. Ordered from root to extent.
-	ae::Array< uint32_t > chain;
+	//! Bone indices -> transform targets in world space. The IK will try to
+	//! move the specified bone towards the target transform. The IK will only
+	//! consider the position of the target transform, not the orientation.
+	ae::Map< uint32_t, ae::Vec3 > extentTargets;
+	ae::Map< uint32_t, ae::Quaternion > extentOrientations;
 	//! Joint info for each bone in the skeleton. Leave this empty to use the
 	//! default ae::IKConstraints, or append a single ae::IKJoint to use that for all
 	//! bones. Otherwise this should be the same length as 'pose.GetBoneCount()'. 
@@ -28304,25 +28306,17 @@ ae::Vec3 IK::ClipJoint(
 
 IK::IK( ae::Tag tag ) :
 	tag( tag ),
-	chain( tag ),
+	extentTargets( tag ),
+	extentOrientations( tag ),
 	joints( tag ),
 	pose( tag )
 {}
 
 void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 {
-	AE_ASSERT( !chain.Length() || pose.GetBoneCount() );
-	AE_ASSERT_MSG( bindPose, "A bind pose is required to run IK" );
 	// @TODO: More thorough validation
+	AE_ASSERT_MSG( bindPose, "A bind pose is required to run IK" );
 	AE_ASSERT_MSG( bindPose->GetBoneCount() == pose.GetBoneCount(), "Bind pose and pose hierarchy must match" );
-
-	struct IKBone
-	{
-		ae::Vec3 modelPos;
-		ae::Quaternion modelToBoneRot;
-		float length; // Fixed distance between pos and parent pos
-		float defaultTwist; // The bind pose twist angle between this bone and its parent
-	};
 
 	//AE_ASSERT( joints.Length() == 0 || joints.Length() == 1 || joints.Length() == bones.Length() );
 	auto GetConstraints = [ this ]( uint32_t idx ) -> const ae::IKConstraints&
@@ -28341,17 +28335,35 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 
 	if( debugLines )
 	{
-		ae::Matrix4 debugTarget = debugModelToWorld * targetTransform;
-		debugTarget.SetScale( debugJointScale );
-		debugLines->AddOBB( debugTarget, ae::Color::Red() );
+		for( const auto& target : extentTargets )
+		{
+			const ae::Vec3 p0 = debugModelToWorld.TransformPoint3x4( pose.GetBoneByIndex( target.key )->modelToBone.GetTranslation() );
+			const ae::Vec3 p1 = debugModelToWorld.TransformPoint3x4( target.value );
+			debugLines->AddLine( p0, p1, ae::Color::Red() );
+		}
 	}
 
 	// (a) The initial configuration of the manipulator and the target
-	ae::Array< IKBone > bones( tag, chain.Length() );
-	for( uint32_t i = 0; i < chain.Length(); i++ )
+	struct IKBone
 	{
-		const Bone* bindBone = bindPose->GetBoneByIndex( chain[ i ] );
-		const Bone* currentBone = pose.GetBoneByIndex( chain[ i ] );
+		ae::Vec3 modelPos;
+		ae::Quaternion modelToBoneRot;
+		float length; // Fixed distance between pos and parent pos
+		float defaultTwist; // The bind pose twist angle between this bone and its parent
+	};
+	ae::Array< IKBone > bones( tag, pose.GetBoneCount() );
+	AE_ASSERT( !bindPose->GetBoneByIndex( 0 )->parent );
+	AE_ASSERT( !pose.GetBoneByIndex( 0 )->parent );
+	bones.Append( {
+		.modelPos = pose.GetBoneByIndex( 0 )->modelToBone.GetTranslation(),
+		.modelToBoneRot = pose.GetBoneByIndex( 0 )->modelToBone.GetRotation(),
+		.length = 0.0f,
+		.defaultTwist = 0.0f
+	} );
+	for( uint32_t i = 1; i < pose.GetBoneCount(); i++ )
+	{
+		const Bone* bindBone = bindPose->GetBoneByIndex( i );
+		const Bone* currentBone = pose.GetBoneByIndex( i );
 		AE_ASSERT( currentBone->parent );
 		AE_ASSERT( bindBone->parent );
 		IKBone ikBone;
@@ -28369,212 +28381,148 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		bones.Append( ikBone );
 	}
 
-	const ae::Vec3 rootPos = bones[ 0 ].modelPos;
-	const ae::Vec3 targetPos = targetTransform.GetTranslation();
-	const ae::Quaternion targetRot = targetTransform.GetRotation();
+	const ae::Bone* rootBone_HACK = pose.GetBoneByName( "QuickRigCharacter_RightShoulder" );
+	const ae::Bone* extentBone_HACK = pose.GetBoneByName( "QuickRigCharacter_RightHand" );
+	AE_ASSERT( rootBone_HACK && extentBone_HACK );
+	const ae::Vec3 rootPos_HACK = bones[ rootBone_HACK->index ].modelPos;
+	const ae::Vec3 targetPos_HACK = *extentTargets.TryGet( extentBone_HACK->index );
 
-	uint32_t iters = 0;
-	// Always allow one iteration when debugging to see rotation limits
-	while( ( iters == 0 && debugLines ) || ( ( bones[ bones.Length() - 1 ].modelPos - targetPos ).Length() > 0.001f && iters < iterationCount ) )
+	for( uint32_t iterations = 0; iterations < iterationCount; iterations++ )
 	{
-		// Start from end and iterate to root to move toward target
-		// (b) relocate and reorient joint p4 to target t
-		bones[ bones.Length() - 1 ].modelPos = targetPos;
-		bones[ bones.Length() - 1 ].modelToBoneRot = targetRot;
-		for( int32_t i = bones.Length() - 2; i >= 0; i-- )
+		auto reverseIter = [&]( auto&& reverseIter, IKBone* ikBone, const Bone* poseBone ) -> void
 		{
-			IKBone* parentBone = i ? &bones[ i - 1 ] : nullptr;
-			IKBone* currentBone = &bones[ i ];
-			IKBone* childBone = &bones[ i + 1 ];
-			const ae::IKConstraints& currentConstraints = GetConstraints( i );
-			const ae::IKConstraints& childConstraints = GetConstraints( i + 1 );
-			const ae::Vec3 currentPrimaryAxis = GetAxisVector( currentConstraints.twistAxis );
-
-			// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
-			currentBone->modelPos = childBone->modelPos + ( currentBone->modelPos - childBone->modelPos ).SafeNormalizeCopy() * childBone->length;
-
-			if( parentBone )
+			// TODO: Support multiple children, but first get a recursive version
+			// working with a non-branching chain.
+			const Bone* poseChild = poseBone->firstChild;
+			IKBone* ikChild = poseChild ? &bones[ poseChild->index ] : nullptr;
+			// for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
 			{
-				if( enableRotationLimits )
+				// Start from end and iterate to root to move toward target
+				// (b) relocate and reorient joint p4 to target t
+				if( ikChild )
 				{
-					// (d) reorient joint p0' in such a way that the rotor expressing the rotation between the orientation frames at joints p0' and p1' is within the motion range bounds
-					// Decompose rotation into twist and swing so twist can be limited
-					const ae::Quaternion relative0 = childBone->modelToBoneRot.RelativeCopy( currentBone->modelToBoneRot );
-					ae::Quaternion twistRot0;
-					ae::Quaternion swingRot;
-					relative0.GetTwistSwing( currentPrimaryAxis, &twistRot0, &swingRot );
-					float twistAngle = 0.0f;
-					twistRot0.GetAxisAngle( nullptr, &twistAngle );
+					reverseIter( reverseIter, ikChild, poseChild );
 
-					twistAngle -= currentBone->defaultTwist;
-					twistAngle = ae::Clip( twistAngle, currentConstraints.twistLimits[ 0 ], currentConstraints.twistLimits[ 1 ] );
-					twistAngle += currentBone->defaultTwist;
+					// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
+					const ae::Vec3 childDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
+					ikBone->modelPos = ikChild->modelPos - childDir * ikChild->length;
 
-					const ae::Quaternion twistRot1 = ae::Quaternion( currentPrimaryAxis, twistAngle );
-					const ae::Quaternion relative1 = swingRot * twistRot1;
-					currentBone->modelToBoneRot = parentBone->modelToBoneRot * relative1;
+					// Reorient current joint to point toward child joint
+					const ae::Vec3 currentPrimaryAxis = GetAxisVector( GetConstraints( poseBone->index ).twistAxis );
+					const ae::Quaternion invRot = ikBone->modelToBoneRot.GetInverse();
+					const ae::Vec3 boneDir = invRot.Rotate( childDir );
+					const ae::Vec3 axis = currentPrimaryAxis.Cross( boneDir );
+					const float angle = boneDir.GetAngleBetween( currentPrimaryAxis );
+					ikBone->modelToBoneRot *= ae::Quaternion( axis, angle );
 
-					// (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
-					currentBone->modelPos -= ClipJoint(
-						childBone->length,
-						currentBone->modelPos,
-						parentBone->modelToBoneRot,
-						childBone->modelPos,
-						currentConstraints,
-						ae::Color::Magenta()
-					);
+					if( debugLines )
+					{
+						debugLines->AddLine(
+							debugModelToWorld.TransformPoint3x4( ikChild->modelPos ),
+							debugModelToWorld.TransformPoint3x4( ikBone->modelPos ),
+							ae::Color::Magenta()
+						);
+					}
 				}
-				
+				else // @TODO: support ik targets on non-end joints, but first get a recursive version
+				{
+					// Is an extent if there's no child, set to target for
+					// correct initial pose this iteration.
+					if( const ae::Vec3* extentTarget = extentTargets.TryGet( poseBone->index ) )
+					{
+						ikBone->modelPos = *extentTarget;
+					}
+
+					if( const ae::Quaternion* extentOri = extentOrientations.TryGet( poseBone->index ) )
+					{
+						ikBone->modelToBoneRot = *extentOri;
+					}
+					else if( poseBone->parent )
+					{
+						// If no orientation target, try to at least match the position target's direction from the parent joint
+						const ae::Vec3 targetDir = ( ikBone->modelPos - bones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
+						const ae::Vec3 currentPrimaryAxis = GetAxisVector( GetConstraints( poseBone->index ).twistAxis );
+						const ae::Quaternion invRot = ikBone->modelToBoneRot.GetInverse();
+						const ae::Vec3 boneDir = invRot.Rotate( targetDir );
+						const ae::Vec3 axis = currentPrimaryAxis.Cross( boneDir );
+						const float angle = boneDir.GetAngleBetween( currentPrimaryAxis );
+						ikBone->modelToBoneRot *= ae::Quaternion( axis, angle );
+					}
+				}
+			}
+		};
+		reverseIter( reverseIter, &bones[ rootBone_HACK->index ], rootBone_HACK );
+		
+		// Iterate from root to reposition joints
+		bones[ rootBone_HACK->index ].modelPos = rootPos_HACK;
+		auto forwardIter = [&]( auto&& forwardIter, IKBone* ikBone, const Bone* poseBone ) -> void
+		{
+			// TODO: Support multiple children, but first get a recursive version working with a non-branching chain.
+			const Bone* poseChild = poseBone->firstChild;
+			if( poseChild )
+			{
+				IKBone* ikChild = &bones[ poseChild->index ];
+				const ae::IKConstraints& currentConstraints = GetConstraints( poseBone->index );
+				const ae::Vec3 currentPrimaryAxis = GetAxisVector( currentConstraints.twistAxis );
+
+				// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
+				ikChild->modelPos = ikBone->modelPos + ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy() * ikChild->length;
+
 				// Reorient current joint to point toward child joint
-				const ae::Vec3 dir = ( childBone->modelPos - currentBone->modelPos ).SafeNormalizeCopy();
-				const ae::Quaternion invRot = currentBone->modelToBoneRot.GetInverse();
+				const ae::Vec3 dir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
+				const ae::Quaternion invRot = ikBone->modelToBoneRot.GetInverse();
 				const ae::Vec3 boneDir = invRot.Rotate( dir );
 				const ae::Vec3 axis = currentPrimaryAxis.Cross( boneDir );
 				const float angle = boneDir.GetAngleBetween( currentPrimaryAxis );
-				currentBone->modelToBoneRot *= ae::Quaternion( axis, angle );
-			}
-			currentBone->modelPos = childBone->modelPos + currentBone->modelToBoneRot.Rotate( currentPrimaryAxis ) * -childBone->length;
+				ikBone->modelToBoneRot *= ae::Quaternion( axis, angle );
+				ikChild->modelPos = ikBone->modelPos + ikBone->modelToBoneRot.Rotate( currentPrimaryAxis ) * ikChild->length;
 
-			// (h) reorient the joint p-1' in order to satisfy the orientation limits
-
-			if( debugLines )
-			{
-				debugLines->AddLine(
-					debugModelToWorld.TransformPoint3x4( childBone->modelPos ),
-					debugModelToWorld.TransformPoint3x4( currentBone->modelPos ),
-					ae::Color::Magenta()
-				);
-			}
-		}
-		
-		// Iterate from root to reposition joints
-		bones[ 0 ].modelPos = rootPos;
-		for( uint32_t i = 0; i < bones.Length() - 1; i++ )
-		{
-			IKBone* parentBone = i ? &bones[ i - 1 ] : nullptr;
-			IKBone* currentBone = &bones[ i ];
-			IKBone* childBone = &bones[ i + 1 ];
-			const ae::IKConstraints& currentConstraints = GetConstraints( i );
-			const ae::IKConstraints& childConstraints = GetConstraints( i + 1 );
-			const ae::Vec3 currentPrimaryAxis = GetAxisVector( currentConstraints.twistAxis );
-
-			// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
-			childBone->modelPos = currentBone->modelPos + ( childBone->modelPos - currentBone->modelPos ).SafeNormalizeCopy() * childBone->length;
-
-			if( parentBone )
-			{
-				if( enableRotationLimits )
+				if( debugLines )
 				{
-					// (d) reorient joint p0' in such a way that the rotor expressing the rotation between the orientation frames at joints p0' and p1' is within the motion range bounds
-					// Decompose rotation into twist and swing so twist can be limited
-					const ae::Quaternion relative0 = currentBone->modelToBoneRot.RelativeCopy( parentBone->modelToBoneRot );
-					ae::Quaternion twistRot0;
-					ae::Quaternion swingRot;
-					relative0.GetTwistSwing( currentPrimaryAxis, &twistRot0, &swingRot );
-					float twistAngle = 0.0f;
-					twistRot0.GetAxisAngle( nullptr, &twistAngle );
-
-					twistAngle -= currentBone->defaultTwist;
-					twistAngle = ae::Clip( twistAngle, currentConstraints.twistLimits[ 0 ], currentConstraints.twistLimits[ 1 ] );
-					twistAngle += currentBone->defaultTwist;
-
-					const ae::Quaternion twistRot1 = ae::Quaternion( currentPrimaryAxis, twistAngle );
-					const ae::Quaternion relative1 = swingRot * twistRot1;
-					currentBone->modelToBoneRot = parentBone->modelToBoneRot * relative1;
-					// Move the child bone based on its parents new rotation, so
-					// that it doesn't "move" in local space
-					childBone->modelPos = currentBone->modelPos + currentBone->modelToBoneRot.Rotate( currentPrimaryAxis ) * childBone->length;
-
-					// (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
-					const ae::Quaternion currentBindModelToBone = bindPose->GetBoneByIndex( chain[ i ] )->modelToBone.GetRotation();
-					const ae::Quaternion parentBindModelToBone = bindPose->GetBoneByIndex( chain[ i - 1 ] )->modelToBone.GetRotation();
-					const ae::Quaternion bindRelative = currentBindModelToBone.RelativeCopy( parentBindModelToBone );
-					childBone->modelPos += ClipJoint(
-						childBone->length,
-						currentBone->modelPos,
-						( parentBone->modelToBoneRot * bindRelative ),
-						childBone->modelPos,
-						currentConstraints,
+					debugLines->AddLine(
+						debugModelToWorld.TransformPoint3x4( ikChild->modelPos ),
+						debugModelToWorld.TransformPoint3x4( ikBone->modelPos ),
 						ae::Color::PicoPink()
 					);
 				}
-
-				// Reorient current joint to point toward child joint
-				const ae::Vec3 dir = ( childBone->modelPos - currentBone->modelPos ).SafeNormalizeCopy();
-				const ae::Quaternion invRot = currentBone->modelToBoneRot.GetInverse();
-				const ae::Vec3 boneDir = invRot.Rotate( dir );
-				const ae::Vec3 axis = currentPrimaryAxis.Cross( boneDir );
-				const float angle = boneDir.GetAngleBetween( currentPrimaryAxis );
-				currentBone->modelToBoneRot *= ae::Quaternion( axis, angle );
+				forwardIter( forwardIter, ikChild, poseChild );
 			}
-			childBone->modelPos = currentBone->modelPos + currentBone->modelToBoneRot.Rotate( currentPrimaryAxis ) * childBone->length;
-
-			// (h) reorient the joint p-1' in order to satisfy the orientation limits
-
-			if( debugLines )
-			{
-				debugLines->AddLine(
-					debugModelToWorld.TransformPoint3x4( childBone->modelPos ),
-					debugModelToWorld.TransformPoint3x4( currentBone->modelPos ),
-					ae::Color::PicoPink()
-				);
-			}
-		}
-		
-		iters++;
+		};
+		forwardIter( forwardIter, &bones[ rootBone_HACK->index ], rootBone_HACK );
 	}
 
 	poseOut->Initialize( &pose );
-	ae::Array< const ae::Bone* > outBones( tag, bones.Length() );
-	ae::Array< ae::Matrix4 > outTransforms( tag, bones.Length() );
-	AE_ASSERT( chain.Length() == bones.Length() );
-	for( uint32_t i = 0; i < chain.Length(); i++ )
+	const ae::Bone* poseOutRoot = poseOut->GetBoneByIndex( rootBone_HACK->index );
+	auto finalizeOutPose = [&]( auto&& finalizeOutPose, IKBone* ikBone, const Bone* poseOutBone ) -> void
 	{
-		const uint32_t idx = chain[ i ];
-		const IKBone& ikBone = bones[ i ];
-
-		outBones.Append( poseOut->GetBoneByIndex( idx ) );
-		
-		ae::Matrix4 modelToBone = ikBone.modelToBoneRot.GetTransformMatrix();
-		modelToBone.SetTranslation( ikBone.modelPos );
-		outTransforms.Append( modelToBone );
-	}
-
-	// Don't apply any results when iteration is disabled, only display debug
-	// info. Skip debug lines also, there are no results.
-	if( iterationCount )
-	{
-		ae::Matrix4* finalTransform = &outTransforms[ outTransforms.Length() - 1 ];
-		*finalTransform = targetTransform;
-		// @TODO: Maintain the old bones scale
-		finalTransform->SetTranslation( bones[ bones.Length() - 1 ].modelPos );
-
-		for( uint32_t i = 0; i < chain.Length(); i++ )
+		const ae::Matrix4 modelToBone = ikBone->modelToBoneRot.GetTransformMatrix().SetTranslation( ikBone->modelPos );
+		poseOut->SetTransform( poseOutBone, modelToBone );
+		if( debugLines )
 		{
-			poseOut->SetTransform( poseOut->GetBoneByIndex( chain[ i ] ), outTransforms[ i ] );
-			if( debugLines )
-			{
-				ae::Matrix4 worldTransform = debugModelToWorld * outTransforms[ i ];
-				worldTransform.SetScale( debugJointScale );
-				debugLines->AddLine(
-					worldTransform.GetTranslation(),
-					worldTransform.GetTranslation() + worldTransform.GetAxis( 0 ),
-					ae::Color::Red()
-				);
-				debugLines->AddLine(
-					worldTransform.GetTranslation(),
-					worldTransform.GetTranslation() + worldTransform.GetAxis( 1 ),
-					ae::Color::Green()
-				);
-				debugLines->AddLine(
-					worldTransform.GetTranslation(),
-					worldTransform.GetTranslation() + worldTransform.GetAxis( 2 ),
-					ae::Color::Blue()
-				);
-				debugLines->AddOBB( worldTransform, ae::Color::Yellow() ); 
-			}
+			const ae::Matrix4 worldTransform = ( debugModelToWorld * modelToBone ).SetScale( debugJointScale );
+			debugLines->AddLine(
+				worldTransform.GetTranslation(),
+				worldTransform.GetTranslation() + worldTransform.GetAxis( 0 ),
+				ae::Color::Red()
+			);
+			debugLines->AddLine(
+				worldTransform.GetTranslation(),
+				worldTransform.GetTranslation() + worldTransform.GetAxis( 1 ),
+				ae::Color::Green()
+			);
+			debugLines->AddLine(
+				worldTransform.GetTranslation(),
+				worldTransform.GetTranslation() + worldTransform.GetAxis( 2 ),
+				ae::Color::Blue()
+			);
+			debugLines->AddOBB( worldTransform, ( poseOutBone == poseOutRoot ) ? ae::Color::Orange() : ae::Color::Yellow() );
 		}
-	}
+		for( const Bone* poseOutChild = poseOutBone->firstChild; poseOutChild; poseOutChild = poseOutChild->nextSibling )
+		{
+			finalizeOutPose( finalizeOutPose, &bones[ poseOutChild->index ], poseOutChild );
+		}
+	};
+	finalizeOutPose( finalizeOutPose, &bones[ poseOutRoot->index ], poseOutRoot );
 }
 
 //------------------------------------------------------------------------------
