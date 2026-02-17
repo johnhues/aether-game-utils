@@ -813,6 +813,7 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	Vec3 AddRotationXYCopy( float rotation ) const;
 	float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
 	Vec3 RotateCopy( Vec3 axis, float angle ) const;
+	Quaternion RotationBetween( Vec3 target ) const;
 	
 	Vec3 Lerp( const Vec3& end, float t ) const;
 	Vec3 DtSlerp( const Vec3& end, float snappiness, float dt, float epsilon = 0.0001f ) const;
@@ -15298,6 +15299,13 @@ Vec3 Vec3::RotateCopy( Vec3 axis, float angle ) const
 	return Vec3( r0.Dot( *this ), r1.Dot( *this ), r2.Dot( *this ) );
 }
 
+Quaternion Vec3::RotationBetween( Vec3 target ) const
+{
+	const ae::Vec3 axis = Cross( target );
+	const float angle = target.GetAngleBetween( *this );
+	return ae::Quaternion( axis, angle );
+}
+
 Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 {
 	Vec3 v0 = *this;
@@ -15557,6 +15565,7 @@ Matrix4& Matrix4::SetTranslation( const Vec3& translation )
 
 Matrix4& Matrix4::SetRotation( const Quaternion& q2 )
 {
+	// @TODO: Don't clear scale
 	Quaternion q = q2.GetInverse();
 	data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
 	data[4] = 2*q.i*q.j + 2*q.k*q.r;
@@ -28409,11 +28418,8 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 
 					// Reorient current joint to point toward child joint
 					const ae::Vec3 currentPrimaryAxis = GetAxisVector( GetConstraints( poseBone->index ).twistAxis );
-					const ae::Quaternion invRot = ikBone->modelToBoneRot.GetInverse();
-					const ae::Vec3 boneDir = invRot.Rotate( childDir );
-					const ae::Vec3 axis = currentPrimaryAxis.Cross( boneDir );
-					const float angle = boneDir.GetAngleBetween( currentPrimaryAxis );
-					ikBone->modelToBoneRot *= ae::Quaternion( axis, angle );
+					const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( childDir );
+					ikBone->modelToBoneRot *= currentPrimaryAxis.RotationBetween( boneDir );
 
 					if( debugLines )
 					{
@@ -28442,11 +28448,8 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 						// If no orientation target, try to at least match the position target's direction from the parent joint
 						const ae::Vec3 targetDir = ( ikBone->modelPos - bones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
 						const ae::Vec3 currentPrimaryAxis = GetAxisVector( GetConstraints( poseBone->index ).twistAxis );
-						const ae::Quaternion invRot = ikBone->modelToBoneRot.GetInverse();
-						const ae::Vec3 boneDir = invRot.Rotate( targetDir );
-						const ae::Vec3 axis = currentPrimaryAxis.Cross( boneDir );
-						const float angle = boneDir.GetAngleBetween( currentPrimaryAxis );
-						ikBone->modelToBoneRot *= ae::Quaternion( axis, angle );
+						const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( targetDir );
+						ikBone->modelToBoneRot *= currentPrimaryAxis.RotationBetween( boneDir );
 					}
 				}
 			}
@@ -28470,11 +28473,8 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 
 				// Reorient current joint to point toward child joint
 				const ae::Vec3 dir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
-				const ae::Quaternion invRot = ikBone->modelToBoneRot.GetInverse();
-				const ae::Vec3 boneDir = invRot.Rotate( dir );
-				const ae::Vec3 axis = currentPrimaryAxis.Cross( boneDir );
-				const float angle = boneDir.GetAngleBetween( currentPrimaryAxis );
-				ikBone->modelToBoneRot *= ae::Quaternion( axis, angle );
+				const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( dir );
+				ikBone->modelToBoneRot *= currentPrimaryAxis.RotationBetween( boneDir );
 				ikChild->modelPos = ikBone->modelPos + ikBone->modelToBoneRot.Rotate( currentPrimaryAxis ) * ikChild->length;
 
 				if( debugLines )

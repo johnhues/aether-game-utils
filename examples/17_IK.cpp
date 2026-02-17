@@ -257,7 +257,7 @@ int main()
 	};
 	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
-	ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
+	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
 	bool drawMesh = false;
 	bool drawSkeleton = true;
 	bool autoIK = true;
@@ -467,6 +467,10 @@ int main()
 			ik.debugJointScale = ikJointScale;
 			ik.enableRotationLimits = rotationIK;
 			ik.Run( autoIK ? iterCount : 1, &currentPose );
+			if( autoOrientation )
+			{
+				targetTransform.SetRotation( extentBone->modelToBone.GetRotation() );
+			}
 		}
 		
 		// Update mesh
@@ -570,6 +574,7 @@ int main()
 		
 		if( camera.GetMode() == ae::DebugCamera::Mode::None )
 		{
+			ImGuizmo::Enable( ( gizmoOperation == ImGuizmo::ROTATE ) ? !autoOrientation : true );
 			ImGuizmo::Manipulate(
 				worldToView.data,
 				viewToProj.data,
