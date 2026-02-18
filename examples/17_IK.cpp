@@ -109,8 +109,8 @@ int main()
 	camera.Reset( ae::Vec3( 0.0f, 0.0f, 1.0f ), ae::Vec3( 0.0f, 3.5f, 0.4f ) );
 	camera.SetDistanceLimits( 0.01f, 25.0f );
 	debugLines.Initialize( 20 * 1024 );
+	debugLines.SetXRayEnabled( true );
 	gridLines.Initialize( 4096 );
-	gridLines.SetXRayEnabled( false );
 	ui.Initialize();
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
@@ -178,12 +178,15 @@ int main()
 	// const char* rightFootBoneName = "QuickRigCharacter_RightFoot";
 
 	const char* rightHandBoneName = "QuickRigCharacter_RightHand";
+	const char* leftHandBoneName = "QuickRigCharacter_LeftHand";
 	const char* rightForearmBoneName = "QuickRigCharacter_RightForeArm";
 	const char* rightArmBoneName = "QuickRigCharacter_RightArm";
 	const char* rightShoulderBoneName = "QuickRigCharacter_RightShoulder";
 
 	ae::Skeleton currentPose = TAG_ALL;
 	ae::Array< ae::IKConstraints > ikConstraints = TAG_ALL;
+	ae::Map< uint32_t, ae::Vec3 > extentTargets = TAG_ALL;
+	ae::Map< uint32_t, ae::Quaternion > extentOrientations = TAG_ALL;
 	ikConstraints.Reserve( skin.GetBindPose().GetBoneCount() );
 	for( uint32_t i = 0; i < skin.GetBindPose().GetBoneCount(); i++ )
 	{
@@ -236,7 +239,7 @@ int main()
 		ikConstraints[ handBone->index ].twistLimits[ 1 ] = 0.3f;
 	}
 	{
-		const ae::Bone* foreArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightForeArm" );
+		const ae::Bone* foreArmBone = skin.GetBindPose().GetBoneByName( rightForearmBoneName );
 		// ikConstraints[ foreArmBone->index ].rotationLimits[ 0 ] = 1.25f;
 		// ikConstraints[ foreArmBone->index ].rotationLimits[ 1 ] = 1.25f;
 		// ikConstraints[ foreArmBone->index ].rotationLimits[ 2 ] = 0.1f;
@@ -246,19 +249,20 @@ int main()
 	const ae::Matrix4 skeletonTransform = ae::Matrix4::RotationY( ae::Pi ) * ae::Matrix4::RotationX( ae::Pi * -0.5f );
 	const ae::Matrix4 testJoint0Bind = ae::Matrix4::Translation( -1.25f, 0.5f, 0.0f ) * ae::Matrix4::Scaling( 0.2f );
 	const ae::Matrix4 testJoint1Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 0.8f ) * ae::Matrix4::Scaling( 0.2f );
-	ae::Matrix4 targetTransform, testJoint0, testJoint1;
+	ae::Matrix4 testJoint0, testJoint1;
 	auto SetDefault = [&]()
 	{
 		currentPose.Initialize( &skin.GetBindPose() );
 		currentPose.SetTransform( currentPose.GetRoot(), skeletonTransform );
-		targetTransform = currentPose.GetBoneByName( rightHandBoneName )->modelToBone;
+		extentTargets.Clear();
+		extentOrientations.Clear();
 		testJoint0 = testJoint0Bind;
 		testJoint1 = testJoint1Bind;
 	};
 	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
-	bool drawMesh = false;
+	bool drawMesh = true;
 	bool drawSkeleton = true;
 	bool autoIK = true;
 	bool fromBindPose = true;
@@ -275,7 +279,7 @@ int main()
 		One
 	};
 	TestJointId selTestJoint = TestJointId::None;
-	static uint32_t s_selectedJointIndex = skin.GetBindPose().GetBoneByName( rightHandBoneName )->index;
+	uint32_t selectedJointIndex = skin.GetBindPose().GetBoneByName( rightHandBoneName )->index;
 	ae::IKConstraints testConstraints;
 	testConstraints.horizontalAxis = ae::Axis::NegativeY;
 	testConstraints.bendAxis = ae::Axis::Z;
@@ -284,7 +288,7 @@ int main()
 	testConstraints.rotationLimits[ 1 ] = 0.52f;
 	testConstraints.rotationLimits[ 2 ] = 0.38f;
 	testConstraints.rotationLimits[ 3 ] = 0.24f;
-	auto GetSelectedTransform = [&]() -> ae::Matrix4&
+	auto GetSelectedTransform = [&]() -> ae::Matrix4
 	{
 		switch( selTestJoint )
 		{
@@ -292,12 +296,16 @@ int main()
 			case TestJointId::One: return testJoint1;
 			default: break;
 		}
-		return targetTransform; // IK Handle
+		ae::Matrix4 transform = currentPose.GetBoneByIndex( selectedJointIndex )->modelToBone;
+		if( const ae::Vec3* target = extentTargets.TryGet( selectedJointIndex ) )
+		{
+			transform.SetTranslation( *target );
+		}
+		return transform;
 	};
 	auto GetFocusPos = [&]() -> ae::Vec3
 	{
-		if( selTestJoint != TestJointId::None ) { return GetSelectedTransform().GetTranslation(); }
-		return currentPose.GetBoneByIndex( s_selectedJointIndex )->modelToBone.GetTranslation();
+		return GetSelectedTransform().GetTranslation();
 	};
 	
 	AE_INFO( "Run" );
@@ -337,6 +345,8 @@ int main()
 
 			ImGui::Separator();
 
+			ImGui::RadioButton( "Selection", (int*)&gizmoOperation, 0 );
+			ImGui::SameLine();
 			ImGui::RadioButton( "Translate", (int*)&gizmoOperation, ImGuizmo::TRANSLATE );
 			ImGui::SameLine();
 			ImGui::RadioButton( "Rotate", (int*)&gizmoOperation, ImGuizmo::ROTATE );
@@ -373,9 +383,9 @@ int main()
 				{
 					const ae::Bone* bone = currentPose.GetBoneByIndex( i );
 					ImGui::PushID( i );
-					if( ImGui::Selectable( bone->name.c_str(), s_selectedJointIndex == i ) )
+					if( ImGui::Selectable( bone->name.c_str(), selectedJointIndex == i ) )
 					{
-						s_selectedJointIndex = i;
+						selectedJointIndex = i;
 					}
 					ImGui::PopID();
 				}
@@ -386,8 +396,8 @@ int main()
 			{
 				if( selTestJoint == TestJointId::None )
 				{
-					ImGui::Text( "Selected Joint: %s", currentPose.GetBoneByIndex( s_selectedJointIndex )->name.c_str() );
-					return &ikConstraints[ s_selectedJointIndex ];
+					ImGui::Text( "Selected Joint: %s", currentPose.GetBoneByIndex( selectedJointIndex )->name.c_str() );
+					return &ikConstraints[ selectedJointIndex ];
 				}
 				ImGui::Text( "Selected Joint: %s", jointNames[ (int)selTestJoint ] );
 				return &testConstraints;
@@ -410,6 +420,10 @@ int main()
 		if( input.GetPress( ae::Key::S ) )
 		{
 			drawSkeleton = !drawSkeleton;
+		}
+		if( input.GetPress( ae::Key::Q ) )
+		{
+			gizmoOperation = ImGuizmo::OPERATION( 0 );
 		}
 		if( input.GetPress( ae::Key::W ) )
 		{
@@ -454,11 +468,11 @@ int main()
 		if( ( autoIK || shouldStep ) && ( drawSkeleton || drawMesh || drawIK ) )
 		{
 			ae::IK ik = TAG_ALL;
-			const ae::Bone* extentBone = currentPose.GetBoneByName( rightHandBoneName );
-			ik.extentTargets.Set( extentBone->index, targetTransform.GetTranslation() );
+			ik.rootBoneIndex = currentPose.GetBoneByName( rightShoulderBoneName )->index; // @HACK: Use currentPose.GetRoot()
+			ik.extentTargets = extentTargets;
 			if( !autoOrientation )
 			{
-				ik.extentOrientations.Set( extentBone->index, targetTransform.GetRotation() );
+				ik.extentOrientations = extentOrientations;
 			}
 			ik.joints = ikConstraints;
 			ik.bindPose = &skin.GetBindPose();
@@ -466,11 +480,7 @@ int main()
 			ik.debugLines = drawIK ? &debugLines : nullptr;
 			ik.debugJointScale = ikJointScale;
 			ik.enableRotationLimits = rotationIK;
-			ik.Run( autoIK ? iterCount : 1, &currentPose );
-			if( autoOrientation )
-			{
-				targetTransform.SetRotation( extentBone->modelToBone.GetRotation() );
-			}
+			ik.Run( ( autoIK ? iterCount : 1 ), &currentPose );
 		}
 		
 		// Update mesh
@@ -503,9 +513,9 @@ int main()
 				}
 			}
 
-			if( s_selectedJointIndex < currentPose.GetBoneCount() )
+			if( selectedJointIndex < currentPose.GetBoneCount() )
 			{
-				const ae::Bone* childBone = currentPose.GetBoneByIndex( s_selectedJointIndex );
+				const ae::Bone* childBone = currentPose.GetBoneByIndex( selectedJointIndex );
 				// @TODO: Show selected
 			}
 		}
@@ -544,44 +554,69 @@ int main()
 		const ae::Matrix4 worldToProj = viewToProj * worldToView;
 		const ae::Matrix4 projToWorld = worldToProj.GetInverse();
 
-		// if( input.mouse.leftButton && input.mousePrev.leftButton )
+		// Mouse picking
+		if( window.GetFocused() && !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() )
 		{
 			const ae::Vec4 ndcPos = ae::Vec4( input.mouse.position.x / (float)window.GetWidth() * 2.0f - 1.0f, input.mouse.position.y / (float)window.GetHeight() * 2.0f - 1.0f, 0.0f, 1.0f );
 			ae::Vec4 worldPos = projToWorld * ndcPos;
 			worldPos /= worldPos.w;
-			const ae::Vec3 rayOrigin = camera.GetPosition();
-			const ae::Vec3 rayDir = ( worldPos.GetXYZ() - rayOrigin ).SafeNormalizeCopy();
-			const ae::Plane plane( ae::Vec3( 0.0f ), ae::Vec3( 0, 0, 1 ) );
-			ae::Vec3 intersection;
-			if( plane.IntersectRay( rayOrigin, rayDir * 1000.0f, &intersection ) )
+			const ae::Vec3 cameraPos = camera.GetPosition();
+			const ae::Vec3 cameraDir = ( worldPos.GetXYZ() - cameraPos ).SafeNormalizeCopy();
+			for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 			{
-				debugLines.AddCircle( intersection, -rayDir, 0.1f, ae::Color::Red(), 16 );
+				const ae::Bone* bone = currentPose.GetBoneByIndex( i );
+				const ae::Vec3 pos = bone->modelToBone.GetTranslation();
+				if( ae::Sphere( pos, ikJointScale * 0.5f ).IntersectRay( cameraPos, cameraDir * 1000.0f ) )
+				{
+					const bool selected = ( selectedJointIndex == i && selTestJoint == TestJointId::None );
+					const ae::Color color = selected ? ae::Color::AetherGreen() : ae::Color::AetherRed();
+					debugLines.AddCircle( pos, -cameraDir, ikJointScale * 0.5f, color, 16 );
+					if( input.mouse.leftButton && input.mousePrev.leftButton )
+					{
+						selectedJointIndex = i;
+						selTestJoint = TestJointId::None;
+					}
+					else if( input.mouse.rightButton && input.mousePrev.rightButton )
+					{
+						selectedJointIndex = i;
+						selTestJoint = TestJointId::None;
+						extentTargets.Remove( selectedJointIndex );
+						extentOrientations.Remove( selectedJointIndex );
+					}
+				}
 			}
-
-			// @TODO: Picking
-			// for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
-			// {
-			// 	const ae::Bone* bone = currentPose.GetBoneByIndex( i );
-			// 	const ae::Bone* parent = bone->parent;
-			// 	if( parent )
-			// 	{
-			// 		const ae::Vec3 pos = bone->transform.GetTranslation();
-			// 		const ae::Color color = ( ae::Line( rayOrigin, rayOrigin + rayDir ).GetDistance( pos ) < 0.3f ) ? ae::Color::PicoRed() : ae::Color::PicoBlue();
-			// 		debugLines.AddCircle( pos, -rayDir, 0.1f, color, 16 );
-			// 	}
-			// }
 		}
 		
-		if( camera.GetMode() == ae::DebugCamera::Mode::None )
+		if( gizmoOperation && camera.GetMode() == ae::DebugCamera::Mode::None )
 		{
+			ae::Matrix4 gizmoTransform = GetSelectedTransform();
 			ImGuizmo::Enable( ( gizmoOperation == ImGuizmo::ROTATE ) ? !autoOrientation : true );
-			ImGuizmo::Manipulate(
+			if( ImGuizmo::Manipulate(
 				worldToView.data,
 				viewToProj.data,
 				gizmoOperation,
 				( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : gizmoMode,
-				GetSelectedTransform().data
-			);
+				gizmoTransform.data
+			) )
+			{
+				switch( selTestJoint )
+				{
+					case TestJointId::Zero: testJoint0 = gizmoTransform; break;
+					case TestJointId::One: testJoint1 = gizmoTransform; break;
+					default:
+					{
+						if( gizmoOperation == ImGuizmo::TRANSLATE )
+						{
+							extentTargets.Set( selectedJointIndex, gizmoTransform.GetTranslation() );
+						}
+						else if( gizmoOperation == ImGuizmo::ROTATE )
+						{
+							extentOrientations.Set( selectedJointIndex, gizmoTransform.GetRotation() );
+						}
+						break;
+					}
+				}
+			}
 		}
 		
 		render.Activate();

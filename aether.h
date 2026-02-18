@@ -4765,7 +4765,7 @@ public:
 	//! or ae::DebugLines::Render(). All debug lines must be resubmitted after calling this.
 	void Render( const Matrix4& worldToNdc );
 	//! Enable or disable drawing of desaturated lines on failed depth test.
-	//! Enabled by default.
+	//! Disabled by default.
 	void SetXRayEnabled( bool enabled ) { m_xray = enabled; }
 	//! Resets the internal vertex buffer without uploading anything to the GPU. Use this if a call to
 	//! ae::DebugLines::Render() is ever skipped.
@@ -5347,6 +5347,8 @@ struct IK
 	void Run( uint32_t iterationCount, ae::Skeleton* poseOut );
 
 	const ae::Tag tag;
+	//! The index of the root bone that the IK will start from.
+	uint32_t rootBoneIndex = 0;
 	//! Bone indices -> transform targets in world space. The IK will try to
 	//! move the specified bone towards the target transform. The IK will only
 	//! consider the position of the target transform, not the orientation.
@@ -28326,6 +28328,11 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	// @TODO: More thorough validation
 	AE_ASSERT_MSG( bindPose, "A bind pose is required to run IK" );
 	AE_ASSERT_MSG( bindPose->GetBoneCount() == pose.GetBoneCount(), "Bind pose and pose hierarchy must match" );
+	const ae::Bone* poseRootBone = pose.GetBoneByIndex( rootBoneIndex );
+	if( !poseRootBone )
+	{
+		return;
+	}
 
 	//AE_ASSERT( joints.Length() == 0 || joints.Length() == 1 || joints.Length() == bones.Length() );
 	auto GetConstraints = [ this ]( uint32_t idx ) -> const ae::IKConstraints&
@@ -28360,10 +28367,10 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		float length; // Fixed distance between pos and parent pos
 		float defaultTwist; // The bind pose twist angle between this bone and its parent
 	};
-	ae::Array< IKBone > bones( tag, pose.GetBoneCount() );
+	ae::Array< IKBone > ikBones( tag, pose.GetBoneCount() );
 	AE_ASSERT( !bindPose->GetBoneByIndex( 0 )->parent );
 	AE_ASSERT( !pose.GetBoneByIndex( 0 )->parent );
-	bones.Append( {
+	ikBones.Append( {
 		.modelPos = pose.GetBoneByIndex( 0 )->modelToBone.GetTranslation(),
 		.modelToBoneRot = pose.GetBoneByIndex( 0 )->modelToBone.GetRotation(),
 		.length = 0.0f,
@@ -28387,14 +28394,9 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		bindRot.GetTwistSwing( twistAxis, &twist, nullptr );
 		twist.GetAxisAngle( nullptr, &ikBone.defaultTwist );
 		
-		bones.Append( ikBone );
+		ikBones.Append( ikBone );
 	}
-
-	const ae::Bone* rootBone_HACK = pose.GetBoneByName( "QuickRigCharacter_RightShoulder" );
-	const ae::Bone* extentBone_HACK = pose.GetBoneByName( "QuickRigCharacter_RightHand" );
-	AE_ASSERT( rootBone_HACK && extentBone_HACK );
-	const ae::Vec3 rootPos_HACK = bones[ rootBone_HACK->index ].modelPos;
-	const ae::Vec3 targetPos_HACK = *extentTargets.TryGet( extentBone_HACK->index );
+	const ae::Vec3 rootBonePos = ikBones[ rootBoneIndex ].modelPos;
 
 	for( uint32_t iterations = 0; iterations < iterationCount; iterations++ )
 	{
@@ -28403,7 +28405,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 			// TODO: Support multiple children, but first get a recursive version
 			// working with a non-branching chain.
 			const Bone* poseChild = poseBone->firstChild;
-			IKBone* ikChild = poseChild ? &bones[ poseChild->index ] : nullptr;
+			IKBone* ikChild = poseChild ? &ikBones[ poseChild->index ] : nullptr;
 			// for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
 			{
 				// Start from end and iterate to root to move toward target
@@ -28446,7 +28448,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					else if( poseBone->parent )
 					{
 						// If no orientation target, try to at least match the position target's direction from the parent joint
-						const ae::Vec3 targetDir = ( ikBone->modelPos - bones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
+						const ae::Vec3 targetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
 						const ae::Vec3 currentPrimaryAxis = GetAxisVector( GetConstraints( poseBone->index ).twistAxis );
 						const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( targetDir );
 						ikBone->modelToBoneRot *= currentPrimaryAxis.RotationBetween( boneDir );
@@ -28454,17 +28456,17 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				}
 			}
 		};
-		reverseIter( reverseIter, &bones[ rootBone_HACK->index ], rootBone_HACK );
+		reverseIter( reverseIter, &ikBones[ rootBoneIndex ], poseRootBone );
 		
 		// Iterate from root to reposition joints
-		bones[ rootBone_HACK->index ].modelPos = rootPos_HACK;
+		ikBones[ rootBoneIndex ].modelPos = rootBonePos;
 		auto forwardIter = [&]( auto&& forwardIter, IKBone* ikBone, const Bone* poseBone ) -> void
 		{
 			// TODO: Support multiple children, but first get a recursive version working with a non-branching chain.
 			const Bone* poseChild = poseBone->firstChild;
 			if( poseChild )
 			{
-				IKBone* ikChild = &bones[ poseChild->index ];
+				IKBone* ikChild = &ikBones[ poseChild->index ];
 				const ae::IKConstraints& currentConstraints = GetConstraints( poseBone->index );
 				const ae::Vec3 currentPrimaryAxis = GetAxisVector( currentConstraints.twistAxis );
 
@@ -28488,11 +28490,11 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				forwardIter( forwardIter, ikChild, poseChild );
 			}
 		};
-		forwardIter( forwardIter, &bones[ rootBone_HACK->index ], rootBone_HACK );
+		forwardIter( forwardIter, &ikBones[ rootBoneIndex ], poseRootBone );
 	}
 
 	poseOut->Initialize( &pose );
-	const ae::Bone* poseOutRoot = poseOut->GetBoneByIndex( rootBone_HACK->index );
+	const ae::Bone* poseOutRoot = poseOut->GetBoneByIndex( rootBoneIndex );
 	auto finalizeOutPose = [&]( auto&& finalizeOutPose, IKBone* ikBone, const Bone* poseOutBone ) -> void
 	{
 		const ae::Matrix4 modelToBone = ikBone->modelToBoneRot.GetTransformMatrix().SetTranslation( ikBone->modelPos );
@@ -28519,10 +28521,10 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		}
 		for( const Bone* poseOutChild = poseOutBone->firstChild; poseOutChild; poseOutChild = poseOutChild->nextSibling )
 		{
-			finalizeOutPose( finalizeOutPose, &bones[ poseOutChild->index ], poseOutChild );
+			finalizeOutPose( finalizeOutPose, &ikBones[ poseOutChild->index ], poseOutChild );
 		}
 	};
-	finalizeOutPose( finalizeOutPose, &bones[ poseOutRoot->index ], poseOutRoot );
+	finalizeOutPose( finalizeOutPose, &ikBones[ poseOutRoot->index ], poseOutRoot );
 }
 
 //------------------------------------------------------------------------------
