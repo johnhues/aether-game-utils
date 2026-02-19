@@ -813,7 +813,7 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	Vec3 AddRotationXYCopy( float rotation ) const;
 	float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
 	Vec3 RotateCopy( Vec3 axis, float angle ) const;
-	Quaternion RotationBetween( Vec3 target ) const;
+	Quaternion RotationTo( Vec3 target ) const;
 	
 	Vec3 Lerp( const Vec3& end, float t ) const;
 	Vec3 DtSlerp( const Vec3& end, float snappiness, float dt, float epsilon = 0.0001f ) const;
@@ -15301,8 +15301,9 @@ Vec3 Vec3::RotateCopy( Vec3 axis, float angle ) const
 	return Vec3( r0.Dot( *this ), r1.Dot( *this ), r2.Dot( *this ) );
 }
 
-Quaternion Vec3::RotationBetween( Vec3 target ) const
+Quaternion Vec3::RotationTo( Vec3 target ) const
 {
+	// @TODO: How does this handle a bad cross product?
 	const ae::Vec3 axis = Cross( target );
 	const float angle = target.GetAngleBetween( *this );
 	return ae::Quaternion( axis, angle );
@@ -28364,8 +28365,9 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	{
 		ae::Vec3 modelPos;
 		ae::Quaternion modelToBoneRot;
-		float length; // Fixed distance between pos and parent pos
-		float defaultTwist; // The bind pose twist angle between this bone and its parent
+		const ae::Vec3 twistAxis;
+		const float length; // Fixed distance between pos and parent pos
+		const float bindTwist; // The bind pose twist angle between this bone and its parent
 	};
 	ae::Array< IKBone > ikBones( tag, pose.GetBoneCount() );
 	AE_ASSERT( !bindPose->GetBoneByIndex( 0 )->parent );
@@ -28373,8 +28375,9 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	ikBones.Append( {
 		.modelPos = pose.GetBoneByIndex( 0 )->modelToBone.GetTranslation(),
 		.modelToBoneRot = pose.GetBoneByIndex( 0 )->modelToBone.GetRotation(),
+		.twistAxis = GetAxisVector( GetConstraints( 0 ).twistAxis ),
 		.length = 0.0f,
-		.defaultTwist = 0.0f
+		.bindTwist = 0.0f
 	} );
 	for( uint32_t i = 1; i < pose.GetBoneCount(); i++ )
 	{
@@ -28382,18 +28385,21 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		const Bone* currentBone = pose.GetBoneByIndex( i );
 		AE_ASSERT( currentBone->parent );
 		AE_ASSERT( bindBone->parent );
-		IKBone ikBone;
-		ikBone.modelPos = currentBone->modelToBone.GetTranslation();
-		ikBone.modelToBoneRot = currentBone->modelToBone.GetRotation();
-		ikBone.length = ( bindBone->modelToBone.GetTranslation() - bindBone->parent->modelToBone.GetTranslation() ).Length();
 
 		ae::Quaternion twist;
 		float twistAngle = 0.0f;
 		const ae::Vec3 twistAxis = GetAxisVector( GetConstraints( i ).twistAxis );
 		const ae::Quaternion bindRot = bindBone->modelToBone.GetRotation().RelativeCopy( bindBone->parent->modelToBone.GetRotation() );
 		bindRot.GetTwistSwing( twistAxis, &twist, nullptr );
-		twist.GetAxisAngle( nullptr, &ikBone.defaultTwist );
-		
+		twist.GetAxisAngle( nullptr, &twistAngle );
+
+		IKBone ikBone = {
+			.modelPos = currentBone->modelToBone.GetTranslation(),
+			.modelToBoneRot = currentBone->modelToBone.GetRotation(),
+			.twistAxis = twistAxis,
+			.length = ( bindBone->modelToBone.GetTranslation() - bindBone->parent->modelToBone.GetTranslation() ).Length(),
+			.bindTwist = twistAngle
+		};
 		ikBones.Append( ikBone );
 	}
 	const ae::Vec3 rootBonePos = ikBones[ rootBoneIndex ].modelPos;
@@ -28407,13 +28413,13 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		// sub-base. The new position of the sub-base will then be the centroid
 		// of all these positions. Thereafter, the normal algorithm should be
 		// applied inwards starting from the sub-base to the manipulator root.
-		// If there are more intermediate sub- bases, the same technique should
+		// If there are more intermediate sub-bases, the same technique should
 		// be used.
 		auto reverseIter = [&]( auto&& reverseIter, IKBone* ikBone, const Bone* poseBone ) -> void
 		{
 			if( !poseBone->firstChild )
 			{
-				// Is an extent if there's no child, set to target for
+				// Is an extent since there's no child. Set to target for
 				// correct initial pose this iteration.
 				if( const ae::Vec3* extentTarget = extentTargets.TryGet( poseBone->index ) )
 				{
@@ -28428,9 +28434,8 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				{
 					// If no orientation target, try to at least match the position target's direction from the parent joint
 					const ae::Vec3 targetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
-					const ae::Vec3 currentPrimaryAxis = GetAxisVector( GetConstraints( poseBone->index ).twistAxis );
 					const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( targetDir );
-					ikBone->modelToBoneRot *= currentPrimaryAxis.RotationBetween( boneDir );
+					ikBone->modelToBoneRot *= ikBone->twistAxis.RotationTo( boneDir );
 				}
 			}
 
@@ -28460,15 +28465,17 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 			}
 			if( count )
 			{
-				// Note that this does not necessarily maintain corrent bone
-				// lengths for intermediate joints with multiple children. The
-				// second phase corrects this.
 				ikBone->modelPos = averagePos / (float)count;
 				averageChildDir.SafeNormalize();
+				// Correct bone distances cannot be maintained for joints with
+				// multiple children while iterating in reverse. Joint lengths
+				// are a property of the child joint (their distance from their
+				// parent), so moving a parent joint's position inherently
+				// requires updating child joint positions based on their
+				// length. The second (forward) phase corrects this.
 				// Reorient current joint to point toward child joint
-				const ae::Vec3 currentPrimaryAxis = GetAxisVector( GetConstraints( poseBone->index ).twistAxis );
 				const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( averageChildDir );
-				ikBone->modelToBoneRot *= currentPrimaryAxis.RotationBetween( boneDir );
+				ikBone->modelToBoneRot *= ikBone->twistAxis.RotationTo( boneDir );
 			}
 		};
 		reverseIter( reverseIter, &ikBones[ rootBoneIndex ], poseRootBone );
@@ -28486,8 +28493,6 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 			for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
 			{
 				IKBone* ikChild = &ikBones[ poseChild->index ];
-				const ae::IKConstraints& currentConstraints = GetConstraints( poseBone->index );
-				const ae::Vec3 currentPrimaryAxis = GetAxisVector( currentConstraints.twistAxis );
 
 				// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
 				ikChild->modelPos = ikBone->modelPos + ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy() * ikChild->length;
@@ -28495,8 +28500,8 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				// Reorient current joint to point toward child joint
 				const ae::Vec3 dir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
 				const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( dir );
-				ikBone->modelToBoneRot *= currentPrimaryAxis.RotationBetween( boneDir );
-				ikChild->modelPos = ikBone->modelPos + ikBone->modelToBoneRot.Rotate( currentPrimaryAxis ) * ikChild->length;
+				ikBone->modelToBoneRot *= ikBone->twistAxis.RotationTo( boneDir );
+				ikChild->modelPos = ikBone->modelPos + ikBone->modelToBoneRot.Rotate( ikBone->twistAxis ) * ikChild->length;
 
 				if( debugLines )
 				{
