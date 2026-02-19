@@ -262,8 +262,8 @@ int main()
 	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
-	bool drawMesh = true;
-	bool drawSkeleton = true;
+	bool drawMesh = false;
+	bool drawSkeleton = false;
 	bool autoIK = true;
 	bool fromBindPose = true;
 	bool autoOrientation = true;
@@ -468,7 +468,7 @@ int main()
 		if( ( autoIK || shouldStep ) && ( drawSkeleton || drawMesh || drawIK ) )
 		{
 			ae::IK ik = TAG_ALL;
-			ik.rootBoneIndex = currentPose.GetBoneByName( rightShoulderBoneName )->index; // @HACK: Use currentPose.GetRoot()
+			ik.rootBoneIndex = currentPose.GetRoot()->index;
 			ik.extentTargets = extentTargets;
 			if( !autoOrientation )
 			{

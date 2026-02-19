@@ -28400,71 +28400,90 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 
 	for( uint32_t iterations = 0; iterations < iterationCount; iterations++ )
 	{
+		// In the first stage, the normal algorithm is applied but this time
+		// starting from each end effector and moving inwards to the parent
+		// sub-base. This will produce as many different positions of the
+		// sub-base as the number of end effectors connected with that specific
+		// sub-base. The new position of the sub-base will then be the centroid
+		// of all these positions. Thereafter, the normal algorithm should be
+		// applied inwards starting from the sub-base to the manipulator root.
+		// If there are more intermediate sub- bases, the same technique should
+		// be used.
 		auto reverseIter = [&]( auto&& reverseIter, IKBone* ikBone, const Bone* poseBone ) -> void
 		{
-			// TODO: Support multiple children, but first get a recursive version
-			// working with a non-branching chain.
-			const Bone* poseChild = poseBone->firstChild;
-			IKBone* ikChild = poseChild ? &ikBones[ poseChild->index ] : nullptr;
-			// for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
+			if( !poseBone->firstChild )
 			{
-				// Start from end and iterate to root to move toward target
-				// (b) relocate and reorient joint p4 to target t
-				if( ikChild )
+				// Is an extent if there's no child, set to target for
+				// correct initial pose this iteration.
+				if( const ae::Vec3* extentTarget = extentTargets.TryGet( poseBone->index ) )
 				{
-					reverseIter( reverseIter, ikChild, poseChild );
+					ikBone->modelPos = *extentTarget;
+				}
 
-					// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
-					const ae::Vec3 childDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
-					ikBone->modelPos = ikChild->modelPos - childDir * ikChild->length;
-
-					// Reorient current joint to point toward child joint
+				if( const ae::Quaternion* extentOri = extentOrientations.TryGet( poseBone->index ) )
+				{
+					ikBone->modelToBoneRot = *extentOri;
+				}
+				else if( poseBone->parent )
+				{
+					// If no orientation target, try to at least match the position target's direction from the parent joint
+					const ae::Vec3 targetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
 					const ae::Vec3 currentPrimaryAxis = GetAxisVector( GetConstraints( poseBone->index ).twistAxis );
-					const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( childDir );
+					const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( targetDir );
 					ikBone->modelToBoneRot *= currentPrimaryAxis.RotationBetween( boneDir );
-
-					if( debugLines )
-					{
-						debugLines->AddLine(
-							debugModelToWorld.TransformPoint3x4( ikChild->modelPos ),
-							debugModelToWorld.TransformPoint3x4( ikBone->modelPos ),
-							ae::Color::Magenta()
-						);
-					}
 				}
-				else // @TODO: support ik targets on non-end joints, but first get a recursive version
+			}
+
+			uint32_t count = 0;
+			ae::Vec3 averagePos = ae::Vec3( 0.0f );
+			ae::Vec3 averageChildDir = ae::Vec3( 0.0f );
+			for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
+			{
+				// (b) relocate and reorient joint p4 to target t
+				IKBone* ikChild = &ikBones[ poseChild->index ];
+				reverseIter( reverseIter, ikChild, poseChild );
+
+				// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
+				const ae::Vec3 childDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
+				averagePos += ikChild->modelPos - childDir * ikChild->length;
+				averageChildDir += childDir;
+				count++;
+
+				if( debugLines )
 				{
-					// Is an extent if there's no child, set to target for
-					// correct initial pose this iteration.
-					if( const ae::Vec3* extentTarget = extentTargets.TryGet( poseBone->index ) )
-					{
-						ikBone->modelPos = *extentTarget;
-					}
-
-					if( const ae::Quaternion* extentOri = extentOrientations.TryGet( poseBone->index ) )
-					{
-						ikBone->modelToBoneRot = *extentOri;
-					}
-					else if( poseBone->parent )
-					{
-						// If no orientation target, try to at least match the position target's direction from the parent joint
-						const ae::Vec3 targetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
-						const ae::Vec3 currentPrimaryAxis = GetAxisVector( GetConstraints( poseBone->index ).twistAxis );
-						const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( targetDir );
-						ikBone->modelToBoneRot *= currentPrimaryAxis.RotationBetween( boneDir );
-					}
+					debugLines->AddLine(
+						debugModelToWorld.TransformPoint3x4( ikChild->modelPos ),
+						debugModelToWorld.TransformPoint3x4( ikBone->modelPos ),
+						ae::Color::Magenta()
+					);
 				}
+			}
+			if( count )
+			{
+				// Note that this does not necessarily maintain corrent bone
+				// lengths for intermediate joints with multiple children. The
+				// second phase corrects this.
+				ikBone->modelPos = averagePos / (float)count;
+				averageChildDir.SafeNormalize();
+				// Reorient current joint to point toward child joint
+				const ae::Vec3 currentPrimaryAxis = GetAxisVector( GetConstraints( poseBone->index ).twistAxis );
+				const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( averageChildDir );
+				ikBone->modelToBoneRot *= currentPrimaryAxis.RotationBetween( boneDir );
 			}
 		};
 		reverseIter( reverseIter, &ikBones[ rootBoneIndex ], poseRootBone );
-		
-		// Iterate from root to reposition joints
+
+		// In the second stage, the normal algorithm is applied starting now
+		// from the root and moving outwards to the sub-base. Then, the
+		// algorithm should be applied separately for each chain until the end
+		// effector is reached; if more sub-bases exist, the same process is
+		// applied. The method is repeated until all end effectors reach the
+		// targets or there is no significant change between their previous and
+		// their new positions.
 		ikBones[ rootBoneIndex ].modelPos = rootBonePos;
 		auto forwardIter = [&]( auto&& forwardIter, IKBone* ikBone, const Bone* poseBone ) -> void
 		{
-			// TODO: Support multiple children, but first get a recursive version working with a non-branching chain.
-			const Bone* poseChild = poseBone->firstChild;
-			if( poseChild )
+			for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
 			{
 				IKBone* ikChild = &ikBones[ poseChild->index ];
 				const ae::IKConstraints& currentConstraints = GetConstraints( poseBone->index );
