@@ -59,6 +59,7 @@ inline void aeAssertImpl( const char* msgStr )
 }
 
 #define AE_MEMORY_CHECKS 1 // Enable strict memory checks for unit tests
+#define AE_ENABLE_OPENGL 0 // Disable OpenGL for unit tests since it may not be available in all environments
 
 #define AE_LOG_FUNCTION_CONFIG TestLogger
 namespace ae { enum class LogSeverity; }

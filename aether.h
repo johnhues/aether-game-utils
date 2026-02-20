@@ -157,6 +157,17 @@
 #endif
 
 //------------------------------------------------------------------------------
+// AE_ENABLE_OPENGL define
+//! Define to 0 before including aether.h to disable OpenGL dependency.
+//! Render class method bodies become empty stubs. Intended for headless
+//! server builds and command-line tools. A future AE_ENABLE_WINDOW flag
+//! will handle OS window dependency separately.
+//------------------------------------------------------------------------------
+#ifndef AE_ENABLE_OPENGL
+	#define AE_ENABLE_OPENGL 1
+#endif
+
+//------------------------------------------------------------------------------
 // AE_MAX_SCRATCH_BYTES_CONFIG define
 //------------------------------------------------------------------------------
 //! The cumulative maximum bytes of all currently allocated ae::ScratchBuffers.
@@ -19127,6 +19138,7 @@ void Window::m_Initialize( bool rememberPosition )
 		frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
 	}
 	
+#if AE_ENABLE_OPENGL
 	NSOpenGLPixelFormatAttribute openglProfile;
 	if( ae::GLMajorVersion >= 4 )
 	{
@@ -19165,6 +19177,11 @@ void Window::m_Initialize( bool rememberPosition )
 	[nsPixelFormat release];
 	[nsWindow setContentView:glView];
 	[nsWindow makeFirstResponder:glView];
+#else
+	NSView* view = [[NSView alloc] initWithFrame:frame];
+	[nsWindow setContentView:view];
+	[nsWindow makeFirstResponder:nsWindow];
+#endif
 	[nsWindow setOpaque:YES];
 	[nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
 	if( rememberPosition )
@@ -20649,8 +20666,10 @@ void Input::SetTextMode( bool enabled )
 		}
 		else
 		{
+#if AE_ENABLE_OPENGL
 			NSOpenGLView* glView = [nsWindow contentView];
 			[nsWindow makeFirstResponder:glView];
+#endif
 		}
 #endif
 	}
@@ -23122,6 +23141,7 @@ uint32_t ListenerSocket::GetConnectionCount() const
 
 }  // ae end
 
+#if AE_ENABLE_OPENGL
 //------------------------------------------------------------------------------
 // OpenGL includes
 //------------------------------------------------------------------------------
@@ -26747,6 +26767,206 @@ void SpriteRenderer::Clear()
 	}
 }
 
+} // ae end
+#else // !AE_ENABLE_OPENGL
+namespace ae
+{
+int32_t GLMajorVersion = 0;
+int32_t GLMinorVersion = 0;
+bool ReverseZ = false;
+
+//------------------------------------------------------------------------------
+// ae::UniformList stubs
+//------------------------------------------------------------------------------
+void UniformList::Set( const char* name, float value ) {}
+void UniformList::Set( const char* name, Vec2 value ) {}
+void UniformList::Set( const char* name, Vec3 value ) {}
+void UniformList::Set( const char* name, Vec4 value ) {}
+void UniformList::Set( const char* name, const Matrix4& value ) {}
+void UniformList::Set( const char* name, const class Texture* tex ) {}
+const UniformList::Value* UniformList::Get( const char* name ) const { return nullptr; }
+
+//------------------------------------------------------------------------------
+// ae::Shader stubs
+//------------------------------------------------------------------------------
+Shader::~Shader() {}
+void Shader::Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount ) {}
+void Shader::Terminate() {}
+void Shader::m_Activate( const UniformList& uniforms ) const {}
+const Shader::_Attribute* Shader::m_GetAttributeByIndex( uint32_t index ) const { return nullptr; }
+int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* defines, int32_t defineCount ) { return 0; }
+
+//------------------------------------------------------------------------------
+// ae::VertexBuffer stubs
+//------------------------------------------------------------------------------
+VertexBuffer::~VertexBuffer() {}
+void VertexBuffer::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, ae::Vertex::Primitive primitive, ae::Vertex::Usage vertexUsage, ae::Vertex::Usage indexUsage ) {}
+void VertexBuffer::AddAttribute( const char* name, uint32_t componentCount, ae::Vertex::Type type, uint32_t offset ) {}
+void VertexBuffer::Terminate() {}
+void VertexBuffer::UploadVertices( uint32_t startIdx, const void* vertices, uint32_t count ) {}
+void VertexBuffer::UploadIndices( uint32_t startIdx, const void* indices, uint32_t count ) {}
+void VertexBuffer::Bind( const ae::Shader* shader, const ae::UniformList& uniforms, const ae::InstanceData** instanceDatas, uint32_t instanceDataCount ) const {}
+void VertexBuffer::Draw() const {}
+void VertexBuffer::Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount ) const {}
+void VertexBuffer::DrawInstanced( uint32_t primitiveStartIdx, uint32_t primitiveCount, uint32_t instanceCount ) const {}
+uint32_t VertexBuffer::GetMaxPrimitiveCount() const { return 0; }
+void VertexBuffer::m_Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount, int32_t instanceCount ) const {}
+
+//------------------------------------------------------------------------------
+// ae::VertexArray stubs
+//------------------------------------------------------------------------------
+VertexArray::VertexArray( ae::Tag tag ) :
+	m_tag( tag )
+{}
+VertexArray::~VertexArray() {}
+void VertexArray::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, ae::Vertex::Primitive primitive, ae::Vertex::Usage vertexUsage, ae::Vertex::Usage indexUsage ) {}
+void VertexArray::AddAttribute( const char* name, uint32_t componentCount, ae::Vertex::Type type, uint32_t offset ) {}
+void VertexArray::Terminate() {}
+void VertexArray::SetVertices( const void* vertices, uint32_t count ) {}
+void VertexArray::SetIndices( const void* indices, uint32_t count ) {}
+void VertexArray::AppendVertices( const void* vertices, uint32_t count ) {}
+void VertexArray::AppendIndices( const void* indices, uint32_t count, uint32_t indexOffset ) {}
+void VertexArray::ClearVertices() {}
+void VertexArray::ClearIndices() {}
+void VertexArray::Upload() {}
+void VertexArray::Draw( const ae::Shader* shader, const ae::UniformList& uniforms ) const {}
+void VertexArray::Draw( const ae::Shader* shader, const ae::UniformList& uniforms, uint32_t primitiveStart, uint32_t primitiveCount ) const {}
+template<> const void* VertexArray::GetVertices<void>() const { return nullptr; }
+template<> const void* VertexArray::GetIndices<void>() const { return nullptr; }
+
+//------------------------------------------------------------------------------
+// ae::InstanceData stubs
+//------------------------------------------------------------------------------
+InstanceData::~InstanceData() {}
+void InstanceData::Initialize( uint32_t dataStride, uint32_t maxInstanceCount, ae::Vertex::Usage usage ) {}
+void InstanceData::AddAttribute( const char* name, uint32_t componentCount, ae::Vertex::Type type, uint32_t offset ) {}
+void InstanceData::Terminate() {}
+void InstanceData::UploadData( uint32_t startIdx, const void* data, uint32_t count ) {}
+const VertexBuffer::_Attribute* InstanceData::_GetAttribute( const char* n ) const { return nullptr; }
+
+//------------------------------------------------------------------------------
+// ae::Texture stubs
+//------------------------------------------------------------------------------
+Texture::~Texture() {}
+void Texture::Initialize( uint32_t target ) {}
+void Texture::Terminate() {}
+
+//------------------------------------------------------------------------------
+// ae::Texture2D stubs
+//------------------------------------------------------------------------------
+void Texture2D::Initialize( const TextureParams& params ) {}
+void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, ae::Texture::Format format, ae::Texture::Type type, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps ) {}
+void Texture2D::Terminate() {}
+
+//------------------------------------------------------------------------------
+// ae::RenderTarget stubs
+//------------------------------------------------------------------------------
+RenderTarget::~RenderTarget() {}
+void RenderTarget::Initialize( uint32_t width, uint32_t height ) {}
+void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap ) {}
+void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap ) {}
+void RenderTarget::Terminate() {}
+void RenderTarget::Activate() {}
+void RenderTarget::Clear( Color color ) {}
+void RenderTarget::Render( const Shader* shader, const UniformList& uniforms ) {}
+void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z ) {}
+const Texture2D* RenderTarget::GetTexture( uint32_t index ) const { return nullptr; }
+uint32_t RenderTarget::GetTextureCount() const { return 0; }
+const Texture2D* RenderTarget::GetDepth() const { return nullptr; }
+float RenderTarget::GetAspectRatio() const { return 0.0f; }
+uint32_t RenderTarget::GetWidth() const { return 0; }
+uint32_t RenderTarget::GetHeight() const { return 0; }
+Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const { return {}; }
+Matrix4 RenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const { return Matrix4::Identity(); }
+Matrix4 RenderTarget::GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal, const Matrix4& worldToNdc ) const { return Matrix4::Identity(); }
+Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z ) { return Matrix4::Identity(); }
+
+//------------------------------------------------------------------------------
+// ae::GraphicsDevice stubs
+//------------------------------------------------------------------------------
+GraphicsDevice::~GraphicsDevice() {}
+void GraphicsDevice::Initialize( class Window* window ) {}
+void GraphicsDevice::Terminate() {}
+void GraphicsDevice::SetVsyncEnbled( bool enabled ) {}
+bool GraphicsDevice::GetVsyncEnabled() const { return false; }
+void GraphicsDevice::Activate() {}
+void GraphicsDevice::Clear( Color color ) {}
+void GraphicsDevice::Present() {}
+void GraphicsDevice::AddTextureBarrier() {}
+float GraphicsDevice::GetAspectRatio() const { return 0.0f; }
+void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height ) {}
+
+//------------------------------------------------------------------------------
+// ae::TextRender stubs
+//------------------------------------------------------------------------------
+TextRender::TextRender( const ae::Tag& tag ) :
+	m_tag( tag )
+{}
+TextRender::~TextRender() {}
+void TextRender::Initialize( uint32_t maxStringCount, uint32_t maxGlyphCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing ) {}
+void TextRender::Terminate() {}
+void TextRender::Render( const ae::Matrix4& uiToScreen ) {}
+void TextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit ) {}
+uint32_t TextRender::GetLineCount( const char* str, uint32_t lineLength, uint32_t charLimit ) const { return 0; }
+uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, char** _outStr, uint32_t* lenOut ) const { return 0; }
+
+//------------------------------------------------------------------------------
+// ae::DebugLines stubs
+//------------------------------------------------------------------------------
+DebugLines::DebugLines( const ae::Tag& tag ) :
+	m_vertexArray( tag )
+{}
+DebugLines::~DebugLines() {}
+void DebugLines::Initialize( uint32_t maxVerts ) {}
+void DebugLines::Terminate() {}
+void DebugLines::Render( const Matrix4& worldToNdc ) {}
+void DebugLines::Clear() {}
+uint32_t DebugLines::AddLine( Vec3 p0, Vec3 p1, Color color ) { return 0; }
+uint32_t DebugLines::AddDistanceCheck( Vec3 p0, Vec3 p1, float distance, ae::Color successColor, ae::Color failColor ) { return 0; }
+uint32_t DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 halfSize, float cornerRadius, uint32_t cornerPointCount, Color color ) { return 0; }
+uint32_t DebugLines::AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, uint32_t pointCount ) { return 0; }
+uint32_t DebugLines::AddAABB( Vec3 pos, Vec3 halfSize, Color color ) { return 0; }
+uint32_t DebugLines::AddAABB( AABB aabb, Color color ) { return 0; }
+uint32_t DebugLines::AddOBB( const Matrix4& transform, Color color ) { return 0; }
+uint32_t DebugLines::AddOBB( const OBB& obb, Color color ) { return 0; }
+uint32_t DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount ) { return 0; }
+uint32_t DebugLines::AddSphere( const Sphere& sphere, Color color, uint32_t pointCount ) { return 0; }
+uint32_t DebugLines::AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color ) { return 0; }
+uint32_t DebugLines::AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t vertexCount, const void* indices, uint32_t indexSize, uint32_t indexCount, Matrix4 transform, Color color ) { return 0; }
+uint32_t DebugLines::GetVertexCount() const { return 0; }
+uint32_t DebugLines::GetMaxVertexCount() const { return 0; }
+
+//------------------------------------------------------------------------------
+// ae::SpriteFont stubs
+//------------------------------------------------------------------------------
+SpriteFont::GlyphData::GlyphData() {}
+void SpriteFont::SetGlyphsASCIISpriteSheet( uint32_t textureWidth, uint32_t textureHeight, uint32_t charWidth, uint32_t charHeight, char firstCharacter, char lastCharacter, ae::Rect sprite ) {}
+void SpriteFont::SetGlyph( char c, ae::Rect quad, ae::Rect uvs, float advance ) {}
+bool SpriteFont::GetGlyph( char c, ae::Rect* quad, ae::Rect* uv, float* advance, float uiSize ) const { return false; }
+float SpriteFont::GetTextWidth( const char* text, float uiSize ) const { return 0.0f; }
+
+//------------------------------------------------------------------------------
+// ae::SpriteRenderer stubs
+//------------------------------------------------------------------------------
+SpriteRenderer::SpriteRenderer( const ae::Tag& tag ) :
+	m_params( tag ),
+	m_spriteGroups( tag ),
+	m_vertexArray( tag )
+{}
+void SpriteRenderer::Initialize( uint32_t maxGroups, uint32_t maxCount ) {}
+void SpriteRenderer::Terminate() {}
+void SpriteRenderer::AddSprite( uint32_t group, ae::Vec2 pos, ae::Vec2 size, ae::Rect uvs, ae::Color color ) {}
+void SpriteRenderer::AddSprite( uint32_t group, ae::Rect quad, ae::Rect uvs, ae::Color color ) {}
+void SpriteRenderer::AddSprite( uint32_t group, const ae::Matrix4& transform, ae::Rect uvs, ae::Color color ) {}
+void SpriteRenderer::AddText( uint32_t group, const char* text, const SpriteFont* font, ae::Rect region, float fontSize, float lineHeight, ae::Color color ) {}
+void SpriteRenderer::SetParams( uint32_t group, const ae::Shader* shader, const ae::UniformList& uniforms ) {}
+void SpriteRenderer::Render() {}
+void SpriteRenderer::Clear() {}
+
+} // ae end
+#endif // AE_ENABLE_OPENGL
+
+namespace ae {
 //------------------------------------------------------------------------------
 // ae::DebugCamera member functions
 //------------------------------------------------------------------------------
@@ -30354,7 +30574,7 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 					*vertexIndex = (IsosurfaceIndex)vertices.Length();
 					vertices.Append( vertex );
 				}
-				AE_DEBUG_ASSERT_MSG( *vertexIndex < (IsosurfaceIndex)vertices.Length(), "# < # ox:# oy:# oz:#", index, vertices.Length(), ox, oy, oz );
+				AE_DEBUG_ASSERT_MSG( *vertexIndex < (IsosurfaceIndex)vertices.Length(), "# < # ox:# oy:# oz:#", *vertexIndex, vertices.Length(), ox, oy, oz );
 				quad[ j ] = *vertexIndex;
 			}
 
