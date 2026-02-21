@@ -177,6 +177,7 @@ int main()
 	// const char* leftFootBoneName = "QuickRigCharacter_LeftFoot";
 	// const char* rightFootBoneName = "QuickRigCharacter_RightFoot";
 
+	const char* hipsBoneName = "QuickRigCharacter_Hips";
 	const char* rightHandBoneName = "QuickRigCharacter_RightHand";
 	const char* leftHandBoneName = "QuickRigCharacter_LeftHand";
 	const char* rightForearmBoneName = "QuickRigCharacter_RightForeArm";
@@ -184,9 +185,11 @@ int main()
 	const char* rightShoulderBoneName = "QuickRigCharacter_RightShoulder";
 
 	ae::Skeleton currentPose = TAG_ALL;
+	ae::Map< uint32_t, ae::Vec3 > targets = TAG_ALL;
+	ae::Map< uint32_t, ae::Quaternion > targetOrientations = TAG_ALL;
 	ae::Array< ae::IKConstraints > ikConstraints = TAG_ALL;
-	ae::Map< uint32_t, ae::Vec3 > extentTargets = TAG_ALL;
-	ae::Map< uint32_t, ae::Quaternion > extentOrientations = TAG_ALL;
+	ae::Array< ae::IKDistanceConstraint > distanceConstraints = TAG_ALL;
+	// Rotation constraints
 	ikConstraints.Reserve( skin.GetBindPose().GetBoneCount() );
 	for( uint32_t i = 0; i < skin.GetBindPose().GetBoneCount(); i++ )
 	{
@@ -245,6 +248,40 @@ int main()
 		// ikConstraints[ foreArmBone->index ].rotationLimits[ 2 ] = 0.1f;
 		// ikConstraints[ foreArmBone->index ].rotationLimits[ 3 ] = 0.1f;
 	}
+	// Distance constraints
+	{
+		const ae::Bone* headBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Head" );
+		const ae::Bone* neckBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Neck" );
+		const ae::Bone* hipsBone = skin.GetBindPose().GetBoneByName( hipsBoneName );
+		const ae::Bone* spineBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine" );
+		const ae::Bone* spine1Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine1" );
+		const ae::Bone* spine2Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine2" );
+		const ae::Bone* rightShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightShoulder" );
+		const ae::Bone* leftShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftShoulder" );
+		const ae::Bone* rightArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightArm" );
+		const ae::Bone* leftArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftArm" );
+		const ae::Bone* rightUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightUpLeg" );
+		const ae::Bone* leftUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftUpLeg" );
+		// Head
+		distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)rightShoulderBone->index, 0.0f, 1.25f } );
+		distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)leftShoulderBone->index, 0.0f, 1.25f } );
+		distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)rightShoulderBone->index, 0.75f, 1.25f } );
+		distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)leftShoulderBone->index, 0.75f, 1.25f } );
+		// Collarbone
+		distanceConstraints.Append( { (int32_t)rightShoulderBone->index, (int32_t)leftShoulderBone->index } );
+		distanceConstraints.Append( { (int32_t)rightArmBone->index, (int32_t)leftArmBone->index, 0.95f, 1.0f } );
+		distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)rightArmBone->index, 1.0f, 1.25f } );
+		distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)leftArmBone->index, 1.0f, 1.25f } );
+		// Spine
+		distanceConstraints.Append( { (int32_t)hipsBone->index, (int32_t)spine1Bone->index, 0.95f, 1.05f } );
+		distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)spine2Bone->index, 0.95f, 1.05f } );
+		// Hips
+		distanceConstraints.Append( { (int32_t)rightUpLegBone->index, (int32_t)leftUpLegBone->index } );
+		distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)rightUpLegBone->index } );
+		distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)leftUpLegBone->index } );
+		distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.0f } );
+		distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.0f } );
+	}
 
 	const ae::Matrix4 skeletonTransform = ae::Matrix4::RotationY( ae::Pi ) * ae::Matrix4::RotationX( ae::Pi * -0.5f );
 	const ae::Matrix4 testJoint0Bind = ae::Matrix4::Translation( -1.25f, 0.5f, 0.0f ) * ae::Matrix4::Scaling( 0.2f );
@@ -254,21 +291,21 @@ int main()
 	{
 		currentPose.Initialize( &skin.GetBindPose() );
 		currentPose.SetTransform( currentPose.GetRoot(), skeletonTransform );
-		extentTargets.Clear();
-		extentOrientations.Clear();
+		targets.Clear();
+		targetOrientations.Clear();
 		testJoint0 = testJoint0Bind;
 		testJoint1 = testJoint1Bind;
 	};
 	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
-	bool drawMesh = false;
-	bool drawSkeleton = false;
+	bool drawMesh = true;
+	bool drawSkeleton = true;
 	bool autoIK = true;
 	bool fromBindPose = true;
 	bool autoOrientation = true;
-	bool drawIK = true;
-	int32_t iterCount = 1;
+	bool drawIK = false;
+	int32_t iterCount = 5;
 	float ikJointScale = 0.1f;
 	bool rotationIK = true;
 	enum class TestJointId
@@ -288,7 +325,7 @@ int main()
 	testConstraints.rotationLimits[ 1 ] = 0.52f;
 	testConstraints.rotationLimits[ 2 ] = 0.38f;
 	testConstraints.rotationLimits[ 3 ] = 0.24f;
-	auto GetSelectedTransform = [&]() -> ae::Matrix4
+	auto GetSelectedTransform = [&]( bool allowTarget ) -> ae::Matrix4
 	{
 		switch( selTestJoint )
 		{
@@ -297,7 +334,7 @@ int main()
 			default: break;
 		}
 		ae::Matrix4 transform = currentPose.GetBoneByIndex( selectedJointIndex )->modelToBone;
-		if( const ae::Vec3* target = extentTargets.TryGet( selectedJointIndex ) )
+		if( const ae::Vec3* target = allowTarget ? targets.TryGet( selectedJointIndex ) : nullptr )
 		{
 			transform.SetTranslation( *target );
 		}
@@ -305,7 +342,7 @@ int main()
 	};
 	auto GetFocusPos = [&]() -> ae::Vec3
 	{
-		return GetSelectedTransform().GetTranslation();
+		return GetSelectedTransform( true ).GetTranslation();
 	};
 	
 	AE_INFO( "Run" );
@@ -468,13 +505,14 @@ int main()
 		if( ( autoIK || shouldStep ) && ( drawSkeleton || drawMesh || drawIK ) )
 		{
 			ae::IK ik = TAG_ALL;
-			ik.rootBoneIndex = currentPose.GetRoot()->index;
-			ik.extentTargets = extentTargets;
+			ik.rootBoneIndex = currentPose.GetBoneByName( hipsBoneName )->index;
+			ik.targets = targets;
 			if( !autoOrientation )
 			{
-				ik.extentOrientations = extentOrientations;
+				ik.targetOrientations = targetOrientations;
 			}
 			ik.joints = ikConstraints;
+			ik.distanceConstraints = distanceConstraints;
 			ik.bindPose = &skin.GetBindPose();
 			ik.pose.Initialize( &currentPose );
 			ik.debugLines = drawIK ? &debugLines : nullptr;
@@ -580,8 +618,8 @@ int main()
 					{
 						selectedJointIndex = i;
 						selTestJoint = TestJointId::None;
-						extentTargets.Remove( selectedJointIndex );
-						extentOrientations.Remove( selectedJointIndex );
+						targets.Remove( selectedJointIndex );
+						targetOrientations.Remove( selectedJointIndex );
 					}
 				}
 			}
@@ -589,7 +627,7 @@ int main()
 		
 		if( gizmoOperation && camera.GetMode() == ae::DebugCamera::Mode::None )
 		{
-			ae::Matrix4 gizmoTransform = GetSelectedTransform();
+			ae::Matrix4 gizmoTransform = GetSelectedTransform( gizmoOperation != ImGuizmo::ROTATE );
 			ImGuizmo::Enable( ( gizmoOperation == ImGuizmo::ROTATE ) ? !autoOrientation : true );
 			if( ImGuizmo::Manipulate(
 				worldToView.data,
@@ -607,11 +645,11 @@ int main()
 					{
 						if( gizmoOperation == ImGuizmo::TRANSLATE )
 						{
-							extentTargets.Set( selectedJointIndex, gizmoTransform.GetTranslation() );
+							targets.Set( selectedJointIndex, gizmoTransform.GetTranslation() );
 						}
 						else if( gizmoOperation == ImGuizmo::ROTATE )
 						{
-							extentOrientations.Set( selectedJointIndex, gizmoTransform.GetRotation() );
+							targetOrientations.Set( selectedJointIndex, gizmoTransform.GetRotation() );
 						}
 						break;
 					}
