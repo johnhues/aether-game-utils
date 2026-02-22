@@ -5329,13 +5329,6 @@ struct IKConstraints
 	ae::Axis bendAxis = ae::Axis::Z;
 	// @TODO
 	ae::Axis horizontalAxis = ae::Axis::Y;
-	//! The half-range of motion of this joint in radians. @TODO: Array element
-	//! details. @TODO: Should support no limits.
-	float rotationLimits[ 4 ] = { 1.25f, 1.25f, 1.25f, 1.25f };
-	//! The amount in radians that this joint is allowed to twist around the
-	//! primary axis in either direction. Lower limit is negative, upper limit
-	//! is positive. Zero is no twist. @TODO: Should support no limits.
-	float twistLimits[ 2 ] = { -ae::QuarterPi, ae::QuarterPi };
 };
 
 //------------------------------------------------------------------------------
@@ -5347,6 +5340,20 @@ struct IKDistanceConstraint
 	int32_t idx1 = -1;
 	float maxCompression01 = 1.0f;
 	float maxStretch1N = 1.0f;
+};
+
+//------------------------------------------------------------------------------
+// ae::IKRotationConstraint struct
+//------------------------------------------------------------------------------
+struct IKRotationConstraint
+{
+	//! The half-range of motion of this joint in radians. @TODO: Array element
+	//! details. @TODO: Should support no limits.
+	float rotationLimits[ 4 ] = { 1.25f, 1.25f, 1.25f, 1.25f };
+	//! The amount in radians that this joint is allowed to twist around the
+	//! primary axis in either direction. Lower limit is negative, upper limit
+	//! is positive. Zero is no twist. @TODO: Should support no limits.
+	float twistLimits[ 2 ] = { -ae::QuarterPi, ae::QuarterPi };
 };
 
 //------------------------------------------------------------------------------
@@ -5365,19 +5372,18 @@ struct IK
 	//! consider the position of the target transform, not the orientation.
 	ae::Map< uint32_t, ae::Vec3 > targets;
 	ae::Map< uint32_t, ae::Quaternion > targetOrientations;
-	//! Joint info for each bone in the skeleton. Leave this empty to use the
-	//! default ae::IKConstraints, or append a single ae::IKJoint to use that for all
-	//! bones. Otherwise this should be the same length as 'pose.GetBoneCount()'. 
+	//! Rotation limits for each joint. The IK will try to keep the rotation of
+	//! each joint within these limits.
 	ae::Array< ae::IKConstraints > joints;
 	//! Distance constraints between any two bones. This is useful for
 	//! preventing bones shoulder bones etc from collapsing or folding outwards.
 	ae::Array< ae::IKDistanceConstraint > distanceConstraints;
+	//! Limit rotations of joints
+	ae::Map< uint32_t, ae::IKRotationConstraint > rotationConstraints;
 	//! Referenced for bone lengths and joint limits
 	const ae::Skeleton* bindPose = nullptr;
 	//! Used as the starting point for the IK.
 	ae::Skeleton pose;
-	//! If false, the IK will not respect joint limits
-	bool enableRotationLimits = false;
 
 	ae::DebugLines* debugLines = nullptr;
 	ae::Matrix4 debugModelToWorld = ae::Matrix4::Identity();
@@ -5386,7 +5392,7 @@ struct IK
 	// @TODO: Cleaup IK helpers
 	static ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 p );
 	static ae::Vec3 GetAxisVector( ae::Axis axis, bool negative = true );
-	ae::Vec3 ClipJoint( float bindBoneLength, ae::Vec3 j0Pos, ae::Quaternion j0Ori, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, ae::Color debugColor );
+	ae::Vec3 ClipJoint( float bindBoneLength, ae::Vec3 j0Pos, ae::Quaternion j0Ori, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, const ae::IKRotationConstraint& j1RotationConstraints, ae::Color debugColor );
 
 	static float GetAxis( ae::Axis axis, const ae::Vec3 v )
 	{
@@ -28236,12 +28242,13 @@ ae::Vec3 IK::ClipJoint(
 	ae::Quaternion j0Ori, // Parent
 	ae::Vec3 j1Pos, // Child
 	const ae::IKConstraints& j1Constraints, // Child
+	const ae::IKRotationConstraint& j1RotationConstraints,
 	ae::Color debugColor )
 {
 	const ae::Axis ha = j1Constraints.horizontalAxis;
 	const ae::Axis va = j1Constraints.bendAxis;
 	const ae::Axis pa = j1Constraints.twistAxis;
-	const float (&j0AngleLimits)[ 4 ] = j1Constraints.rotationLimits;
+	const float (&j0AngleLimits)[ 4 ] = j1RotationConstraints.rotationLimits;
 	const float clipLen = debugLines ? ( bindBoneLength * debugJointScale ) : bindBoneLength;
 	const float q[ 4 ] =
 	{
@@ -28336,6 +28343,7 @@ IK::IK( ae::Tag tag ) :
 	targetOrientations( tag ),
 	joints( tag ),
 	distanceConstraints( tag ),
+	rotationConstraints( tag ),
 	pose( tag )
 {}
 

@@ -188,67 +188,8 @@ int main()
 	ae::Map< uint32_t, ae::Vec3 > targets = TAG_ALL;
 	ae::Map< uint32_t, ae::Quaternion > targetOrientations = TAG_ALL;
 	ae::Array< ae::IKConstraints > ikConstraints = TAG_ALL;
+	ae::Map< uint32_t, ae::IKRotationConstraint > rotationConstraints = TAG_ALL;
 	ae::Array< ae::IKDistanceConstraint > distanceConstraints = TAG_ALL;
-	// Rotation constraints
-	ikConstraints.Reserve( skin.GetBindPose().GetBoneCount() );
-	for( uint32_t i = 0; i < skin.GetBindPose().GetBoneCount(); i++ )
-	{
-		ae::IKConstraints constraints;
-		const ae::Bone* bone = skin.GetBindPose().GetBoneByIndex( i );
-		if( strncmp( "QuickRigCharacter_Right", bone->name.c_str(), strlen("QuickRigCharacter_Right") ) == 0 )
-		{
-			constraints.twistAxis = ae::Axis::NegativeX;
-			constraints.horizontalAxis = ae::Axis::NegativeZ;
-			constraints.bendAxis = ae::Axis::Y;
-		}
-		else
-		{
-			constraints.twistAxis = ae::Axis::X;
-			constraints.horizontalAxis = ae::Axis::NegativeZ;
-			constraints.bendAxis = ae::Axis::NegativeY;
-		}
-		
-		if( strcmp( bone->name.c_str(), rightShoulderBoneName ) == 0 )
-		{
-			// constraints.rotationLimits[ 0 ] = 0.23f;
-			// constraints.rotationLimits[ 1 ] = 0.23f;
-			// constraints.rotationLimits[ 2 ] = 0.23f;
-			// constraints.rotationLimits[ 3 ] = 0.23f;
-		}
-		else if( strcmp( bone->name.c_str(), rightArmBoneName ) == 0 )
-		{
-			// constraints.rotationLimits[ 0 ] = 1.5f;
-			// constraints.rotationLimits[ 1 ] = 1.5f;
-			// constraints.rotationLimits[ 2 ] = 0.29f;
-			// constraints.rotationLimits[ 3 ] = 0.29f;
-		}
-		else if( strcmp( bone->name.c_str(), rightForearmBoneName ) == 0 )
-		{
-			// constraints.rotationLimits[ 0 ] = 1.5f;
-			// constraints.rotationLimits[ 1 ] = 0.29f;
-			// constraints.rotationLimits[ 2 ] = 0.29f;
-			// constraints.rotationLimits[ 3 ] = 0.29f;
-		}
-
-		ikConstraints.Append( constraints );
-	}
-	{
-		const ae::Bone* handBone = skin.GetBindPose().GetBoneByName( rightHandBoneName );
-		// ikConstraints[ handBone->index ].rotationLimits[ 0 ] = 0.07f;
-		// ikConstraints[ handBone->index ].rotationLimits[ 1 ] = 0.07f;
-		// ikConstraints[ handBone->index ].rotationLimits[ 2 ] = 0.07f;
-		// ikConstraints[ handBone->index ].rotationLimits[ 3 ] = 1.25f;
-		ikConstraints[ handBone->index ].twistLimits[ 0 ] = -0.3f;
-		ikConstraints[ handBone->index ].twistLimits[ 1 ] = 0.3f;
-	}
-	{
-		const ae::Bone* foreArmBone = skin.GetBindPose().GetBoneByName( rightForearmBoneName );
-		// ikConstraints[ foreArmBone->index ].rotationLimits[ 0 ] = 1.25f;
-		// ikConstraints[ foreArmBone->index ].rotationLimits[ 1 ] = 1.25f;
-		// ikConstraints[ foreArmBone->index ].rotationLimits[ 2 ] = 0.1f;
-		// ikConstraints[ foreArmBone->index ].rotationLimits[ 3 ] = 0.1f;
-	}
-	// Distance constraints
 	{
 		const ae::Bone* headBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Head" );
 		const ae::Bone* neckBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Neck" );
@@ -257,30 +198,61 @@ int main()
 		const ae::Bone* spine1Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine1" );
 		const ae::Bone* spine2Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine2" );
 		const ae::Bone* rightShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightShoulder" );
-		const ae::Bone* leftShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftShoulder" );
 		const ae::Bone* rightArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightArm" );
+		const ae::Bone* rightForearmBone = skin.GetBindPose().GetBoneByName( rightForearmBoneName );
+		const ae::Bone* rightHandBone = skin.GetBindPose().GetBoneByName( rightHandBoneName );
+		const ae::Bone* leftShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftShoulder" );
 		const ae::Bone* leftArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftArm" );
 		const ae::Bone* rightUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightUpLeg" );
 		const ae::Bone* leftUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftUpLeg" );
-		// Head
-		distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)rightShoulderBone->index, 0.0f, 1.25f } );
-		distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)leftShoulderBone->index, 0.0f, 1.25f } );
-		distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)rightShoulderBone->index, 0.75f, 1.25f } );
-		distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)leftShoulderBone->index, 0.75f, 1.25f } );
-		// Collarbone
-		distanceConstraints.Append( { (int32_t)rightShoulderBone->index, (int32_t)leftShoulderBone->index } );
-		distanceConstraints.Append( { (int32_t)rightArmBone->index, (int32_t)leftArmBone->index, 0.95f, 1.0f } );
-		distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)rightArmBone->index, 1.0f, 1.25f } );
-		distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)leftArmBone->index, 1.0f, 1.25f } );
-		// Spine
-		distanceConstraints.Append( { (int32_t)hipsBone->index, (int32_t)spine1Bone->index, 0.95f, 1.05f } );
-		distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)spine2Bone->index, 0.95f, 1.05f } );
-		// Hips
-		distanceConstraints.Append( { (int32_t)rightUpLegBone->index, (int32_t)leftUpLegBone->index } );
-		distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)rightUpLegBone->index } );
-		distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)leftUpLegBone->index } );
-		distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.0f } );
-		distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.0f } );
+		// Joint setup
+		ikConstraints.Reserve( skin.GetBindPose().GetBoneCount() );
+		for( uint32_t i = 0; i < skin.GetBindPose().GetBoneCount(); i++ )
+		{
+			ae::IKConstraints constraints;
+			const ae::Bone* bone = skin.GetBindPose().GetBoneByIndex( i );
+			if( strncmp( "QuickRigCharacter_Right", bone->name.c_str(), strlen("QuickRigCharacter_Right") ) == 0 )
+			{
+				constraints.twistAxis = ae::Axis::NegativeX;
+				constraints.horizontalAxis = ae::Axis::NegativeZ;
+				constraints.bendAxis = ae::Axis::Y;
+			}
+			else
+			{
+				constraints.twistAxis = ae::Axis::X;
+				constraints.horizontalAxis = ae::Axis::NegativeZ;
+				constraints.bendAxis = ae::Axis::NegativeY;
+			}
+			ikConstraints.Append( constraints );
+		}
+		// Rotation constraints
+		{
+			rotationConstraints.Set( rightArmBone->index, { .rotationLimits={ 0.23f, 0.23f, 0.23f, 0.23f } } );
+			rotationConstraints.Set( rightForearmBone->index, { .rotationLimits={ 1.5f, 0.23f, 0.23f, 1.5f } } );
+			rotationConstraints.Set( rightHandBone->index, { .rotationLimits={ 0.23f, 0.23f, 1.5f, 0.23f } } );
+		}
+		// Distance constraints
+		{
+			// Head
+			distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)rightShoulderBone->index, 0.0f, 1.25f } );
+			distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)leftShoulderBone->index, 0.0f, 1.25f } );
+			distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)rightShoulderBone->index, 0.75f, 1.25f } );
+			distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)leftShoulderBone->index, 0.75f, 1.25f } );
+			// Collarbone
+			distanceConstraints.Append( { (int32_t)rightShoulderBone->index, (int32_t)leftShoulderBone->index } );
+			distanceConstraints.Append( { (int32_t)rightArmBone->index, (int32_t)leftArmBone->index, 0.95f, 1.0f } );
+			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)rightArmBone->index, 1.0f, 1.25f } );
+			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)leftArmBone->index, 1.0f, 1.25f } );
+			// Spine
+			distanceConstraints.Append( { (int32_t)hipsBone->index, (int32_t)spine1Bone->index, 0.95f, 1.05f } );
+			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)spine2Bone->index, 0.95f, 1.05f } );
+			// Hips
+			distanceConstraints.Append( { (int32_t)rightUpLegBone->index, (int32_t)leftUpLegBone->index } );
+			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)rightUpLegBone->index } );
+			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)leftUpLegBone->index } );
+			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.0f } );
+			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.0f } );
+		}
 	}
 
 	const ae::Matrix4 skeletonTransform = ae::Matrix4::RotationY( ae::Pi ) * ae::Matrix4::RotationX( ae::Pi * -0.5f );
@@ -307,7 +279,7 @@ int main()
 	bool drawIK = false;
 	int32_t iterCount = 5;
 	float ikJointScale = 0.1f;
-	bool rotationIK = true;
+	bool demoWindow = false;
 	enum class TestJointId
 	{
 		None,
@@ -318,13 +290,14 @@ int main()
 	TestJointId selTestJoint = TestJointId::None;
 	uint32_t selectedJointIndex = skin.GetBindPose().GetBoneByName( rightHandBoneName )->index;
 	ae::IKConstraints testConstraints;
+	ae::IKRotationConstraint testRotationConstraints;
 	testConstraints.horizontalAxis = ae::Axis::NegativeY;
 	testConstraints.bendAxis = ae::Axis::Z;
 	testConstraints.twistAxis = ae::Axis::X;
-	testConstraints.rotationLimits[ 0 ] = 0.14f;
-	testConstraints.rotationLimits[ 1 ] = 0.52f;
-	testConstraints.rotationLimits[ 2 ] = 0.38f;
-	testConstraints.rotationLimits[ 3 ] = 0.24f;
+	testRotationConstraints.rotationLimits[ 0 ] = 0.14f;
+	testRotationConstraints.rotationLimits[ 1 ] = 0.52f;
+	testRotationConstraints.rotationLimits[ 2 ] = 0.38f;
+	testRotationConstraints.rotationLimits[ 3 ] = 0.24f;
 	auto GetSelectedTransform = [&]( bool allowTarget ) -> ae::Matrix4
 	{
 		switch( selTestJoint )
@@ -378,7 +351,6 @@ int main()
 			ImGui::Checkbox( "Auto Orientation", &autoOrientation );
 			ImGui::SliderInt( "Iterations", &iterCount, 0, 10 );
 			ImGui::SliderFloat( "Joint Scale", &ikJointScale, 0.01f, 1.0f );
-			ImGui::Checkbox( "IK Rotation Limits", &rotationIK );
 
 			ImGui::Separator();
 
@@ -408,7 +380,11 @@ int main()
 			{
 				camera.Refocus( GetFocusPos() );
 			}
-
+			ImGui::SameLine();
+			if( ImGui::Button( "Demo Window" ) )
+			{
+				demoWindow = !demoWindow;
+			}
 			ImGui::Separator();
 
 			const char* jointNames[] = { "None", "Target", "Test 0", "Test 1" };
@@ -443,12 +419,19 @@ int main()
 			ImGui::ListBox( "Horizontal", (int*)&constraints->horizontalAxis, axisNames, countof(axisNames), 3 );
 			ImGui::ListBox( "Vertical", (int*)&constraints->bendAxis, axisNames, countof(axisNames), 3 );
 			ImGui::ListBox( "Primary", (int*)&constraints->twistAxis, axisNames, countof(axisNames), 3 );
-			ImGui::SliderFloat( "R0", &constraints->rotationLimits[ 0 ], 0.0f, ae::HalfPi );
-			ImGui::SliderFloat( "R1", &constraints->rotationLimits[ 1 ], 0.0f, ae::HalfPi );
-			ImGui::SliderFloat( "R2", &constraints->rotationLimits[ 2 ], 0.0f, ae::HalfPi );
-			ImGui::SliderFloat( "R3", &constraints->rotationLimits[ 3 ], 0.0f, ae::HalfPi );
-			ImGui::SliderFloat( "T0", &constraints->twistLimits[ 0 ], -ae::Pi, 0.0f );
-			ImGui::SliderFloat( "T1", &constraints->twistLimits[ 1 ], 0.0f, ae::Pi );
+			if( selTestJoint == TestJointId::None )
+			{
+				ae::IKRotationConstraint* rotationConstraint = rotationConstraints.TryGet( selectedJointIndex );
+				if( rotationConstraint )
+				{
+					ImGui::SliderFloat( "R0", &rotationConstraint->rotationLimits[ 0 ], 0.0f, ae::HalfPi );
+					ImGui::SliderFloat( "R1", &rotationConstraint->rotationLimits[ 1 ], 0.0f, ae::HalfPi );
+					ImGui::SliderFloat( "R2", &rotationConstraint->rotationLimits[ 2 ], 0.0f, ae::HalfPi );
+					ImGui::SliderFloat( "R3", &rotationConstraint->rotationLimits[ 3 ], 0.0f, ae::HalfPi );
+					ImGui::SliderFloat( "T0", &rotationConstraint->twistLimits[ 0 ], -ae::Pi, 0.0f );
+					ImGui::SliderFloat( "T1", &rotationConstraint->twistLimits[ 1 ], 0.0f, ae::Pi );
+				}
+			}
 		}
 		if( input.GetPress( ae::Key::V ) )
 		{
@@ -493,6 +476,11 @@ int main()
 			shouldStep = true;
 		}
 		ImGui::End();
+
+		if( demoWindow )
+		{
+			ImGui::ShowDemoWindow( &demoWindow );
+		}
 		
 		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
 		camera.Update( &input, dt );
@@ -513,11 +501,11 @@ int main()
 			}
 			ik.joints = ikConstraints;
 			ik.distanceConstraints = distanceConstraints;
+			ik.rotationConstraints = rotationConstraints;
 			ik.bindPose = &skin.GetBindPose();
 			ik.pose.Initialize( &currentPose );
 			ik.debugLines = drawIK ? &debugLines : nullptr;
 			ik.debugJointScale = ikJointScale;
-			ik.enableRotationLimits = rotationIK;
 			ik.Run( ( autoIK ? iterCount : 1 ), &currentPose );
 		}
 		
@@ -561,13 +549,13 @@ int main()
 		ae::IK ik = TAG_ALL;
 		ik.debugLines = &debugLines;
 		ik.debugJointScale = ikJointScale;
-		ik.enableRotationLimits = rotationIK;
 		const ae::Vec3 testJointClipped = testJoint1.GetTranslation() + ik.ClipJoint(
 			( testJoint0Bind.GetTranslation() - testJoint1Bind.GetTranslation() ).Length(),
 			testJoint0.GetTranslation(),
 			testJoint0.GetRotation(),
 			testJoint1.GetTranslation(),
 			testConstraints,
+			testRotationConstraints,
 			ae::Color::PicoBlue()
 		);
 
