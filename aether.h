@@ -28388,8 +28388,9 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	struct _IKBone
 	{
 		ae::Vec3 modelPos;
-		ae::Quaternion boneToModelRot;
+		ae::Quaternion boneToModelRot; // @TODO: Should this be flipped? It's inverted constantly below
 		const ae::Vec3 twistAxis;
+		const ae::Vec3 parentBindDir; // Direction from parent to this bone, in this bone's bind-pose local frame
 		const float length; // Fixed distance between pos and parent pos
 		const float bindTwist; // The bind pose twist angle between this bone and its parent
 	};
@@ -28398,6 +28399,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		.modelPos = pose.GetBoneByIndex( 0 )->boneToModel.GetTranslation(),
 		.boneToModelRot = pose.GetBoneByIndex( 0 )->boneToModel.GetRotation(),
 		.twistAxis = GetAxisVector( GetConstraints( rootBoneIndex ).twistAxis ),
+		.parentBindDir = GetAxisVector( GetConstraints( rootBoneIndex ).twistAxis ),
 		.length = 0.0f,
 		.bindTwist = 0.0f
 	} );
@@ -28415,10 +28417,14 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		bindRot.GetTwistSwing( twistAxis, &twist, nullptr );
 		twist.GetAxisAngle( nullptr, &twistAngle );
 
+		const ae::Vec3 worldBindDir = ( bindBone->boneToModel.GetTranslation() - bindBone->parent->boneToModel.GetTranslation() ).SafeNormalizeCopy();
+		const ae::Vec3 localBindDir = bindBone->parent->boneToModel.GetRotation().GetInverse().Rotate( worldBindDir );
+
 		ikBones.Append( {
 			.modelPos = currentBone->boneToModel.GetTranslation(),
 			.boneToModelRot = currentBone->boneToModel.GetRotation(),
 			.twistAxis = twistAxis,
+			.parentBindDir = localBindDir,
 			.length = ( bindBone->boneToModel.GetTranslation() - bindBone->parent->boneToModel.GetTranslation() ).Length(),
 			.bindTwist = twistAngle
 		} );
@@ -28526,14 +28532,11 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				// Apply distance constraints last while iterating in reverse so
 				// they are prioritized over target positions.
 				ApplyDistanceConstraints( poseBone, ikBone );
-				if( count == 1 )
-				{
-					// Reorient current joint to point toward child joint
-					const _IKBone* ikChild = &ikBones[ poseBone->firstChild->index ];
-					const ae::Vec3 worldTargetDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
-					const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
-					ikBone->boneToModelRot *= ikBone->twistAxis.RotationTo( localTargetDir );
-				}
+				// Reorient current joint to point toward child joint
+				const _IKBone* ikChild = &ikBones[ poseBone->firstChild->index ];
+				const ae::Vec3 worldTargetDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
+				const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
+				ikBone->boneToModelRot *= ikChild->parentBindDir.RotationTo( localTargetDir );
 			}
 			else
 			{
@@ -28553,7 +28556,6 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				}
 				else if( poseBone->parent )
 				{
-					// @TODO: This seems a little weird, why parent to current dir and local bind dir?
 					// If no orientation target, try to at least match the position target's direction from the parent joint
 					const ae::Vec3 worldTargetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
 					const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
@@ -28607,8 +28609,8 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				{
 					const ae::Vec3 worldTargetDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
 					const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
-					ikBone->boneToModelRot *= ikBone->twistAxis.RotationTo( localTargetDir );
-					ikChild->modelPos = ikBone->modelPos + ikBone->boneToModelRot.Rotate( ikBone->twistAxis ) * ikChild->length;
+					ikBone->boneToModelRot *= ikChild->parentBindDir.RotationTo( localTargetDir );
+					ikChild->modelPos = ikBone->modelPos + ikBone->boneToModelRot.Rotate( ikChild->parentBindDir ) * ikChild->length;
 				}
 
 				if( debugLines )
