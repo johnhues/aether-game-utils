@@ -169,20 +169,6 @@ int main()
 			return -1;
 		}
 	}
-	
-	// const char* anchorBoneName = "QuickRigCharacter_Hips";
-	// const char* headBoneName = "QuickRigCharacter_Head";
-	// const char* rightHandBoneName = "QuickRigCharacter_RightHand";
-	// const char* leftHandBoneName = "QuickRigCharacter_LeftHand";
-	// const char* leftFootBoneName = "QuickRigCharacter_LeftFoot";
-	// const char* rightFootBoneName = "QuickRigCharacter_RightFoot";
-
-	const char* hipsBoneName = "QuickRigCharacter_Hips";
-	const char* rightHandBoneName = "QuickRigCharacter_RightHand";
-	const char* leftHandBoneName = "QuickRigCharacter_LeftHand";
-	const char* rightForearmBoneName = "QuickRigCharacter_RightForeArm";
-	const char* rightArmBoneName = "QuickRigCharacter_RightArm";
-	const char* rightShoulderBoneName = "QuickRigCharacter_RightShoulder";
 
 	ae::Skeleton currentPose = TAG_ALL;
 	ae::Map< uint32_t, ae::Vec3 > targets = TAG_ALL;
@@ -190,21 +176,21 @@ int main()
 	ae::Array< ae::IKConstraints > ikConstraints = TAG_ALL;
 	ae::Map< uint32_t, ae::IKRotationConstraint > rotationConstraints = TAG_ALL;
 	ae::Array< ae::IKDistanceConstraint > distanceConstraints = TAG_ALL;
+	const ae::Bone* headBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Head" );
+	const ae::Bone* neckBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Neck" );
+	const ae::Bone* hipsBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Hips" );
+	const ae::Bone* spineBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine" );
+	const ae::Bone* spine1Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine1" );
+	const ae::Bone* spine2Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine2" );
+	const ae::Bone* rightShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightShoulder" );
+	const ae::Bone* rightArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightArm" );
+	const ae::Bone* rightForearmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightForeArm" );
+	const ae::Bone* rightHandBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightHand" );
+	const ae::Bone* leftShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftShoulder" );
+	const ae::Bone* leftArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftArm" );
+	const ae::Bone* rightUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightUpLeg" );
+	const ae::Bone* leftUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftUpLeg" );
 	{
-		const ae::Bone* headBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Head" );
-		const ae::Bone* neckBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Neck" );
-		const ae::Bone* hipsBone = skin.GetBindPose().GetBoneByName( hipsBoneName );
-		const ae::Bone* spineBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine" );
-		const ae::Bone* spine1Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine1" );
-		const ae::Bone* spine2Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine2" );
-		const ae::Bone* rightShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightShoulder" );
-		const ae::Bone* rightArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightArm" );
-		const ae::Bone* rightForearmBone = skin.GetBindPose().GetBoneByName( rightForearmBoneName );
-		const ae::Bone* rightHandBone = skin.GetBindPose().GetBoneByName( rightHandBoneName );
-		const ae::Bone* leftShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftShoulder" );
-		const ae::Bone* leftArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftArm" );
-		const ae::Bone* rightUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightUpLeg" );
-		const ae::Bone* leftUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftUpLeg" );
 		// Joint setup
 		ikConstraints.Reserve( skin.GetBindPose().GetBoneCount() );
 		for( uint32_t i = 0; i < skin.GetBindPose().GetBoneCount(); i++ )
@@ -288,7 +274,7 @@ int main()
 		One
 	};
 	TestJointId selTestJoint = TestJointId::None;
-	uint32_t selectedJointIndex = skin.GetBindPose().GetBoneByName( rightHandBoneName )->index;
+	uint32_t selectedJointIndex = rightHandBone->index;
 	ae::IKConstraints testConstraints;
 	ae::IKRotationConstraint testRotationConstraints;
 	testConstraints.horizontalAxis = ae::Axis::NegativeY;
@@ -306,7 +292,7 @@ int main()
 			case TestJointId::One: return testJoint1;
 			default: break;
 		}
-		ae::Matrix4 transform = currentPose.GetBoneByIndex( selectedJointIndex )->modelToBone;
+		ae::Matrix4 transform = currentPose.GetBoneByIndex( selectedJointIndex )->boneToModel;
 		if( const ae::Vec3* target = allowTarget ? targets.TryGet( selectedJointIndex ) : nullptr )
 		{
 			transform.SetTranslation( *target );
@@ -493,7 +479,7 @@ int main()
 		if( ( autoIK || shouldStep ) && ( drawSkeleton || drawMesh || drawIK ) )
 		{
 			ae::IK ik = TAG_ALL;
-			ik.rootBoneIndex = currentPose.GetBoneByName( hipsBoneName )->index;
+			ik.rootBoneIndex = hipsBone->index;
 			ik.targets = targets;
 			if( !autoOrientation )
 			{
@@ -518,7 +504,7 @@ int main()
 		{
 			for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 			{
-				const ae::Matrix4& t = currentPose.GetBoneByIndex( i )->modelToBone;
+				const ae::Matrix4& t = currentPose.GetBoneByIndex( i )->boneToModel;
 				ae::Vec3 p = t.GetTranslation();
 				ae::Vec3 xAxis = t.GetAxis( 0 );
 				ae::Vec3 yAxis = t.GetAxis( 1 );
@@ -534,8 +520,8 @@ int main()
 				const ae::Bone* parent = bone->parent;
 				if( parent )
 				{
-					debugLines.AddLine( parent->modelToBone.GetTranslation(), bone->modelToBone.GetTranslation(), ae::Color::PicoBlue() );
-					debugLines.AddOBB( bone->modelToBone * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
+					debugLines.AddLine( parent->boneToModel.GetTranslation(), bone->boneToModel.GetTranslation(), ae::Color::PicoBlue() );
+					debugLines.AddOBB( bone->boneToModel * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
 				}
 			}
 
@@ -591,7 +577,7 @@ int main()
 			for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 			{
 				const ae::Bone* bone = currentPose.GetBoneByIndex( i );
-				const ae::Vec3 pos = bone->modelToBone.GetTranslation();
+				const ae::Vec3 pos = bone->boneToModel.GetTranslation();
 				if( ae::Sphere( pos, ikJointScale * 0.5f ).IntersectRay( cameraPos, cameraDir * 1000.0f ) )
 				{
 					const bool selected = ( selectedJointIndex == i && selTestJoint == TestJointId::None );

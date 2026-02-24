@@ -5262,9 +5262,9 @@ struct Bone
 {
 	ae::Str64 name;
 	uint32_t index = 0;
-	ae::Matrix4 modelToBone = ae::Matrix4::Identity();
-	ae::Matrix4 parentToChild = ae::Matrix4::Identity();
 	ae::Matrix4 boneToModel = ae::Matrix4::Identity();
+	ae::Matrix4 parentToChild = ae::Matrix4::Identity();
+	ae::Matrix4 modelToBone = ae::Matrix4::Identity();
 	Bone* firstChild = nullptr;
 	Bone* nextSibling = nullptr;
 	Bone* parent = nullptr;
@@ -5299,7 +5299,7 @@ public:
 	const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& parentToChild );
 	void SetLocalTransforms( const Bone** targets, const ae::Matrix4* parentToChildTransforms, uint32_t count );
 	void SetLocalTransform( const Bone* target, const ae::Matrix4& parentToChild );
-	void SetTransform( const Bone* target, const ae::Matrix4& modelToBone );
+	void SetTransform( const Bone* target, const ae::Matrix4& boneToModel );
 	
 	const Bone* GetRoot() const;
 	const Bone* GetBoneByName( const char* name ) const;
@@ -28022,7 +28022,7 @@ void Skeleton::Initialize( uint32_t maxBones )
 	Bone* bone = &m_bones.Append( {} );
 	bone->name = "root";
 	bone->index = 0;
-	bone->modelToBone = ae::Matrix4::Identity();
+	bone->boneToModel = ae::Matrix4::Identity();
 	bone->parentToChild = ae::Matrix4::Identity();
 	bone->parent = nullptr;
 }
@@ -28034,9 +28034,9 @@ void Skeleton::Initialize( const Skeleton* otherPose )
 	const void* beginCheck = m_bones.Data();
 	ae::Bone* root = &m_bones[ 0 ];
 	const ae::Bone* otherRoot = otherPose->GetRoot();
-	root->modelToBone = otherRoot->modelToBone;
-	root->parentToChild = otherRoot->parentToChild;
 	root->boneToModel = otherRoot->boneToModel;
+	root->parentToChild = otherRoot->parentToChild;
+	root->modelToBone = otherRoot->modelToBone;
 	for( uint32_t i = 1; i < otherPose->m_bones.Length(); i++ ) // Skip root
 	{
 		const ae::Bone& otherBone = otherPose->m_bones[ i ];
@@ -28065,9 +28065,9 @@ const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::
 
 	bone->name = name;
 	bone->index = m_bones.Length() - 1;
-	bone->modelToBone = parent->modelToBone * parentToChild;
+	bone->boneToModel = parent->boneToModel * parentToChild;
 	bone->parentToChild = parentToChild;
-	bone->boneToModel = bone->modelToBone.GetInverse();
+	bone->modelToBone = bone->boneToModel.GetInverse();
 	bone->parent = parent;
 	
 	Bone** children = &parent->firstChild;
@@ -28095,38 +28095,38 @@ void Skeleton::SetLocalTransforms( const Bone** targets, const ae::Matrix4* pare
 		bone->parentToChild = parentToChildTransforms[ i ];
 	}
 	
-	m_bones[ 0 ].modelToBone = m_bones[ 0 ].modelToBone;
+	m_bones[ 0 ].boneToModel = m_bones[ 0 ].boneToModel;
 	for( uint32_t i = 1; i < m_bones.Length(); i++ )
 	{
 		ae::Bone* bone = &m_bones[ i ];
 		AE_ASSERT( bone->parent );
 		AE_ASSERT( bone->parent < bone );
-		bone->modelToBone = bone->parent->modelToBone * bone->parentToChild;
-		bone->boneToModel = bone->modelToBone.GetInverse();
+		bone->boneToModel = bone->parent->boneToModel * bone->parentToChild;
+		bone->modelToBone = bone->boneToModel.GetInverse();
 	}
 }
 
-void Skeleton::SetTransform( const Bone* _target, const ae::Matrix4& modelToBone )
+void Skeleton::SetTransform( const Bone* _target, const ae::Matrix4& boneToModel )
 {
 	const intptr_t _index = ( _target - m_bones.Data() );
 	AE_ASSERT( _index >= 0 && _index < (intptr_t)m_bones.Length() );
 	const uint32_t index = (uint32_t)_index;
 	ae::Bone* target = &m_bones[ index ];
-	target->modelToBone = modelToBone;
-	target->boneToModel = modelToBone.GetInverse();
+	target->boneToModel = boneToModel;
+	target->modelToBone = boneToModel.GetInverse();
 	if( !target->parent )
 	{
-		target->parentToChild = modelToBone;
+		target->parentToChild = boneToModel;
 	}
 	else
 	{
-		target->parentToChild = target->parent->boneToModel * modelToBone;
+		target->parentToChild = target->parent->modelToBone * boneToModel;
 	}
 	for( uint32_t i = index + 1; i < m_bones.Length(); i++ )
 	{
 		ae::Bone* bone = &m_bones[ i ];
-		bone->modelToBone = bone->parent->modelToBone * bone->parentToChild;
-		bone->boneToModel = bone->modelToBone.GetInverse();
+		bone->boneToModel = bone->parent->boneToModel * bone->parentToChild;
+		bone->modelToBone = bone->boneToModel.GetInverse();
 	}
 }
 
@@ -28377,7 +28377,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	{
 		for( const auto& target : targets )
 		{
-			const ae::Vec3 p0 = debugModelToWorld.TransformPoint3x4( pose.GetBoneByIndex( target.key )->modelToBone.GetTranslation() );
+			const ae::Vec3 p0 = debugModelToWorld.TransformPoint3x4( pose.GetBoneByIndex( target.key )->boneToModel.GetTranslation() );
 			const ae::Vec3 p1 = debugModelToWorld.TransformPoint3x4( target.value );
 			debugLines->AddLine( p0, p1, ae::Color::Red() );
 		}
@@ -28388,15 +28388,15 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	struct _IKBone
 	{
 		ae::Vec3 modelPos;
-		ae::Quaternion modelToBoneRot;
+		ae::Quaternion boneToModelRot;
 		const ae::Vec3 twistAxis;
 		const float length; // Fixed distance between pos and parent pos
 		const float bindTwist; // The bind pose twist angle between this bone and its parent
 	};
 	ae::Array< _IKBone > ikBones( tag, pose.GetBoneCount() );
 	ikBones.Append( {
-		.modelPos = pose.GetBoneByIndex( 0 )->modelToBone.GetTranslation(),
-		.modelToBoneRot = pose.GetBoneByIndex( 0 )->modelToBone.GetRotation(),
+		.modelPos = pose.GetBoneByIndex( 0 )->boneToModel.GetTranslation(),
+		.boneToModelRot = pose.GetBoneByIndex( 0 )->boneToModel.GetRotation(),
 		.twistAxis = GetAxisVector( GetConstraints( rootBoneIndex ).twistAxis ),
 		.length = 0.0f,
 		.bindTwist = 0.0f
@@ -28411,15 +28411,15 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		ae::Quaternion twist;
 		float twistAngle = 0.0f;
 		const ae::Vec3 twistAxis = GetAxisVector( GetConstraints( i ).twistAxis );
-		const ae::Quaternion bindRot = bindBone->modelToBone.GetRotation().RelativeCopy( bindBone->parent->modelToBone.GetRotation() );
+		const ae::Quaternion bindRot = bindBone->boneToModel.GetRotation().RelativeCopy( bindBone->parent->boneToModel.GetRotation() );
 		bindRot.GetTwistSwing( twistAxis, &twist, nullptr );
 		twist.GetAxisAngle( nullptr, &twistAngle );
 
 		ikBones.Append( {
-			.modelPos = currentBone->modelToBone.GetTranslation(),
-			.modelToBoneRot = currentBone->modelToBone.GetRotation(),
+			.modelPos = currentBone->boneToModel.GetTranslation(),
+			.boneToModelRot = currentBone->boneToModel.GetRotation(),
 			.twistAxis = twistAxis,
-			.length = ( bindBone->modelToBone.GetTranslation() - bindBone->parent->modelToBone.GetTranslation() ).Length(),
+			.length = ( bindBone->boneToModel.GetTranslation() - bindBone->parent->boneToModel.GetTranslation() ).Length(),
 			.bindTwist = twistAngle
 		} );
 	}
@@ -28530,9 +28530,9 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				{
 					// Reorient current joint to point toward child joint
 					const _IKBone* ikChild = &ikBones[ poseBone->firstChild->index ];
-					const ae::Vec3 dir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
-					const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( dir );
-					ikBone->modelToBoneRot *= ikBone->twistAxis.RotationTo( boneDir );
+					const ae::Vec3 worldTargetDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
+					const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
+					ikBone->boneToModelRot *= ikBone->twistAxis.RotationTo( localTargetDir );
 				}
 			}
 			else
@@ -28549,14 +28549,15 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 
 				if( const ae::Quaternion* extentOri = targetOrientations.TryGet( poseBone->index ) )
 				{
-					ikBone->modelToBoneRot = *extentOri;
+					ikBone->boneToModelRot = *extentOri;
 				}
 				else if( poseBone->parent )
 				{
+					// @TODO: This seems a little weird, why parent to current dir and local bind dir?
 					// If no orientation target, try to at least match the position target's direction from the parent joint
-					const ae::Vec3 targetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
-					const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( targetDir );
-					ikBone->modelToBoneRot *= ikBone->twistAxis.RotationTo( boneDir );
+					const ae::Vec3 worldTargetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
+					const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
+					ikBone->boneToModelRot *= ikBone->twistAxis.RotationTo( localTargetDir );
 				}
 			}
 		};
@@ -28604,10 +28605,10 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				// compounding spin each iteration.
 				if( singleChild )
 				{
-					const ae::Vec3 dir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
-					const ae::Vec3 boneDir = ikBone->modelToBoneRot.GetInverse().Rotate( dir );
-					ikBone->modelToBoneRot *= ikBone->twistAxis.RotationTo( boneDir );
-					ikChild->modelPos = ikBone->modelPos + ikBone->modelToBoneRot.Rotate( ikBone->twistAxis ) * ikChild->length;
+					const ae::Vec3 worldTargetDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
+					const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
+					ikBone->boneToModelRot *= ikBone->twistAxis.RotationTo( localTargetDir );
+					ikChild->modelPos = ikBone->modelPos + ikBone->boneToModelRot.Rotate( ikBone->twistAxis ) * ikChild->length;
 				}
 
 				if( debugLines )
@@ -28628,11 +28629,11 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	const ae::Bone* poseOutRoot = poseOut->GetBoneByIndex( rootBoneIndex );
 	auto finalizeOutPose = [&]( auto&& finalizeOutPose, _IKBone* ikBone, const Bone* poseOutBone ) -> void
 	{
-		const ae::Matrix4 modelToBone = ikBone->modelToBoneRot.GetTransformMatrix().SetTranslation( ikBone->modelPos );
-		poseOut->SetTransform( poseOutBone, modelToBone );
+		const ae::Matrix4 boneToModel = ikBone->boneToModelRot.GetTransformMatrix().SetTranslation( ikBone->modelPos );
+		poseOut->SetTransform( poseOutBone, boneToModel );
 		if( debugLines )
 		{
-			const ae::Matrix4 worldTransform = ( debugModelToWorld * modelToBone ).SetScale( debugJointScale );
+			const ae::Matrix4 worldTransform = ( debugModelToWorld * boneToModel ).SetScale( debugJointScale );
 			debugLines->AddLine(
 				worldTransform.GetTranslation(),
 				worldTransform.GetTranslation() + worldTransform.GetAxis( 0 ),
@@ -28690,7 +28691,7 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* no
 		if( bone->parent ) { AE_ASSERT_MSG( bone->parent->index == bindPoseBone->parent->index, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
 		else { AE_ASSERT_MSG( !bindPoseBone->parent, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
 		
-		ae::Matrix4 transform = bone->modelToBone * bindPoseBone->boneToModel;
+		ae::Matrix4 transform = bone->boneToModel * bindPoseBone->modelToBone;
 		tempBones[ i ] = transform;
 		tempBoneNorm[ i ] = transform.GetNormalMatrix();
 	}
