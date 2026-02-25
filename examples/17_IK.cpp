@@ -173,7 +173,7 @@ int main()
 	ae::Skeleton currentPose = TAG_ALL;
 	ae::Map< uint32_t, ae::Vec3 > targets = TAG_ALL;
 	ae::Map< uint32_t, ae::Quaternion > targetOrientations = TAG_ALL;
-	ae::Array< ae::IKConstraints > ikConstraints = TAG_ALL;
+	ae::Array< ae::IKConstraints > ikConstraints = TAG_ALL; // @TODO: Clean up. Currently not used
 	ae::Map< uint32_t, ae::IKRotationConstraint > rotationConstraints = TAG_ALL;
 	ae::Array< ae::IKDistanceConstraint > distanceConstraints = TAG_ALL;
 	const ae::Bone* headBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Head" );
@@ -220,22 +220,31 @@ int main()
 		// Distance constraints
 		{
 			// Head
-			distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)rightShoulderBone->index, 0.0f, 1.25f } );
-			distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)leftShoulderBone->index, 0.0f, 1.25f } );
-			distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)rightShoulderBone->index, 0.75f, 1.25f } );
-			distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)leftShoulderBone->index, 0.75f, 1.25f } );
+			distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)rightShoulderBone->index, 0.85f, 1.15f } );
+			distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)leftShoulderBone->index, 0.85f, 1.15f } );
+			distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)rightArmBone->index, 0.85f, 1.15f } );
+			distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)leftArmBone->index, 0.85f, 1.15f } );
 			// Collarbone
 			distanceConstraints.Append( { (int32_t)rightShoulderBone->index, (int32_t)leftShoulderBone->index } );
-			distanceConstraints.Append( { (int32_t)rightArmBone->index, (int32_t)leftArmBone->index, 0.95f, 1.0f } );
+			distanceConstraints.Append( { (int32_t)rightArmBone->index, (int32_t)leftArmBone->index, 1.0f, 1.1f } );
 			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)rightArmBone->index, 1.0f, 1.25f } );
 			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)leftArmBone->index, 1.0f, 1.25f } );
 			// Spine
-			distanceConstraints.Append( { (int32_t)hipsBone->index, (int32_t)spine1Bone->index, 0.95f, 1.05f } );
-			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)spine2Bone->index, 0.95f, 1.05f } );
+			distanceConstraints.Append( { (int32_t)hipsBone->index, (int32_t)spine1Bone->index, 1.0f, 1.05f } );
+			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)spine2Bone->index, 1.0f, 1.05f } );
+			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)neckBone->index, 1.0f, 1.05f } );
+			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)headBone->index, 1.0f, 1.05f } );
+			// Torso
+			distanceConstraints.Append( { (int32_t)leftArmBone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)rightArmBone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)leftArmBone->index, 0.9f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)rightArmBone->index, 0.9f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.1f } );
 			// Hips
 			distanceConstraints.Append( { (int32_t)rightUpLegBone->index, (int32_t)leftUpLegBone->index } );
-			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)rightUpLegBone->index } );
-			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)leftUpLegBone->index } );
+			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)rightUpLegBone->index , 1.0f, 1.2f} );
+			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)leftUpLegBone->index, 1.0f, 1.2f } );
 			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.0f } );
 			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.0f } );
 		}
@@ -261,7 +270,6 @@ int main()
 	bool drawSkeleton = true;
 	bool autoIK = true;
 	bool fromBindPose = true;
-	bool autoOrientation = true;
 	bool drawIK = false;
 	int32_t iterCount = 5;
 	float ikJointScale = 0.1f;
@@ -334,7 +342,6 @@ int main()
 			}
 			ImGui::EndDisabled();
 			ImGui::Checkbox( "From Bind Pose", &fromBindPose );
-			ImGui::Checkbox( "Auto Orientation", &autoOrientation );
 			ImGui::SliderInt( "Iterations", &iterCount, 0, 10 );
 			ImGui::SliderFloat( "Joint Scale", &ikJointScale, 0.01f, 1.0f );
 
@@ -481,11 +488,7 @@ int main()
 			ae::IK ik = TAG_ALL;
 			ik.rootBoneIndex = hipsBone->index;
 			ik.targets = targets;
-			if( !autoOrientation )
-			{
-				ik.targetOrientations = targetOrientations;
-			}
-			ik.joints = ikConstraints;
+			ik.targetOrientations = targetOrientations;
 			ik.distanceConstraints = distanceConstraints;
 			ik.rotationConstraints = rotationConstraints;
 			ik.bindPose = &skin.GetBindPose();
@@ -602,7 +605,6 @@ int main()
 		if( gizmoOperation && camera.GetMode() == ae::DebugCamera::Mode::None )
 		{
 			ae::Matrix4 gizmoTransform = GetSelectedTransform( gizmoOperation != ImGuizmo::ROTATE );
-			ImGuizmo::Enable( ( gizmoOperation == ImGuizmo::ROTATE ) ? !autoOrientation : true );
 			if( ImGuizmo::Manipulate(
 				worldToView.data,
 				viewToProj.data,

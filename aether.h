@@ -5372,9 +5372,6 @@ struct IK
 	//! consider the position of the target transform, not the orientation.
 	ae::Map< uint32_t, ae::Vec3 > targets;
 	ae::Map< uint32_t, ae::Quaternion > targetOrientations;
-	//! Rotation limits for each joint. The IK will try to keep the rotation of
-	//! each joint within these limits.
-	ae::Array< ae::IKConstraints > joints;
 	//! Distance constraints between any two bones. This is useful for
 	//! preventing bones shoulder bones etc from collapsing or folding outwards.
 	ae::Array< ae::IKDistanceConstraint > distanceConstraints;
@@ -28341,7 +28338,6 @@ IK::IK( ae::Tag tag ) :
 	tag( tag ),
 	targets( tag ),
 	targetOrientations( tag ),
-	joints( tag ),
 	distanceConstraints( tag ),
 	rotationConstraints( tag ),
 	pose( tag )
@@ -28357,21 +28353,6 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	{
 		return;
 	}
-
-	AE_ASSERT( joints.Length() == 0 || joints.Length() == 1 || joints.Length() == pose.GetBoneCount() );
-	auto GetConstraints = [ this ]( uint32_t idx ) -> const ae::IKConstraints&
-	{
-		switch( joints.Length() )
-		{
-			case 0:
-			{
-				static const ae::IKConstraints s_default;
-				return s_default;
-			}
-			case 1: return joints[ 0 ];
-			default: return joints[ idx ];
-		}
-	};
 
 	if( debugLines )
 	{
@@ -28389,19 +28370,17 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	{
 		ae::Vec3 modelPos;
 		ae::Quaternion boneToModelRot; // @TODO: Should this be flipped? It's inverted constantly below
-		const ae::Vec3 twistAxis;
-		const ae::Vec3 parentBindDir; // Direction from parent to this bone, in this bone's bind-pose local frame
+		const ae::Vec3 parentBindDir; // Direction from parent to this bone, in parent's bind-pose local frame
+		const ae::Vec3 selfBindDir;   // Direction from parent to this bone, in this bone's bind-pose local frame
 		const float length; // Fixed distance between pos and parent pos
-		const float bindTwist; // The bind pose twist angle between this bone and its parent
 	};
 	ae::Array< _IKBone > ikBones( tag, pose.GetBoneCount() );
 	ikBones.Append( {
 		.modelPos = pose.GetBoneByIndex( 0 )->boneToModel.GetTranslation(),
 		.boneToModelRot = pose.GetBoneByIndex( 0 )->boneToModel.GetRotation(),
-		.twistAxis = GetAxisVector( GetConstraints( rootBoneIndex ).twistAxis ),
-		.parentBindDir = GetAxisVector( GetConstraints( rootBoneIndex ).twistAxis ),
-		.length = 0.0f,
-		.bindTwist = 0.0f
+		.parentBindDir = ae::Vec3( 0.0 ),
+		.selfBindDir = ae::Vec3( 0.0 ),
+		.length = 0.0f
 	} );
 	for( uint32_t i = 1; i < pose.GetBoneCount(); i++ )
 	{
@@ -28409,24 +28388,16 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		const Bone* currentBone = pose.GetBoneByIndex( i );
 		AE_ASSERT( bindBone->parent );
 		AE_ASSERT( currentBone->parent );
-
-		ae::Quaternion twist;
-		float twistAngle = 0.0f;
-		const ae::Vec3 twistAxis = GetAxisVector( GetConstraints( i ).twistAxis );
-		const ae::Quaternion bindRot = bindBone->boneToModel.GetRotation().RelativeCopy( bindBone->parent->boneToModel.GetRotation() );
-		bindRot.GetTwistSwing( twistAxis, &twist, nullptr );
-		twist.GetAxisAngle( nullptr, &twistAngle );
-
-		const ae::Vec3 worldBindDir = ( bindBone->boneToModel.GetTranslation() - bindBone->parent->boneToModel.GetTranslation() ).SafeNormalizeCopy();
+		ae::Vec3 worldBindDir = ( bindBone->boneToModel.GetTranslation() - bindBone->parent->boneToModel.GetTranslation() );
+		const float bindLen = worldBindDir.SafeNormalize();
 		const ae::Vec3 localBindDir = bindBone->parent->boneToModel.GetRotation().GetInverse().Rotate( worldBindDir );
-
+		const ae::Vec3 selfBindDir = bindBone->boneToModel.GetRotation().GetInverse().Rotate( worldBindDir );
 		ikBones.Append( {
 			.modelPos = currentBone->boneToModel.GetTranslation(),
 			.boneToModelRot = currentBone->boneToModel.GetRotation(),
-			.twistAxis = twistAxis,
 			.parentBindDir = localBindDir,
-			.length = ( bindBone->boneToModel.GetTranslation() - bindBone->parent->boneToModel.GetTranslation() ).Length(),
-			.bindTwist = twistAngle
+			.selfBindDir = selfBindDir,
+			.length = bindLen
 		} );
 	}
 	const ae::Vec3 rootBoneAnchor = ikBones[ rootBoneIndex ].modelPos;
@@ -28434,12 +28405,12 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	struct _IKDistanceConstraint
 	{
 		uint32_t idx0, idx1;
-		float minHalfLength, maxHalfLength;
+		float minLength, maxLength;
 	};
 	ae::Array< _IKDistanceConstraint > tempDistanceConstraints( tag );
 	for( const IKDistanceConstraint& constraint : this->distanceConstraints )
 	{
-		// @TODO: Handle parent child contraints (probably ignore them)
+		// @TODO: Handle parent child constraints (probably ignore them)
 		if( (uint32_t)constraint.idx0 >= pose.GetBoneCount() || (uint32_t)constraint.idx1 >= pose.GetBoneCount() )
 		{
 			continue;
@@ -28448,8 +28419,8 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		tempDistanceConstraints.Append( {
 			.idx0 = (uint32_t)constraint.idx0,
 			.idx1 = (uint32_t)constraint.idx1,
-			.minHalfLength = length * 0.5f * ae::Clip01( constraint.maxCompression01 ),
-			.maxHalfLength = length * 0.5f * ae::Max( 1.0f, constraint.maxStretch1N )
+			.minLength = length * ae::Clip01( constraint.maxCompression01 ),
+			.maxLength = length * ae::Max( 1.0f, constraint.maxStretch1N )
 		} );
 	}
 	auto ApplyDistanceConstraints = [&]( const ae::Bone* poseBone, _IKBone* ikBone )
@@ -28459,20 +28430,18 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 			if( constraint.idx0 == poseBone->index || constraint.idx1 == poseBone->index )
 			{
 				const uint32_t otherIdx = ( constraint.idx0 == poseBone->index ) ? constraint.idx1 : constraint.idx0;
-				_IKBone* otherBone = &ikBones[ otherIdx ];
+				const _IKBone* otherBone = &ikBones[ otherIdx ];
 				ae::Vec3 fromOtherDir = ikBone->modelPos - otherBone->modelPos;
-				const float halfDistance = fromOtherDir.SafeNormalize() * 0.5f;
-				if( halfDistance < constraint.minHalfLength )
+				const float distance = fromOtherDir.SafeNormalize();
+				// Only move one end of the distance constraint per pass. Moving
+				// both ends towards each other breaks bone length guarantees.
+				if( distance < constraint.minLength )
 				{
-					const ae::Vec3 center = ( ikBone->modelPos + otherBone->modelPos ) * 0.5f;
-					ikBone->modelPos = center + fromOtherDir * constraint.minHalfLength;
-					otherBone->modelPos = center - fromOtherDir * constraint.minHalfLength;
+					ikBone->modelPos = otherBone->modelPos + fromOtherDir * constraint.minLength;
 				}
-				else if( halfDistance > constraint.maxHalfLength )
+				else if( distance > constraint.maxLength )
 				{
-					const ae::Vec3 center = ( ikBone->modelPos + otherBone->modelPos ) * 0.5f;
-					ikBone->modelPos = center + fromOtherDir * constraint.maxHalfLength;
-					otherBone->modelPos = center - fromOtherDir * constraint.maxHalfLength;
+					ikBone->modelPos = otherBone->modelPos + fromOtherDir * constraint.maxLength;
 				}
 			}
 		}
@@ -28480,15 +28449,14 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 
 	for( uint32_t iterations = 0; iterations < iterationCount; iterations++ )
 	{
-		// In the first stage, the normal algorithm is applied but this time
-		// starting from each end effector and moving inwards to the parent
-		// sub-base. This will produce as many different positions of the
-		// sub-base as the number of end effectors connected with that specific
-		// sub-base. The new position of the sub-base will then be the centroid
-		// of all these positions. Thereafter, the normal algorithm should be
-		// applied inwards starting from the sub-base to the manipulator root.
-		// If there are more intermediate sub-bases, the same technique should
-		// be used.
+		// In the first stage, the normal algorithm is applied starting from
+		// each end effector and moving inwards to the parent sub-base. This
+		// will produce as many different positions of the sub-base as the
+		// number of end effectors connected with that specific sub-base. The
+		// new position of the sub-base will then be the centroid of all these
+		// positions. Thereafter, the normal algorithm should be applied inwards
+		// starting from the sub-base to the manipulator root. If there are more
+		// intermediate sub-bases, the same technique should be used.
 		auto reverseIter = [&]( auto&& reverseIter, _IKBone* ikBone, const Bone* poseBone ) -> void
 		{
 			if( poseBone->firstChild )
@@ -28528,10 +28496,10 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				else
 				{
 					ikBone->modelPos = averageChildPos / (float)count;
+					// Apply distance constraints last while iterating in reverse so
+					// they are prioritized over target positions.
+					ApplyDistanceConstraints( poseBone, ikBone );
 				}
-				// Apply distance constraints last while iterating in reverse so
-				// they are prioritized over target positions.
-				ApplyDistanceConstraints( poseBone, ikBone );
 				// Reorient current joint to point toward child joint
 				const _IKBone* ikChild = &ikBones[ poseBone->firstChild->index ];
 				const ae::Vec3 worldTargetDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
@@ -28559,7 +28527,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					// If no orientation target, try to at least match the position target's direction from the parent joint
 					const ae::Vec3 worldTargetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
 					const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
-					ikBone->boneToModelRot *= ikBone->twistAxis.RotationTo( localTargetDir );
+					ikBone->boneToModelRot *= ikBone->selfBindDir.RotationTo( localTargetDir );
 				}
 			}
 		};
@@ -28576,12 +28544,10 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		{
 			ikBones[ rootBoneIndex ].modelPos = *target;
 		}
-		else
+		else if( pose.GetBoneByIndex( rootBoneIndex )->parent != pose.GetRoot() )
 		{
-			// @TODO: It makes sense to allow the root bone to move in some
-			// cases and not others, eg. hips(ok) vs. shoulder(not ok). For now
-			// though, pin the bone to its original position unless it's been
-			// set explicitly.
+			// Only pin the given root bone if it has a real parent. Note that
+			// ae::Skeleton automatically creates a root bone that doesn't count.
 			ikBones[ rootBoneIndex ].modelPos = rootBoneAnchor;
 		}
 		auto forwardIter = [&]( auto&& forwardIter, _IKBone* ikBone, const Bone* poseBone ) -> void
