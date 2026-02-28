@@ -158,7 +158,8 @@
 
 //------------------------------------------------------------------------------
 // AE_ENABLE_OPENGL define
-//! Define to 0 before including aether.h to disable OpenGL dependency.
+//------------------------------------------------------------------------------
+//! Define as 0 before including aether.h to disable OpenGL dependency.
 //! Render class method bodies become empty stubs. Intended for headless
 //! server builds and command-line tools. A future AE_ENABLE_WINDOW flag
 //! will handle OS window dependency separately.
@@ -202,6 +203,17 @@
 #endif
 #ifndef AE_HASH64_FNV1A_PRIME_CONFIG
 	#define AE_HASH64_FNV1A_PRIME_CONFIG 0x100000001B3ull
+#endif
+
+//------------------------------------------------------------------------------
+// AE_DEPRECATED define
+//------------------------------------------------------------------------------
+//! Define as 1 before including aether.h to enable deprecated functions or
+//! features. This can be useful for maintaining compatibility with older code
+//! while transitioning to newer APIs.
+//------------------------------------------------------------------------------
+#ifndef AE_DEPRECATED
+	#define AE_DEPRECATED 0
 #endif
 
 //------------------------------------------------------------------------------
@@ -6506,12 +6518,13 @@ public:
 		Matrix4,
 		Color,
 		UUID,
-
+#if AE_DEPRECATED
 		Class, // @TODO: Remove
 		Enum, // @TODO: Remove
 		Pointer, // @TODO: Remove
 		CustomRef, // @TODO: Remove
 		None, // @TODO: Remove
+#endif // AE_DEPRECATED
 	};
 
 	virtual ae::BasicType::Type GetType() const = 0;
@@ -6607,10 +6620,11 @@ public:
 	//! Returns a pointer to the inner value of \p pointer, unless given null.
 	template< typename T > T*const* GetRef( ae::ConstDataPointer pointer ) const;
 
-
 	// Internal
 	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< PointerType >(); }
+#if AE_DEPRECATED
 	virtual ae::BasicType::Type GetBasicType() const { return ae::BasicType::Pointer; } // @HACK: Remove
+#endif // AE_DEPRECATED
 	virtual bool SetRefFromString( ae::DataPointer pointer, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
 	virtual std::string GetStringFromRef( ae::ConstDataPointer pointer, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 };
@@ -6777,7 +6791,7 @@ public:
 	_TypePointer m_varType;
 	ae::TypeName m_name;
 	uint32_t m_offset = 0;
-	// Deprecated
+#if AE_DEPRECATED
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
 	void m_AddProp( const char* prop, const char* value );
 	class Serializer
@@ -6825,6 +6839,7 @@ public:
 		}
 		return nullptr;
 	}
+#endif // AE_DEPRECATED
 };
 
 //------------------------------------------------------------------------------
@@ -6838,6 +6853,7 @@ public:
 	//--------------------------------------------------------------------------
 	// C++ type info
 	//--------------------------------------------------------------------------
+	ae::TypeId GetId() const;
 	template< typename T = ae::Object > T* New( void* obj ) const;
 	//! Creates a temporary instance of this type and copies the vtable from
 	//! the instance. This type must be default constructible.
@@ -6900,11 +6916,10 @@ private:
 public:
 	template< typename T > typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type Init( const char* name );
 	template< typename T > typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type Init( const char* name );
-	void m_AddProp( const char* prop, const char* value );
 	void m_AddVar( const ae::ClassVar* var );
 	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< ClassType >(); }
-	// Deprecated
-	ae::TypeId GetId() const;
+#if AE_DEPRECATED
+	void m_AddProp( const char* prop, const char* value );
 	const ae::ClassType* GetClassType() const { return this; }
 	bool HasProperty( const char* property ) const;
 	const ae::ClassType* GetTypeWithProperty( const char* property ) const;
@@ -6915,6 +6930,7 @@ public:
 	uint32_t GetPropertyValueCount( const char* propName ) const;
 	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
 	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
+#endif // AE_DEPRECATED
 };
 
 //------------------------------------------------------------------------------
@@ -7078,8 +7094,10 @@ struct _Globals
 	uint32_t metaCacheSeq = 0;
 	ae::Map< ae::TypeId, const ae::EnumType*, kMaxMetaEnumTypes, ae::Hash32, ae::MapMode::Stable > enumTypes;
 	ae::Map< ae::TypeId, ae::ClassType*, kMaxMetaTypes, ae::Hash32, ae::MapMode::Stable > classTypes;
+#if AE_DEPRECATED
 	const ae::ClassVar::Serializer* varSerializer = nullptr;
 	bool varSerializerInitialized = false;
+#endif // AE_DEPRECATED
 
 	// Graphics
 	class GraphicsDevice* graphicsDevice = nullptr;
@@ -13416,6 +13434,8 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 //------------------------------------------------------------------------------
 // Deprecated meta class property registration macros
 //------------------------------------------------------------------------------
+#if AE_DEPRECATED
+
 //! Register a class property
 //! Call signature: AE_REGISTER_CLASS_PROPERTY( (Namespace0, ..., NameSpaceN, MyType), typeProperty );
 #define AE_REGISTER_NAMESPACECLASS_PROPERTY( _C, _P ) AE_REGISTER_CLASS_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P )
@@ -13435,6 +13455,8 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 //! Multiple values can be specified per property.
 #define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P, _PV )
 #define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (_C), _V, _P, _PV )
+
+#endif // AE_DEPRECATED
 
 //------------------------------------------------------------------------------
 // Internal meta class registration macros
@@ -14549,6 +14571,8 @@ bool ae::AttributeList::Has() const
 //------------------------------------------------------------------------------
 // ae::ClassVar templated member functions
 //------------------------------------------------------------------------------
+#if AE_DEPRECATED
+
 template< typename T >
 bool ae::ClassVar::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx ) const
 {
@@ -14687,6 +14711,8 @@ const T* ae::ClassVar::GetPointer( const ae::Object* obj, int32_t arrayIdx ) con
 	}
 	return nullptr;
 }
+
+#endif // AE_DEPRECATED
 
 //------------------------------------------------------------------------------
 // ae::Cast implementation
@@ -31251,6 +31277,22 @@ bool ae::ConstDataPointer::operator != ( const ae::ConstDataPointer& other ) con
 //------------------------------------------------------------------------------
 // ae::ClassVar member functions
 //------------------------------------------------------------------------------
+const char* ae::ClassVar::GetName() const { return m_name.c_str(); }
+uint32_t ae::ClassVar::GetOffset() const { return m_offset; }
+const ae::ClassType& ae::ClassVar::GetClassType() const
+{
+	const ae::ClassType* type = m_owner.GetClassType();
+	AE_ASSERT_MSG( type, "Member variable # has no class type", m_name );
+	return *type;
+
+}
+const ae::Type& ae::ClassVar::GetOuterVarType() const
+{
+	AE_ASSERT( m_varType.Get() );
+	return *m_varType.Get();
+}
+
+#if AE_DEPRECATED
 ae::ClassVar::Serializer::~Serializer()
 {
 	if( _Globals::Get()->varSerializer == this )
@@ -31267,9 +31309,6 @@ void ae::ClassVar::SetSerializer( const ae::ClassVar::Serializer* serializer )
 	}
 	_Globals::Get()->varSerializer = serializer;
 }
-
-const char* ae::ClassVar::GetName() const { return m_name.c_str(); }
-uint32_t ae::ClassVar::GetOffset() const { return m_offset; }
 
 std::string ae::ClassVar::GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx ) const
 {
@@ -31368,19 +31407,6 @@ bool ae::ClassVar::SetObjectValueFromString( ae::Object* obj, const char* value,
 	}
 	return false;
 }
-
-const ae::ClassType& ae::ClassVar::GetClassType() const
-{
-	const ae::ClassType* type = m_owner.GetClassType();
-	AE_ASSERT_MSG( type, "Member variable # has no class type", m_name );
-	return *type;
-
-}
-const ae::Type& ae::ClassVar::GetOuterVarType() const
-{
-	AE_ASSERT( m_varType.Get() );
-	return *m_varType.Get();
-}
 bool ae::ClassVar::HasProperty( const char* prop ) const { return GetPropertyIndex( prop ) >= 0; }
 int32_t ae::ClassVar::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
 int32_t ae::ClassVar::GetPropertyCount() const { return m_props.Length(); }
@@ -31397,6 +31423,21 @@ const char* ae::ClassVar::GetPropertyValue( const char* propName, uint32_t value
 	const auto* vals = m_props.TryGet( propName );
 	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
 }
+void ae::ClassVar::m_AddProp( const char* prop, const char* value )
+{
+	AE_ASSERT_MSG( m_props.Length() < m_props.Size(), "Set/increase AE_MAX_META_PROP_LIST_LENGTH_CONFIG (Currently: #)", m_props.Size() );
+	auto* props = m_props.TryGet( prop );
+	if( !props )
+	{
+		props = &m_props.Set( prop, {} );
+	}
+	if( value && value[ 0 ] ) // 'm_props' will have an empty array for properties when no value is specified
+	{
+		props->Append( value );
+	}
+}
+#endif // AE_DEPRECATED
+
 ae::ClassVar::_TypePointer::_TypePointer( const ae::Type& _varType )
 {
 	if( const ae::ClassType* classType = _varType.AsVarType< ae::ClassType >() )
@@ -31423,19 +31464,6 @@ const ae::Type* ae::ClassVar::_TypePointer::Get() const
 		case Static: return varType;
 		case Class: return ae::GetClassTypeById( typeId );
 		default: return nullptr;
-	}
-}
-void ae::ClassVar::m_AddProp( const char* prop, const char* value )
-{
-	AE_ASSERT_MSG( m_props.Length() < m_props.Size(), "Set/increase AE_MAX_META_PROP_LIST_LENGTH_CONFIG (Currently: #)", m_props.Size() );
-	auto* props = m_props.TryGet( prop );
-	if( !props )
-	{
-		props = &m_props.Set( prop, {} );
-	}
-	if( value && value[ 0 ] ) // 'm_props' will have an empty array for properties when no value is specified
-	{
-		props->Append( value );
 	}
 }
 
@@ -31503,7 +31531,7 @@ bool ae::ClassType::IsType( const ae::ClassType* otherType ) const
 	return false;
 }
 
-// @TODO: Remove
+#if AE_DEPRECATED
 ae::BasicType::Type ae::ClassVar::GetType() const
 {
 	if( const ae::BasicType* basicType = m_HACK_FindInnerVarType< ae::BasicType >() )
@@ -31632,6 +31660,7 @@ uint32_t ae::ClassVar::GetArrayMaxLength() const
 	const ae::ArrayType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayType >();
 	return arrayAdapter ? arrayAdapter->GetMaxLength() : 0;
 }
+#endif // AE_DEPRECATED
 
 //------------------------------------------------------------------------------
 // Internal ae::Object functions
@@ -31729,11 +31758,13 @@ std::string ae::BasicType::GetVarDataAsString( ae::ConstDataPointer _varData ) c
 		case BasicType::Matrix4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
 		case BasicType::Color: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
 		case BasicType::UUID: return ae::Str64::Format( "#", *reinterpret_cast< const ae::UUID* >( varData ) ).c_str();
+#if AE_DEPRECATED
 		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
 		case BasicType::Enum: AE_FAIL(); break; // @TODO: Remove
 		case BasicType::Pointer: AE_FAIL(); break; // @TODO: Remove
 		case BasicType::CustomRef: AE_FAIL(); break; // @TODO: Remove
 		case BasicType::None: AE_FAIL(); break; // @TODO: Remove
+#endif // AE_DEPRECATED
 	}
 	return "";
 }
@@ -31896,11 +31927,13 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 			*(ae::UUID*)varData = ae::FromString< ae::UUID >( value, ae::UUID() );
 			return true;
 		}
+#if AE_DEPRECATED
 		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
 		case BasicType::Enum: AE_FAIL(); break; // @TODO: Remove
 		case BasicType::Pointer: AE_FAIL(); break; // @TODO: Remove
 		case BasicType::CustomRef: AE_FAIL(); break; // @TODO: Remove
 		case BasicType::None: AE_FAIL(); break; // @TODO: Remove
+#endif // AE_DEPRECATED
 	}
 	return false;
 }
@@ -32009,6 +32042,8 @@ ae::DataPointer ae::PointerType::Dereference( ae::ConstDataPointer varData ) con
 //------------------------------------------------------------------------------
 // ae::ClassType member functions
 //------------------------------------------------------------------------------
+ae::TypeId ae::ClassType::GetId() const { return m_id; }
+
 const ae::ClassType* ae::ClassType::GetClassType( ae::ConstDataPointer varData ) const
 {
 	if( const ae::Object* data = static_cast< const ae::Object* >( varData.Get( this ) ) )
@@ -32036,10 +32071,8 @@ ae::ConstDataPointer ae::ClassType::GetVarData( const ae::ClassVar* var, ae::Con
 	return {};
 }
 
-//------------------------------------------------------------------------------
-// ae::ClassType member functions
-//------------------------------------------------------------------------------
-ae::TypeId ae::ClassType::GetId() const { return m_id; }
+#if AE_DEPRECATED
+
 bool ae::ClassType::HasProperty( const char* property ) const { return GetPropertyIndex( property ) >= 0; }
 const ae::ClassType* ae::ClassType::GetTypeWithProperty( const char* property ) const
 {
@@ -32077,6 +32110,9 @@ const char* ae::ClassType::GetPropertyValue( const char* propName, uint32_t valu
 	const auto* vals = m_props.TryGet( propName );
 	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
 }
+
+#endif // AE_DEPRECATED
+
 void ae::ClassType::PatchVTable( ae::Object* obj ) const
 {
 	if( obj )
@@ -32101,6 +32137,7 @@ bool ae::ClassType::IsDefaultConstructible() const { return m_isDefaultConstruct
 bool ae::ClassType::IsFinal() const { return m_isFinal; }
 const char* ae::ClassType::GetParentTypeName() const { return m_parent.c_str(); }
 
+#if AE_DEPRECATED
 void ae::ClassType::m_AddProp( const char* prop, const char* value )
 {
 	auto* props = m_props.TryGet( prop );
@@ -32113,6 +32150,7 @@ void ae::ClassType::m_AddProp( const char* prop, const char* value )
 		props->Append( value );
 	}
 }
+#endif // AE_DEPRECATED
 
 void ae::ClassType::m_AddVar( const ae::ClassVar* var )
 {

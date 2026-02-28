@@ -46,6 +46,7 @@ AE_REGISTER_ENUM_CLASS( TestEnumClass );
 AE_FORCE_LINK_CLASS( Namespace0, Namespace1, NamespaceClass );
 AE_REGISTER_NAMESPACECLASS( (Namespace0, Namespace1, NamespaceClass) );
 
+#if AE_DEPRECATED
 AE_REGISTER_NAMESPACECLASS_PROPERTY( (Namespace0, Namespace1, NamespaceClass), someProp0 );
 
 AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp1, v0 );
@@ -67,6 +68,7 @@ AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, Namespace1, NamespaceClass), enumTe
 AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop0, val0 );
 AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop1, val0 );
 AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop1, val1 );
+#endif // AE_DEPRECATED
 
 AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, Namespace1, NamespaceClass), uuidMember );
 

@@ -73,6 +73,7 @@ TEST_CASE( "Class registration", "[aeMeta]" )
 	REQUIRE( ae::GetClassType< SomeClass* >() == ae::GetClassType< SomeClass >() );
 }
 
+#if AE_DEPRECATED
 TEST_CASE( "Class properties", "[aeMeta]" )
 {
 	const ae::ClassType* type = ae::GetClassType< SomeClass >();
@@ -118,6 +119,7 @@ TEST_CASE( "Class properties", "[aeMeta]" )
 	AE_REQUIRE_THROWS( type->GetPropertyName( 3 ) );
 	AE_REQUIRE_THROWS( type->GetPropertyValueCount( 3 ) );
 }
+#endif // AE_DEPRECATED
 
 TEST_CASE( "Class vars", "[aeMeta]" )
 {
@@ -128,6 +130,7 @@ TEST_CASE( "Class vars", "[aeMeta]" )
 	REQUIRE( type->GetVarByName( "intMember", false ) );
 	REQUIRE( type->GetVarByIndex( 0, false ) );
 	REQUIRE( type->GetVarByName( "intMember", false ) == type->GetVarByIndex( 0, false ) );
+#if AE_DEPRECATED
 	const ae::ClassVar* intVar = type->GetVarByName( "intMember", false );
 	REQUIRE( intVar->HasProperty( "intProp" ) );
 	REQUIRE( intVar->GetPropertyIndex( "intProp" ) == 0 );
@@ -135,10 +138,12 @@ TEST_CASE( "Class vars", "[aeMeta]" )
 	REQUIRE( strcmp( intVar->GetPropertyName( 0 ), "intProp" ) == 0 );
 	REQUIRE( intVar->GetPropertyValueCount( 0 ) == 0 );
 	REQUIRE( intVar->GetPropertyValueCount( "intProp" ) == 0 );
+#endif // AE_DEPRECATED
 
 	REQUIRE( type->GetVarByName( "boolMember", false ) );
 	REQUIRE( type->GetVarByIndex( 1, false ) );
 	REQUIRE( type->GetVarByName( "boolMember", false ) == type->GetVarByIndex( 1, false ) );
+#if AE_DEPRECATED
 	const ae::ClassVar* boolVar = type->GetVarByName( "boolMember", false );
 	REQUIRE( boolVar->HasProperty( "boolProp" ) );
 	REQUIRE( boolVar->GetPropertyIndex( "boolProp" ) == 0 );
@@ -148,10 +153,12 @@ TEST_CASE( "Class vars", "[aeMeta]" )
 	REQUIRE( boolVar->GetPropertyValueCount( "boolProp" ) == 1 );
 	REQUIRE( strcmp( boolVar->GetPropertyValue( 0, 0 ), "val" ) == 0 );
 	REQUIRE( strcmp( boolVar->GetPropertyValue( "boolProp", 0 ), "val" ) == 0 );
+#endif // AE_DEPRECATED
 
 	REQUIRE( type->GetVarByName( "enumTest", false ) );
 	REQUIRE( type->GetVarByIndex( 2, false ) );
 	REQUIRE( type->GetVarByName( "enumTest", false ) == type->GetVarByIndex( 2, false ) );
+#if AE_DEPRECATED
 	const ae::ClassVar* enumVar = type->GetVarByName( "enumTest", false );
 	REQUIRE( enumVar->GetPropertyCount() == 2 );
 	
@@ -177,6 +184,7 @@ TEST_CASE( "Class vars", "[aeMeta]" )
 
 	REQUIRE( strcmp( enumVar->GetPropertyValue( 1, 1 ), "val1" ) == 0 );
 	REQUIRE( strcmp( enumVar->GetPropertyValue( "prop1", 1 ), "val1" ) == 0 );
+#endif // AE_DEPRECATED
 }
 
 //------------------------------------------------------------------------------
@@ -228,6 +236,7 @@ TEST_CASE( "Aggregate vars", "[aeMeta]" )
 		REQUIRE( someClassType );
 		REQUIRE( someClassType->GetName() == ae::Str32( "SomeClass" ) );
 		REQUIRE( someClassType->GetSize() == sizeof(SomeClass) );
+#if AE_DEPRECATED
 		REQUIRE( someClassVar->GetSubType() == ae::GetClassType< SomeClass >() );
 		SomeClass* someClassPtr = someClassVar->GetPointer< SomeClass >( &c );
 		REQUIRE( someClassPtr == &c.someClass );
@@ -236,6 +245,7 @@ TEST_CASE( "Aggregate vars", "[aeMeta]" )
 		const ae::ClassType* varType = ae::GetClassTypeFromObject( someClassPtr );
 		REQUIRE( varType );
 		REQUIRE( varType == ae::GetClassType< SomeClass >() );
+#endif // AE_DEPRECATED
 	}
 	{
 		const ae::ClassVar* someClass1 = type->GetVarByName( "someClass1", false );
@@ -244,6 +254,7 @@ TEST_CASE( "Aggregate vars", "[aeMeta]" )
 		REQUIRE( someClass1Type );
 		REQUIRE( someClass1Type->GetName() == ae::Str32( "SomeClass" ) );
 		REQUIRE( someClass1Type->GetSize() == sizeof(SomeClass) );
+#if AE_DEPRECATED
 		REQUIRE( someClass1->GetSubType() == ae::GetClassType< SomeClass >() );
 		SomeClass* someClass1Ptr = someClass1->GetPointer< SomeClass >( &c );
 		REQUIRE( someClass1Ptr == &c.someClass1 );
@@ -252,6 +263,7 @@ TEST_CASE( "Aggregate vars", "[aeMeta]" )
 		const ae::ClassType* varType = ae::GetClassTypeFromObject( someClass1Ptr );
 		REQUIRE( varType );
 		REQUIRE( varType == ae::GetClassType< SomeClass >() );
+#endif // AE_DEPRECATED
 	}
 }
 
@@ -280,8 +292,10 @@ TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 		const ae::BasicType* intVarType = intVar->GetOuterVarType().AsVarType< ae::BasicType >();
 		REQUIRE( intVarType );
 		REQUIRE( intVarType->GetType() == ae::BasicType::Int32 );
+#if AE_DEPRECATED
 		REQUIRE( intVar->GetObjectValue< int32_t >( &c, &intMember ) );
 		REQUIRE( intMember == c.intMember );
+#endif // AE_DEPRECATED
 	}
 	{
 		bool boolMember = false;
@@ -290,8 +304,10 @@ TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 		const ae::BasicType* boolVarType = boolVar->GetOuterVarType().AsVarType< ae::BasicType >();
 		REQUIRE( boolVarType );
 		REQUIRE( boolVarType->GetType() == ae::BasicType::Bool );
+#if AE_DEPRECATED
 		REQUIRE( boolVar->GetObjectValue< bool >( &c, &boolMember ) );
 		REQUIRE( boolMember == c.boolMember );
+#endif // AE_DEPRECATED
 	}
 	{
 		TestEnumClass enumTest = TestEnumClass::Zero;
@@ -300,8 +316,10 @@ TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 		const ae::EnumType* enumVarType = enumVar->GetOuterVarType().AsVarType< ae::EnumType >();
 		REQUIRE( enumVarType );
 		REQUIRE( ae::Str32( "TestEnumClass" ) == enumVarType->GetName() );
+#if AE_DEPRECATED
 		REQUIRE( enumVar->GetObjectValue< TestEnumClass >( &c, &enumTest ) );
 		REQUIRE( enumTest == c.enumTest );
+#endif // AE_DEPRECATED
 	}
 	{
 		ae::UUID uuid;
@@ -310,12 +328,14 @@ TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 		const ae::BasicType* uuidVarType = uuidVar->GetOuterVarType().AsVarType< ae::BasicType >();
 		REQUIRE( uuidVarType );
 		REQUIRE( uuidVarType->GetType() == ae::BasicType::UUID );
+#if AE_DEPRECATED
 		REQUIRE( uuidVar->GetObjectValue< ae::UUID >( &c, &uuid ) );
 		REQUIRE( uuid == c.uuidMember );
 		const ae::Str64 uuidStrExpected = "00010203-0405-0607-0809-0a0b0c0d0e0f";
 		REQUIRE( ae::ToString( uuid ) == uuidStrExpected );
 		const auto strActual = uuidVar->GetObjectValueAsString( &c );
 		REQUIRE( strActual == uuidStrExpected );
+#endif // AE_DEPRECATED
 	}
 }
 
@@ -390,7 +410,8 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( basicVarType );
 		REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
 		REQUIRE( basicVarType->GetSize() == sizeof(int32_t) );
-		
+
+#if AE_DEPRECATED
 		// @TODO: Old, replace with Type functions
 		REQUIRE( intArrayVar->IsArray() );
 		REQUIRE( intArrayVar->IsArrayFixedLength() );
@@ -400,6 +421,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( intArrayVar->SetArrayLength( &c, 3 ) == 3 );
 		REQUIRE( intArrayVar->SetArrayLength( &c, 4 ) == 3 );
 		REQUIRE( intArrayVar->SetArrayLength( &c, 5 ) == 3 );
+#endif // AE_DEPRECATED
 	}
 	// ae::Array< int32_t, 4 > intArray2;
 	{
@@ -424,6 +446,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( basicVarType->GetSize() == sizeof(int32_t) );
 
 		// @TODO: Old, replace with Type functions
+#if AE_DEPRECATED
 		REQUIRE( intArray2Var->IsArray() );
 		REQUIRE( !intArray2Var->IsArrayFixedLength() );
 		REQUIRE( intArray2Var->GetArrayLength( &c ) == 0 );
@@ -438,6 +461,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( c.intArray2.Length() == 0 );
 		REQUIRE( intArray2Var->SetArrayLength( &c, 1 ) == 1 );
 		REQUIRE( c.intArray2.Length() == 1 );
+#endif // AE_DEPRECATED
 	}
 	// ae::Array< int32_t > intArray3 = AE_ALLOC_TAG_META_TEST;
 	{
@@ -462,6 +486,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( basicVarType->GetSize() == sizeof(int32_t) );
 
 		// @TODO: Old, replace with Type functions
+#if AE_DEPRECATED
 		REQUIRE( intArray3Var->IsArray() );
 		REQUIRE( !intArray3Var->IsArrayFixedLength() );
 		REQUIRE( intArray3Var->GetArrayLength( &c ) == 0 );
@@ -480,6 +505,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( c.intArray3.Length() == 10020 );
 		REQUIRE( intArray3Var->SetArrayLength( &c, 0 ) == 0 );
 		REQUIRE( c.intArray3.Length() == 0 );
+#endif // AE_DEPRECATED
 	}
 	// SomeClass someClassArray[ 3 ];
 	{
@@ -505,6 +531,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
 		// @TODO: Old, replace with Type functions
+#if AE_DEPRECATED
 		REQUIRE( someClassArrayVar->GetSubType() == ae::GetClassType< SomeClass >() );
 		REQUIRE( someClassArrayVar->IsArrayFixedLength() );
 		REQUIRE( someClassArrayVar->GetArrayLength( &c ) == 3 );
@@ -513,6 +540,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( someClassArrayVar->SetArrayLength( &c, 3 ) == 3 );
 		REQUIRE( someClassArrayVar->SetArrayLength( &c, 4 ) == 3 );
 		REQUIRE( someClassArrayVar->SetArrayLength( &c, 5 ) == 3 );
+#endif // AE_DEPRECATED
 	}
 	// ae::Array< SomeClass, 4 > someClassArray2;
 	{
@@ -538,6 +566,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
 		// @TODO: Old, replace with Type functions
+#if AE_DEPRECATED
 		REQUIRE( someClassArray2Var->IsArray() );
 		REQUIRE( someClassArray2Var->GetSubType() == ae::GetClassType< SomeClass >() );
 		REQUIRE( !someClassArray2Var->IsArrayFixedLength() );
@@ -553,6 +582,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( c.someClassArray2.Length() == 0 );
 		REQUIRE( someClassArray2Var->SetArrayLength( &c, 1 ) == 1 );
 		REQUIRE( c.someClassArray2.Length() == 1 );
+#endif // AE_DEPRECATED
 	}
 	// ae::Array< SomeClass > someClassArray3 = AE_ALLOC_TAG_META_TEST;
 	{
@@ -578,6 +608,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
 		// @TODO: Old, replace with Type functions
+#if AE_DEPRECATED
 		REQUIRE( someClassArray3Var->IsArray() );
 		REQUIRE( someClassArray3Var->GetSubType() == ae::GetClassType< SomeClass >() );
 		REQUIRE( !someClassArray3Var->IsArrayFixedLength() );
@@ -603,6 +634,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( someClassArray3Var->GetPointer< SomeClass >( &c, 0 ) == &c.someClassArray3[ 0 ] );
 		REQUIRE( someClassArray3Var->GetPointer< SomeClass >( &c, 1 ) == &c.someClassArray3[ 1 ] );
 		REQUIRE( someClassArray3Var->GetPointer< SomeClass >( &c, 2 ) == &c.someClassArray3[ 2 ] );
+#endif // AE_DEPRECATED
 	}
 }
 
@@ -815,25 +847,39 @@ TEST_CASE( "can read enum values from object using meta definition", "[aeMeta]" 
 	
 	c.enumTest = TestEnumClass::Five;
 	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Five" );
+#if AE_DEPRECATED
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Five" ); // @TODO: Remove
+#endif // AE_DEPRECATED
 	c.enumTest = TestEnumClass::Four;
 	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Four" );
+#if AE_DEPRECATED
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Four" ); // @TODO: Remove
+#endif // AE_DEPRECATED
 	c.enumTest = TestEnumClass::Three;
 	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Three" );
+#if AE_DEPRECATED
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Three" ); // @TODO: Remove
+#endif // AE_DEPRECATED
 	c.enumTest = TestEnumClass::Two;
 	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Two" );
+#if AE_DEPRECATED
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Two" ); // @TODO: Remove
+#endif // AE_DEPRECATED
 	c.enumTest = TestEnumClass::One;
 	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "One" );
+#if AE_DEPRECATED
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "One" ); // @TODO: Remove
+#endif // AE_DEPRECATED
 	c.enumTest = TestEnumClass::Zero;
 	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Zero" );
+#if AE_DEPRECATED
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Zero" ); // @TODO: Remove
+#endif // AE_DEPRECATED
 	c.enumTest = TestEnumClass::NegativeOne;
 	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "NegativeOne" );
+#if AE_DEPRECATED
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "NegativeOne" ); // @TODO: Remove
+#endif // AE_DEPRECATED
 }
 
 TEST_CASE( "can't read invalid enum values from object using meta definition", "[aeMeta]" )
@@ -843,9 +889,11 @@ TEST_CASE( "can't read invalid enum values from object using meta definition", "
 	const ae::ClassVar* enumTestVar = type->GetVarByName( "enumTest", false );
 	const ae::EnumType* enumVarType = enumTestVar->GetOuterVarType().AsVarType< ae::EnumType >();
 	REQUIRE( enumVarType );
-	
+
+#if AE_DEPRECATED
 	c.enumTest = (TestEnumClass)6;
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "" );
+#endif // AE_DEPRECATED
 }
 
 TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
@@ -855,7 +903,8 @@ TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
 	const ae::ClassVar* enumTestVar = type->GetVarByName( "enumTest", false );
 	const ae::EnumType* enumVarType = enumTestVar->GetOuterVarType().AsVarType< ae::EnumType >();
 	REQUIRE( enumVarType );
-	
+
+#if AE_DEPRECATED
 	REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Five" ) );
 	REQUIRE( c.enumTest == TestEnumClass::Five );
 	REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Four" ) );
@@ -885,6 +934,7 @@ TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
 	REQUIRE( c.enumTest == TestEnumClass::Zero );
 	REQUIRE( enumTestVar->SetObjectValueFromString( &c, "-1" ) );
 	REQUIRE( c.enumTest == TestEnumClass::NegativeOne );
+#endif // AE_DEPRECATED
 }
 
 TEST_CASE( "can't set invalid enum values on object using meta definition", "[aeMeta]" )
@@ -894,7 +944,8 @@ TEST_CASE( "can't set invalid enum values on object using meta definition", "[ae
 	const ae::ClassVar* enumTestVar = type->GetVarByName( "enumTest", false );
 	const ae::EnumType* enumVarType = enumTestVar->GetOuterVarType().AsVarType< ae::EnumType >();
 	REQUIRE( enumVarType );
-	
+
+#if AE_DEPRECATED
 	c.enumTest = TestEnumClass::Four;
 	REQUIRE( !enumTestVar->SetObjectValueFromString( &c, "Six" ) );
 	REQUIRE( c.enumTest == TestEnumClass::Four );
@@ -902,6 +953,7 @@ TEST_CASE( "can't set invalid enum values on object using meta definition", "[ae
 	REQUIRE( c.enumTest == TestEnumClass::Four );
 	REQUIRE( !enumTestVar->SetObjectValueFromString( &c, "" ) );
 	REQUIRE( c.enumTest == TestEnumClass::Four );
+#endif // AE_DEPRECATED
 }
 
 //------------------------------------------------------------------------------
@@ -1072,11 +1124,11 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
 	const ae::ClassVar* var_RefTesterB_ref = type_RefTesterB->GetVarByName( "ref", false );
 	REQUIRE( var_RefTesterB_ref );
 	
+#if AE_DEPRECATED
 	REQUIRE( !var_RefTesterA_notRef->GetSubType() );
 	REQUIRE( var_RefTesterA_refA->GetSubType() == type_RefTesterA );
 	REQUIRE( var_RefTesterA_refB->GetSubType() == type_RefTesterB );
 	REQUIRE( var_RefTesterB_ref->GetSubType() == type_RefTester );
-	
 	class RefSerializer : public ae::ClassVar::Serializer
 	{
 	public:
@@ -1227,6 +1279,7 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
 	manager.Destroy( refTesterA1 );
 	manager.Destroy( refTesterA2 );
 	manager.Destroy( refTesterB3 );
+#endif // AE_DEPRECATED
 }
 
 TEST_CASE( "bitfield registration", "[aeMeta]" )
