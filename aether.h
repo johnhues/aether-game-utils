@@ -9682,15 +9682,23 @@ inline void Serialize( ae::BinaryWriter* stream, const ae::UUID* uuid )
 //------------------------------------------------------------------------------
 // ae::GetHash32 inline helpers
 //------------------------------------------------------------------------------
+// Use the non-fixed size integer types for GetHash32. int8_t cannot be passed
+// as char without an explicit cast, where the reverse does not need a cast.
+// long/unsigned long are normalized to int64_t/uint64_t first for
+// platform-independent results (long is 32-bit on Windows, 64-bit on
+// macOS/Linux).
 template<> inline uint32_t GetHash32( const bool& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const int8_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const int16_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const int32_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const int64_t& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const uint8_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const uint16_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const uint32_t& value ) { return value; }
-template<> inline uint32_t GetHash32( const uint64_t& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const signed char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const short& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned short& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const int& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned int& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const long& value ) { const int64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
+template<> inline uint32_t GetHash32( const unsigned long& value ) { const uint64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
+template<> inline uint32_t GetHash32( const long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const unsigned long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
 template<> inline uint32_t GetHash32( const float& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
 template<> inline uint32_t GetHash32( const double& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
 template<> inline uint32_t GetHash32( const ae::Vec2& value ) { return ae::Hash32().HashType( value.data ).Get(); }
@@ -9708,15 +9716,22 @@ template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { 
 //------------------------------------------------------------------------------
 // ae::GetHash64 inline helpers
 //------------------------------------------------------------------------------
+// Use the non-fixed size integer types for GetHash64. int8_t cannot be passed
+// as char without an explicit cast, where the reverse does not need a cast.
+// long/unsigned long are casted wide to uint64_t. This is always safe
+// regardless of long's native size (32-bit on Windows, 64-bit on macOS/Linux).
 template<> inline uint64_t GetHash64( const bool& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const int8_t& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const int16_t& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const int32_t& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const int64_t& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const uint8_t& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const uint16_t& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const uint32_t& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const uint64_t& value ) { return value; }
+template<> inline uint64_t GetHash64( const char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const signed char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const short& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned short& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const int& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned int& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const long long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned long long& value ) { return (uint64_t)value; }
 template<> inline uint64_t GetHash64( const float& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
 template<> inline uint64_t GetHash64( const double& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
 template<> inline uint64_t GetHash64( const ae::Vec2& value ) { return ae::Hash64().HashType( value.data ).Get(); }

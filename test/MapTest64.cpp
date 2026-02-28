@@ -35,9 +35,29 @@ using aeHashN = ae::Hash64;
 //------------------------------------------------------------------------------
 TEST_CASE( "GetHash() template function hashes values correctly", "[ae::HashMap64]" )
 {
-	REQUIRE( ae::GetHash64( 777u ) == 777ull );
-	REQUIRE( ae::GetHash64( 777 ) == 777ull );
-	REQUIRE( ae::GetHash64( -777 ) == (uint64_t)-777 );
+	// All integer types: cast to uint64_t
+	REQUIRE( ae::GetHash64( (bool)true ) == 1ull );
+	REQUIRE( ae::GetHash64( (char)77 ) == 77ull );
+	REQUIRE( ae::GetHash64( (signed char)-77 ) == (uint64_t)(signed char)-77 );
+	REQUIRE( ae::GetHash64( (unsigned char)200 ) == 200ull );
+	REQUIRE( ae::GetHash64( (short)-777 ) == (uint64_t)(short)-777 );
+	REQUIRE( ae::GetHash64( (unsigned short)777 ) == 777ull );
+	REQUIRE( ae::GetHash64( (unsigned int)777 ) == 777ull );
+	REQUIRE( ae::GetHash64( (int)777 ) == 777ull );
+	REQUIRE( ae::GetHash64( (int)-777 ) == (uint64_t)(int)-777 );
+	REQUIRE( ae::GetHash64( (long long)-777 ) == (uint64_t)(long long)-777 );
+	REQUIRE( ae::GetHash64( (unsigned long long)777 ) == 777ull );
+	REQUIRE( ae::GetHash64( (long)-777 ) == (uint64_t)(long)-777 );
+	REQUIRE( ae::GetHash64( (unsigned long)777 ) == 777ull );
+	// Fixed-width aliases
+	REQUIRE( ae::GetHash64( (int8_t)-77 ) == (uint64_t)(int8_t)-77 );
+	REQUIRE( ae::GetHash64( (uint8_t)200 ) == 200ull );
+	REQUIRE( ae::GetHash64( (int16_t)-777 ) == (uint64_t)(int16_t)-777 );
+	REQUIRE( ae::GetHash64( (uint16_t)777 ) == 777ull );
+	REQUIRE( ae::GetHash64( (int32_t)-777 ) == (uint64_t)(int32_t)-777 );
+	REQUIRE( ae::GetHash64( (uint32_t)777 ) == 777ull );
+	REQUIRE( ae::GetHash64( (int64_t)-777 ) == (uint64_t)(int64_t)-777 );
+	REQUIRE( ae::GetHash64( (uint64_t)777 ) == 777ull );
 	if( sizeof( void* ) == 8 )
 	{
 		REQUIRE( ae::GetHash64( (const void*)777u ) == 0xd19adc106a20b93dull );

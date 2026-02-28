@@ -35,9 +35,32 @@ using aeHashN = ae::Hash32;
 //------------------------------------------------------------------------------
 TEST_CASE( "GetHash() template function hashes values correctly", "[ae::HashMap32]" )
 {
-	REQUIRE( ae::GetHash32( 777u ) == 777u );
-	REQUIRE( ae::GetHash32( 777 ) == 777u );
-	REQUIRE( ae::GetHash32( -777 ) == (uint32_t)-777 );
+	// Integer types <= 32 bits: direct cast
+	REQUIRE( ae::GetHash32( (bool)true ) == 1u );
+	REQUIRE( ae::GetHash32( (char)77 ) == 77u );
+	REQUIRE( ae::GetHash32( (signed char)-77 ) == (uint32_t)(signed char)-77 );
+	REQUIRE( ae::GetHash32( (unsigned char)200 ) == 200u );
+	REQUIRE( ae::GetHash32( (short)-777 ) == (uint32_t)(short)-777 );
+	REQUIRE( ae::GetHash32( (unsigned short)777 ) == 777u );
+	REQUIRE( ae::GetHash32( (unsigned int)777 ) == 777u );
+	REQUIRE( ae::GetHash32( (int)777 ) == 777u );
+	REQUIRE( ae::GetHash32( (int)-777 ) == (uint32_t)-777 );
+	// Fixed-width aliases <= 32 bits
+	REQUIRE( ae::GetHash32( (int8_t)-77 ) == (uint32_t)(int8_t)-77 );
+	REQUIRE( ae::GetHash32( (uint8_t)200 ) == 200u );
+	REQUIRE( ae::GetHash32( (int16_t)-777 ) == (uint32_t)(int16_t)-777 );
+	REQUIRE( ae::GetHash32( (uint16_t)777 ) == 777u );
+	REQUIRE( ae::GetHash32( (int32_t)-777 ) == (uint32_t)(int32_t)-777 );
+	REQUIRE( ae::GetHash32( (uint32_t)777 ) == 777u );
+	// Integer types > 32 bits: normalized to 64 bits then hashed
+	{ const long long v = 777; REQUIRE( ae::GetHash32( v ) == ae::Hash32().HashData( &v, sizeof(v) ).Get() ); }
+	{ const unsigned long long v = 777; REQUIRE( ae::GetHash32( v ) == ae::Hash32().HashData( &v, sizeof(v) ).Get() ); }
+	// long: normalized to int64_t for platform-independent results
+	{ const int64_t v = (long)777; REQUIRE( ae::GetHash32( (long)777 ) == ae::Hash32().HashData( &v, sizeof(v) ).Get() ); }
+	{ const uint64_t v = (unsigned long)777; REQUIRE( ae::GetHash32( (unsigned long)777 ) == ae::Hash32().HashData( &v, sizeof(v) ).Get() ); }
+	// Fixed-width aliases > 32 bits
+	{ const int64_t v = 777; REQUIRE( ae::GetHash32( v ) == ae::Hash32().HashData( &v, sizeof(v) ).Get() ); }
+	{ const uint64_t v = 777; REQUIRE( ae::GetHash32( v ) == ae::Hash32().HashData( &v, sizeof(v) ).Get() ); }
 	if( sizeof( void* ) == 8 )
 	{
 		REQUIRE( ae::GetHash32( (const void*)777u ) == 0xc68b223du );
