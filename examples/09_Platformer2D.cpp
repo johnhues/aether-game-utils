@@ -43,10 +43,12 @@ const uint32_t kTileMask_Collision = 1;
 const uint32_t kTile_Air = 0;
 const uint32_t kTile_Wall = 1;
 const uint32_t kTile_Water = 2;
+const uint32_t kTile_Foliage = 3;
 
 const float kGravity = 10.0f;
 const float kAirDensity = 12.5f;
 const float kWaterDensity = 1000.0f;
+const float kFoliageDensity = 125.0f;
 
 // Player
 const float kPlayerMass = 70.0f;
@@ -63,28 +65,37 @@ const float kSwimHorizontal = 6.5f;
 const float kSwimUp = 14.0f;
 const float kSwimDown = 10.0f;
 
+const ae::Color kFoliageColor = ae::Color::AetherGreen().ScaleRGB( 0.1f );
+const ae::Color kWaterBackgroundColor = ae::Color::AetherBlue();
+const ae::Color kWallColor = ae::Color::AetherGray();
+const ae::Color kWaterColor = ae::Color::AetherBlue().ScaleA( 0.5f );
+const ae::Color kShadowColor = ae::Color::AetherPurple().ScaleRGB( 0.1f ).ScaleA( 0.8f );
+const ae::Vec2 kShadowOffset = ae::Vec2( 0.0f, -0.25f );
+
 // Map
 #define O kTile_Air
 #define B kTile_Wall
 #define W kTile_Water
+#define L kTile_Foliage
 const uint32_t kMapData[] =
 {
-	B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,
-	B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,
-	B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,
-	B,O,O,O,O,O,O,O,O,O,B,B,B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,
-	B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,B,B,B,B,B,O,O,O,O,O,B,
-	B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,
-	B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,B,B,B,
-	B,O,O,O,O,O,O,O,B,B,B,B,B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,
-	B,O,O,O,O,O,O,O,O,O,B,B,W,W,W,W,W,W,B,B,B,B,O,O,O,O,O,B,
-	B,O,O,O,O,O,B,B,O,O,B,B,W,W,W,W,W,W,B,B,B,B,B,W,W,W,W,B,
-	B,O,O,O,O,O,O,O,O,O,B,B,W,W,W,W,W,W,B,B,B,B,B,B,B,B,B,B,
+	B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,L,L,L,L,
+	B,O,O,B,B,B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,L,L,
+	B,O,O,B,B,B,B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,
+	B,O,O,B,L,L,B,B,O,O,B,B,B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,
+	B,O,B,B,B,B,B,B,O,O,O,O,O,O,O,O,B,B,B,B,B,B,O,L,L,O,O,B,
+	B,O,O,B,L,L,L,O,O,O,O,O,O,O,O,O,O,L,L,L,L,L,L,L,B,B,B,B,
+	B,B,O,B,L,O,O,O,O,O,O,O,O,O,O,O,O,O,O,L,L,O,O,L,B,B,B,B,
+	B,O,O,B,O,O,O,O,B,B,B,B,B,O,O,O,O,O,O,O,B,O,O,O,O,L,L,B,
+	B,O,B,B,O,O,O,O,O,O,B,B,O,O,O,O,O,O,O,B,B,O,O,O,O,O,L,B,
+	B,O,O,O,O,O,B,B,O,L,B,B,W,W,W,W,W,W,B,B,B,W,W,W,W,W,W,B,
+	B,O,O,O,O,O,O,O,L,L,B,B,W,W,W,W,W,W,W,W,W,W,W,W,W,B,B,B,
 	B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,
 };
 #undef O
 #undef B
 #undef W
+#undef L
 const uint32_t kMapWidth = 28;
 const uint32_t kMapHeight = 12;
 
@@ -179,6 +190,18 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 		// Always reset jump so a jump is possible immediately after leaving water
 		m_canJumpTimer = kJumpMaxAirTime;
 		m_jumpHoldTimer = 0.0f;
+		m_body->AddGravity( ae::Vec2( 0.0f, -kGravity ) );m_body->AddGravity( ae::Vec2( 0.0f, -kGravity ) );
+	}
+	else if( tile == kTile_Foliage )
+	{
+		bool input = false;
+		if( jumpButton || up ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kMoveHorizontal * 0.5f ) ); input = true; }
+		if( down ) { m_body->AddForce( ae::Vec2( 0.0f, -kPlayerMass * kMoveHorizontal ) ); input = true; }
+		if( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kMoveHorizontal * 0.5f, 0.0f ) ); input = true; }
+		if( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kMoveHorizontal * 0.5f, 0.0f ) ); input = true; }
+		const float damping = input ? 0.03f : 0.1f;
+		m_body->AddForce( m_body->GetVelocity() * ( kPlayerMass * -damping / dt ) );
+		m_jumpHoldTimer = 0.0f;
 	}
 	else // Air / ground
 	{
@@ -203,15 +226,17 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 			m_jumpHoldTimer -= dt;
 			m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kJumpHold ) );
 		}
-	}
 
-	m_body->AddGravity( ae::Vec2( 0.0f, -kGravity ) );
+		m_body->AddGravity( ae::Vec2( 0.0f, -kGravity ) );
+	}
 }
 
 void Player::Render( ae::SpriteRenderer* spriteRender )
 {
-	ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( GetPosition(), -0.5f ) );
-	spriteRender->AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), CanJump() ? ae::Color::PicoRed() : ae::Color::PicoBlue() );
+	ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( GetPosition() + kShadowOffset, -0.5f ) );
+	spriteRender->AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), kShadowColor );
+	transform = ae::Matrix4::Translation( ae::Vec3( GetPosition(), -0.5f ) );
+	spriteRender->AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::AetherRed().ScaleRGB( 0.7f ) );
 }
 
 //------------------------------------------------------------------------------
@@ -237,6 +262,7 @@ struct Game
 		input.Initialize( &window );
 		spriteRender.Initialize( 1, 512 );
 		spriteShader.Initialize( kVertexShader, kFragmentShader );
+		spriteShader.SetBlending( true );
 		timeStep.SetTimeStep( 1.0f / kFramesPerSecond );
 
 		world.Initialize( 1.0f / kSimulationStepsPerSecond );
@@ -246,6 +272,8 @@ struct Game
 		world.SetTileProperties( kTile_Wall, kTileMask_Collision );
 		world.SetTileProperties( kTile_Water, kTileMask_Open );
 		world.SetTileFluidDensity( kTile_Water, kWaterDensity );
+		world.SetTileProperties( kTile_Foliage, kTileMask_Open );
+		world.SetTileFluidDensity( kTile_Foliage, kFoliageDensity );
 		AE_STATIC_ASSERT( countof(kMapData) == kMapWidth * kMapHeight );
 		world.LoadTiles( kMapData, kMapWidth, kMapHeight, true );
 		
@@ -268,15 +296,45 @@ struct Game
 			ae::Color color;
 			switch( world.GetTile( ae::Int2( x, y ) ) )
 			{
-				case kTile_Air: color = ae::Color::PicoPeach(); break;
-				case kTile_Water: color = ae::Color::PicoPink(); break;
-				default: color = ae::Color::PicoOrange(); break;
+				case kTile_Foliage: color = kFoliageColor; break;
+				case kTile_Water: color = kWaterBackgroundColor; break;
+				default: color = ae::Color().ScaleA( 0.0f ); break;
 			}
+			if( color.a == 0 ) { continue; }
 			ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( x, y, 0.0f ) );
 			spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), color );
 		}
-		
+
+		for( uint32_t y = 0; y < world.GetHeight(); y++ )
+		for( uint32_t x = 0; x < world.GetWidth(); x++ )
+		{
+			ae::Color color;
+			switch( world.GetTile( ae::Int2( x, y ) ) )
+			{
+				case kTile_Wall: color = kShadowColor; break;
+				default: color = ae::Color().ScaleA( 0.0f ); break;
+			}
+			if( color.a == 0 ) { continue; }
+			ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( x, y - 0.25f, 0.0f ) );
+			spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), color );
+		}
+
 		player.Render( &spriteRender );
+
+		for( uint32_t y = 0; y < world.GetHeight(); y++ )
+		for( uint32_t x = 0; x < world.GetWidth(); x++ )
+		{
+			ae::Color color;
+			switch( world.GetTile( ae::Int2( x, y ) ) )
+			{
+				case kTile_Wall: color = kWallColor; break;
+				case kTile_Water: color = kWaterColor; break;
+				default: color = ae::Color().ScaleA( 0.0f ); break;
+			}
+			if( color.a == 0 ) { continue; }
+			ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( x, y, 0.0f ) );
+			spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), color );
+		}
 
 		ae::Vec2 camera = player.GetPosition();
 		ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 5.0f * render.GetAspectRatio() ), 1.0f / 5.0f, 1.0f ) );
