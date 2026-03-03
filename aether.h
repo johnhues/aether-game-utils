@@ -6534,9 +6534,18 @@ public:
 	//! Returns 0 for all other types.
 	virtual uint32_t GetMaxLength() const { return 0; }
 
+	//! Returns a string representation of the value at \p varData, or an empty
+	//! string on failure.
 	std::string GetVarDataAsString( ae::ConstDataPointer varData ) const;
+	//! Parses \p value and writes the result to \p varData. Returns true on
+	//! success. Returns false if \p varData is null or \p value cannot be
+	//! parsed into this type.
 	bool SetVarDataFromString( ae::DataPointer varData, const char* value ) const;
+	//! Copies the value at \p varData into \p valueOut. Returns false if
+	//! \p varData is null or T does not match this basic type.
 	template< typename T > bool GetVarData( ae::ConstDataPointer varData, T* valueOut ) const;
+	//! Writes \p value into \p varData. Returns false if \p varData is null
+	//! or T does not match this basic type.
 	template< typename T > bool SetVarData( ae::DataPointer varData, const T& value ) const;
 	
 	// Internal
@@ -6571,9 +6580,22 @@ public:
 	//--------------------------------------------------------------------------
 	// ae::DataPointer
 	//--------------------------------------------------------------------------
+	//! Returns a string representation of the enum value at \p varData (the
+	//! enum value name), or an empty string if the value is not a named enum
+	//! member or \p varData is null.
 	std::string GetVarDataAsString( ae::ConstDataPointer varData ) const;
+	//! Parses \p value as an enum name or integer string and writes the result
+	//! to \p varData. Returns true on success. Returns false if \p varData is
+	//! null or \p value does not match any enum name and cannot be parsed as
+	//! a valid integer for this enum's underlying type.
 	bool SetVarDataFromString( ae::DataPointer varData, const char* value ) const;
+	//! Copies the enum value at \p varData into \p valueOut. Returns false if
+	//! \p varData is null or T does not match the exact registered enum type
+	//! (for enum T) or is not an integral type (for integral T).
 	template< typename T > bool GetVarData( ae::ConstDataPointer varData, T* valueOut ) const;
+	//! Writes \p value into \p varData. Returns false if \p varData is null,
+	//! T is an enum type that does not match the exact registered enum type,
+	//! or T is not an integral or enum type.
 	template< typename T > bool SetVarData( ae::DataPointer varData, const T& value ) const;
 
 	//--------------------------------------------------------------------------
@@ -6612,21 +6634,27 @@ public:
 	//! that like a normal C-pointer dereference, the const-ness of the
 	//! referenced value is separate from the const-ness of the pointer.
 	ae::DataPointer Dereference( ae::ConstDataPointer pointer ) const;
-
 	//! Writes \p value to the given \p pointer, returning true on success.
-	virtual bool SetRef( ae::DataPointer pointer, ae::Object* value ) const = 0;
+	virtual bool Set( ae::DataPointer pointer, ae::Object* value ) const = 0;
 	//! Returns a pointer to the inner value of \p pointer, unless given null.
-	template< typename T > T** GetRef( ae::DataPointer pointer ) const;
+	template< typename T > T** Get( ae::DataPointer pointer ) const;
 	//! Returns a pointer to the inner value of \p pointer, unless given null.
-	template< typename T > T*const* GetRef( ae::ConstDataPointer pointer ) const;
+	template< typename T > T*const* Get( ae::ConstDataPointer pointer ) const;
+
+	//! Parses \p value as a reference to an object and writes the result to
+	//! \p pointer, returning true on success. The encoding of \p value should
+	//! match the encoding used by ObjectPointerToStringFn.
+	virtual bool FromString( ae::DataPointer pointer, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
+	//! Returns a string representation of the object pointer at \p pointer, or
+	//! an empty string if \p pointer is null. The encoding of the returned
+	//! string should match the encoding expected by StringToObjectPointerFn.
+	virtual std::string ToString( ae::ConstDataPointer pointer, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 
 	// Internal
 	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< PointerType >(); }
 #if AE_DEPRECATED
 	virtual ae::BasicType::Type GetBasicType() const { return ae::BasicType::Pointer; } // @HACK: Remove
 #endif // AE_DEPRECATED
-	virtual bool SetRefFromString( ae::DataPointer pointer, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
-	virtual std::string GetStringFromRef( ae::ConstDataPointer pointer, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -6705,7 +6733,9 @@ public:
 class MapType : public ae::Type
 {
 public:
+	//! Returns the key type of this map type
 	virtual const ae::Type& GetKeyVarType() const = 0;
+	//! Returns the value type of this map type
 	virtual const ae::Type& GetValueVarType() const = 0;
 
 	//! Gets a value in the map by key, inserts a new value if the key does not
@@ -6714,7 +6744,7 @@ public:
 	virtual ae::DataPointer Get( ae::DataPointer map, ae::ConstDataPointer key ) const = 0;
 	//! Gets a value in the map by key, returns an empty value if the key does not exist.
 	virtual ae::DataPointer TryGet( ae::DataPointer map, ae::ConstDataPointer key ) const = 0;
-	//! Gets a value in the map by key, returns an empty value if the key does  not exist.
+	//! Gets a value in the map by key, returns an empty value if the key does not exist.
 	virtual ae::ConstDataPointer TryGet( ae::ConstDataPointer map, ae::ConstDataPointer key ) const = 0;
 
 	//! Current number of map elements
@@ -6853,7 +6883,13 @@ public:
 	//--------------------------------------------------------------------------
 	// C++ type info
 	//--------------------------------------------------------------------------
+	//! Returns a stable, platform-agnostic identifier for this type. The id
+	//! is the FNV1a-32 hash of the registered type name string (via
+	//! ae::GetTypeIdFromName()), so it is consistent across runs.
 	ae::TypeId GetId() const;
+	//! Placement-constructs an instance of this type into \p obj and returns
+	//! it cast to T. Returns null if this type is abstract, has no registered
+	//! constructor, or T is not a base of this type.
 	template< typename T = ae::Object > T* New( void* obj ) const;
 	//! Creates a temporary instance of this type and copies the vtable from
 	//! the instance. This type must be default constructible.
@@ -6870,9 +6906,15 @@ public:
 	//--------------------------------------------------------------------------
 	// Inheritance
 	//--------------------------------------------------------------------------
+	//! Returns the registered name of this type's parent class, or an empty
+	//! string if this type has no parent.
 	const char* GetParentTypeName() const;
+	//! Returns the ae::ClassType of this type's parent class, or null if this
+	//! type has no parent or the parent is not registered.
 	const ae::ClassType* GetParentType() const;
+	//! Returns true if this type is \p otherType or inherits from it.
 	bool IsType( const ae::ClassType* otherType ) const;
+	//! Returns true if this type is T or inherits from T.
 	template< typename T > bool IsType() const;
 
 	//--------------------------------------------------------------------------
@@ -6880,9 +6922,21 @@ public:
 	//--------------------------------------------------------------------------
 	//! Gets the class type of the given DataPointer if possible.
 	const ae::ClassType* GetClassType( ae::ConstDataPointer varData ) const;
+	//! Returns a typed pointer to the object at \p varData if \p varData is
+	//! non-null and the runtime type of the object is T or inherits from T.
+	//! Returns null otherwise.
 	template< typename T > T* TryGet( ae::DataPointer varData ) const;
+	//! Returns a typed const pointer to the object at \p varData if \p varData
+	//! is non-null and the runtime type of the object is T or inherits from T.
+	//! Returns null otherwise.
 	template< typename T > const T* TryGet( ae::ConstDataPointer varData ) const;
+	//! Returns a DataPointer addressing the member variable \p var within the
+	//! object at \p varData. Returns a null DataPointer if \p varData is null
+	//! or \p var does not belong to this type.
 	ae::DataPointer GetVarData( const ae::ClassVar* var, ae::DataPointer varData ) const;
+	//! Returns a ConstDataPointer addressing the member variable \p var within
+	//! the object at \p varData. Returns a null ConstDataPointer if \p varData
+	//! is null or \p var does not belong to this type.
 	ae::ConstDataPointer GetVarData( const ae::ClassVar* var, ae::ConstDataPointer varData ) const;
 
 	//--------------------------------------------------------------------------
@@ -6906,7 +6960,9 @@ private:
 	ae::TypeId m_id = ae::kInvalidTypeId;
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
+#if AE_DEPRECATED
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
+#endif // AE_DEPRECATED
 	ae::Array< const ae::ClassVar*, kMaxMetaVars > m_vars;
 	ae::TypeName m_parent;
 	bool m_isAbstract = false;
@@ -13834,9 +13890,10 @@ namespace ae {
 // ae::PointerType templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
-T** ae::PointerType::GetRef( ae::DataPointer varData ) const
+T** ae::PointerType::Get( ae::DataPointer varData ) const
 {
-	if( GetInnerVarType().IsSameExactVarType< T >() )
+	static_assert( std::is_base_of_v< ae::Object, T >, "T must be derived from ae::Object" );
+	if( GetInnerVarType().GetExactVarTypeId() == ae::GetTypeIdWithQualifiers< T >() )
 	{
 		return static_cast< T** >( varData.Get( this ) );
 	}
@@ -13844,9 +13901,10 @@ T** ae::PointerType::GetRef( ae::DataPointer varData ) const
 }
 
 template< typename T >
-T*const* ae::PointerType::GetRef( ae::ConstDataPointer varData ) const
+T*const* ae::PointerType::Get( ae::ConstDataPointer varData ) const
 {
-	if( GetInnerVarType().IsSameExactVarType< T >() )
+	static_assert( std::is_base_of_v< ae::Object, T >, "T must be derived from ae::Object" );
+	if( GetInnerVarType().GetExactVarTypeId() == ae::GetTypeIdWithQualifiers< T >() )
 	{
 		return static_cast< T*const* >( varData.Get( this ) );
 	}
@@ -13862,7 +13920,7 @@ struct TypeT< T* > : public ae::PointerType
 	static ae::Type* Get() { static ae::TypeT< T* > s_type; return &s_type; }
 	ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< T* >(); }
 
-	bool SetRef( ae::DataPointer _varData, ae::Object* value ) const override
+	bool Set( ae::DataPointer _varData, ae::Object* value ) const override
 	{
 		if( T** varData = static_cast< T** >( _varData.Get( this ) ) )
 		{
@@ -13885,7 +13943,7 @@ struct TypeT< T* > : public ae::PointerType
 		return false;
 	}
 
-	bool SetRefFromString( ae::DataPointer _varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override
+	bool FromString( ae::DataPointer _varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override
 	{
 		if( T** varData = static_cast< T** >( _varData.Get( this ) ) )
 		{
@@ -13910,7 +13968,7 @@ struct TypeT< T* > : public ae::PointerType
 		return false;
 	}
 
-	std::string GetStringFromRef( ae::ConstDataPointer _varData, ObjectPointerToStringFn fn, const void* userData ) const override
+	std::string ToString( ae::ConstDataPointer _varData, ObjectPointerToStringFn fn, const void* userData ) const override
 	{
 		if( fn )
 		{
@@ -13929,9 +13987,9 @@ struct TypeT< std::nullptr_t > : public ae::PointerType
 	const ae::Type& GetInnerVarType() const override { AE_FAIL(); return *Get(); } // @TODO: Must return something, add Void type
 	static ae::Type* Get() { static ae::TypeT< std::nullptr_t > s_type; return &s_type; }
 	ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< std::nullptr_t >(); }
-	bool SetRef( ae::DataPointer varData, ae::Object* value ) const override { AE_FAIL(); return false; }
-	bool SetRefFromString( ae::DataPointer varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override { AE_FAIL(); return false; }
-	std::string GetStringFromRef( ae::ConstDataPointer varData, ObjectPointerToStringFn fn, const void* userData ) const override { AE_FAIL(); return ""; }
+	bool Set( ae::DataPointer varData, ae::Object* value ) const override { AE_FAIL(); return false; }
+	bool FromString( ae::DataPointer varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override { AE_FAIL(); return false; }
+	std::string ToString( ae::ConstDataPointer varData, ObjectPointerToStringFn fn, const void* userData ) const override { AE_FAIL(); return ""; }
 };
 
 template< typename T, uint32_t N >
@@ -14384,9 +14442,15 @@ bool ae::BasicType::SetVarData( ae::DataPointer _varData, const T& value ) const
 template< typename T >
 bool ae::EnumType::GetVarData( ae::ConstDataPointer _varData, T* valueOut ) const
 {
+	// Allow getting enum value with an integral type as long as the underlying enum type matches
+	if( std::is_enum_v< T > && ( ae::GetTypeIdWithoutQualifiers< T >() != GetExactVarTypeId() ) )
+	{
+		return false;
+	}
+	// Note that this constexpr prevents the following case from compiling,
+	// which would result in compilation errors for non-enum types.
 	if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
 	{
-		AE_DEBUG_ASSERT_MSG( false, "Invalid type conversion attempted" );
 		return false;
 	}
 	else if( valueOut )
@@ -14421,9 +14485,15 @@ bool ae::EnumType::GetVarData( ae::ConstDataPointer _varData, T* valueOut ) cons
 template< typename T >
 bool ae::EnumType::SetVarData( ae::DataPointer _varData, const T& value ) const
 {
-	if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
+	// Allow setting enum value with an integral type as long as the underlying enum type matches
+	if( std::is_enum_v< T > && ( ae::GetTypeIdWithoutQualifiers< T >() != GetExactVarTypeId() ) )
 	{
-		AE_DEBUG_ASSERT_MSG( false, "Invalid type conversion attempted" );
+		return false;
+	}
+	// Note that this constexpr prevents the following case from compiling,
+	// which would result in compilation errors for non-enum types.
+	else if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
+	{
 		return false;
 	}
 	else if( void* varData = _varData.Get( this ) )
@@ -14621,7 +14691,7 @@ bool ae::ClassVar::SetObjectValue( ae::Object* obj, const T& value, int32_t arra
 		else if constexpr( std::is_pointer_v< T > || std::is_null_pointer_v< T > )
 		{
 			const ae::PointerType* pointerVarType = varType->AsVarType< ae::PointerType >();
-			return pointerVarType ? pointerVarType->SetRef( varData, (ae::Object*)value ) : false;
+			return pointerVarType ? pointerVarType->Set( varData, (ae::Object*)value ) : false;
 		}
 	}
 	return false;
@@ -31380,7 +31450,7 @@ std::string ae::ClassVar::GetObjectValueAsString( const ae::Object* obj, int32_t
 				AE_ASSERT( serializer );
 				return serializer->ObjectPointerToString( obj );
 			};
-			return pointerVarType->GetStringFromRef( varData, fn, _Globals::Get()->varSerializer );
+			return pointerVarType->ToString( varData, fn, _Globals::Get()->varSerializer );
 		}
 	}
 	return "";
@@ -31432,7 +31502,7 @@ bool ae::ClassVar::SetObjectValueFromString( ae::Object* obj, const char* value,
 				AE_ASSERT( serializer );
 				return serializer->StringToObjectPointer( pointerVal, objOut );
 			};
-			return pointerVarType->SetRefFromString( varData, value, fn, _Globals::Get()->varSerializer );
+			return pointerVarType->FromString( varData, value, fn, _Globals::Get()->varSerializer );
 		}
 	}
 	return false;

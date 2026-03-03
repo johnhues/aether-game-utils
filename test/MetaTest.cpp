@@ -1282,6 +1282,430 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
 #endif // AE_DEPRECATED
 }
 
+TEST_CASE( "BasicType can read and write values via DataPointer", "[aeMeta]" )
+{
+	SomeClass c;
+	c.intMember = 42;
+	c.boolMember = true;
+
+	const ae::ClassType* type = ae::GetClassType< SomeClass >();
+	const ae::ClassVar* intVar = type->GetVarByName( "intMember", false );
+	const ae::ClassVar* boolVar = type->GetVarByName( "boolMember", false );
+
+	const ae::BasicType* intVarType = intVar->GetOuterVarType().AsVarType< ae::BasicType >();
+	const ae::BasicType* boolVarType = boolVar->GetOuterVarType().AsVarType< ae::BasicType >();
+	REQUIRE( intVarType );
+	REQUIRE( boolVarType );
+
+	ae::DataPointer intData( intVar, &c );
+	ae::DataPointer boolData( boolVar, &c );
+
+	// GetVarData reads the correct int value
+	int32_t intOut = 0;
+	REQUIRE( intVarType->GetVarData( ae::ConstDataPointer( intData ), &intOut ) );
+	REQUIRE( intOut == 42 );
+
+	// Type mismatch returns false
+	bool boolOut = false;
+	REQUIRE( !intVarType->GetVarData( ae::ConstDataPointer( intData ), &boolOut ) );
+
+	// SetVarData writes correctly
+	REQUIRE( intVarType->SetVarData( intData, (int32_t)99 ) );
+	REQUIRE( c.intMember == 99 );
+
+	// Type mismatch SetVarData returns false
+	REQUIRE( !intVarType->SetVarData( intData, true ) );
+
+	// GetVarDataAsString returns decimal string for int
+	REQUIRE( intVarType->GetVarDataAsString( ae::ConstDataPointer( intData ) ) == "99" );
+
+	// SetVarDataFromString parses decimal string
+	REQUIRE( intVarType->SetVarDataFromString( intData, "77" ) );
+	REQUIRE( c.intMember == 77 );
+
+	// Non-numeric string falls back to 0 (SetVarDataFromString always succeeds for numeric types)
+	REQUIRE( intVarType->SetVarDataFromString( intData, "hello" ) );
+	REQUIRE( c.intMember == 0 );
+
+	// bool: GetVarData reads the correct value
+	REQUIRE( boolVarType->GetVarData( ae::ConstDataPointer( boolData ), &boolOut ) );
+	REQUIRE( boolOut == true );
+
+	REQUIRE( boolVarType->SetVarData( boolData, false ) );
+	REQUIRE( c.boolMember == false );
+
+	// GetVarDataAsString returns "false"/"true" for bool
+	REQUIRE( boolVarType->GetVarDataAsString( ae::ConstDataPointer( boolData ) ) == "false" );
+	REQUIRE( boolVarType->SetVarData( boolData, true ) );
+	REQUIRE( boolVarType->GetVarDataAsString( ae::ConstDataPointer( boolData ) ) == "true" );
+
+	// SetVarDataFromString parses "false" and "true"
+	REQUIRE( boolVarType->SetVarDataFromString( boolData, "false" ) );
+	REQUIRE( c.boolMember == false );
+	REQUIRE( boolVarType->SetVarDataFromString( boolData, "true" ) );
+	REQUIRE( c.boolMember == true );
+
+	// Null DataPointer returns false / empty string for all ops
+	ae::DataPointer nullData;
+	REQUIRE( !intVarType->GetVarData( ae::ConstDataPointer( nullData ), &intOut ) );
+	REQUIRE( !intVarType->SetVarData( nullData, (int32_t)1 ) );
+	REQUIRE( intVarType->GetVarDataAsString( ae::ConstDataPointer( nullData ) ) == "" );
+	REQUIRE( !intVarType->SetVarDataFromString( nullData, "1" ) );
+}
+
+TEST_CASE( "EnumType can read and write values via DataPointer", "[aeMeta]" )
+{
+	SomeClass c;
+	c.enumTest = TestEnumClass::Two;
+
+	const ae::ClassType* type = ae::GetClassType< SomeClass >();
+	const ae::ClassVar* enumVar = type->GetVarByName( "enumTest", false );
+	const ae::EnumType* enumVarType = enumVar->GetOuterVarType().AsVarType< ae::EnumType >();
+	REQUIRE( enumVarType );
+
+	ae::DataPointer enumData( enumVar, &c );
+
+	// GetVarData reads correctly
+	TestEnumClass enumOut = TestEnumClass::Zero;
+	REQUIRE( enumVarType->GetVarData( ae::ConstDataPointer( enumData ), &enumOut ) );
+	REQUIRE( enumOut == TestEnumClass::Two );
+
+	// SetVarData writes correctly
+	REQUIRE( enumVarType->SetVarData( enumData, TestEnumClass::Five ) );
+	REQUIRE( c.enumTest == TestEnumClass::Five );
+
+	// GetVarData succeeds for any integral T (int32_t reads the underlying value)
+	int32_t intOut = 0;
+	REQUIRE( enumVarType->GetVarData( ae::ConstDataPointer( enumData ), &intOut ) );
+	REQUIRE( intOut == (int32_t)TestEnumClass::Five );
+
+	// Type mismatch: wrong enum type returns false (PlayerState != TestEnumClass)
+	PlayerState playerStateOut = PlayerState::Idle;
+	REQUIRE( !enumVarType->GetVarData( ae::ConstDataPointer( enumData ), &playerStateOut ) );
+	REQUIRE( !enumVarType->SetVarData( enumData, PlayerState::Run ) );
+
+	// SetVarDataFromString with valid name succeeds
+	REQUIRE( enumVarType->SetVarDataFromString( enumData, "Three" ) );
+	REQUIRE( c.enumTest == TestEnumClass::Three );
+
+	// SetVarDataFromString with numeric string succeeds
+	REQUIRE( enumVarType->SetVarDataFromString( enumData, "2" ) );
+	REQUIRE( c.enumTest == TestEnumClass::Two );
+
+	// Unknown name returns false and leaves value unchanged
+	REQUIRE( !enumVarType->SetVarDataFromString( enumData, "Unknown" ) );
+	REQUIRE( c.enumTest == TestEnumClass::Two );
+
+	// GetVarDataAsString returns empty string for value not in the enum
+	c.enumTest = (TestEnumClass)99;
+	REQUIRE( enumVarType->GetVarDataAsString( ae::ConstDataPointer( enumData ) ) == "" );
+}
+
+TEST_CASE( "ArrayType can resize and access elements via DataPointer", "[aeMeta]" )
+{
+	ArrayClass c;
+
+	const ae::ClassType* type = ae::GetClassType< ArrayClass >();
+	const ae::ClassVar* intArrayVar = type->GetVarByName( "intArray", false );
+	const ae::ClassVar* intArray3Var = type->GetVarByName( "intArray3", false );
+	REQUIRE( intArrayVar );
+	REQUIRE( intArray3Var );
+
+	const ae::ArrayType* fixedArrayType = intArrayVar->GetOuterVarType().AsVarType< ae::ArrayType >();
+	const ae::ArrayType* dynArrayType = intArray3Var->GetOuterVarType().AsVarType< ae::ArrayType >();
+	REQUIRE( fixedArrayType );
+	REQUIRE( dynArrayType );
+
+	ae::DataPointer fixedData( intArrayVar, &c );
+	ae::DataPointer dynData( intArray3Var, &c );
+
+	// Resize dynamic array: grow to 3
+	REQUIRE( dynArrayType->Resize( dynData, 3 ) == 3 );
+	REQUIRE( dynArrayType->GetLength( ae::ConstDataPointer( dynData ) ) == 3 );
+
+	// Shrink to 1
+	REQUIRE( dynArrayType->Resize( dynData, 1 ) == 1 );
+	REQUIRE( dynArrayType->GetLength( ae::ConstDataPointer( dynData ) ) == 1 );
+
+	// Resize to 0
+	REQUIRE( dynArrayType->Resize( dynData, 0 ) == 0 );
+	REQUIRE( dynArrayType->GetLength( ae::ConstDataPointer( dynData ) ) == 0 );
+
+	// Fixed C-array resize to max (3) returns 3; length always equals max
+	REQUIRE( fixedArrayType->Resize( fixedData, 3 ) == 3 );
+	REQUIRE( fixedArrayType->GetLength( ae::ConstDataPointer( fixedData ) ) == 3 );
+
+	// Resize beyond capacity clamps to 3
+	REQUIRE( fixedArrayType->Resize( fixedData, 5 ) == 3 );
+
+	// GetElement returns valid DataPointer for a valid index
+	REQUIRE( dynArrayType->Resize( dynData, 3 ) == 3 );
+	ae::DataPointer elem0 = dynArrayType->GetElement( dynData, 0 );
+	REQUIRE( elem0 );
+
+	// Out-of-bounds index returns null DataPointer
+	ae::DataPointer elemOob = dynArrayType->GetElement( dynData, 10 );
+	REQUIRE( !elemOob );
+
+	// Write through mutable GetElement pointer and verify via object member
+	const ae::BasicType* intBasicType = dynArrayType->GetInnerVarType().AsVarType< ae::BasicType >();
+	REQUIRE( intBasicType );
+	REQUIRE( intBasicType->SetVarData( elem0, (int32_t)777 ) );
+	REQUIRE( c.intArray3[ 0 ] == 777 );
+}
+
+TEST_CASE( "OptionalType can insert and clear values via DataPointer", "[aeMeta]" )
+{
+	// ae::Optional TypeT is a stub; test std::optional only
+	OptionalClass c;
+
+	const ae::ClassType* type = ae::GetClassType< OptionalClass >();
+	const ae::ClassVar* intStdOptionalVar = type->GetVarByName( "intStdOptional", false );
+	const ae::ClassVar* someClassStdOptionalVar = type->GetVarByName( "someClassStdOptional", false );
+	REQUIRE( intStdOptionalVar );
+	REQUIRE( someClassStdOptionalVar );
+
+	const ae::OptionalType* intOptType =
+		intStdOptionalVar->GetOuterVarType().AsVarType< ae::OptionalType >();
+	const ae::OptionalType* classOptType =
+		someClassStdOptionalVar->GetOuterVarType().AsVarType< ae::OptionalType >();
+	REQUIRE( intOptType );
+	REQUIRE( classOptType );
+
+	ae::DataPointer intOptData( intStdOptionalVar, &c );
+	ae::DataPointer classOptData( someClassStdOptionalVar, &c );
+
+	// GetOrInsert on empty optional constructs a value and returns non-null
+	REQUIRE( !c.intStdOptional.has_value() );
+	ae::DataPointer intInserted = intOptType->GetOrInsert( intOptData );
+	REQUIRE( intInserted );
+	REQUIRE( c.intStdOptional.has_value() );
+
+	// TryGet on the now-present value returns non-null
+	REQUIRE( intOptType->TryGet( intOptData ) );
+
+	// Clear destroys the value; TryGet returns null afterward
+	intOptType->Clear( intOptData );
+	REQUIRE( !c.intStdOptional.has_value() );
+	REQUIRE( !intOptType->TryGet( intOptData ) );
+
+	// Same for std::optional< SomeClass >
+	REQUIRE( !c.someClassStdOptional.has_value() );
+	ae::DataPointer classInserted = classOptType->GetOrInsert( classOptData );
+	REQUIRE( classInserted );
+	REQUIRE( c.someClassStdOptional.has_value() );
+	REQUIRE( classOptType->TryGet( classOptData ) );
+
+	classOptType->Clear( classOptData );
+	REQUIRE( !c.someClassStdOptional.has_value() );
+	REQUIRE( !classOptType->TryGet( classOptData ) );
+}
+
+TEST_CASE( "PointerType can read and write pointer values via DataPointer", "[aeMeta]" )
+{
+	RefTesterA objA;
+	RefTesterA objA2;
+	RefTesterB objB;
+
+	const ae::ClassType* typeRefTesterA = ae::GetClassType< RefTesterA >();
+	const ae::ClassType* typeRefTesterB = ae::GetClassType< RefTesterB >();
+	const ae::ClassType* typeRefTester  = ae::GetClassType< RefTester >();
+	REQUIRE( typeRefTesterA );
+	REQUIRE( typeRefTesterB );
+	REQUIRE( typeRefTester );
+
+	const ae::ClassVar* varRefA = typeRefTesterA->GetVarByName( "refA", false );
+	const ae::ClassVar* varRef  = typeRefTesterB->GetVarByName( "ref", false );
+	REQUIRE( varRefA );
+	REQUIRE( varRef );
+
+	// Pointer vars expose PointerType as outer var type
+	const ae::PointerType* refAType = varRefA->GetOuterVarType().AsVarType< ae::PointerType >();
+	const ae::PointerType* refType  = varRef->GetOuterVarType().AsVarType< ae::PointerType >();
+	REQUIRE( refAType );
+	REQUIRE( refType );
+
+	// GetInnerVarType for refA matches RefTesterA
+	REQUIRE( refAType->GetInnerVarType().AsVarType< ae::ClassType >() == typeRefTesterA );
+	// GetInnerVarType for ref matches RefTester (base class)
+	REQUIRE( refType->GetInnerVarType().AsVarType< ae::ClassType >() == typeRefTester );
+
+	ae::DataPointer ptrRefA( varRefA, &objA );
+	ae::DataPointer ptrRef( varRef, &objB );
+
+	// SetRef sets the pointer
+	REQUIRE( refAType->Set( ptrRefA, &objA2 ) );
+	REQUIRE( objA.refA == &objA2 );
+
+	// SetRef with nullptr clears the pointer
+	REQUIRE( refAType->Set( ptrRefA, nullptr ) );
+	REQUIRE( objA.refA == nullptr );
+
+	// SetRef stores the pointer; verify via direct member access
+	REQUIRE( refAType->Set( ptrRefA, &objA2 ) );
+	REQUIRE( objA.refA == &objA2 );
+
+	// Dereference on a non-null pointer returns a non-null DataPointer
+	ae::DataPointer derefed = refAType->Dereference( ae::ConstDataPointer( ptrRefA ) );
+	REQUIRE( derefed );
+
+	// Dereference on a null pointer returns a null DataPointer
+	REQUIRE( refAType->Set( ptrRefA, nullptr ) );
+	ae::DataPointer derefedNull = refAType->Dereference( ae::ConstDataPointer( ptrRefA ) );
+	REQUIRE( !derefedNull );
+
+	// Get<T> returns T** when T matches the inner pointer type
+	REQUIRE( refAType->Set( ptrRefA, &objA2 ) );
+	RefTesterA** rawRef = refAType->Get< RefTesterA >( ptrRefA );
+	REQUIRE( rawRef );
+	REQUIRE( *rawRef == &objA2 );
+
+	// Get<T> const variant also returns the stored pointer
+	RefTesterA* const* rawRefConst = refAType->Get< RefTesterA >( ae::ConstDataPointer( ptrRefA ) );
+	REQUIRE( rawRefConst );
+	REQUIRE( *rawRefConst == &objA2 );
+
+	// Get<T> returns null when T does not match the inner pointer type
+	REQUIRE( refAType->Get< RefTesterB >( ptrRefA ) == nullptr );
+}
+
+TEST_CASE( "MapType can read and write map values via DataPointer", "[aeMeta]" )
+{
+	MapClass c;
+
+	const ae::ClassType* type = ae::GetClassType< MapClass >();
+	REQUIRE( type );
+
+	const ae::ClassVar* intMapVar      = type->GetVarByName( "intMap", false );
+	const ae::ClassVar* intMapFixedVar = type->GetVarByName( "intMapFixed", false );
+	REQUIRE( intMapVar );
+	REQUIRE( intMapFixedVar );
+
+	// Outer var type is MapType
+	const ae::MapType* mapType      = intMapVar->GetOuterVarType().AsVarType< ae::MapType >();
+	const ae::MapType* fixedMapType = intMapFixedVar->GetOuterVarType().AsVarType< ae::MapType >();
+	REQUIRE( mapType );
+	REQUIRE( fixedMapType );
+
+	// Key type is BasicType::String (ae::Str32)
+	const ae::BasicType* keyType = mapType->GetKeyVarType().AsVarType< ae::BasicType >();
+	REQUIRE( keyType );
+	REQUIRE( keyType->GetType() == ae::BasicType::String );
+
+	// Value type is BasicType::Int32
+	const ae::BasicType* valueType = mapType->GetValueVarType().AsVarType< ae::BasicType >();
+	REQUIRE( valueType );
+	REQUIRE( valueType->GetType() == ae::BasicType::Int32 );
+
+	ae::DataPointer mapData( intMapVar, &c );
+	ae::DataPointer fixedMapData( intMapFixedVar, &c );
+
+	// Initial length is 0
+	REQUIRE( mapType->GetLength( ae::ConstDataPointer( mapData ) ) == 0 );
+
+	// Dynamic map has no hard length limit
+	REQUIRE( mapType->GetMaxLength() == ae::MaxValue< uint32_t >() );
+	// Fixed map capacity is 4
+	REQUIRE( fixedMapType->GetMaxLength() == 4 );
+
+	// Get() inserts key if absent and returns non-null value DataPointer
+	const ae::Str32 keyHello( "hello" );
+	const ae::ConstDataPointer keyData( &keyHello );
+	ae::DataPointer valPtr = mapType->Get( mapData, keyData );
+	REQUIRE( valPtr );
+
+	// Write a value through the returned DataPointer and verify via member
+	REQUIRE( valueType->SetVarData( valPtr, (int32_t)42 ) );
+	REQUIRE( c.intMap.Get( keyHello, 0 ) == 42 );
+
+	// TryGet for an existing key returns non-null
+	REQUIRE( mapType->TryGet( mapData, keyData ) );
+
+	// TryGet for a missing key returns null
+	const ae::Str32 keyMissing( "missing" );
+	REQUIRE( !mapType->TryGet( mapData, ae::ConstDataPointer( &keyMissing ) ) );
+
+	// Insert a second entry and verify index-based accessors
+	const ae::Str32 keyWorld( "world" );
+	ae::DataPointer valPtr2 = mapType->Get( mapData, ae::ConstDataPointer( &keyWorld ) );
+	REQUIRE( valueType->SetVarData( valPtr2, (int32_t)99 ) );
+
+	// Length increases after inserts
+	REQUIRE( mapType->GetLength( ae::ConstDataPointer( mapData ) ) == 2 );
+
+	// GetKey/GetValue by index return valid DataPointers
+	REQUIRE( mapType->GetKey( ae::ConstDataPointer( mapData ), 0 ) );
+	REQUIRE( mapType->GetValue( ae::ConstDataPointer( mapData ), 0 ) );
+}
+
+TEST_CASE( "ClassType hierarchy and DataPointer operations", "[aeMeta]" )
+{
+	const ae::ClassType* typeObject       = ae::GetClassType< ae::Object >();
+	const ae::ClassType* typeSomeClass    = ae::GetClassType< SomeClass >();
+	const ae::ClassType* typeNamespace    =
+		ae::GetClassTypeByName( "Namespace0::Namespace1::NamespaceClass" );
+	const ae::ClassType* typeRefTester    = ae::GetClassType< RefTester >();
+	const ae::ClassType* typeRefTesterA   = ae::GetClassType< RefTesterA >();
+	REQUIRE( typeObject );
+	REQUIRE( typeSomeClass );
+	REQUIRE( typeNamespace );
+	REQUIRE( typeRefTester );
+	REQUIRE( typeRefTesterA );
+
+	// GetId() equals FNV1a-32 hash of the registered type name
+	REQUIRE( typeSomeClass->GetId() ==
+		ae::Hash32().HashString( typeSomeClass->GetName() ).Get() );
+
+	// GetParentTypeName for SomeClass is "ae::Object"
+	REQUIRE( ae::Str32( typeSomeClass->GetParentTypeName() ) == "ae::Object" );
+
+	// GetParentType for SomeClass returns ae::Object's ClassType
+	REQUIRE( typeSomeClass->GetParentType() == typeObject );
+
+	// GetParentType for ae::Object returns nullptr (no registered parent)
+	REQUIRE( typeObject->GetParentType() == nullptr );
+
+	// IsType with a base class returns true
+	REQUIRE( typeSomeClass->IsType( typeObject ) );
+
+	// IsType<SomeClass> is true for SomeClass itself
+	REQUIRE( typeSomeClass->IsType< SomeClass >() );
+	// IsType<SomeClass> is true for a derived type
+	REQUIRE( typeNamespace->IsType< SomeClass >() );
+	// IsType<SomeClass> is false for an unrelated base type
+	REQUIRE( !typeObject->IsType< SomeClass >() );
+
+	// TryGet<SomeClass> on a DataPointer holding a NamespaceClass succeeds
+	Namespace0::Namespace1::NamespaceClass nsObj;
+	ae::DataPointer nsData( &nsObj );
+	REQUIRE( typeNamespace->TryGet< SomeClass >( nsData ) );
+
+	// TryGet<NamespaceClass> on a DataPointer holding a SomeClass fails
+	SomeClass scObj;
+	ae::DataPointer scData( &scObj );
+	REQUIRE( !typeSomeClass->TryGet< Namespace0::Namespace1::NamespaceClass >( scData ) );
+
+	// GetVarData returns a DataPointer addressing the member; read it back
+	const ae::ClassVar* intVar = typeSomeClass->GetVarByName( "intMember", false );
+	REQUIRE( intVar );
+	scObj.intMember = 55;
+	ae::ConstDataPointer memberData = typeSomeClass->GetVarData( intVar, ae::ConstDataPointer( scData ) );
+	REQUIRE( memberData );
+	const ae::BasicType* intType = intVar->GetOuterVarType().AsVarType< ae::BasicType >();
+	int32_t readBack = 0;
+	REQUIRE( intType->GetVarData( memberData, &readBack ) );
+	REQUIRE( readBack == 55 );
+
+	// New(): allocate aligned storage, placement-construct, verify type
+	void* storage = ae::Allocate( AE_ALLOC_TAG_META_TEST, typeSomeClass->GetSize(),
+		typeSomeClass->GetAlignment() );
+	SomeClass* newObj = typeSomeClass->New< SomeClass >( storage );
+	REQUIRE( newObj );
+	REQUIRE( typeSomeClass->IsType( ae::GetClassTypeFromObject( newObj ) ) );
+	newObj->~SomeClass();
+	ae::Free( storage );
+}
+
 TEST_CASE( "bitfield registration", "[aeMeta]" )
 {
 	const ae::EnumType* gamePadBitFieldEnum = ae::GetEnumType( "GamePadBitField" );

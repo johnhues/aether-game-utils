@@ -100,6 +100,13 @@ AE_REGISTER_CLASS_VAR( OptionalClass, intStdOptional );
 AE_REGISTER_CLASS_VAR( OptionalClass, someClassStdOptional );
 
 //------------------------------------------------------------------------------
+// MapClass
+//------------------------------------------------------------------------------
+AE_REGISTER_CLASS( MapClass );
+AE_REGISTER_CLASS_VAR( MapClass, intMap );
+AE_REGISTER_CLASS_VAR( MapClass, intMapFixed );
+
+//------------------------------------------------------------------------------
 // SomeOldEnum
 //------------------------------------------------------------------------------
 AE_REGISTER_ENUM( SomeOldEnum );
