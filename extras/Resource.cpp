@@ -137,7 +137,7 @@ bool ae::ResourceManager::Load()
 		if( file->GetStatus() == ae::File::Status::Success )
 		{
 			bool allLoaded = true;
-			AE_INFO( "Loading '#'...", file->GetUrl() );
+			AE_INFO( "Loading '#'...", file->GetURL() );
 			FileInfo* fileInfo = m_files.GetValue( fileIdx );
 			for( ae::Resource* r = fileInfo->resources.GetFirst(); r; r = r->m_node.GetNext() )
 			{
@@ -155,11 +155,11 @@ bool ae::ResourceManager::Load()
 			}
 			if( allLoaded )
 			{
-				AE_INFO( "\tSuccess", file->GetUrl() );
+				AE_INFO( "\tSuccess", file->GetURL() );
 			}
 			else
 			{
-				AE_WARN( "\tFailed to load '#'", file->GetUrl() );
+				AE_WARN( "\tFailed to load '#'", file->GetURL() );
 			}
 			m_fs->Destroy( file );
 			m_files.RemoveIndex( fileIdx );

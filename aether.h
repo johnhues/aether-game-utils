@@ -3735,7 +3735,7 @@ public:
 		Error
 	};
 
-	const char* GetUrl() const;
+	const char* GetURL() const;
 	Status GetStatus() const;
 	//! Platform specific error code eg. 200, 404, etc. for http
 	uint32_t GetCode() const;
@@ -20850,7 +20850,7 @@ void Input::m_UpdateModifiers()
 //------------------------------------------------------------------------------
 // ae::File member functions
 //------------------------------------------------------------------------------
-const char* File::GetUrl() const
+const char* File::GetURL() const
 {
 	return m_url.c_str();
 }
