@@ -21094,37 +21094,67 @@ extern "C" void EMSCRIPTEN_KEEPALIVE _ae_em_free( void* p )
 
 EM_JS( void, _ae_FileSystem_ReadImpl, ( const char* url, void* arg, uint32_t timeoutMs ),
 {
+	var handled = false; // Prevent double-calling callbacks
 	var xhr = new XMLHttpRequest();
 	xhr.timeout = timeoutMs;
 	xhr.open('GET', UTF8ToString(url), true);
 	xhr.responseType = 'arraybuffer';
 	xhr.ontimeout = function xhr_ontimeout() {
-		__ae_FileSystem_ReadFail(arg, xhr.status, true);
-	};
-	xhr.onload = function xhr_onload() {
-		if(xhr.status == 200) {
-			if(xhr.response) {
-				var byteArray = new Uint8Array(xhr.response);
-				var buffer = _malloc(byteArray.length);
-				if(buffer) {
-					HEAPU8.set(byteArray, buffer);
-					__ae_FileSystem_ReadSuccess(arg, buffer, byteArray.length);
-					__ae_em_free(buffer);
-				}
-				else {
-					__ae_FileSystem_ReadFail(arg, 0, false);
-				}
-			}
-			else {
-				__ae_FileSystem_ReadSuccess(arg, 0, 0); // Empty response but request succeeded
-			}
-			
+		if (!handled) {
+			handled = true;
+			__ae_FileSystem_ReadFail(arg, xhr.status, true);
 		}
 	};
-	xhr.onerror = function xhrError() {
-		__ae_FileSystem_ReadFail(arg, xhr.status, false);
+	xhr.onload = function xhr_onload() {
+		if (!handled) {
+			handled = true;
+			if(xhr.status != 200) {
+				__ae_FileSystem_ReadFail(arg, xhr.status, false);
+				return;
+			}
+			if(!xhr.response) {
+				__ae_FileSystem_ReadSuccess(arg, 0, 0);
+				return;
+			}
+			var byteArray = new Uint8Array(xhr.response);
+			var buffer = _malloc(byteArray.length);
+			if(!buffer) {
+				__ae_FileSystem_ReadFail(arg, 0, false);
+				return;
+			}
+			HEAPU8.set(byteArray, buffer);
+			__ae_FileSystem_ReadSuccess(arg, buffer, byteArray.length);
+			__ae_em_free(buffer);
+		}
 	};
-	xhr.send(null);
+	xhr.onerror = function xhr_onerror() {
+		if (!handled) {
+			handled = true;
+			__ae_FileSystem_ReadFail(arg, xhr.status || 0, false); // CORS errors may have status=0
+		}
+	};
+	xhr.onabort = function xhr_onabort() {
+		if (!handled) {
+			handled = true;
+			__ae_FileSystem_ReadFail(arg, 0, false);
+		}
+	};
+	xhr.onloadend = function xhr_onloadend() {
+		// Safety net: catches edge cases where other handlers don't fire
+		if (!handled) {
+			handled = true;
+			__ae_FileSystem_ReadFail(arg, xhr.status || 0, false);
+		}
+	};
+	
+	try {
+		xhr.send(null);
+	} catch(e) {
+		if (!handled) {
+			handled = true;
+			__ae_FileSystem_ReadFail(arg, 0, false);
+		}
+	}
 } );
 #endif
 
