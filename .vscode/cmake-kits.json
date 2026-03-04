@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Emscripten",
+    "toolchainFile": "/opt/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+    "environmentVariables": {
+      "EMSDK": "/opt/emsdk"
+    },
+    "compilers": {
+      "C": "/opt/emsdk/upstream/emscripten/emcc",
+      "CXX": "/opt/emsdk/upstream/emscripten/em++"
+    },
+    "preferredGenerator": {
+      "name": "Ninja Multi-Config"
+    }
+  }
+]
