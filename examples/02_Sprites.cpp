@@ -29,6 +29,9 @@
 // Constants
 //------------------------------------------------------------------------------
 const ae::Tag TAG_EXAMPLE = "example";
+#ifndef DATA_DIR
+	#define DATA_DIR "data"
+#endif
 
 const char* kVertexShader = R"(
 	AE_UNIFORM_HIGHP mat4 u_worldToProj;
@@ -73,7 +76,7 @@ int main()
 	ae::SpriteRenderer spriteRenderer = TAG_EXAMPLE;
 	ae::Shader spriteShader;
 
-	fileSystem.Initialize( "data", "ae", "sprites" );
+	fileSystem.Initialize( DATA_DIR, "ae", "sprites" );
 	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "sprites" );
 	render.Initialize( &window );
@@ -81,46 +84,65 @@ int main()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	spriteRenderer.Initialize( 1, 16 );
 	spriteShader.Initialize( kVertexShader, kFragmentShader, nullptr, 0 );
+	spriteShader.SetBlending( true );
 	
 	// Sprites
 	ae::Texture2D spriteTex;
-	{
-		ae::Scratch< uint8_t > fileData( fileSystem.GetSize( ae::FileSystem::Root::Data, "circle.tga" ) );
-		fileSystem.Read( ae::FileSystem::Root::Data, "circle.tga", fileData.Data(), fileData.Length() );
-		ae::TargaFile targa = TAG_EXAMPLE;
-		targa.Load( fileData.Data(), fileData.Length() );
-		spriteTex.Initialize( targa.textureParams );
-	}
+	const ae::File* file = fileSystem.Read( ae::FileSystem::Root::Data, "circle.tga", 2.5f );
+	AE_INFO( "Load texture '#'...", file ? file->GetURL() : "null" );
 	
-	while( !input.quit )
+	auto Update = [&]()
 	{
 		input.Pump();
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
 		spriteRenderer.Clear();
-		
-		// Red
-		ae::Matrix4 localToWorld = ae::Matrix4::Translation( ae::Vec3( -0.5f, -0.5f, 0.5f ) );
-		localToWorld *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
-		spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoRed() );
 
-		// Green
-		localToWorld = ae::Matrix4::Scaling(  ae::Vec3( 1.0f, 1.0f, 0.5f ) );
-		spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoGreen() );
+		if( file && file->GetStatus() != ae::File::Status::Pending )
+		{
+			AE_INFO( "Load texture" );
+			if( const uint32_t fileSize = file->GetLength() )
+			{
+				ae::TargaFile targa = TAG_EXAMPLE;
+				targa.Load( file->GetData(), file->GetLength() );
+				spriteTex.Initialize( targa.textureParams );
+			}
+			fileSystem.Destroy( file );
+			file = nullptr;
+		}
+		else if( spriteTex.GetWidth() && spriteTex.GetHeight() )
+		{
+			// Red
+			ae::Matrix4 localToWorld = ae::Matrix4::Translation( ae::Vec3( -0.5f, -0.5f, 0.5f ) );
+			localToWorld *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
+			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoRed() );
+	
+			// Green
+			localToWorld = ae::Matrix4::Scaling(  ae::Vec3( 1.0f, 1.0f, 0.5f ) );
+			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoGreen() );
+	
+			// Blue
+			localToWorld = ae::Matrix4::Translation( ae::Vec3( 0.5f, 0.5f, -0.5f ) );
+			localToWorld *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
+			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoBlue() );
 
-		// Blue
-		localToWorld = ae::Matrix4::Translation( ae::Vec3( 0.5f, 0.5f, -0.5f ) );
-		localToWorld *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
-		spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoBlue() );
+			ae::UniformList uniforms;
+			uniforms.Set( "u_worldToProj", ae::Matrix4::Scaling( ae::Vec3( 0.5f / render.GetAspectRatio(), 0.5f, 1.0f ) ) );
+			uniforms.Set( "u_tex", &spriteTex );
+			spriteRenderer.SetParams( 0, &spriteShader, uniforms );
+			spriteRenderer.Render();
+		}
 
-		ae::UniformList uniforms;
-		uniforms.Set( "u_worldToProj", ae::Matrix4::Scaling( ae::Vec3( 0.5f / render.GetAspectRatio(), 0.5f, 1.0f ) ) );
-		uniforms.Set( "u_tex", &spriteTex );
-		spriteRenderer.SetParams( 0, &spriteShader, uniforms );
-		spriteRenderer.Render();
 		render.Present();
 		timeStep.Tick();
-	}
+		return !input.quit;
+	};
+
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
+#else
+	while( Update() ) {}
+#endif
 
 	AE_LOG( "Terminate" );
 	spriteRenderer.Terminate();
