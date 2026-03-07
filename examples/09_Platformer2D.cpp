@@ -199,9 +199,11 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 		if( down ) { m_body->AddForce( ae::Vec2( 0.0f, -kPlayerMass * kMoveHorizontal ) ); input = true; }
 		if( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kMoveHorizontal * 0.5f, 0.0f ) ); input = true; }
 		if( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kMoveHorizontal * 0.5f, 0.0f ) ); input = true; }
-		const float damping = input ? 0.03f : 0.1f;
-		m_body->AddForce( m_body->GetVelocity() * ( kPlayerMass * -damping / dt ) );
+		const float damping = input ? 0.01f : 0.1f;
+
+		m_canJumpTimer = kJumpMaxAirTime;
 		m_jumpHoldTimer = 0.0f;
+		m_body->AddForce( m_body->GetVelocity() * ( kPlayerMass * -damping / dt ) );
 	}
 	else // Air / ground
 	{
