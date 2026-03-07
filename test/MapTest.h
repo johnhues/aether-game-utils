@@ -850,6 +850,92 @@ TEST_CASE( "Map StableInsertIndex", "[ae::Map" AE_HASH_N "][stable]" )
 	REQUIRE( map.Get( "gamma" ) == 30 );
 }
 
+//------------------------------------------------------------------------------
+// char* pointer key tests
+//------------------------------------------------------------------------------
+// HashMap::m_IsEqual() (aether.h:10821) handles char* keys specially using
+// strcmp instead of pointer comparison. These tests verify content-based
+// comparison works correctly with different pointers to same string content.
+//------------------------------------------------------------------------------
+TEST_CASE( "hash map works with char* keys (Set/Get)", "[ae::HashMap" AE_HASH_N "]" )
+{
+	ae::HashMap< const char*, 10, aeHashN > map;
+	const char* str1 = "hello";
+	const char* str2 = "world";
+	char str3[] = "hello"; // Different pointer, same content as str1
+	
+	REQUIRE( map.Set( str1, 0 ) );
+	REQUIRE( map.Set( str2, 1 ) );
+	REQUIRE( map.Length() == 2 );
+	
+	// Should find str3 because m_IsEqual uses strcmp, not pointer comparison
+	REQUIRE( map.Get( str3 ) == 0 );
+	REQUIRE( map.Get( str1 ) == 0 );
+	REQUIRE( map.Get( str2 ) == 1 );
+}
+
+TEST_CASE( "hash map works with char* keys (Remove)", "[ae::HashMap" AE_HASH_N "]" )
+{
+	ae::HashMap< const char*, 10, aeHashN > map;
+	const char* str1 = "test";
+	char str2[] = "test"; // Different pointer, same content
+	
+	REQUIRE( map.Set( str1, 0 ) );
+	REQUIRE( map.Length() == 1 );
+	
+	// Should remove successfully because m_IsEqual uses strcmp
+	REQUIRE( map.Remove( str2 ) == 0 );
+	REQUIRE( map.Length() == 0 );
+	REQUIRE( map.Get( str1 ) == -1 );
+}
+
+TEST_CASE( "hash map works with const char* keys", "[ae::HashMap" AE_HASH_N "]" )
+{
+	ae::HashMap< const char*, 10, aeHashN > map;
+	const char* str1 = "alpha";
+	const char* str2 = "beta";
+	char str3[] = "alpha"; // Different pointer, same content as str1
+	
+	REQUIRE( map.Set( str1, 0 ) );
+	REQUIRE( map.Set( str2, 1 ) );
+	REQUIRE( map.Length() == 2 );
+	
+	// Should find str3 via content comparison
+	REQUIRE( map.Get( str3 ) == 0 );
+	REQUIRE( map.Get( str1 ) == 0 );
+	REQUIRE( map.Get( str2 ) == 1 );
+}
+
+TEST_CASE( "map works with char* keys (Set/Get)", "[aeMap" AE_HASH_N "]" )
+{
+	ae::Map< const char*, int, 10, aeHashN > map;
+	const char* key1 = "alpha";
+	char key2[] = "alpha"; // Different pointer, same content
+	
+	map.Set( key1, 100 );
+	REQUIRE( map.Length() == 1 );
+	
+	// Should find via content comparison (HashMap::m_IsEqual uses strcmp)
+	REQUIRE( map.Get( key2 ) == 100 );
+	REQUIRE( map.Get( key1 ) == 100 );
+}
+
+TEST_CASE( "map works with char* keys (Remove)", "[aeMap" AE_HASH_N "]" )
+{
+	ae::Map< const char*, int, 10, aeHashN > map;
+	const char* key1 = "beta";
+	char key2[] = "beta"; // Different pointer, same content
+	
+	map.Set( key1, 200 );
+	REQUIRE( map.Length() == 1 );
+	
+	int value = 0;
+	// Should remove successfully via content comparison
+	REQUIRE( map.Remove( key2, &value ) );
+	REQUIRE( value == 200 );
+	REQUIRE( map.Length() == 0 );
+}
+
 TEST_CASE( "HashMap Increment Decrement", "[ae::HashMap" AE_HASH_N "][increment][decrement]" )
 {
 	ae::HashMap< std::string, 0, aeHashN > hashMap = TAG_TEST;

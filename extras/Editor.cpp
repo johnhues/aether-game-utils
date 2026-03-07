@@ -1308,11 +1308,11 @@ void Editor::QueueRead( const char* levelPath )
 	AE_ASSERT_MSG( m_params, "Must call Editor::Initialize()" );
 	if( m_pendingLevel )
 	{
-		AE_WARN( "Cancelling level read '#'", m_pendingLevel->GetUrl() );
+		AE_WARN( "Cancelling level read '#'", m_pendingLevel->GetURL() );
 		m_fileSystem.Destroy( m_pendingLevel );
 	}
 	m_pendingLevel = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
-	AE_INFO( "Queuing level load '#'", m_pendingLevel->GetUrl() );
+	AE_INFO( "Queuing level load '#'", m_pendingLevel->GetURL() );
 }
 
 // @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
@@ -1340,7 +1340,7 @@ void Editor::m_Read()
 	if( parseResult.IsError() )
 	{
 		AE_ERR( "Could not parse json '#' Error:# (#)",
-			m_pendingLevel->GetUrl(),
+			m_pendingLevel->GetURL(),
 			rapidjson::GetParseError_En( parseResult.Code() ),
 			parseResult.Offset()
 		);
@@ -1349,11 +1349,11 @@ void Editor::m_Read()
 	const JsonScene scene( m_tag, document, false );
 	if( !scene.success )
 	{
-		AE_ERR( "Level '#' is not a valid scene", m_pendingLevel->GetUrl() );
+		AE_ERR( "Level '#' is not a valid scene", m_pendingLevel->GetURL() );
 		return;
 	}
 
-	m_lastLoadedLevel = m_pendingLevel->GetUrl();
+	m_lastLoadedLevel = m_pendingLevel->GetURL();
 
 	// @HACK: Currently two LevelUnload are sent
 	{
@@ -1392,12 +1392,12 @@ void Editor::m_Read()
 	// Serialize all components (second phase to handle references)
 	JsonToRegistry( entityMap, document[ JSON_SCENE_OBJECTS_NAME ], m_params->registry );
 
-	AE_INFO( "Loaded level '#'", m_pendingLevel->GetUrl() );
+	AE_INFO( "Loaded level '#'", m_pendingLevel->GetURL() );
 
 	{
 		EditorEvent event;
 		event.type = EditorEventType::LevelLoad;
-		event.path = m_pendingLevel->GetUrl();
+		event.path = m_pendingLevel->GetURL();
 		SendPluginEvent( m_plugins, event );
 	}
 }
@@ -1612,7 +1612,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 	uint32_t fileSize = m_pendingLevel->GetLength();
 	if( !fileSize )
 	{
-		AE_ERR( "Could not read level '#'", m_pendingLevel->GetUrl() );
+		AE_ERR( "Could not read level '#'", m_pendingLevel->GetURL() );
 		return;
 	}
 
@@ -1620,12 +1620,12 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 
 	if( !program->MakeWritable( m_pendingLevel->GetUrl() ) )
 	{
-		const ae::Str512 msg = ae::Str512::Format( "File may not be writable '#'", m_pendingLevel->GetUrl() );
+		const ae::Str512 msg = ae::Str512::Format( "File may not be writable '#'", m_pendingLevel->GetURL() );
 		AE_WARN( msg.c_str() );
 		ae::ShowMessage( msg.c_str() );
 	}
 
-	AE_INFO( "Loading level... '#'", m_pendingLevel->GetUrl() );
+	AE_INFO( "Loading level... '#'", m_pendingLevel->GetURL() );
 	
 	const char* jsonBuffer = (const char*)m_pendingLevel->GetData();
 	AE_ASSERT( jsonBuffer[ m_pendingLevel->GetLength() ] == 0 ); // ae::File::Read() should always add a null terminator
@@ -1635,7 +1635,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 	if( parseResult.IsError() )
 	{
 		AE_ERR( "Could not parse json '#' Error:# (#)",
-			m_pendingLevel->GetUrl(),
+			m_pendingLevel->GetURL(),
 			rapidjson::GetParseError_En( parseResult.Code() ),
 			parseResult.Offset()
 		);
@@ -1646,9 +1646,9 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 	if( !scene.success )
 	{
 		InvalidSceneDialog dialog;
-		dialog.levelPath = m_pendingLevel->GetUrl();
+		dialog.levelPath = m_pendingLevel->GetURL();
 		m_PushDialog( dialog );
-		AE_ERR( "Invalid level data format '#'", m_pendingLevel->GetUrl() );
+		AE_ERR( "Invalid level data format '#'", m_pendingLevel->GetURL() );
 		return;
 	}
 
@@ -3559,7 +3559,7 @@ void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
 {
 	if( m_pendingLevel )
 	{
-		AE_WARN( "Cancelling level read '#'", m_pendingLevel->GetUrl() );
+		AE_WARN( "Cancelling level read '#'", m_pendingLevel->GetURL() );
 		program->fileSystem.Destroy( m_pendingLevel );
 		m_pendingLevel = nullptr;
 	}
@@ -4166,7 +4166,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 		{
 			char buf[ 256 ];
 			auto val = var->GetObjectValueAsString( component, idx );
-			strlcpy( buf, val.c_str(), sizeof(buf) );
+			ae::_strlcpy( buf, val.c_str(), sizeof(buf) );
 			ImGui::Text( "%s", varName.c_str() );
 			if( ImGui::InputTextMultiline( varName.c_str(), buf, sizeof(buf), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4 ), 0 ) )
 			{
@@ -4332,7 +4332,7 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 			float hitT = INFINITY;
 			ae::Vec3 hitPos( 0.0f );
 			const ae::Sphere sphere( editorObj->GetTransform().GetTranslation(), 0.5f );
-			if( sphere.IntersectRay( mouseRaySrc, mouseRay, &hitPos, &hitT ) )
+			if( sphere.IntersectRay( mouseRaySrc, mouseRay, &hitPos, nullptr, &hitT ) )
 			{
 				raycastParams.userData = nullptr;
 				raycastParams.transform = ae::Matrix4::Identity();
@@ -4806,12 +4806,12 @@ void Editor::m_Fork()
 	PROCESS_INFORMATION procInfo;
 	char args[ 256 ];
 	args[ 0 ] = 0;
-	strlcat( args, m_params->argv[ 0 ], sizeof(args) );
-	strlcat( args, " --editor", sizeof(args) );
+	ae::_strlcat( args, m_params->argv[ 0 ], sizeof(args) );
+	ae::_strlcat( args, " --editor", sizeof(args) );
 	if( levelPath[ 0 ] )
 	{
-		strlcat( args, " --level ", sizeof(args) );
-		strlcat( args, levelPath, sizeof(args) );
+		ae::_strlcat( args, " --level ", sizeof(args) );
+		ae::_strlcat( args, levelPath, sizeof(args) );
 	}
 	CreateProcessA(
 		m_params->argv[ 0 ],

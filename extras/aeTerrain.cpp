@@ -38,11 +38,7 @@
 #endif
 
 #ifndef AE_TERRAIN_SIMD
-  #if _AE_LINUX_ || _AE_EMSCRIPTEN_
-    #define AE_TERRAIN_SIMD 0
-  #else
-    #define AE_TERRAIN_SIMD 1
-  #endif
+  #define AE_TERRAIN_SIMD 0
 #endif
 
 #ifndef AE_TERRAIN_FANCY_NORMALS
@@ -2129,7 +2125,8 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
   ae::Vec3 dir = ray.SafeNormalizeCopy();
   
   ae::Vec3 curpos = start;
-  ae::Vec3 cb, tmax, tdelta;
+  ae::Vec3 cb, tmax;
+  ae::Vec3 tdelta( 0.0f );
   int stepX, outX;
   int stepY, outY;
   int stepZ, outZ;
@@ -2209,6 +2206,12 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
   else
   {
     tmax.z = 1000000;
+  }
+
+  AE_DEBUG_ASSERT( tdelta != ae::Vec3( 0.0f ) );
+  if( tdelta == ae::Vec3( 0.0f ) )
+  {
+    return false;
   }
   
   int32_t steps = 0;
@@ -2494,7 +2497,8 @@ bool Terrain::Raycast( const ae::RaycastParams& _params, ae::RaycastResult* outR
   int32_t z = ae::Floor( start.z );
   
   ae::Vec3 curpos = start;
-  ae::Vec3 cb, tmax, tdelta;
+  ae::Vec3 cb, tmax;
+  ae::Vec3 tdelta( 0.0f );
   int32_t stepX, outX;
   int32_t stepY, outY;
   int32_t stepZ, outZ;
@@ -2575,6 +2579,13 @@ bool Terrain::Raycast( const ae::RaycastParams& _params, ae::RaycastResult* outR
   {
     tmax.z = 1000000;
   }
+
+  AE_DEBUG_ASSERT( tdelta != ae::Vec3( 0.0f ) );
+  if( tdelta == ae::Vec3( 0.0f ) )
+  {
+    return false;
+  }
+
 
   ae::RaycastResult resultsAccum;
   while( true )

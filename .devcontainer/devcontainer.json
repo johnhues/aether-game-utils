@@ -1,0 +1,20 @@
+{
+  "name": "aether-game-utils (ubuntu_clang)",
+  "image": "ghcr.io/johnhues/aether-build:latest",
+  "initializeCommand": "bash -lc 'if [ -n \"${localEnv:GHCR_USER}\" ] && [ -n \"${localEnv:GHCR_TOKEN}\" ]; then echo \"${localEnv:GHCR_TOKEN}\" | docker login ghcr.io -u \"${localEnv:GHCR_USER}\" --password-stdin; else echo \"GHCR auth not configured. Set Codespaces secrets GHCR_USER and GHCR_TOKEN.\"; exit 1; fi'",
+  "containerEnv": {
+    "CC": "clang",
+    "CXX": "clang++"
+  },
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "postCreateCommand": "cmake -E make_directory build",
+  "remoteUser": "root",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools"
+      ]
+    }
+  }
+}

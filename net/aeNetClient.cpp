@@ -66,7 +66,7 @@ namespace
 
 void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info );
 	
-AetherPlayer* AetherClient_GetPlayer( AetherClientInternal* ac, AetherUuid uuid )
+AetherPlayer* AetherClient_GetPlayer( AetherClientInternal* ac, ae::UUID uuid )
 {
   int32_t playerCount = ac->pub.allPlayers.Length();
   for( int32_t i = 0; i < playerCount; i++ )
@@ -79,7 +79,7 @@ AetherPlayer* AetherClient_GetPlayer( AetherClientInternal* ac, AetherUuid uuid 
   return nullptr;
 }
 
-AetherPlayer* AetherClient_AddPlayer( AetherClientInternal* ac, AetherUuid uuid )
+AetherPlayer* AetherClient_AddPlayer( AetherClientInternal* ac, ae::UUID uuid )
 {
   AetherPlayer* player = ae::New< AetherPlayer >( AE_ALLOC_TAG_NET );
   player->uuid = uuid;
@@ -116,7 +116,7 @@ void AetherClient_Connect( AetherClient* _ac )
   ac->pub.m_isConnecting = true;
 }
 
-AetherClient* AetherClient_New( AetherUuid uuid, const char* ip, uint16_t port )
+AetherClient* AetherClient_New( ae::UUID uuid, const char* ip, uint16_t port )
 {
   AetherClientInternal* ac = new AetherClientInternal();
 

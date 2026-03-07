@@ -96,7 +96,7 @@ int main()
 		// File loading
 		if( fontFile && fontFile->GetStatus() != ae::File::Status::Pending )
 		{
-			AE_ASSERT_MSG( fontFile->GetLength(), "Could not load #", fontFile->GetUrl() );
+			AE_ASSERT_MSG( fontFile->GetLength(), "Could not load #", fontFile->GetURL() );
 			ae::TargaFile targa = TAG_EXAMPLE;
 			targa.Load( fontFile->GetData(), fontFile->GetLength() );
 			targa.textureParams.filter = ae::Texture::Filter::Nearest;

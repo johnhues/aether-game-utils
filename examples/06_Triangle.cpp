@@ -118,12 +118,12 @@ int main()
 		}
 		else if( input.mouse.usingTouch )
 		{
-			pos.x += input.mouse.scroll.x * 0.01f;
-			pos.y += input.mouse.scroll.y * -0.01f;
+			pos.x += input.mouse.scrollMomentum.x * 0.01f;
+			pos.y += input.mouse.scrollMomentum.y * -0.01f;
 		}
 		else
 		{
-			scale += input.mouse.scroll.y * 0.01f;
+			scale += input.mouse.scrollMomentum.y * 0.01f;
 			scale = ae::Clip( scale, 0.1f, 2.0f );
 		}
 		

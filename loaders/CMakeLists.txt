@@ -22,6 +22,7 @@ if(AE_LOADERS_OFBX)
 		GIT_REPOSITORY https://github.com/nem0/OpenFBX.git
 		GIT_TAG b2e720c8f6d5979fc4ed346262e6270084b15836
 		SOURCE_SUBDIR "NO-SUBDIRECTORY" # Use a non-existent subdirectory name to skip add_subdirectory()
+		GIT_PROGRESS TRUE
 	)
 	FetchContent_MakeAvailable(openfbx)
 	FetchContent_GetProperties(openfbx SOURCE_DIR OPENFBX_SOURCE_DIR)

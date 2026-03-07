@@ -366,7 +366,7 @@ TEST_CASE( "array will assert if too many elements are appended" )
 	REQUIRE_NOTHROW( array.Append( 1 ) );
 	REQUIRE_NOTHROW( array.Append( 2 ) );
 	REQUIRE_NOTHROW( array.Append( 3 ) );
-	REQUIRE_THROWS( array.Append( 4 ) );
+	AE_REQUIRE_THROWS( array.Append( 4 ) );
 }
 
 TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]" )

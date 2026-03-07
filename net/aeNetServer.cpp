@@ -69,7 +69,7 @@ namespace
   };
 }
 
-AetherPlayer* AetherServer_GetPlayer( AetherServerInternal* as, AetherUuid uuid )
+AetherPlayer* AetherServer_GetPlayer( AetherServerInternal* as, ae::UUID uuid )
 {
   int32_t playerCount = as->pub.playerCount;
   for( int32_t i = 0; i < playerCount; i++ )
@@ -82,7 +82,7 @@ AetherPlayer* AetherServer_GetPlayer( AetherServerInternal* as, AetherUuid uuid 
   return nullptr;
 }
 
-AetherPlayer* AetherServer_AddPlayer( AetherServerInternal* as, AetherUuid uuid )
+AetherPlayer* AetherServer_AddPlayer( AetherServerInternal* as, ae::UUID uuid )
 {
   AetherPlayer* player = new AetherPlayer();
   player->uuid = uuid;
@@ -290,12 +290,7 @@ void AetherServer_Update( AetherServer* _as )
   {
     if( !player->alive )
     {
-      char uuidStr[ 64 ];
-      player->uuid.ToString( uuidStr, sizeof(uuidStr) );
-      // AE_LOG( "AETHER remove disconnected player %s", uuidStr );
-
       delete player;
-
       return true;
     }
     return false;
@@ -313,10 +308,6 @@ bool AetherServer_SystemReceive( AetherServerInternal* as, void** userdata, Aeth
   {
     case kSysMsgPlayerConnect:
     {
-      char uuidStr[ 64 ];
-      header.uuid.ToString( uuidStr, sizeof(uuidStr) );
-      // AE_LOG( "AETHER player connect %s", uuidStr );
-      
       // TODO: Make sure player isn't already connected
       AetherPlayer* player = AetherServer_AddPlayer( as, header.uuid );
       
@@ -392,10 +383,6 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
         AetherPlayer* player = (AetherPlayer*)e.peer->data;
         if( player )
         {
-          char uuidStr[ 64 ];
-          player->uuid.ToString( uuidStr, sizeof(uuidStr) );
-          // AE_LOG( "ENET Disconnect %s", uuidStr );
-
           player->alive = false;
           
           infoOut->msgId = kSysMsgPlayerDisconnect;

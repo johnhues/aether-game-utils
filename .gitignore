@@ -34,14 +34,9 @@
 *.out
 *.app
 
-# CMake / CLion
+# Build directories
 build
-build_xcode
-build_vscode
-build_em
-build_linux
-linux
-em
+build_*
 
 # System
 .DS_Store

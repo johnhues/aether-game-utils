@@ -59,7 +59,7 @@ function(ae_add_shared_library)
 	if(ADD_SHARED_LIB_INCLUDE_DIRS)
 		target_include_directories(${ADD_SHARED_LIB_NAME} PRIVATE ${ADD_SHARED_LIB_INCLUDE_DIRS})
 	endif()
-	if(MSVC)
+	if(WIN32)
 		set_target_properties(${ADD_SHARED_LIB_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS YES)
 	elseif(APPLE)
 		if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
@@ -135,7 +135,7 @@ function(ae_add_bundle BUNDLE_NAME)
 	target_link_libraries(${AEAB_TARGET_NAME} PRIVATE "${AEAB_LIBS};${AEAB_PACKAGE_LIBS}")
 	target_include_directories(${AEAB_TARGET_NAME} PRIVATE "${AEAB_INCLUDE_DIRS}")
 
-	if(WIN32)
+	if(MSVC)
 		set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
 			LINK_FLAGS "/ENTRY:mainCRTStartup" # Use main instead of WinMain
 		)
@@ -210,6 +210,8 @@ function(ae_add_bundle BUNDLE_NAME)
 			"-lopenal"
 			"-s TEXTDECODER=2" # When marshalling C UTF-8 strings across the JS<->Wasm language boundary, favor smallest generated code size rather than performance
 			# "-s MINIMAL_RUNTIME=2" # Enable aggressive MINIMAL_RUNTIME mode.
+			"-s INITIAL_MEMORY=2GB" # Allocate the max possible safe memory, which for legacy reasons is 2GB. Leave it up to the browser/OS to decide how much of that memory to actually back with physical RAM.
+			"-s ALLOW_MEMORY_GROWTH=0"
 			"-s MIN_WEBGL_VERSION=3 -s MAX_WEBGL_VERSION=3" # Require WebGL 3 support in target browser, for smallest generated code size. (pass -s MIN_WEBGL_VERSION=1 to dual-target WebGL 1 and WebGL 2)
 			"-s ENVIRONMENT=web" # The generated build output is only to be expected to be run in a web browser, never in a native CLI shell, or in a web worker.
 			"-s ABORTING_MALLOC=0" # Fine tuning for code size: do not generate code to abort program execution on malloc() failures, that will not be interesting here.
@@ -224,14 +226,12 @@ function(ae_add_bundle BUNDLE_NAME)
 			"-s MIN_FIREFOX_VERSION=70"
 			"-s MIN_SAFARI_VERSION=130000"
 			"-s MIN_CHROME_VERSION=80"
-			"-s ALLOW_MEMORY_GROWTH"
 		)
 		string(TOLOWER "${CMAKE_BUILD_TYPE}" cmake_build_type_tolower)
 		if (cmake_build_type_tolower STREQUAL "debug")
 			list(APPEND _AE_EM_LINKER_FLAGS
 				"-s SAFE_HEAP=1" # Enable safe heap mode
 				"-s ASSERTIONS=1" # Enable assertions
-				"-s DEMANGLE_SUPPORT=1"
 				"-s STACK_OVERFLOW_CHECK=1"
 				"-O0"
 				"-frtti"

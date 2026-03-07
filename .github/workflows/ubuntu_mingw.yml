@@ -1,4 +1,4 @@
-name: Emscripten
+name: Ubuntu MinGW
 on: [push]
 jobs:
   build-and-test:
@@ -13,8 +13,8 @@ jobs:
       - name: Create Build Directory
         run: cmake -E make_directory build
       - name: Configure
-        run: . /opt/emsdk/emsdk_env.sh && emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
+        run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=.github/toolchains/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
       - name: Build
-        run: . /opt/emsdk/emsdk_env.sh && emmake make -C build all -j$(nproc)
+        run: make -C build all -j$(nproc)
       - name: Test
-        run: node build/test/test.js
+        run: wine build/test/test.exe

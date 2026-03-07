@@ -170,7 +170,7 @@ public:
 
   ae::NetObject* netObject = nullptr;
   bool alive = true;
-  AetherUuid playerId = AetherUuid::Zero();
+  ae::UUID playerId;
   InputInfo input;
 
 private:

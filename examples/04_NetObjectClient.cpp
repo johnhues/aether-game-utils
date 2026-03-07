@@ -34,7 +34,7 @@ int main()
   AE_LOG( "Initialize" );
   Game game;
   game.Initialize();
-  AetherClient* client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
+  AetherClient* client = AetherClient_New( ae::UUID::Generate(), "127.0.0.1", 3500 );
   ae::NetObjectClient netObjectClient;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
   double nextSend = 0.0;
@@ -110,7 +110,7 @@ int main()
     //------------------------------------------------------------------------------
     if( client->IsConnected() && nextSend < time )
     {
-      AetherUuid playerId = client->localPlayer->uuid;
+      ae::UUID playerId = client->localPlayer->uuid;
       int32_t objIdx = gameObjects.FindFn( [ playerId ]( const GameObject& o ){ return o.playerId == playerId; } );
       GameObject* obj = ( objIdx >= 0 ) ? &gameObjects[ objIdx ] : nullptr;
       if( obj )

@@ -116,7 +116,7 @@ int main()
 	AE_INFO( "data dir: '#'", dataDir );
 	
 	const ae::File* file = fs.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
-	AE_INFO( "Start loading '#'", file->GetUrl() );
+	AE_INFO( "Start loading '#'", file->GetURL() );
 
 	float spin = 0.0f;
 	float spinVelocity = 0.0f;
@@ -164,12 +164,12 @@ int main()
 				}
 				else
 				{
-					AE_ERR( "Invalid obj file '#'", file->GetUrl() );
+					AE_ERR( "Invalid obj file '#'", file->GetURL() );
 				}
 			}
 			else
 			{
-				AE_ERR( "Error reading file '#'", file->GetUrl() );
+				AE_ERR( "Error reading file '#'", file->GetURL() );
 			}
 
 			fs.Destroy( file );

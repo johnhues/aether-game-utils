@@ -50,7 +50,7 @@ int main()
 		if( file && file->GetStatus() != ae::File::Status::Pending )
 		{
 			audioData = audio.LoadWavFile( file->GetData(), file->GetLength() );
-			AE_INFO( audioData ? "Loaded audio file: '#'" : "Failed to load audio file: '#'", file->GetUrl() );
+			AE_INFO( audioData ? "Loaded audio file: '#'" : "Failed to load audio file: '#'", file->GetURL() );
 			fs.Destroy( file );
 			file = nullptr;
 		}

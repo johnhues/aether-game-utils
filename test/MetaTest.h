@@ -65,6 +65,7 @@ public:
 	int32_t intMember;
 	bool boolMember;
 	TestEnumClass enumTest;
+	ae::UUID uuidMember;
 };
 
 
@@ -79,6 +80,7 @@ namespace Namespace0 {
 			int32_t intMember;
 			bool boolMember;
 			TestEnumClass enumTest;
+			ae::UUID uuidMember;
 		};
 	}
 }
@@ -169,6 +171,16 @@ public:
 
 	std::optional< int32_t > intStdOptional;
 	std::optional< SomeClass > someClassStdOptional;
+};
+
+//------------------------------------------------------------------------------
+// MapClass
+//------------------------------------------------------------------------------
+class MapClass : public ae::Inheritor< ae::Object, MapClass >
+{
+public:
+	ae::Map< ae::Str32, int32_t > intMap = AE_ALLOC_TAG_META_TEST;
+	ae::Map< ae::Str32, int32_t, 4 > intMapFixed;
 };
 
 //------------------------------------------------------------------------------

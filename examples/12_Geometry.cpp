@@ -229,7 +229,7 @@ int main()
 				ae::Vec3 p;
 				ae::Vec3 n;
 				float t;
-				if( ae::IntersectRayTriangle( raySource, ray, triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], ccw, cw, &p, &n, &t ) )
+				if( ae::Triangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ] ).IntersectRay( raySource, ray, ccw, cw, &p, &n, &t ) )
 				{
 					debug.AddSphere( p, 0.1f, ae::Color::Green(), 8 );
 					debug.AddLine( p, p + n, ae::Color::Green() );
