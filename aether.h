@@ -27160,7 +27160,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 
 	// Input
 	const ae::Vec2 movement = input ? ae::Vec2( input->mouse.movement ) : ae::Vec2( 0.0f );
-	const ae::Vec2 scroll = input ? input->mouse.scrollMomentum : ae::Vec2( 0.0f );
+	const ae::Vec2 scroll = input ? input->mouse.scrollMomentum * 0.01f : ae::Vec2( 0.0f );
 	const bool alt = input ? input->Get( ae::Key::LeftAlt ) : false;
 	const bool shift = input ? input->Get( ae::Key::LeftShift ) : false;
 	const bool control = input ? input->Get( ae::Key::LeftControl ) : false;

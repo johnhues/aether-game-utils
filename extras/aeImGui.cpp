@@ -72,7 +72,7 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 	io.MouseDown[ 0 ] = input->mouse.leftButton;
 	io.MouseDown[ 1 ] = input->mouse.rightButton;
 	io.MouseDown[ 2 ] = input->mouse.middleButton;
-	io.MouseWheel += input->mouse.scrollMomentum.y * ( input->RequestsNaturalScrolling() ? -1.0f : 1.0f );
+	io.MouseWheel += input->mouse.scrollMomentum.y * ( input->RequestsNaturalScrolling() ? -0.025f : 0.025f );
 	ae::Vec2 mousePos( input->mouse.position.x, windowHeight - input->mouse.position.y );
 	io.MousePos = ImVec2( mousePos.x, mousePos.y );
 	
