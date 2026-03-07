@@ -3539,7 +3539,17 @@ struct MouseState
 	//! Cursor jumps are filtered when the mouse is captured and when the window
 	//! becomes active.
 	ae::Int2 movement = ae::Int2( 0 );
+	//! Raw scroll input only (no momentum). Wheel gives ~1.0 per notch, and
+	//! uses sub-line float precision if possible. Is reset each frame. Physical
+	//! direction regardless of OS natural scrolling setting, see
+	//! ae::Input::RequestsNaturalScrolling().
 	ae::Vec2 scroll = ae::Vec2( 0.0f );
+	//! Raw scroll input plus trackpad momentum continuation. Wheel gives ~1.0
+	//! per notch, and uses sub-line float precision if possible. Use for smooth
+	//! camera, zoom, and UI input. Is reset each frame. Physical direction
+	//! regardless of OS natural scrolling setting, see
+	//! ae::Input::RequestsNaturalScrolling().
+	ae::Vec2 scrollMomentum = ae::Vec2( 0.0f );
 	bool usingTouch = false;
 };
 
@@ -3629,6 +3639,10 @@ public:
 	void SetCursorHidden( bool hidden ) { m_hideCursor = hidden; }
 	//! Returns true if the cursor is hidden
 	bool GetCursorHidden() const { return m_hideCursor; }
+	//! Returns true if the OS natural scrolling setting is enabled (macOS only,
+	//! always false on other platforms). UI callers who want to match OS scroll
+	//! direction: multiply scrollMomentum by RequestsNaturalScrolling() ? -1.0f : 1.0f
+	bool RequestsNaturalScrolling() const { return m_naturalScroll; }
 	
 	void SetTextMode( bool enabled );
 	bool GetTextMode() const { return m_textMode; }
@@ -3710,6 +3724,7 @@ public:
 	float m_leftAnalogThreshold = 0.1f;
 	float m_rightAnalogThreshold = 0.1f;
 	bool m_gamepadRequiresFocus = true;
+	bool m_naturalScroll = false;
 	// Touch
 	ae::TouchArray m_touches;
 	ae::TouchArray m_touchesPrev;
@@ -19859,6 +19874,7 @@ void Input::Initialize( Window* window )
 	[nsWindow makeKeyAndOrderFront:nil]; // nil sender
 	[nsWindow orderFrontRegardless];
 	[GCController setShouldMonitorBackgroundEvents: YES];
+	m_naturalScroll = [[NSUserDefaults standardUserDefaults] boolForKey:@"com.apple.swipescrolldirection"];
 	[[NSApplication sharedApplication] run];
 #endif
 
@@ -19882,6 +19898,7 @@ void Input::Pump()
 	mousePrev = mouse;
 	mouse.movement = ae::Int2( 0 );
 	mouse.scroll = ae::Vec2( 0.0f );
+	mouse.scrollMomentum = ae::Vec2( 0.0f );
 	m_touchesPrev = m_touches;
 	for( ae::Touch& touch : m_touches )
 	{
@@ -19929,9 +19946,11 @@ void Input::Pump()
 					break;
 				case WM_MOUSEWHEEL:
 					mouse.scroll.y += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
+					mouse.scrollMomentum.y += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
 					break;
 				case WM_MOUSEHWHEEL:
 					mouse.scroll.x += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
+					mouse.scrollMomentum.x += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
 					break;
 				case WM_CHAR:
 				{
@@ -20069,9 +20088,16 @@ void Input::Pump()
 					if( cursorWithinWindow )
 					{
 						mouse.usingTouch = [event hasPreciseScrollingDeltas]; // @NOTE: Scroll is never NSEventSubtypeTouch
-						float mult = mouse.usingTouch ? m_timeStep.GetDt() : 1.0f;
-						mouse.scroll.x += event.scrollingDeltaX * mult;
-						mouse.scroll.y += event.scrollingDeltaY * mult;
+						const float flip = m_naturalScroll ? -1.0f : 1.0f;
+						const float dx = (float)event.scrollingDeltaX * flip;
+						const float dy = (float)event.scrollingDeltaY * flip;
+						if( event.momentumPhase == NSEventPhaseNone )
+						{
+							mouse.scroll.x += dx;
+							mouse.scroll.y += dy;
+						}
+						mouse.scrollMomentum.x += dx;
+						mouse.scrollMomentum.y += dy;
 					}
 					break;
 				default:
@@ -27134,7 +27160,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 
 	// Input
 	const ae::Vec2 movement = input ? ae::Vec2( input->mouse.movement ) : ae::Vec2( 0.0f );
-	const ae::Vec2 scroll = input ? input->mouse.scroll : ae::Vec2( 0.0f );
+	const ae::Vec2 scroll = input ? input->mouse.scrollMomentum : ae::Vec2( 0.0f );
 	const bool alt = input ? input->Get( ae::Key::LeftAlt ) : false;
 	const bool shift = input ? input->Get( ae::Key::LeftShift ) : false;
 	const bool control = input ? input->Get( ae::Key::LeftControl ) : false;
@@ -27252,7 +27278,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	// Don't zoom when scrolling with touch
 	if( !usingTouch )
 	{
-		m_dist += scroll.y * 2.5f * zoomSpeed; // Natural scroll dir to match pan
+		m_dist += scroll.y * 2.5f * zoomSpeed;
 	}
 	m_dist = ae::Clip( m_dist, m_min, m_max );
 
