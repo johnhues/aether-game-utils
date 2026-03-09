@@ -81,6 +81,33 @@ const char* kFragShader = R"(
 		
 	})";
 
+template< typename Fn >
+void UpdateResource( ae::FileSystem* fileSystem, const ae::File** _resourceFile, const Fn& fn )
+{
+	const ae::File* resourceFile = *_resourceFile;
+	if( !resourceFile || resourceFile->GetStatus() == ae::File::Status::Pending )
+	{
+		return;
+	}
+	else if( resourceFile->GetStatus() == ae::File::Status::Success && resourceFile->GetLength() )
+	{
+		if( fn() )
+		{
+			AE_INFO( "Successfully loaded resource file '#'", resourceFile->GetURL() );
+		}
+		else
+		{
+			AE_ERR( "Error parsing resource file '#'", resourceFile->GetURL() );
+		}
+	}
+	else
+	{
+		AE_ERR( "Could not access file '#'", resourceFile->GetURL() );
+	}
+	fileSystem->Destroy( resourceFile );
+	*_resourceFile = nullptr;
+}
+
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
@@ -120,55 +147,13 @@ int main()
 	shader.SetCulling( ae::Culling::CounterclockwiseFront );
 
 	ae::Texture2D texture;
-	{
-		ae::TargaFile targaFile = TAG_ALL;
-		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, "character.tga" );
-		AE_ASSERT( fileSize );
-		ae::Scratch< uint8_t > fileData( fileSize );
-		fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", fileData.Data(), fileData.Length() );
-		targaFile.Load( fileData.Data(), fileData.Length() );
-		texture.Initialize( targaFile.textureParams );
-	}
-	
 	ae::Skin skin = TAG_ALL;
 	ae::VertexBuffer vertexData;
 	Vertex* vertices = nullptr;
-	{
-		const char* fileName = "character.fbx";
-		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
-		AE_ASSERT_MSG( fileSize, "Could not load '#'", fileName );
-		ae::Scratch< uint8_t > fileData( fileSize );
-		if( !fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() ) )
-		{
-			AE_ERR( "Error reading fbx file: '#'", fileName );
-			return -1;
-		}
-		
-		ae::FbxLoader fbxLoader = TAG_ALL;
-		if( !fbxLoader.Initialize( fileData.Data(), fileData.Length() ) )
-		{
-			AE_ERR( "Error parsing fbx file: '#'", fileName );
-			return -1;
-		}
-		
-		ae::FbxLoaderParams params;
-		params.descriptor.vertexSize = sizeof(Vertex);
-		params.descriptor.indexSize = 4;
-		params.descriptor.posOffset = offsetof( Vertex, pos );
-		params.descriptor.normalOffset = offsetof( Vertex, normal );
-		params.descriptor.colorOffset = offsetof( Vertex, color );
-		params.descriptor.uvOffset = offsetof( Vertex, uv );
-		params.vertexData = &vertexData;
-		params.skin = &skin;
-		params.maxVerts = fbxLoader.GetMeshVertexCount( 0u );
-		vertices = ae::NewArray< Vertex >( TAG_ALL, params.maxVerts );
-		params.vertexOut = vertices;
-		if( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
-		{
-			AE_ERR( "Error loading fbx file data: '#'", fileName );
-			return -1;
-		}
-	}
+	const ae::File* tgaFile = fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", 2.5f );
+	const ae::File* fbxFile = fileSystem.Read( ae::FileSystem::Root::Data, "character.fbx", 2.5f );
+	AE_INFO( "Loading '#'", tgaFile->GetURL() );
+	AE_INFO( "Loading '#'", fbxFile->GetURL() );
 
 	ae::Skeleton currentPose = TAG_ALL;
 	ae::Map< uint32_t, ae::Vec3 > targets = TAG_ALL;
@@ -176,79 +161,20 @@ int main()
 	ae::Array< ae::IKConstraints > ikConstraints = TAG_ALL; // @TODO: Clean up. Currently not used
 	ae::Map< uint32_t, ae::IKRotationConstraint > rotationConstraints = TAG_ALL;
 	ae::Array< ae::IKDistanceConstraint > distanceConstraints = TAG_ALL;
-	const ae::Bone* headBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Head" );
-	const ae::Bone* neckBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Neck" );
-	const ae::Bone* hipsBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Hips" );
-	const ae::Bone* spineBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine" );
-	const ae::Bone* spine1Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine1" );
-	const ae::Bone* spine2Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine2" );
-	const ae::Bone* rightShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightShoulder" );
-	const ae::Bone* rightArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightArm" );
-	const ae::Bone* rightForearmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightForeArm" );
-	const ae::Bone* rightHandBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightHand" );
-	const ae::Bone* leftShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftShoulder" );
-	const ae::Bone* leftArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftArm" );
-	const ae::Bone* rightUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightUpLeg" );
-	const ae::Bone* leftUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftUpLeg" );
-	{
-		// Joint setup
-		ikConstraints.Reserve( skin.GetBindPose().GetBoneCount() );
-		for( uint32_t i = 0; i < skin.GetBindPose().GetBoneCount(); i++ )
-		{
-			ae::IKConstraints constraints;
-			const ae::Bone* bone = skin.GetBindPose().GetBoneByIndex( i );
-			if( strncmp( "QuickRigCharacter_Right", bone->name.c_str(), strlen("QuickRigCharacter_Right") ) == 0 )
-			{
-				constraints.twistAxis = ae::Axis::NegativeX;
-				constraints.horizontalAxis = ae::Axis::NegativeZ;
-				constraints.bendAxis = ae::Axis::Y;
-			}
-			else
-			{
-				constraints.twistAxis = ae::Axis::X;
-				constraints.horizontalAxis = ae::Axis::NegativeZ;
-				constraints.bendAxis = ae::Axis::NegativeY;
-			}
-			ikConstraints.Append( constraints );
-		}
-		// Rotation constraints
-		{
-			rotationConstraints.Set( rightArmBone->index, { .rotationLimits={ 0.23f, 0.23f, 0.23f, 0.23f } } );
-			rotationConstraints.Set( rightForearmBone->index, { .rotationLimits={ 1.5f, 0.23f, 0.23f, 1.5f } } );
-			rotationConstraints.Set( rightHandBone->index, { .rotationLimits={ 0.23f, 0.23f, 1.5f, 0.23f } } );
-		}
-		// Distance constraints
-		{
-			// Head
-			distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)rightShoulderBone->index, 0.85f, 1.15f } );
-			distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)leftShoulderBone->index, 0.85f, 1.15f } );
-			distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)rightArmBone->index, 0.85f, 1.15f } );
-			distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)leftArmBone->index, 0.85f, 1.15f } );
-			// Collarbone
-			distanceConstraints.Append( { (int32_t)rightShoulderBone->index, (int32_t)leftShoulderBone->index } );
-			distanceConstraints.Append( { (int32_t)rightArmBone->index, (int32_t)leftArmBone->index, 1.0f, 1.1f } );
-			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)rightArmBone->index, 1.0f, 1.25f } );
-			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)leftArmBone->index, 1.0f, 1.25f } );
-			// Spine
-			distanceConstraints.Append( { (int32_t)hipsBone->index, (int32_t)spine1Bone->index, 1.0f, 1.05f } );
-			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)spine2Bone->index, 1.0f, 1.05f } );
-			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)neckBone->index, 1.0f, 1.05f } );
-			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)headBone->index, 1.0f, 1.05f } );
-			// Torso
-			distanceConstraints.Append( { (int32_t)leftArmBone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.1f } );
-			distanceConstraints.Append( { (int32_t)rightArmBone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.1f } );
-			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)leftArmBone->index, 0.9f, 1.1f } );
-			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)rightArmBone->index, 0.9f, 1.1f } );
-			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.1f } );
-			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.1f } );
-			// Hips
-			distanceConstraints.Append( { (int32_t)rightUpLegBone->index, (int32_t)leftUpLegBone->index } );
-			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)rightUpLegBone->index , 1.0f, 1.2f} );
-			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)leftUpLegBone->index, 1.0f, 1.2f } );
-			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.0f } );
-			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.0f } );
-		}
-	}
+	const ae::Bone* headBone = nullptr;
+	const ae::Bone* neckBone = nullptr;
+	const ae::Bone* hipsBone = nullptr;
+	const ae::Bone* spineBone = nullptr;
+	const ae::Bone* spine1Bone = nullptr;
+	const ae::Bone* spine2Bone = nullptr;
+	const ae::Bone* rightShoulderBone = nullptr;
+	const ae::Bone* rightArmBone = nullptr;
+	const ae::Bone* rightForearmBone = nullptr;
+	const ae::Bone* rightHandBone = nullptr;
+	const ae::Bone* leftShoulderBone = nullptr;
+	const ae::Bone* leftArmBone = nullptr;
+	const ae::Bone* rightUpLegBone = nullptr;
+	const ae::Bone* leftUpLegBone = nullptr;
 
 	const ae::Matrix4 skeletonTransform = ae::Matrix4::RotationY( ae::Pi ) * ae::Matrix4::RotationX( ae::Pi * -0.5f );
 	const ae::Matrix4 testJoint0Bind = ae::Matrix4::Translation( -1.25f, 0.5f, 0.0f ) * ae::Matrix4::Scaling( 0.2f );
@@ -263,7 +189,6 @@ int main()
 		testJoint0 = testJoint0Bind;
 		testJoint1 = testJoint1Bind;
 	};
-	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
 	bool drawMesh = true;
@@ -282,7 +207,7 @@ int main()
 		One
 	};
 	TestJointId selTestJoint = TestJointId::None;
-	uint32_t selectedJointIndex = rightHandBone->index;
+	uint32_t selectedJointIndex = 0;
 	ae::IKConstraints testConstraints;
 	ae::IKRotationConstraint testRotationConstraints;
 	testConstraints.horizontalAxis = ae::Axis::NegativeY;
@@ -312,11 +237,131 @@ int main()
 		return GetSelectedTransform( true ).GetTranslation();
 	};
 	
+	auto UpdateResources = [&]()
+	{
+		UpdateResource( &fileSystem, &tgaFile, [&]()
+		{
+			ae::TargaFile targaFile = TAG_ALL;
+			if( targaFile.Load( tgaFile->GetData(), tgaFile->GetLength() ) )
+			{
+				texture.Initialize( targaFile.textureParams );
+				return true;
+			}
+			return false;
+		} );
+
+		UpdateResource( &fileSystem, &fbxFile, [&]()
+		{
+			ae::FbxLoader fbxLoader = TAG_ALL;
+			if( !fbxLoader.Initialize( fbxFile->GetData(), fbxFile->GetLength() ) )
+			{
+				return false;
+			}
+			ae::FbxLoaderParams params;
+			params.descriptor.vertexSize = sizeof(Vertex);
+			params.descriptor.indexSize = 4;
+			params.descriptor.posOffset = offsetof( Vertex, pos );
+			params.descriptor.normalOffset = offsetof( Vertex, normal );
+			params.descriptor.colorOffset = offsetof( Vertex, color );
+			params.descriptor.uvOffset = offsetof( Vertex, uv );
+			params.vertexData = &vertexData;
+			params.skin = &skin;
+			params.maxVerts = fbxLoader.GetMeshVertexCount( 0u );
+			vertices = ae::NewArray< Vertex >( TAG_ALL, params.maxVerts );
+			params.vertexOut = vertices;
+			if( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
+			{
+				return false;
+			}
+			headBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Head" );
+			neckBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Neck" );
+			hipsBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Hips" );
+			spineBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine" );
+			spine1Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine1" );
+			spine2Bone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_Spine2" );
+			rightShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightShoulder" );
+			rightArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightArm" );
+			rightForearmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightForeArm" );
+			rightHandBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightHand" );
+			leftShoulderBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftShoulder" );
+			leftArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftArm" );
+			rightUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightUpLeg" );
+			leftUpLegBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_LeftUpLeg" );
+			// Joint setup
+			ikConstraints.Reserve( skin.GetBindPose().GetBoneCount() );
+			for( uint32_t i = 0; i < skin.GetBindPose().GetBoneCount(); i++ )
+			{
+				ae::IKConstraints constraints;
+				const ae::Bone* bone = skin.GetBindPose().GetBoneByIndex( i );
+				if( strncmp( "QuickRigCharacter_Right", bone->name.c_str(), strlen("QuickRigCharacter_Right") ) == 0 )
+				{
+					constraints.twistAxis = ae::Axis::NegativeX;
+					constraints.horizontalAxis = ae::Axis::NegativeZ;
+					constraints.bendAxis = ae::Axis::Y;
+				}
+				else
+				{
+					constraints.twistAxis = ae::Axis::X;
+					constraints.horizontalAxis = ae::Axis::NegativeZ;
+					constraints.bendAxis = ae::Axis::NegativeY;
+				}
+				ikConstraints.Append( constraints );
+			}
+			// Rotation constraints
+			rotationConstraints.Set( rightArmBone->index, { .rotationLimits={ 0.23f, 0.23f, 0.23f, 0.23f } } );
+			rotationConstraints.Set( rightForearmBone->index, { .rotationLimits={ 1.5f, 0.23f, 0.23f, 1.5f } } );
+			rotationConstraints.Set( rightHandBone->index, { .rotationLimits={ 0.23f, 0.23f, 1.5f, 0.23f } } );
+			// Distance constraints
+			// Head
+			distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)rightShoulderBone->index, 0.85f, 1.15f } );
+			distanceConstraints.Append( { (int32_t)headBone->index, (int32_t)leftShoulderBone->index, 0.85f, 1.15f } );
+			distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)rightArmBone->index, 0.85f, 1.15f } );
+			distanceConstraints.Append( { (int32_t)neckBone->index, (int32_t)leftArmBone->index, 0.85f, 1.15f } );
+			// Collarbone
+			distanceConstraints.Append( { (int32_t)rightShoulderBone->index, (int32_t)leftShoulderBone->index } );
+			distanceConstraints.Append( { (int32_t)rightArmBone->index, (int32_t)leftArmBone->index, 1.0f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)rightArmBone->index, 1.0f, 1.25f } );
+			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)leftArmBone->index, 1.0f, 1.25f } );
+			// Spine
+			distanceConstraints.Append( { (int32_t)hipsBone->index, (int32_t)spine1Bone->index, 1.0f, 1.05f } );
+			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)spine2Bone->index, 1.0f, 1.05f } );
+			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)neckBone->index, 1.0f, 1.05f } );
+			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)headBone->index, 1.0f, 1.05f } );
+			// Torso
+			distanceConstraints.Append( { (int32_t)leftArmBone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)rightArmBone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)leftArmBone->index, 0.9f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)rightArmBone->index, 0.9f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.1f } );
+			distanceConstraints.Append( { (int32_t)spine2Bone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.1f } );
+			// Hips
+			distanceConstraints.Append( { (int32_t)rightUpLegBone->index, (int32_t)leftUpLegBone->index } );
+			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)rightUpLegBone->index , 1.0f, 1.2f} );
+			distanceConstraints.Append( { (int32_t)spineBone->index, (int32_t)leftUpLegBone->index, 1.0f, 1.2f } );
+			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)rightUpLegBone->index, 0.9f, 1.0f } );
+			distanceConstraints.Append( { (int32_t)spine1Bone->index, (int32_t)leftUpLegBone->index, 0.9f, 1.0f } );
+
+			selectedJointIndex = rightHandBone->index;
+			SetDefault();
+			return true;
+		} );
+
+		return fileSystem.GetFileCount();
+	};
 	AE_INFO( "Run" );
-	while( !input.quit )
+	auto Update = [&]()
 	{
 		const float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
 		input.Pump();
+
+		if( UpdateResources() )
+		{
+			render.Activate();
+			render.Clear( ae::Color::AetherBlack() );
+			render.Present();
+			timeStep.Tick();
+			return true;
+		}
 
 		ImGuiIO& io = ImGui::GetIO();
 		ui.NewFrame( &render, &input, dt );
@@ -658,7 +703,14 @@ int main()
 		ui.Render();
 		render.Present();
 		timeStep.Tick();
-	}
+		return !input.quit;
+	};
+
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
+#else
+	while( Update() ) {}
+#endif
 
 	AE_INFO( "Terminate" );
 	ae::Delete( vertices );

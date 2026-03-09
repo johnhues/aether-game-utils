@@ -112,65 +112,73 @@ int main()
 	shader.SetCulling( ae::Culling::CounterclockwiseFront );
 
 	ae::Texture2D texture;
-	{
-		ae::TargaFile targaFile = TAG_ALL;
-		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, "character.tga" );
-		AE_ASSERT( fileSize );
-		ae::Scratch< uint8_t > fileData( fileSize );
-		fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", fileData.Data(), fileData.Length() );
-		targaFile.Load( fileData.Data(), fileData.Length() );
-		texture.Initialize( targaFile.textureParams );
-	}
-	
 	ae::Skin skin = TAG_ALL;
 	ae::Animation anim = TAG_ALL;
 	ae::VertexBuffer vertexData;
 	Vertex* vertices = nullptr;
-	{
-		const char* fileName = "character.fbx";
-		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
-		AE_ASSERT_MSG( fileSize, "Could not load '#'", fileName );
-		ae::Scratch< uint8_t > fileData( fileSize );
-		if( !fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() ) )
-		{
-			AE_ERR( "Error reading fbx file: '#'", fileName );
-			return -1;
-		}
-		
-		ae::FbxLoader fbxLoader = TAG_ALL;
-		if( !fbxLoader.Initialize( fileData.Data(), fileData.Length() ) )
-		{
-			AE_ERR( "Error parsing fbx file: '#'", fileName );
-			return -1;
-		}
-		
-		ae::FbxLoaderParams params;
-		params.descriptor.vertexSize = sizeof(Vertex);
-		params.descriptor.indexSize = 4;
-		params.descriptor.posOffset = offsetof( Vertex, pos );
-		params.descriptor.normalOffset = offsetof( Vertex, normal );
-		params.descriptor.colorOffset = offsetof( Vertex, color );
-		params.descriptor.uvOffset = offsetof( Vertex, uv );
-		params.vertexData = &vertexData;
-		params.skin = &skin;
-		params.anim = &anim;
-		params.maxVerts = fbxLoader.GetMeshVertexCount( 0u );
-		vertices = ae::NewArray< Vertex >( TAG_ALL, params.maxVerts );
-		params.vertexOut = vertices;
-		if( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
-		{
-			AE_ERR( "Error loading fbx file data: '#'", fileName );
-			return -1;
-		}
-	}
-	anim.loop = true;
+	bool initialized = false;
+	const ae::File* tgaFile = fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", 2.5f );
+	const ae::File* fbxFile = fileSystem.Read( ae::FileSystem::Root::Data, "character.fbx", 2.5f );
+	AE_INFO( "Loading '#' and '#'", tgaFile->GetURL(), fbxFile->GetURL() );
 	
 	double animTime = 0.0;
 	
 	AE_INFO( "Run" );
-	while( !input.quit )
+	auto Update = [&]()
 	{
 		input.Pump();
+
+		if( tgaFile && tgaFile->GetStatus() != ae::File::Status::Pending
+			&& fbxFile && fbxFile->GetStatus() != ae::File::Status::Pending )
+		{
+			if( tgaFile->GetLength() )
+			{
+				ae::TargaFile targaFile = TAG_ALL;
+				targaFile.Load( tgaFile->GetData(), tgaFile->GetLength() );
+				texture.Initialize( targaFile.textureParams );
+			}
+			else { AE_ERR( "Error reading file '#'", tgaFile->GetURL() ); }
+			fileSystem.Destroy( tgaFile ); tgaFile = nullptr;
+
+			if( fbxFile->GetLength() )
+			{
+				ae::FbxLoader fbxLoader = TAG_ALL;
+				if( fbxLoader.Initialize( fbxFile->GetData(), fbxFile->GetLength() ) )
+				{
+					ae::FbxLoaderParams params;
+					params.descriptor.vertexSize = sizeof(Vertex);
+					params.descriptor.indexSize = 4;
+					params.descriptor.posOffset = offsetof( Vertex, pos );
+					params.descriptor.normalOffset = offsetof( Vertex, normal );
+					params.descriptor.colorOffset = offsetof( Vertex, color );
+					params.descriptor.uvOffset = offsetof( Vertex, uv );
+					params.vertexData = &vertexData;
+					params.skin = &skin;
+					params.anim = &anim;
+					params.maxVerts = fbxLoader.GetMeshVertexCount( 0u );
+					vertices = ae::NewArray< Vertex >( TAG_ALL, params.maxVerts );
+					params.vertexOut = vertices;
+					if( fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
+					{
+						anim.loop = true;
+						initialized = true;
+					}
+					else { AE_ERR( "Error loading fbx data: '#'", fbxFile->GetURL() ); }
+				}
+				else { AE_ERR( "Error parsing fbx file: '#'", fbxFile->GetURL() ); }
+			}
+			else { AE_ERR( "Error reading file '#'", fbxFile->GetURL() ); }
+			fileSystem.Destroy( fbxFile ); fbxFile = nullptr;
+		}
+		if( !initialized )
+		{
+			render.Activate();
+			render.Clear( ae::Color::PicoDarkPurple() );
+			render.Present();
+			timeStep.Tick();
+			return true;
+		}
+
 		camera.Update( &input, timeStep.GetDt() );
 		
 		animTime += timeStep.GetDt() * 0.01;
@@ -270,7 +278,14 @@ int main()
 		debugLines.Render( worldToProj );
 		render.Present();
 		timeStep.Tick();
-	}
+		return !input.quit;
+	};
+
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
+#else
+	while( Update() ) {}
+#endif
 
 	AE_INFO( "Terminate" );
 	ae::Delete( vertices );

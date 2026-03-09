@@ -43,6 +43,16 @@ static ae::Matrix4 ofbxToAe( const ofbx::Matrix& m )
 	return result;
 }
 
+static ae::Matrix4 ofbxToAe( const ofbx::DMatrix& m )
+{
+	ae::Matrix4 result;
+	for( uint32_t i = 0; i < 16; i++ )
+	{
+		result.data[ i ] = (float)m.m[ i ];
+	}
+	return result;
+}
+
 static ae::Matrix4 getBindPoseMatrix( const ofbx::Skin* skin, const ofbx::Object* node )
 {
 	if(!skin) return ofbxToAe( node->getGlobalTransform() );
@@ -88,7 +98,7 @@ bool FbxLoader::Initialize( const void* fileData, uint32_t fileDataLen )
 {
 	Terminate();
 	m_state = ae::New< FbxLoaderImpl >( m_tag, m_tag );
-	m_state->scene = ofbx::load( (ofbx::u8*)fileData, fileDataLen, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE );
+	m_state->scene = ofbx::load( (ofbx::u8*)fileData, fileDataLen, (ofbx::u16)0 );
 	if( !m_state->scene )
 	{
 		Terminate();
@@ -165,12 +175,12 @@ const char* FbxLoader::GetMeshName( uint32_t idx ) const
 
 uint32_t FbxLoader::GetMeshVertexCount( uint32_t idx ) const
 {
-	return m_state ? m_state->meshes.GetValue( idx ).mesh->getGeometry()->getVertexCount() : 0;
+	return m_state ? (uint32_t)m_state->meshes.GetValue( idx ).mesh->getGeometry()->getGeometryData().getPositions().values_count : 0;
 }
 
 uint32_t FbxLoader::GetMeshIndexCount( uint32_t idx ) const
 {
-	return m_state ? m_state->meshes.GetValue( idx ).mesh->getGeometry()->getIndexCount() : 0;
+	return m_state ? (uint32_t)m_state->meshes.GetValue( idx ).mesh->getGeometry()->getGeometryData().getPositions().count : 0;
 }
 
 uint32_t FbxLoader::GetMeshBoneCount( uint32_t idx ) const
@@ -184,7 +194,7 @@ uint32_t FbxLoader::GetMeshVertexCount( const char* name ) const
 	{
 		if( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
 		{
-			return info->mesh->getGeometry()->getVertexCount();
+			return (uint32_t)info->mesh->getGeometry()->getGeometryData().getPositions().values_count;
 		}
 	}
 	return 0;
@@ -196,7 +206,7 @@ uint32_t FbxLoader::GetMeshIndexCount( const char* name ) const
 	{
 		if( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
 		{
-			return info->mesh->getGeometry()->getIndexCount();
+			return (uint32_t)info->mesh->getGeometry()->getGeometryData().getPositions().count;
 		}
 	}
 	return 0;
@@ -233,13 +243,13 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	const ofbx::Geometry* geo = mesh->getGeometry();
 	const ae::Matrix4 localToWorld = ofbxToAe( mesh->getGlobalTransform() );
 	const ae::Matrix4 normalMatrix = localToWorld.GetNormalMatrix();
-	const uint32_t vertexCount = geo->getVertexCount();
-	const uint32_t indexCount = geo->getIndexCount();
-	const ofbx::Vec3* meshVerts = geo->getVertices();
-	const ofbx::Vec3* meshNormals = geo->getNormals();
-	const ofbx::Vec4* meshColors = geo->getColors();
-	const ofbx::Vec2* meshUvs = geo->getUVs();
-	const int32_t* meshIndices = geo->getFaceIndices();
+	const ofbx::GeometryData& geomData = geo->getGeometryData();
+	const ofbx::Vec3Attributes meshPositions = geomData.getPositions();
+	const ofbx::Vec3Attributes meshNormalsAttr = geomData.getNormals();
+	const ofbx::Vec4Attributes meshColorsAttr = geomData.getColors();
+	const ofbx::Vec2Attributes meshUvsAttr = geomData.getUVs();
+	const uint32_t vertexCount = (uint32_t)meshPositions.values_count;
+	const uint32_t indexCount = (uint32_t)meshPositions.count;
 	if( params.vertexOut && params.maxVerts < vertexCount ) { return false; }
 	if( params.indexOut && params.maxIndex < indexCount ) { return false; }
 	const ofbx::Skin* ofbxSkin = info->mesh->getGeometry()->getSkin();
@@ -288,17 +298,15 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	
 	for( uint32_t j = 0; j < vertexCount; j++ )
 	{
-		ofbx::Vec3 p0 = meshVerts[ j ];
+		ofbx::Vec3 p0 = meshPositions.values[ j ];
 		ae::Vec4 p = localToWorld * ae::Vec4( p0.x, p0.y, p0.z, 1.0f );
-		ae::Color color = meshColors ? ae::Color::SRGBA( (float)meshColors[ j ].x, (float)meshColors[ j ].y, (float)meshColors[ j ].z, (float)meshColors[ j ].w ) : ae::Color::White();
-		ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
 		
 		uint8_t vertex[ 128 ];
 		AE_ASSERT( params.descriptor.vertexSize <= sizeof(vertex) );
 		params.descriptor.SetPosition( vertex, 0, p );
 		params.descriptor.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
-		params.descriptor.SetColor( vertex, 0, color.GetLinearRGBA() );
-		params.descriptor.SetUV( vertex, 0, uv );
+		params.descriptor.SetColor( vertex, 0, ae::Color::White().GetLinearRGBA() );
+		params.descriptor.SetUV( vertex, 0, ae::Vec2( 0.0f ) );
 		vertexBuffer.AppendArray( vertex, params.descriptor.vertexSize );
 		
 		skinVerts[ j ].position = p.GetXYZ();
@@ -306,15 +314,28 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	
 	for( uint32_t j = 0; j < indexCount; j++ )
 	{
-		int32_t index = ( meshIndices[ j ] < 0 ) ? ( -meshIndices[ j ] - 1 ) : meshIndices[ j ];
-		AE_ASSERT( index < vertexCount );
+		int32_t index = meshPositions.indices ? meshPositions.indices[ j ] : (int32_t)j;
+		AE_ASSERT( index < (int32_t)vertexCount );
 		indices.Append( index );
 		
-		ofbx::Vec3 n = meshNormals[ j ];
-		ae::Vec4 normal = ( normalMatrix * ae::Vec4( n.x, n.y, n.z, 0.0f ) ).SafeNormalizeCopy();
-		params.descriptor.SetNormal( vertexBuffer.Data(), index, normal );
-		
-		skinVerts[ index ].normal = normal.GetXYZ();
+		if( meshNormalsAttr.values )
+		{
+			ofbx::Vec3 n = meshNormalsAttr.get( j );
+			ae::Vec4 normal = ( normalMatrix * ae::Vec4( n.x, n.y, n.z, 0.0f ) ).SafeNormalizeCopy();
+			params.descriptor.SetNormal( vertexBuffer.Data(), index, normal );
+			skinVerts[ index ].normal = normal.GetXYZ();
+		}
+		if( meshColorsAttr.values )
+		{
+			ofbx::Vec4 c = meshColorsAttr.get( j );
+			ae::Color color = ae::Color::SRGBA( (float)c.x, (float)c.y, (float)c.z, (float)c.w );
+			params.descriptor.SetColor( vertexBuffer.Data(), index, color.GetLinearRGBA() );
+		}
+		if( meshUvsAttr.values )
+		{
+			ofbx::Vec2 uv0 = meshUvsAttr.get( j );
+			params.descriptor.SetUV( vertexBuffer.Data(), index, ae::Vec2( uv0.x, uv0.y ) );
+		}
 	}
 	
 	// Skin
@@ -456,9 +477,9 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 						// Subtract 1 from sample count so last frame doesn't count towards final length
 						// ie. A 2 second animation playing at 2 frames per second should have 5 frames, at times: 0, 0.5, 1.0, 1.5, 2
 						float t = ( sampleCount > 1 ) ? startTime + ( j / ( sampleCount - 1.0f ) ) * params.anim->duration : 0.0f;
-						ofbx::Vec3 posFrame = { 0.0, 0.0, 0.0 };
-						ofbx::Vec3 rotFrame = { 0.0, 0.0, 0.0 };
-						ofbx::Vec3 scaleFrame = { 1.0, 1.0, 1.0 };
+						ofbx::DVec3 posFrame = { 0.0, 0.0, 0.0 };
+						ofbx::DVec3 rotFrame = { 0.0, 0.0, 0.0 };
+						ofbx::DVec3 scaleFrame = { 1.0, 1.0, 1.0 };
 						if( tCurveNode ) { posFrame = tCurveNode->getNodeLocalTransform( t ); }
 						if( rCurveNode ) { rotFrame = rCurveNode->getNodeLocalTransform( t ); }
 						if( sCurveNode ) { scaleFrame = sCurveNode->getNodeLocalTransform( t ); }
