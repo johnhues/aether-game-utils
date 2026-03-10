@@ -1654,7 +1654,9 @@ TEST_CASE( "ClassType hierarchy and DataPointer operations", "[aeMeta]" )
 
 	// GetId() equals FNV1a-32 hash of the registered type name
 	REQUIRE( typeSomeClass->GetId() ==
-		ae::Hash32().HashString( typeSomeClass->GetName() ).Get() );
+		ae::TypeId( ae::Hash32().HashString( typeSomeClass->GetName() ).Get() ) );
+	// GetId() matches GetTypeIdFromName()
+	REQUIRE( typeSomeClass->GetId() == ae::GetTypeIdFromName( typeSomeClass->GetName() ) );
 
 	// GetParentTypeName for SomeClass is "ae::Object"
 	REQUIRE( ae::Str32( typeSomeClass->GetParentTypeName() ) == "ae::Object" );

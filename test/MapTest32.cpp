@@ -85,6 +85,10 @@ TEST_CASE( "GetHash() template function hashes values correctly", "[ae::HashMap3
 	REQUIRE( ae::GetHash32( ae::Int3( 1, 2, 3 ) ) == 316 );
 	REQUIRE( ae::GetHash32( ae::Int3( -1, 0, 1 ) ) == 19 );
 	//REQUIRE( ae::Vec3( 0.0f ) ) == 0 ); // Should fail to link
+	// TypeId: GetHash32 returns its underlying uint32_t value
+	ae::TypeId tid( "SomeType" );
+	REQUIRE( ae::GetHash32( tid ) == (uint32_t)tid );
+	REQUIRE( ae::GetHash32( ae::kInvalidTypeId ) == 0u );
 }
 
 #include "MapTest.h"

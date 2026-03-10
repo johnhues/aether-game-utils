@@ -1684,7 +1684,6 @@ template<> uint64_t GetHash64( char* const& key );
 // ae::Hash64 class
 //! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
 //! hash to zero.
-//@TODO: constexpr
 //------------------------------------------------------------------------------
 template< typename U >
 class Hash
@@ -1692,19 +1691,19 @@ class Hash
 public:
 	using UInt = U;
 
-	Hash();
-	explicit Hash( U initialValue );
+	constexpr Hash();
+	constexpr explicit Hash( U initialValue );
 	
-	bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
-	bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
+	constexpr bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
+	constexpr bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
 
-	Hash& HashString( const char* str ); // @TODO: constexpr
+	constexpr Hash& HashString( const char* str );
 	Hash& HashData( const void* data, uint32_t length );
 	template< typename T, uint32_t N > Hash& HashType( const T (&array)[ N ] );
 	template< typename T > Hash& HashType( const T& v );
 	
-	void Set( U hash );
-	U Get() const;
+	constexpr void Set( U hash );
+	constexpr U Get() const;
 	
 private:
 	template< typename T > Hash( T initialValue ) = delete;
@@ -6236,13 +6235,28 @@ private:
 //------------------------------------------------------------------------------
 // Meta system
 //------------------------------------------------------------------------------
-using TypeId = uint32_t;
+struct TypeId
+{
+	constexpr TypeId() : m_id( 0 ) {}
+	constexpr explicit TypeId( uint32_t id ) : m_id( id ) {}
+	template< uint32_t N >
+	constexpr TypeId( const char (&name)[ N ] )
+		: m_id( name[ 0 ] ? Hash32().HashString( name ).Get() : 0 ) {}
+
+	constexpr operator uint32_t() const { return m_id; }
+	constexpr bool operator==( TypeId o ) const { return m_id == o.m_id; }
+	constexpr bool operator!=( TypeId o ) const { return m_id != o.m_id; }
+	constexpr bool operator<( TypeId o ) const { return m_id < o.m_id; }
+
+private:
+	uint32_t m_id;
+};
 using TypeName = ae::Str64;
 class Type;
 class ClassType;
 class ClassVar;
 class EnumType;
-const TypeId kInvalidTypeId = 0;
+constexpr TypeId kInvalidTypeId;
 
 //------------------------------------------------------------------------------
 // Meta limit defines
@@ -6351,9 +6365,8 @@ template< typename T > const ae::ClassType* GetClassType();
 const class ae::EnumType* GetEnumType( const char* enumName );
 //! Get a registered ae::TypeId from an ae::Object
 ae::TypeId GetObjectTypeId( const ae::Object* obj );
-//! Get a registered ae::TypeId from a type name
-//@TODO: Constexpr
-ae::TypeId GetTypeIdFromName( const char* name );
+//! Get a registered ae::TypeId from a type name. Can be evaluated at compile time when given a string literal.
+constexpr ae::TypeId GetTypeIdFromName( const char* name );
 //! Returns an integer id for the given type, which ignores const, pointer, and
 //! reference qualifiers.
 template< typename T > ae::TypeId GetTypeIdWithoutQualifiers();
@@ -9799,6 +9812,7 @@ template<> inline uint32_t GetHash32( char* const& value ) { return ae::Hash32()
 template< uint32_t N > inline uint32_t GetHash32( const char (&value)[ N ] ) { return ae::Hash32().HashString( value ).Get(); }
 template<> inline uint32_t GetHash32( const std::string& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
 template<> inline uint32_t GetHash32( const ae::Hash32& value ) { return value.Get(); }
+template<> inline uint32_t GetHash32( const ae::TypeId& value ) { return (uint32_t)value; }
 template< typename T > inline uint32_t GetHash32( T* const& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
 template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
 
@@ -9875,7 +9889,7 @@ U GetHash( const T& v )
 // ae::Hash templated member functions
 //------------------------------------------------------------------------------
 template< typename U >
-Hash< U >::Hash()
+constexpr Hash< U >::Hash()
 {
 	if constexpr( sizeof(U) == 4 )
 	{
@@ -9892,7 +9906,7 @@ Hash< U >::Hash()
 }
 
 template< typename U >
-Hash< U >::Hash( U initialValue )
+constexpr Hash< U >::Hash( U initialValue )
 {
 	m_hash = initialValue;
 }
@@ -9930,9 +9944,8 @@ Hash< U >& Hash< U >::HashType( const T& v )
 }
 
 template< typename U >
-Hash< U >& Hash< U >::HashString( const char* str )
+constexpr Hash< U >& Hash< U >::HashString( const char* str )
 {
-	// @TODO: constexpr
 	while( *str )
 	{
 		m_hash = m_hash ^ str[ 0 ];
@@ -9957,13 +9970,13 @@ Hash< U >& Hash< U >::HashData( const void* _data, uint32_t length )
 }
 
 template< typename U >
-void Hash< U >::Set( U hash )
+constexpr void Hash< U >::Set( U hash )
 {
 	m_hash = hash;
 }
 
 template< typename U >
-U Hash< U >::Get() const
+constexpr U Hash< U >::Get() const
 {
 	return m_hash;
 }
@@ -13691,6 +13704,11 @@ template< typename T > struct TypeT
 	static ae::Type* Get( uint32_t _i = 0 ) { return ae::FindMetaRegistrationFor< std::remove_const_t< T > >(); }
 };
 
+constexpr ae::TypeId GetTypeIdFromName( const char* name )
+{
+	return ae::TypeId( name[ 0 ] ? ae::Hash32().HashString( name ).Get() : 0u );
+}
+
 template< typename T > ae::TypeId GetTypeIdWithoutQualifiers()
 {
 	return ae::GetTypeIdWithQualifiers< ae::RemoveTypeQualifiers< T > >();
@@ -14619,7 +14637,7 @@ const T* ae::AttributeList::TryGet( uint32_t idx ) const
 	else
 	{
 		static_assert( std::is_final_v< T >, "ae::AttributeList::TryGet() does not support intermediate levels of inheritance." );
-		const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() ); // @TODO: Compile time
+		static const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() );
 		const _Info* info = m_attributeTypes.TryGet( attributeType );
 		if( info && idx < info->count )
 		{
@@ -14641,7 +14659,7 @@ uint32_t ae::AttributeList::GetCount() const
 	else
 	{
 		static_assert( std::is_final_v< T >, "ae::AttributeList::TryGet() does not support intermediate levels of inheritance." );
-		const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() ); // @TODO: Compile time
+		static const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() );
 		const _Info* info = m_attributeTypes.TryGet( attributeType );
 		return info ? info->count : 0;
 	}
@@ -31799,13 +31817,6 @@ ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 		return obj->_metaTypeId;
 	}
 	return ae::kInvalidTypeId;
-}
-
-ae::TypeId ae::GetTypeIdFromName( const char* name )
-{
-	// @TODO: constexpr
-	// @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
-	return name[ 0 ] ? ae::Hash32().HashString( name ).Get() : ae::kInvalidTypeId;
 }
 
 //------------------------------------------------------------------------------
