@@ -1,0 +1,13 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Run Emscripten Test",
+			"type": "node",
+			"request": "launch",
+			"program": "${workspaceFolder}/build_em/test/${command:cmake.buildType}/test.js",
+			"cwd": "${workspaceFolder}/build_em",
+			"preLaunchTask": "Build Emscripten Test"
+		}
+	]
+}
