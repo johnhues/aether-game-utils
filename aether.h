@@ -1118,6 +1118,7 @@ public:
 	explicit Triangle( const Vec3* p012 );
 
 	bool IntersectRay( Vec3 source, Vec3 ray, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
+	bool SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
 	Vec3 ClosestPoint( Vec3 p ) const;
 	Vec3 CounterClockwiseNormal() const;
 	Vec3 ClockwiseNormal() const;
@@ -17208,6 +17209,223 @@ bool Triangle::IntersectRay( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Ve
 	if( tOut )
 	{
 		*tOut = t;
+	}
+	return true;
+}
+
+bool Triangle::SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut, Vec3* normalOut, float* tOut ) const
+{
+	if( !ccw && !cw )
+	{
+		return false;
+	}
+
+	const ae::Vec3 edge1 = vertices[ 1 ] - vertices[ 0 ];
+	const ae::Vec3 edge2 = vertices[ 2 ] - vertices[ 0 ];
+	const ae::Vec3 triNormal = edge1.Cross( edge2 ).SafeNormalizeCopy();
+	// Degenerate triangle
+	if( triNormal.LengthSquared() < 0.5f )
+	{
+		return false;
+	}
+
+	const float epsilon = 1e-8f;
+	float bestT = 2.0f; // Beyond [0,1], i.e. no hit yet
+	ae::Vec3 bestHit, bestNormal;
+
+	//------------------------------------------------------------------------------
+	// 1. Face hit: sphere center reaches plane at distance +/-radius from triangle
+	//------------------------------------------------------------------------------
+	const float dist = triNormal.Dot( source - vertices[ 0 ] );
+	const float rate = triNormal.Dot( ray );
+
+	auto tryFaceHit = [&]( float targetDist, ae::Vec3 faceNormal )
+	{
+		if( ae::Abs( rate ) < epsilon )
+		{
+			return;
+		}
+		const float t = ( targetDist - dist ) / rate;
+		if( t < 0.0f || t > 1.0f || t >= bestT )
+		{
+			return;
+		}
+		// Projection of sphere center onto triangle plane at time t
+		const ae::Vec3 planeHit = source + ray * t - faceNormal * radius;
+		// Barycentric test: is planeHit inside the triangle?
+		const ae::Vec3 toHit = planeHit - vertices[ 0 ];
+		const float d00 = edge1.Dot( edge1 );
+		const float d01 = edge1.Dot( edge2 );
+		const float d11 = edge2.Dot( edge2 );
+		const float denom = d00 * d11 - d01 * d01;
+		if( ae::Abs( denom ) < epsilon )
+		{
+			return;
+		}
+		const float invDenom = 1.0f / denom;
+		const float u = ( d11 * toHit.Dot( edge1 ) - d01 * toHit.Dot( edge2 ) ) * invDenom;
+		const float v = ( d00 * toHit.Dot( edge2 ) - d01 * toHit.Dot( edge1 ) ) * invDenom;
+		if( u >= 0.0f && v >= 0.0f && u + v <= 1.0f )
+		{
+			bestT = t;
+			bestHit = planeHit;
+			bestNormal = faceNormal;
+		}
+	};
+
+	if( ccw && rate < -epsilon )
+	{
+		tryFaceHit( radius, triNormal ); // Sphere approaches from CCW (front) side
+	}
+	if( cw && rate > epsilon )
+	{
+		tryFaceHit( -radius, -triNormal ); // Sphere approaches from CW (back) side
+	}
+
+	//------------------------------------------------------------------------------
+	// 2. Edge hits: sphere center at distance radius from each infinite edge line
+	//------------------------------------------------------------------------------
+	auto tryEdgeHit = [&]( ae::Vec3 A, ae::Vec3 B )
+	{
+		const ae::Vec3 edgeVec = B - A;
+		const float edgeLen = edgeVec.Length();
+		if( edgeLen < epsilon )
+		{
+			return;
+		}
+		const ae::Vec3 edgeDir = edgeVec / edgeLen;
+
+		// Decompose ray and (source-A) into components perpendicular to the edge
+		const ae::Vec3 w = source - A;
+		const ae::Vec3 dPerp = ray - edgeDir * ray.Dot( edgeDir );
+		const ae::Vec3 wPerp = w - edgeDir * w.Dot( edgeDir );
+
+		const float a = dPerp.Dot( dPerp );
+		if( a < epsilon )
+		{
+			return; // Ray parallel to edge
+		}
+		const float b = 2.0f * wPerp.Dot( dPerp );
+		const float c = wPerp.Dot( wPerp ) - radius * radius;
+		const float discr = b * b - 4.0f * a * c;
+		if( discr < 0.0f )
+		{
+			return; // No intersection
+		}
+
+		const float sqrtDiscr = sqrtf( discr );
+		float t = ( -b - sqrtDiscr ) / ( 2.0f * a );
+		if( t < 0.0f )
+		{
+			t = ( -b + sqrtDiscr ) / ( 2.0f * a ); // Started inside, use exit point
+		}
+		if( t < 0.0f || t > 1.0f || t >= bestT )
+		{
+			return;
+		}
+
+		// Check that the closest point on the edge is within the segment [A, B]
+		const ae::Vec3 spherePos = source + ray * t;
+		const float s = ( spherePos - A ).Dot( edgeDir );
+		if( s < 0.0f || s > edgeLen )
+		{
+			return;
+		}
+
+		const ae::Vec3 edgePoint = A + edgeDir * s;
+		const ae::Vec3 contactNormal = ( spherePos - edgePoint ).SafeNormalizeCopy();
+
+		// Winding filter: contact normal must face the allowed side(s)
+		const float nDot = triNormal.Dot( contactNormal );
+		if( ccw && !cw && nDot < 0.0f )
+		{
+			return;
+		}
+		if( cw && !ccw && nDot > 0.0f )
+		{
+			return;
+		}
+
+		bestT = t;
+		bestHit = edgePoint;
+		bestNormal = contactNormal;
+	};
+
+	tryEdgeHit( vertices[ 0 ], vertices[ 1 ] );
+	tryEdgeHit( vertices[ 1 ], vertices[ 2 ] );
+	tryEdgeHit( vertices[ 2 ], vertices[ 0 ] );
+
+	//------------------------------------------------------------------------------
+	// 3. Vertex hits: sphere center at distance radius from each vertex
+	//------------------------------------------------------------------------------
+	auto tryVertexHit = [&]( ae::Vec3 V )
+	{
+		const ae::Vec3 w = source - V;
+		const float a = ray.Dot( ray );
+		if( a < epsilon )
+		{
+			return;
+		}
+		const float b = 2.0f * w.Dot( ray );
+		const float c = w.Dot( w ) - radius * radius;
+		const float discr = b * b - 4.0f * a * c;
+		if( discr < 0.0f )
+		{
+			return;
+		}
+
+		const float sqrtDiscr = sqrtf( discr );
+		float t = ( -b - sqrtDiscr ) / ( 2.0f * a );
+		if( t < 0.0f )
+		{
+			t = ( -b + sqrtDiscr ) / ( 2.0f * a ); // Started inside, use exit point
+		}
+		if( t < 0.0f || t > 1.0f || t >= bestT )
+		{
+			return;
+		}
+
+		const ae::Vec3 spherePos = source + ray * t;
+		const ae::Vec3 contactNormal = ( spherePos - V ).SafeNormalizeCopy();
+
+		// Winding filter
+		const float nDot = triNormal.Dot( contactNormal );
+		if( ccw && !cw && nDot < 0.0f )
+		{
+			return;
+		}
+		if( cw && !ccw && nDot > 0.0f )
+		{
+			return;
+		}
+
+		bestT = t;
+		bestHit = V;
+		bestNormal = contactNormal;
+	};
+
+	tryVertexHit( vertices[ 0 ] );
+	tryVertexHit( vertices[ 1 ] );
+	tryVertexHit( vertices[ 2 ] );
+
+	//------------------------------------------------------------------------------
+	// Return earliest hit
+	//------------------------------------------------------------------------------
+	if( bestT > 1.0f )
+	{
+		return false;
+	}
+	if( hitOut )
+	{
+		*hitOut = bestHit;
+	}
+	if( normalOut )
+	{
+		*normalOut = bestNormal;
+	}
+	if( tOut )
+	{
+		*tOut = bestT;
 	}
 	return true;
 }

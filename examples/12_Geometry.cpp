@@ -233,7 +233,7 @@ int main()
 		{
 			currentTest++;
 		}
-		currentTest = ae::Mod( currentTest, 11 );
+		currentTest = ae::Mod( currentTest, 12 );
 
 		// Geometry calculations / rendering
 		switch( currentTest )
@@ -887,6 +887,49 @@ int main()
 
 				const ae::RaycastParams params = { .source = raySource, .ray = ray };
 				drawRaycast( params, ae::Color::PicoPink() );
+				break;
+			}
+			case 11:
+			{
+				infoText.Append( "Triangle-SphereCast\n" );
+				doRay( true );
+				infoText.Append( "Radius: 3-4\n" );
+
+				static float s_triangleScale = 1.0f;
+				ae::Vec3 triangle[] =
+				{
+					ae::Vec3( 0.0f, -1.0f, -1.0f ) * s_triangleScale,
+					ae::Vec3( 0.0f, 1.0f, -1.0f ) * s_triangleScale,
+					ae::Vec3( 0.0f, 0.0f, 1.0f ) * s_triangleScale,
+				};
+				ae::Vec3 triangleCenter = ( triangle[ 0 ] + triangle[ 1 ] + triangle[ 2 ] ) / 3.0f;
+				ae::Vec3 normal = ( triangle[ 1 ] - triangle[ 0 ] ).Cross( triangle[ 2 ] - triangle[ 0 ] );
+				normal.SafeNormalize();
+				debug.AddLine( triangle[ 0 ], triangle[ 1 ], ae::Color::Red() );
+				debug.AddLine( triangle[ 1 ], triangle[ 2 ], ae::Color::Red() );
+				debug.AddLine( triangle[ 2 ], triangle[ 0 ], ae::Color::Red() );
+				debug.AddLine( triangleCenter, triangleCenter + normal, ae::Color::Red() );
+
+				static float r = 0.5f;
+				if( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
+				if( input.Get( ae::Key::Num4 ) ) r += 0.016f;
+				r = ae::Clip( r, 0.01f, 8.0f );
+
+				bool ccw = true;
+				bool cw = false;
+
+				ae::Vec3 p, n;
+				float t;
+				if( ae::Triangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ] ).SphereCast( raySource, ray, r, ccw, cw, &p, &n, &t ) )
+				{
+					debug.AddSphere( raySource + ray * t, r, ae::Color::Green(), 16 );
+					debug.AddSphere( p, 0.05f, ae::Color::Green(), 8 );
+					debug.AddLine( p, p + n, ae::Color::Green() );
+				}
+				else
+				{
+					debug.AddSphere( raySource + ray, r, ae::Color::Red(), 16 );
+				}
 				break;
 			}
 			default:
