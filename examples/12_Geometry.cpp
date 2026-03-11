@@ -31,6 +31,36 @@
 const ae::Tag TAG_EXAMPLE = "example";
 
 //------------------------------------------------------------------------------
+// Helpers
+//------------------------------------------------------------------------------
+template< typename Fn >
+void UpdateResource( ae::FileSystem* fileSystem, const ae::File** _resourceFile, const Fn& fn )
+{
+	const ae::File* resourceFile = *_resourceFile;
+	if( !resourceFile || resourceFile->GetStatus() == ae::File::Status::Pending )
+	{
+		return;
+	}
+	else if( resourceFile->GetStatus() == ae::File::Status::Success && resourceFile->GetLength() )
+	{
+		if( fn() )
+		{
+			AE_INFO( "Successfully loaded resource file '#'", resourceFile->GetURL() );
+		}
+		else
+		{
+			AE_ERR( "Error parsing resource file '#'", resourceFile->GetURL() );
+		}
+	}
+	else
+	{
+		AE_ERR( "Could not access file '#'", resourceFile->GetURL() );
+	}
+	fileSystem->Destroy( resourceFile );
+	*_resourceFile = nullptr;
+}
+
+//------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
 int main()
@@ -57,16 +87,8 @@ int main()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	fileSystem.Initialize( "data", "ae", "geometry" );
 	debug.Initialize( 2048 );
-	{
-		const char* fileName = "font.tga";
-		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
-		AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
-		ae::Scratch< uint8_t > fileBuffer( fileSize );
-		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-		ae::TargaFile targa = TAG_EXAMPLE;
-		targa.Load( fileBuffer.Data(), fileSize );
-		fontTexture.Initialize( targa.textureParams );
-	}
+	const ae::File* fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
+	AE_INFO( "Loading '#'", fontFile->GetURL() );
 	meshShader.Initialize(
 		R"(
 			AE_UNIFORM_HIGHP mat4 u_modelToProj;
@@ -91,20 +113,8 @@ int main()
 	);
 	meshShader.SetDepthWrite( true );
 	meshShader.SetDepthTest( true );
-	{
-		const char* fileName = "bunny.obj";
-		ae::OBJLoader objLoader = TAG_EXAMPLE;
-		const uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
-		AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
-		ae::Scratch< uint8_t > fileBuffer( fileSize );
-		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-		const ae::OBJLoader::InitializeParams initParams = { .data = fileBuffer.Data(), .length = fileBuffer.Length() };
-		const ae::OBJLoader::VertexDataParams vertexParams = { .vertexData = &meshVertexData };
-		objLoader.Load( initParams );
-		objLoader.InitializeVertexData( vertexParams );
-		objLoader.InitializeCollisionMesh( &meshCollision );
-	}
-	text.Initialize( 16, 512, &fontTexture, 8, 1.0f );
+	const ae::File* objFile = fileSystem.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
+	AE_INFO( "Loading '#'", objFile->GetURL() );
 	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 	
 	// AABB and OBB test state
@@ -115,10 +125,44 @@ int main()
 	static float s_pb = 0.0f;
 
 	AE_INFO( "Run" );
-	while( !input.quit )
+	auto UpdateResources = [&]()
+	{
+		UpdateResource( &fileSystem, &fontFile, [&]()
+		{
+			ae::TargaFile targa = TAG_EXAMPLE;
+			targa.Load( fontFile->GetData(), fontFile->GetLength() );
+			fontTexture.Initialize( targa.textureParams );
+			text.Initialize( 16, 512, &fontTexture, 8, 1.0f );
+			return true;
+		} );
+
+		UpdateResource( &fileSystem, &objFile, [&]()
+		{
+			ae::OBJLoader objLoader = TAG_EXAMPLE;
+			const ae::OBJLoader::InitializeParams initParams = { .data = objFile->GetData(), .length = objFile->GetLength() };
+			const ae::OBJLoader::VertexDataParams vertexParams = { .vertexData = &meshVertexData };
+			objLoader.Load( initParams );
+			objLoader.InitializeVertexData( vertexParams );
+			objLoader.InitializeCollisionMesh( &meshCollision );
+			return true;
+		} );
+
+		return fileSystem.GetFileCount();
+	};
+
+	auto Update = [&]()
 	{
 		const float dt = timeStep.GetTimeStep();
 		input.Pump();
+
+		if( UpdateResources() )
+		{
+			render.Activate();
+			render.Clear( ae::Color::PicoDarkPurple() );
+			render.Present();
+			timeStep.Tick();
+			return !input.quit;
+		}
 
 		if( input.Get( ae::Key::F ) && !input.GetPrev( ae::Key::F ) )
 		{
@@ -867,7 +911,14 @@ int main()
 		render.Present();
 
 		timeStep.Tick();
-	}
+		return !input.quit;
+	};
+
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
+#else
+	while( Update() ) {}
+#endif
 
 	AE_INFO( "Terminate" );
 	text.Terminate();
