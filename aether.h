@@ -19690,6 +19690,8 @@ void _aeEmscriptenTryNewFrame( Input* input )
 		memcpy( input->m_keysPrev, input->m_keys, sizeof(input->m_keys) );
 		input->mousePrev = input->mouse;
 		input->mouse.movement = ae::Int2( 0 );
+		input->mouse.scroll = ae::Vec2( 0.0f );
+		input->mouse.scrollMomentum = ae::Vec2( 0.0f );
 		input->m_touchesPrev = input->m_touches;
 		for( ae::Touch& touch : input->m_touches )
 		{
@@ -19728,20 +19730,32 @@ EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* ke
 		s_keyMap[ 40 ] = ae::Key::Down;
 		s_keyMap[ 45 ] = ae::Key::Insert;
 		s_keyMap[ 46 ] = ae::Key::Delete;
-		for( uint32_t i = 0; i <= 9; i++ )
-		{
-			s_keyMap[ 48 + i ] = (ae::Key)((int)ae::Key::Num0 + i);
-		}
+		s_keyMap[ 48 ] = ae::Key::Num0;
+		s_keyMap[ 49 ] = ae::Key::Num1;
+		s_keyMap[ 50 ] = ae::Key::Num2;
+		s_keyMap[ 51 ] = ae::Key::Num3;
+		s_keyMap[ 52 ] = ae::Key::Num4;
+		s_keyMap[ 53 ] = ae::Key::Num5;
+		s_keyMap[ 54 ] = ae::Key::Num6;
+		s_keyMap[ 55 ] = ae::Key::Num7;
+		s_keyMap[ 56 ] = ae::Key::Num8;
+		s_keyMap[ 57 ] = ae::Key::Num9;
 		for( uint32_t i = 0; i < 26; i++ )
 		{
 			s_keyMap[ 65 + i ] = (ae::Key)((int)ae::Key::A + i);
 		}
 		s_keyMap[ 91 ] = ae::Key::LeftSuper;
 		s_keyMap[ 92 ] = ae::Key::RightSuper;
-		for( uint32_t i = 0; i <= 9; i++ )
-		{
-			s_keyMap[ 96 + i ] = (ae::Key)((int)ae::Key::NumPad0 + i);
-		}
+		s_keyMap[ 96 ] = ae::Key::NumPad0;
+		s_keyMap[ 97 ] = ae::Key::NumPad1;
+		s_keyMap[ 98 ] = ae::Key::NumPad2;
+		s_keyMap[ 99 ] = ae::Key::NumPad3;
+		s_keyMap[ 100 ] = ae::Key::NumPad4;
+		s_keyMap[ 101 ] = ae::Key::NumPad5;
+		s_keyMap[ 102 ] = ae::Key::NumPad6;
+		s_keyMap[ 103 ] = ae::Key::NumPad7;
+		s_keyMap[ 104 ] = ae::Key::NumPad8;
+		s_keyMap[ 105 ] = ae::Key::NumPad9;
 		s_keyMap[ 106 ] = ae::Key::NumPadMultiply;
 		s_keyMap[ 107 ] = ae::Key::NumPadPlus;
 		s_keyMap[ 109 ] = ae::Key::NumPadMinus;
@@ -19783,23 +19797,40 @@ EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* ke
 	return true;
 }
 
+EM_BOOL _aeEmscriptenHandleWheel( int eventType, const EmscriptenWheelEvent* wheelEvent, void* userData )
+{
+	AE_ASSERT( userData );
+	Input* input = (Input*)userData;
+	_aeEmscriptenTryNewFrame( input );
+	// DOM_DELTA_PIXEL (0) is the trackpad path; DOM_DELTA_LINE (1) is the mouse wheel path.
+	// DOM_DELTA_PAGE (2) is not handled — too coarse for camera/UI input.
+	if( wheelEvent->deltaMode != DOM_DELTA_PAGE )
+	{
+		const float scale = ( wheelEvent->deltaMode == DOM_DELTA_LINE ) ? 40.0f : 1.0f;
+		const float dx = (float)wheelEvent->deltaX * scale;
+		const float dy = -(float)wheelEvent->deltaY * scale; // Negate Y: browser positive=down, aether positive=up
+		input->mouse.usingTouch = ( wheelEvent->deltaMode == DOM_DELTA_PIXEL );
+		input->mouse.scroll.x += dx;
+		input->mouse.scroll.y += dy;
+		input->mouse.scrollMomentum.x += dx;
+		input->mouse.scrollMomentum.y += dy;
+	}
+	return true;
+}
+
+EM_BOOL _aeEmscriptenHandleFocus( int eventType, const EmscriptenFocusEvent* focusEvent, void* userData )
+{
+	AE_ASSERT( userData );
+	Input* input = (Input*)userData;
+	input->m_window->m_UpdateFocused( eventType == EMSCRIPTEN_EVENT_FOCUS );
+	return true;
+}
+
 EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent* mouseEvent, void* userData )
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
 	_aeEmscriptenTryNewFrame( input );
-	
-	switch( eventType )
-	{
-		case EMSCRIPTEN_EVENT_MOUSEENTER: // @TODO: It seems like this event is never received
-			input->m_window->m_UpdateFocused( true );
-			break;
-		case EMSCRIPTEN_EVENT_MOUSELEAVE: // @TODO: It seems like this event is never received
-			input->m_window->m_UpdateFocused( false );
-			break;
-		default:
-			break;
-	}
 	
 	const ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY );
 	input->m_SetMousePos( pos.FloorCopy(), ae::Int2( mouseEvent->movementX, -mouseEvent->movementY ) );
@@ -19928,6 +19959,9 @@ void Input::Initialize( Window* window )
 	emscripten_set_touchend_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	emscripten_set_touchmove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	emscripten_set_touchcancel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
+	emscripten_set_wheel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleWheel );
+	emscripten_set_focus_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
+	emscripten_set_blur_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
 	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleLockChange );
 #elif _AE_OSX_
