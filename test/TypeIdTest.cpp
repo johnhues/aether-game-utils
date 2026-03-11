@@ -48,6 +48,33 @@ TEST_CASE( "Hash32 can be used in constexpr context", "[ae::Hash32]" )
 }
 
 //------------------------------------------------------------------------------
+// ae::Hash64 constexpr tests
+//------------------------------------------------------------------------------
+TEST_CASE( "Hash64 can be used in constexpr context", "[ae::Hash64]" )
+{
+	// Default construction and Get() are constexpr
+	constexpr uint64_t basis = ae::Hash64().Get();
+	static_assert( basis == 0xCBF29CE484222325ull, "FNV1a-64 offset basis mismatch" );
+	REQUIRE( basis == 0xCBF29CE484222325ull );
+
+	// HashString is constexpr — result is identical to runtime
+	constexpr uint64_t compileTime = ae::Hash64().HashString( "hello" ).Get();
+	const uint64_t runTime = ae::Hash64().HashString( "hello" ).Get();
+	static_assert( compileTime == ae::Hash64().HashString( "hello" ).Get() );
+	REQUIRE( compileTime == runTime );
+
+	// Two different strings produce different hashes
+	constexpr uint64_t hashA = ae::Hash64().HashString( "hello" ).Get();
+	constexpr uint64_t hashB = ae::Hash64().HashString( "world" ).Get();
+	static_assert( hashA != hashB );
+	REQUIRE( hashA != hashB );
+
+	// Empty string produces the offset basis unchanged
+	constexpr uint64_t emptyHash = ae::Hash64().HashString( "" ).Get();
+	REQUIRE( emptyHash == 0xCBF29CE484222325ull );
+}
+
+//------------------------------------------------------------------------------
 // ae::TypeId tests
 //------------------------------------------------------------------------------
 TEST_CASE( "TypeId default construction equals kInvalidTypeId", "[ae::TypeId]" )
@@ -127,4 +154,84 @@ TEST_CASE( "GetTypeIdFromName is consistent with direct FNV1a-32 hash", "[ae::Ty
 	const char* name = "ae::SomeRegisteredType";
 	ae::TypeId id = ae::GetTypeIdFromName( name );
 	REQUIRE( id == ae::TypeId( ae::Hash32().HashString( name ).Get() ) );
+}
+
+//------------------------------------------------------------------------------
+// ae::TypeId hashing tests
+//------------------------------------------------------------------------------
+TEST_CASE( "TypeId GetHash32 returns underlying uint32_t value", "[ae::TypeId]" )
+{
+	ae::TypeId id( "HashMe" );
+	REQUIRE( ae::GetHash32( id ) == (uint32_t)id );
+	REQUIRE( ae::GetHash32( id ) == ae::Hash32().HashString( "HashMe" ).Get() );
+
+	// Invalid TypeId hashes to 0
+	REQUIRE( ae::GetHash32( ae::kInvalidTypeId ) == 0u );
+}
+
+TEST_CASE( "TypeId GetHash64 returns underlying value widened to uint64_t", "[ae::TypeId]" )
+{
+	ae::TypeId id( "HashMe64" );
+	REQUIRE( ae::GetHash64( id ) == (uint64_t)(uint32_t)id );
+
+	// Two distinct TypeIds produce distinct hash64 values
+	ae::TypeId other( "Other" );
+	REQUIRE( ae::GetHash64( id ) != ae::GetHash64( other ) );
+
+	// Invalid TypeId hashes to 0
+	REQUIRE( ae::GetHash64( ae::kInvalidTypeId ) == 0ull );
+}
+
+//------------------------------------------------------------------------------
+// ae::TypeId BinaryStream serialization tests
+//------------------------------------------------------------------------------
+TEST_CASE( "TypeId round-trips through BinaryStream", "[ae::TypeId]" )
+{
+	ae::TypeId original( "Serializable" );
+
+	// Write via BinaryWriter (use const pointer to resolve overload unambiguously)
+	uint8_t buffer[ 64 ] = {};
+	ae::BinaryWriter writer( buffer, sizeof(buffer) );
+	const ae::TypeId* writePtr = &original;
+	Serialize( &writer, writePtr );
+	REQUIRE( writer.IsValid() );
+	REQUIRE( writer.GetOffset() == sizeof( uint32_t ) );
+
+	// Read back via BinaryReader (BinaryReader* → BinaryStream*, unambiguous)
+	ae::BinaryReader reader( buffer, writer.GetOffset() );
+	ae::TypeId restored;
+	Serialize( &reader, &restored );
+	REQUIRE( reader.IsValid() );
+	REQUIRE( restored == original );
+}
+
+TEST_CASE( "TypeId BinaryWriter const write path works", "[ae::TypeId]" )
+{
+	ae::TypeId id( "ConstWrite" );
+
+	uint8_t buffer[ 64 ] = {};
+	ae::BinaryWriter writer( buffer, sizeof(buffer) );
+	const ae::TypeId* writePtr = &id;
+	Serialize( &writer, writePtr );
+	REQUIRE( writer.IsValid() );
+	REQUIRE( writer.GetOffset() == sizeof( uint32_t ) );
+
+	// Verify the raw bytes equal the underlying uint32_t in native byte order
+	uint32_t raw = 0;
+	memcpy( &raw, buffer, sizeof( raw ) );
+	REQUIRE( raw == (uint32_t)id );
+}
+
+TEST_CASE( "TypeId kInvalidTypeId round-trips through BinaryStream", "[ae::TypeId]" )
+{
+	uint8_t buffer[ 64 ] = {};
+	ae::BinaryWriter writer( buffer, sizeof(buffer) );
+	Serialize( &writer, &ae::kInvalidTypeId );
+	REQUIRE( writer.IsValid() );
+
+	ae::BinaryReader reader( buffer, writer.GetOffset() );
+	ae::TypeId restored( "NotInvalid" );
+	Serialize( &reader, &restored );
+	REQUIRE( reader.IsValid() );
+	REQUIRE( restored == ae::kInvalidTypeId );
 }

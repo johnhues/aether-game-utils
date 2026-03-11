@@ -9832,6 +9832,18 @@ inline void Serialize( ae::BinaryWriter* stream, const ae::UUID* uuid )
 	stream->SerializeRaw( uuid->data, sizeof( uuid->data ) );
 }
 
+inline void Serialize( ae::BinaryStream* stream, ae::TypeId* id )
+{
+	uint32_t raw = (uint32_t)*id;
+	stream->SerializeUInt32( raw );
+	*id = ae::TypeId( raw );
+}
+
+inline void Serialize( ae::BinaryWriter* stream, const ae::TypeId* id )
+{
+	stream->SerializeUInt32( (uint32_t)*id );
+}
+
 //------------------------------------------------------------------------------
 // ae::GetHash32 inline helpers
 //------------------------------------------------------------------------------
@@ -9897,6 +9909,7 @@ template<> inline uint64_t GetHash64( char* const& value ) { return ae::Hash64()
 template< uint32_t N > inline uint64_t GetHash64( const char (&value)[ N ] ) { return ae::Hash64().HashString( value ).Get(); }
 template<> inline uint64_t GetHash64( const std::string& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
 template<> inline uint64_t GetHash64( const ae::Hash64& value ) { return value.Get(); }
+template<> inline uint64_t GetHash64( const ae::TypeId& value ) { return (uint64_t)(uint32_t)value; }
 template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
 template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
 
@@ -9941,26 +9954,15 @@ U GetHash( const T& v )
 //------------------------------------------------------------------------------
 template< typename U >
 constexpr Hash< U >::Hash()
-{
-	if constexpr( sizeof(U) == 4 )
-	{
-		m_hash = (U)AE_HASH32_FNV1A_OFFSET_BASIS_CONFIG;
-	}
-	else if constexpr( sizeof(U) == 8 )
-	{
-		m_hash = (U)AE_HASH64_FNV1A_OFFSET_BASIS_CONFIG;
-	}
-	else
-	{
-		m_hash = 0;
-	}
-}
+	: m_hash( sizeof(U) == 4 ? (U)AE_HASH32_FNV1A_OFFSET_BASIS_CONFIG
+	        : sizeof(U) == 8 ? (U)AE_HASH64_FNV1A_OFFSET_BASIS_CONFIG
+	        : (U)0 )
+{}
 
 template< typename U >
 constexpr Hash< U >::Hash( U initialValue )
-{
-	m_hash = initialValue;
-}
+	: m_hash( initialValue )
+{}
 
 template<>
 constexpr uint32_t Hash< uint32_t >::m_GetPrime()
