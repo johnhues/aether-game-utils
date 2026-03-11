@@ -2611,14 +2611,27 @@ private:
 //------------------------------------------------------------------------------
 // ae::Any
 //------------------------------------------------------------------------------
+//! A fixed-size, type-safe container for opaque storage of a single value.
+//! The template parameters \p Size (bytes) and \p Alignment control the
+//! internal buffer; no dynamic allocation is ever performed. Only trivially
+//! copyable and trivially destructible types are accepted, enforced at compile
+//! time. The type of the stored value is recorded so that reads are type-safe.
+//! C-strings are explicitly rejected; use an ae::Str instead.
+//------------------------------------------------------------------------------
 template< uint32_t Size, uint32_t Alignment >
 struct Any
 {
 	Any() = default;
 	template< typename T > explicit Any( const T& value );
 	template< typename T > void operator=( const T& value );
+	//! Returns the stored value if \p T matches the stored type, otherwise
+	//! returns \p defaultValue.
 	template< typename T > T Get( const T& defaultValue = {} ) const;
+	//! Returns a pointer to the stored value if \p T matches the stored type,
+	//! otherwise nullptr.
 	template< typename T > T* TryGet();
+	//! Returns a const pointer to the stored value if \p T matches the stored
+	//! type, otherwise nullptr.
 	template< typename T > const T* TryGet() const;
 	uint32_t GetType() const { return m_typeId; }
 
@@ -2626,7 +2639,6 @@ private:
 	uint32_t m_typeId = 0; // ae::TypeId
 	alignas( Alignment ) std::byte m_data[ Size ];
 };
-
 
 //------------------------------------------------------------------------------
 // ae::Function class
@@ -4629,7 +4641,7 @@ public:
 	void Initialize( class Window* window );
 	void Terminate();
 
-	void SetVsyncEnbled( bool enabled );
+	void SetVsyncEnabled( bool enabled );
 	bool GetVsyncEnabled() const;
 
 	void Activate();
@@ -4736,7 +4748,7 @@ public:
 	//! false once this limit has been reached until ae::DebugLines::Clear() or ae::DebugLines::Render()
 	//! is called.
 	void Initialize( uint32_t maxVerts );
-	//! Deallocates vertices and frees GPU recources.
+	//! Deallocates vertices and frees GPU resources.
 	void Terminate();
 	//! Draws all debug lines submitted with ae::DebugLines::Add...() since the last call to ae::DebugLines::Clear()
 	//! or ae::DebugLines::Render(). All debug lines must be resubmitted after calling this.
@@ -25886,7 +25898,7 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT( m_context );
 }
 
-void GraphicsDevice::SetVsyncEnbled( bool enabled )
+void GraphicsDevice::SetVsyncEnabled( bool enabled )
 {
 #if _AE_WINDOWS_
 	wglSwapIntervalEXT( enabled ? 1 : 0 );
@@ -27110,7 +27122,7 @@ Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z ) { return Matrix
 GraphicsDevice::~GraphicsDevice() {}
 void GraphicsDevice::Initialize( class Window* window ) {}
 void GraphicsDevice::Terminate() {}
-void GraphicsDevice::SetVsyncEnbled( bool enabled ) {}
+void GraphicsDevice::SetVsyncEnabled( bool enabled ) {}
 bool GraphicsDevice::GetVsyncEnabled() const { return false; }
 void GraphicsDevice::Activate() {}
 void GraphicsDevice::Clear( Color color ) {}
