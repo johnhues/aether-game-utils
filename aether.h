@@ -5034,8 +5034,9 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::CollisionExtra
-//! AE_COLLISION_EXTRA_CONFIG can be defined to provide extra vertex data returned
-//! from Raycasts and PushOuts. See AE_CONFIG_FILE for more info.
+//------------------------------------------------------------------------------
+//! AE_COLLISION_EXTRA_CONFIG can be defined to provide extra vertex data
+//! returned from Raycasts and PushOuts. See AE_CONFIG_FILE for more info.
 //------------------------------------------------------------------------------
 #ifdef AE_COLLISION_EXTRA_CONFIG
 	typedef AE_COLLISION_EXTRA_CONFIG CollisionExtra;
@@ -5048,15 +5049,10 @@ private:
 //------------------------------------------------------------------------------
 struct RaycastParams
 {
-	ae::Matrix4 transform = ae::Matrix4::Identity();
-	const void* userData = nullptr;
 	ae::Vec3 source = ae::Vec3( 0.0f );
 	ae::Vec3 ray = ae::Vec3( 0.0f, 0.0f, -1.0f );
 	uint32_t maxHits = 1;
-	bool hitCounterclockwise = true;
-	bool hitClockwise = false;
-	ae::DebugLines* debug = nullptr; // Draw collision results
-	ae::Color debugColor = ae::Color::Red();
+	ae::Any< 32, 16 > userData;
 };
 
 //------------------------------------------------------------------------------
@@ -5069,8 +5065,8 @@ struct RaycastResult
 		ae::Vec3 position = ae::Vec3( 0.0f );
 		ae::Vec3 normal = ae::Vec3( 0.0f );
 		float distance = 0.0f;
-		const void* userData = nullptr;
-		CollisionExtra extra = {};
+		ae::Any< 32, 16 > userData;
+		CollisionExtra extra = {}; // @TODO: Cleanup. This is CollisionMesh specific.
 	};
 	ae::Array< Hit, 8 > hits;
 
@@ -5081,15 +5077,57 @@ struct RaycastResult
 };
 
 //------------------------------------------------------------------------------
+// ae::TriangleRaycastParams
+//------------------------------------------------------------------------------
+struct TriangleRaycastParams
+{
+	bool hitCounterclockwise = true;
+	bool hitClockwise = false;
+};
+
+//------------------------------------------------------------------------------
+// ae::CollisionMeshRaycastParams
+//------------------------------------------------------------------------------
+struct CollisionMeshRaycastParams
+{
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	bool hitCounterclockwise = true;
+	bool hitClockwise = false;
+	ae::DebugLines* debug = nullptr; // Draw collision results
+	ae::Color debugColor = ae::Color::Red();
+};
+
+//------------------------------------------------------------------------------
+// ae::Raycast free functions
+//------------------------------------------------------------------------------
+//! These wrap the shapes' IntersectRay() methods using the RaycastParams /
+//! RaycastResult pattern, matching CollisionMesh::Raycast. Passing the result
+//! of a previous call as \p prevResult chains multiple shape raycasts together.
+//------------------------------------------------------------------------------
+RaycastResult Raycast( const Triangle& tri, const RaycastParams& params, const TriangleRaycastParams& triParams = {}, RaycastResult prevResult = {} );
+RaycastResult Raycast( const Sphere& sphere, const RaycastParams& params, RaycastResult prevResult = {} );
+RaycastResult Raycast( const Plane& plane, const RaycastParams& params, RaycastResult prevResult = {} );
+RaycastResult Raycast( const AABB& aabb, const RaycastParams& params, RaycastResult prevResult = {} );
+RaycastResult Raycast( const OBB& obb, const RaycastParams& params, RaycastResult prevResult = {} );
+
+//------------------------------------------------------------------------------
+// ae::CollisionMeshPushOutParams
+//------------------------------------------------------------------------------
+struct CollisionMeshPushOutParams
+{
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	ae::DebugLines* debug = nullptr; // Draw collision results
+	ae::Color debugColor = ae::Color::Red();
+};
+
+//------------------------------------------------------------------------------
 // ae::PushOutParams
 //! Sphere collision
 //------------------------------------------------------------------------------
 struct PushOutParams
 {
 	ae::Matrix4 transform = ae::Matrix4::Identity();
-	const void* userData = nullptr;
-	ae::DebugLines* debug = nullptr; // Draw collision results
-	ae::Color debugColor = ae::Color::Red();
+	ae::Any< 32, 16 > userData;
 };
 
 //------------------------------------------------------------------------------
@@ -5102,9 +5140,9 @@ struct PushOutInfo
 	ae::Vec3 velocity = ae::Vec3( 0.0f );
 	struct Hit
 	{
-		ae::Vec3 position;
-		ae::Vec3 normal;
-		CollisionExtra extra;
+		ae::Vec3 position = ae::Vec3( 0.0f );
+		ae::Vec3 normal = ae::Vec3( 0.0f );
+		CollisionExtra extra = {}; // @TODO: Cleanup. This is CollisionMesh specific.
 	};
 	ae::Array< Hit, 8 > hits;
 
@@ -5151,8 +5189,8 @@ public:
 	//! sizes are maintained.
 	void Clear();
 
-	RaycastResult Raycast( const RaycastParams& params, RaycastResult prevResult = RaycastResult() ) const;
-	PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
+	RaycastResult Raycast( const RaycastParams& params, const CollisionMeshRaycastParams& meshParams = {}, RaycastResult prevResult = {} ) const;
+	PushOutInfo PushOut( const PushOutParams& params, const CollisionMeshPushOutParams& meshParams = {}, const PushOutInfo& prevInfo = {} ) const;
 	// @TODO: GetClosestPoint()
 	ae::AABB GetAABB() const { return m_bvh.GetAABB(); }
 	
@@ -12863,7 +12901,7 @@ void CollisionMesh< V, T, B >::Clear()
 }
 
 template< uint32_t V, uint32_t T, uint32_t B >
-RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, RaycastResult result ) const
+RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, const CollisionMeshRaycastParams& meshParams, RaycastResult result ) const
 {
 	// Early out
 	{
@@ -12873,31 +12911,31 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, Ra
 			return result;
 		}
 		// Sphere/OBB check in world space
-		const ae::Vec3 aabbMin = ( params.transform * ae::Vec4( m_aabb.GetMin(), 1.0f ) ).GetXYZ();
-		const ae::Vec3 aabbMax = ( params.transform * ae::Vec4( m_aabb.GetMax(), 1.0f ) ).GetXYZ();
+		const ae::Vec3 aabbMin = ( meshParams.transform * ae::Vec4( m_aabb.GetMin(), 1.0f ) ).GetXYZ();
+		const ae::Vec3 aabbMax = ( meshParams.transform * ae::Vec4( m_aabb.GetMax(), 1.0f ) ).GetXYZ();
 		const ae::Sphere sphere( ( aabbMin + aabbMax ) * 0.5f, ( aabbMax - aabbMin ).Length() * 0.5f );
 		if( result.EarlyOut( params, sphere ) )
 		{
 			return result; // Early out if previous hits already closer than sphere
 		}
-		const ae::OBB obb( params.transform * m_aabb.GetTransform() );
+		const ae::OBB obb( meshParams.transform * m_aabb.GetTransform() );
 		if( result.EarlyOut( params, obb ) )
 		{
 			return result; // Early out if previous hits already closer than obb
 		}
-		if( ae::DebugLines* debug = params.debug )
+		if( ae::DebugLines* debug = meshParams.debug )
 		{
-			debug->AddOBB( obb, params.debugColor ); // Ray intersects obb
+			debug->AddOBB( obb, meshParams.debugColor ); // Ray intersects obb
 		}
 	}
 
-	const ae::Matrix4 invTransform = params.transform.GetInverse();
+	const ae::Matrix4 invTransform = meshParams.transform.GetInverse();
 	const ae::Matrix4 normalTransform = invTransform.GetTranspose();
 	const ae::Vec3 source( invTransform * ae::Vec4( params.source, 1.0f ) );
 	const ae::Vec3 rayEnd( invTransform * ae::Vec4( params.source + params.ray, 1.0f ) );
 	const ae::Vec3 ray = rayEnd - source;
-	const bool ccw = params.hitCounterclockwise;
-	const bool cw = params.hitClockwise;
+	const bool ccw = meshParams.hitCounterclockwise;
+	const bool cw = meshParams.hitClockwise;
 
 	auto bvhFn = [&]( auto&& bvhFn, const ae::BVH< BVHTri, B >* bvh, const BVHNode* current ) -> void
 	{
@@ -12905,10 +12943,10 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, Ra
 		{
 			return;
 		}
-		if( params.debug )
+		if( meshParams.debug )
 		{
-			ae::OBB obb( params.transform * current->aabb.GetTransform() );
-			params.debug->AddOBB( obb, params.debugColor );
+			ae::OBB obb( meshParams.transform * current->aabb.GetTransform() );
+			meshParams.debug->AddOBB( obb, meshParams.debugColor );
 		}
 		if( const BVHLeaf< BVHTri >* leaf = bvh->TryGetLeaf( current->leafIdx ) )
 		{
@@ -12922,16 +12960,16 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, Ra
 				if( Triangle( a, b, c ).IntersectRay( source, ray, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit hit;
-					hit.position = ae::Vec3( params.transform * ae::Vec4( p, 1.0f ) ); // Undo local space transforms
+					hit.position = ae::Vec3( meshParams.transform * ae::Vec4( p, 1.0f ) ); // Undo local space transforms
 					hit.normal = ae::Vec3( normalTransform * ae::Vec4( n, 0.0f ) ).SafeNormalizeCopy(); // SafeNormalizeCopy
 					hit.distance = ( hit.position - params.source ).Length(); // Calculate here because transform might not have uniform scale
 					hit.userData = params.userData;
 					hit.extra = m_collisionExtras[ idx0 ];
 					result.Accumulate( params, hit );
-					if( ae::DebugLines* debug = params.debug )
+					if( ae::DebugLines* debug = meshParams.debug )
 					{
-						debug->AddCircle( hit.position, hit.normal, 0.25f, params.debugColor, 8 );
-						debug->AddLine( hit.position, hit.position + hit.normal, params.debugColor );
+						debug->AddCircle( hit.position, hit.normal, 0.25f, meshParams.debugColor, 8 );
+						debug->AddLine( hit.position, hit.position + hit.normal, meshParams.debugColor );
 					}
 				}
 			}
@@ -12953,16 +12991,16 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, Ra
 }
 
 template< uint32_t V, uint32_t T, uint32_t B >
-PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const
+PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, const CollisionMeshPushOutParams& meshParams, const PushOutInfo& prevInfo ) const
 {
 	if( !m_bvh.GetRoot() )
 	{
 		return prevInfo;
 	}
 	
-	if( ae::DebugLines* debug = params.debug )
+	if( ae::DebugLines* debug = meshParams.debug )
 	{
-		debug->AddSphere( prevInfo.sphere.center, prevInfo.sphere.radius, params.debugColor, 8 );
+		debug->AddSphere( prevInfo.sphere.center, prevInfo.sphere.radius, meshParams.debugColor, 8 );
 	}
 
 	ae::OBB obb( params.transform * m_aabb.GetTransform() );
@@ -12971,10 +13009,10 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 		return prevInfo; // Early out if sphere is to far from mesh
 	}
 	
-	if( ae::DebugLines* debug = params.debug )
+	if( ae::DebugLines* debug = meshParams.debug )
 	{
 		// Sphere intersects obb
-		debug->AddOBB( obb, params.debugColor );
+		debug->AddOBB( obb, meshParams.debugColor );
 	}
 	
 	PushOutInfo result;
@@ -12992,9 +13030,9 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 			{
 				return;
 			}
-			if( params.debug )
+			if( meshParams.debug )
 			{
-				params.debug->AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), params.debugColor );
+				meshParams.debug->AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), meshParams.debugColor );
 			}
 		}
 		else
@@ -13004,9 +13042,9 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 			{
 				return;
 			}
-			if( params.debug )
+			if( meshParams.debug )
 			{
-				params.debug->AddOBB( obb, params.debugColor );
+				meshParams.debug->AddOBB( obb, meshParams.debugColor );
 			}
 		}
 		// Triangle checks
@@ -13060,14 +13098,14 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 						hitOut.extra = extra;
 					}
 		
-					if( ae::DebugLines* debug = params.debug )
+					if( ae::DebugLines* debug = meshParams.debug )
 					{
-						debug->AddLine( a, b, params.debugColor );
-						debug->AddLine( b, c, params.debugColor );
-						debug->AddLine( c, a, params.debugColor );
+						debug->AddLine( a, b, meshParams.debugColor );
+						debug->AddLine( b, c, meshParams.debugColor );
+						debug->AddLine( c, a, meshParams.debugColor );
 		
-						debug->AddLine( triHitPos, triHitPos + triNormal * 2.0f, params.debugColor );
-						debug->AddSphere( triHitPos, 0.05f, params.debugColor, 4 );
+						debug->AddLine( triHitPos, triHitPos + triNormal * 2.0f, meshParams.debugColor );
+						debug->AddSphere( triHitPos, 0.05f, meshParams.debugColor, 4 );
 					}
 				}
 			}
@@ -27856,6 +27894,84 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 	{
 		next->hits.Append( accumHits[ i ] );
 	}
+}
+
+//------------------------------------------------------------------------------
+// ae::Raycast free functions
+//------------------------------------------------------------------------------
+RaycastResult Raycast( const Triangle& tri, const RaycastParams& params, const TriangleRaycastParams& triParams, RaycastResult result )
+{
+	ae::Vec3 p, n;
+	if( tri.IntersectRay( params.source, params.ray, triParams.hitCounterclockwise, triParams.hitClockwise, &p, &n, nullptr ) )
+	{
+		RaycastResult::Hit hit;
+		hit.position = p;
+		hit.normal = n;
+		hit.distance = ( p - params.source ).Length();
+		hit.userData = params.userData;
+		result.Accumulate( params, hit );
+	}
+	return result;
+}
+
+RaycastResult Raycast( const Sphere& sphere, const RaycastParams& params, RaycastResult result )
+{
+	ae::Vec3 p, n;
+	if( sphere.IntersectRay( params.source, params.ray, &p, &n, nullptr ) )
+	{
+		RaycastResult::Hit hit;
+		hit.position = p;
+		hit.normal = n;
+		hit.distance = ( p - params.source ).Length();
+		hit.userData = params.userData;
+		result.Accumulate( params, hit );
+	}
+	return result;
+}
+
+RaycastResult Raycast( const Plane& plane, const RaycastParams& params, RaycastResult result )
+{
+	ae::Vec3 p;
+	if( plane.IntersectRay( params.source, params.ray, &p, nullptr ) )
+	{
+		RaycastResult::Hit hit;
+		hit.position = p;
+		hit.normal = plane.GetNormal();
+		hit.distance = ( p - params.source ).Length();
+		hit.userData = params.userData;
+		result.Accumulate( params, hit );
+	}
+	return result;
+}
+
+RaycastResult Raycast( const AABB& aabb, const RaycastParams& params, RaycastResult result )
+{
+	ae::Vec3 p, n;
+	if( aabb.IntersectRay( params.source, params.ray, &p, &n, nullptr ) )
+	{
+		RaycastResult::Hit hit;
+		hit.position = p;
+		hit.normal = n;
+		hit.distance = ( p - params.source ).Length();
+		hit.userData = params.userData;
+		result.Accumulate( params, hit );
+	}
+	return result;
+}
+
+RaycastResult Raycast( const OBB& obb, const RaycastParams& params, RaycastResult result )
+{
+	ae::Vec3 p, n;
+	if( obb.IntersectRay( params.source, params.ray, &p, &n, nullptr ) )
+	{
+		RaycastResult::Hit hit;
+		hit.position = p;
+		hit.normal = n;
+		hit.distance = ( p - params.source ).Length();
+		hit.userData = params.userData;
+		result.Accumulate( params, hit );
+	}
+	return result;
 }
 
 //------------------------------------------------------------------------------

@@ -2484,10 +2484,8 @@ bool Terrain::Raycast( const ae::RaycastParams& _params, ae::RaycastResult* outR
   }
   
   ae::RaycastParams params = _params;
-  if( !params.debug )
-  {
-    params.debug = m_params.debug;
-  }
+  ae::CollisionMeshRaycastParams meshRaycastParams;
+  meshRaycastParams.debug = m_params.debug;
   
   start /= kChunkSize;
   ray /= kChunkSize;
@@ -2593,7 +2591,7 @@ bool Terrain::Raycast( const ae::RaycastParams& _params, ae::RaycastResult* outR
     const TerrainChunk* chunk = GetChunk( ae::Int3( x, y, z ) );
     if( chunk )
     {
-      resultsAccum = chunk->m_mesh.Raycast( params, resultsAccum );
+      resultsAccum = chunk->m_mesh.Raycast( params, meshRaycastParams, resultsAccum );
     }
     
     if( tmax.x < tmax.y )
@@ -2664,7 +2662,7 @@ ae::PushOutInfo Terrain::PushOutSphere( const ae::PushOutParams& _params, const 
   {
     if( const TerrainChunk* chunk = GetChunk( ae::Int3( x, y, z ) ) )
     {
-      results = chunk->m_mesh.PushOut( params, results );
+      results = chunk->m_mesh.PushOut( params, {}, results );
     }
   }
   

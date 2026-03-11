@@ -801,14 +801,16 @@ int main()
 				meshUniforms.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
 				meshVertexData.Bind( &meshShader, meshUniforms );
 				meshVertexData.Draw();
+
+				const ae::CollisionMeshRaycastParams meshParams = { .transform = modelToWorld };
 				
-				const auto drawRaycast = [ &debug, &meshCollision ]( const ae::RaycastParams& params, ae::Color color )
+				const auto drawRaycast = [ &debug, &meshCollision, &meshParams ]( const ae::RaycastParams& params, ae::Color color )
 				{
-					const ae::Vec3 scale = params.transform.GetScale();
+					const ae::Vec3 scale = meshParams.transform.GetScale();
 					const float radius = 0.002f * ae::Max( scale.x, scale.y, scale.z );
 					const float normLength = 0.02f * ae::Max( scale.x, scale.y, scale.z );
 					debug.AddLine( params.source, params.source + params.ray, color );
-					const ae::RaycastResult result = meshCollision.Raycast( params );
+					const ae::RaycastResult result = meshCollision.Raycast( params, meshParams );
 					if( result.hits.Length() )
 					{
 						const auto hit = result.hits[ 0 ];
@@ -835,11 +837,11 @@ int main()
 				};
 				for( uint32_t i = 0; i < countof(rays); i++ )
 				{
-					const ae::RaycastParams params = { .transform = modelToWorld, .source = rays[ i ].source, .ray = -rays[ i ].source };
+					const ae::RaycastParams params = { .source = rays[ i ].source, .ray = -rays[ i ].source };
 					drawRaycast( params, rays[ i ].color );
 				}
 
-				const ae::RaycastParams params = { .transform = modelToWorld, .source = raySource, .ray = ray };
+				const ae::RaycastParams params = { .source = raySource, .ray = ray };
 				drawRaycast( params, ae::Color::PicoPink() );
 				break;
 			}
