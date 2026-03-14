@@ -1499,9 +1499,9 @@ TEST_CASE( "BasicType can read and write values via DataPointer", "[aeMeta]" )
 	REQUIRE( intVarType->SetVarDataFromString( intData, "77" ) );
 	REQUIRE( c.intMember == 77 );
 
-	// Non-numeric string falls back to 0 (SetVarDataFromString always succeeds for numeric types)
-	REQUIRE( intVarType->SetVarDataFromString( intData, "hello" ) );
-	REQUIRE( c.intMember == 0 );
+	// Non-numeric string: SetVarDataFromString returns false, member unchanged
+	REQUIRE( !intVarType->SetVarDataFromString( intData, "hello" ) );
+	REQUIRE( c.intMember == 77 );
 
 	// bool: GetVarData reads the correct value
 	REQUIRE( boolVarType->GetVarData( ae::ConstDataPointer( boolData ), &boolOut ) );
@@ -1570,6 +1570,12 @@ TEST_CASE( "EnumType can read and write values via DataPointer", "[aeMeta]" )
 
 	// Unknown name returns false and leaves value unchanged
 	REQUIRE( !enumVarType->SetVarDataFromString( enumData, "Unknown" ) );
+	REQUIRE( c.enumTest == TestEnumClass::Two );
+
+	// Permissive numeric parsing: leading whitespace and + prefix
+	REQUIRE( enumVarType->SetVarDataFromString( enumData, " 1" ) );
+	REQUIRE( c.enumTest == TestEnumClass::One );
+	REQUIRE( enumVarType->SetVarDataFromString( enumData, "+2" ) );
 	REQUIRE( c.enumTest == TestEnumClass::Two );
 
 	// GetVarDataAsString returns empty string for value not in the enum

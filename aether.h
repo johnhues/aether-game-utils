@@ -262,7 +262,8 @@
 #include <algorithm>
 #include <array> // @TODO: Remove. For _GetTypeName().
 #include <cassert>
-#include <cerrno> // @TODO: Remove when the errno usage is cleaned up in ae::EnumType
+#include <cerrno> // strtoll/strtoull error checking
+
 #include <chrono>
 #include <cinttypes>
 #include <climits>
@@ -9177,255 +9178,306 @@ inline std::string ToString( ae::UUID v )
 }
 
 //------------------------------------------------------------------------------
-// ae::FromString functions
+// ae::TryFromString functions
 //------------------------------------------------------------------------------
-// No implementation so this acts as a forward declaration. A default templated
-// ae::ToString implementation would prevent the compiler/linker from looking
-// for ae::ToString definitions in other modules.
-template< typename T > T FromString( const char* str, const T& defaultValue );
+//! Parses \p str and writes the result to \p out. Returns true and writes to
+//! \p out on success; returns false and leaves \p out unchanged on failure.
+//! Parsing is permissive: leading whitespace, a leading \c + sign, and trailing
+//! non-numeric characters are accepted. \p str must not be null.
+//! No default implementation is provided — unsupported types produce a linker
+//! error. Register enum support with AE_DEFINE_ENUM_CLASS or AE_ENUM_CLASS.
+template< typename T > bool TryFromString( const char* str, T* out );
 
 template<>
-inline std::string FromString( const char* str, const std::string& )
+inline bool TryFromString( const char* str, std::string* out )
 {
-	return std::string( str );
+	*out = str;
+	return true;
 }
 
 template<>
-inline int8_t FromString( const char* str, const int8_t& defaultValue )
+inline bool TryFromString( const char* str, int8_t* out )
 {
 	int8_t v;
-	if( sscanf( str, "%" SCNi8, &v ) == 1 )
+	if( sscanf( str, "%" SCNi8, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline int16_t FromString( const char* str, const int16_t& defaultValue )
+inline bool TryFromString( const char* str, int16_t* out )
 {
 	int16_t v;
-	if( sscanf( str, "%" SCNi16, &v ) == 1 )
+	if( sscanf( str, "%" SCNi16, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline int32_t FromString( const char* str, const int32_t& defaultValue )
+inline bool TryFromString( const char* str, int32_t* out )
 {
 	int32_t v;
-	if( sscanf( str, "%" SCNi32, &v ) == 1 )
+	if( sscanf( str, "%" SCNi32, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline int64_t FromString( const char* str, const int64_t& defaultValue )
+inline bool TryFromString( const char* str, int64_t* out )
 {
-	int64_t v;
-	if( sscanf( str, "%" SCNi64, &v ) == 1 )
+	char* end = nullptr;
+	errno = 0;
+	const int64_t v = strtoll( str, &end, 10 );
+	if( errno == ERANGE || end == str )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline uint8_t FromString( const char* str, const uint8_t& defaultValue )
+inline bool TryFromString( const char* str, uint8_t* out )
 {
 	uint8_t v;
-	if( sscanf( str, "%" SCNu8, &v ) == 1 )
+	if( sscanf( str, "%" SCNu8, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline uint16_t FromString( const char* str, const uint16_t& defaultValue )
+inline bool TryFromString( const char* str, uint16_t* out )
 {
 	uint16_t v;
-	if( sscanf( str, "%" SCNu16, &v ) == 1 )
+	if( sscanf( str, "%" SCNu16, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline uint32_t FromString( const char* str, const uint32_t& defaultValue )
+inline bool TryFromString( const char* str, uint32_t* out )
 {
 	uint32_t v;
-	if( sscanf( str, "%" SCNu32, &v ) == 1 )
+	if( sscanf( str, "%" SCNu32, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline uint64_t FromString( const char* str, const uint64_t& defaultValue )
+inline bool TryFromString( const char* str, uint64_t* out )
 {
-	uint64_t v;
-	if( sscanf( str, "%" SCNu64, &v ) == 1 )
+	char* end = nullptr;
+	errno = 0;
+	const uint64_t v = strtoull( str, &end, 10 );
+	if( errno == ERANGE || end == str )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline float FromString( const char* str, const float& defaultValue )
+inline bool TryFromString( const char* str, float* out )
 {
 	float v;
-	if( sscanf( str, "%f", &v ) == 1 )
+	if( sscanf( str, "%f", &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline double FromString( const char* str, const double& defaultValue )
+inline bool TryFromString( const char* str, double* out )
 {
 	double v;
-	if( sscanf( str, "%lf", &v ) == 1 )
+	if( sscanf( str, "%lf", &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline ae::Int2 FromString( const char* str, const ae::Int2& defaultValue )
+inline bool TryFromString( const char* str, ae::Int2* out )
 {
 	ae::Int2 r;
-	if( sscanf( str, "%d %d", r.data, r.data + 1 ) == 2 )
+	if( sscanf( str, "%d %d", r.data, r.data + 1 ) != 2 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Int3 FromString( const char* str, const ae::Int3& defaultValue )
+inline bool TryFromString( const char* str, ae::Int3* out )
 {
 	ae::Int3 r;
-	if( sscanf( str, "%d %d %d", r.data, r.data + 1, r.data + 2 ) == 3 )
+	if( sscanf( str, "%d %d %d", r.data, r.data + 1, r.data + 2 ) != 3 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Vec2 FromString( const char* str, const ae::Vec2& defaultValue )
+inline bool TryFromString( const char* str, ae::Vec2* out )
 {
 	ae::Vec2 r;
-	if( sscanf( str, "%f %f", r.data, r.data + 1 ) == 2 )
+	if( sscanf( str, "%f %f", r.data, r.data + 1 ) != 2 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Vec3 FromString( const char* str, const ae::Vec3& defaultValue )
+inline bool TryFromString( const char* str, ae::Vec3* out )
 {
 	ae::Vec3 r;
-	if( sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 ) == 3 )
+	if( sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 ) != 3 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Vec4 FromString( const char* str, const ae::Vec4& defaultValue )
+inline bool TryFromString( const char* str, ae::Vec4* out )
 {
 	ae::Vec4 r;
-	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) != 4 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Quaternion FromString( const char* str, const ae::Quaternion& defaultValue )
+inline bool TryFromString( const char* str, ae::Quaternion* out )
 {
 	ae::Quaternion r;
-	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) != 4 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Matrix4 FromString( const char* str, const ae::Matrix4& defaultValue )
+inline bool TryFromString( const char* str, ae::Matrix4* out )
 {
 	ae::Matrix4 r;
-	if( sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
-		r.data, r.data + 1, r.data + 2, r.data + 3,
-		r.data + 4, r.data + 5, r.data + 6, r.data + 7,
-		r.data + 8, r.data + 9, r.data + 10, r.data + 11,
-		r.data + 12, r.data + 13, r.data + 14, r.data + 15 ) == 16 )
+	if( sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3, r.data + 4, r.data + 5, r.data + 6, r.data + 7, r.data + 8, r.data + 9, r.data + 10, r.data + 11, r.data + 12, r.data + 13, r.data + 14, r.data + 15 ) != 16 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Color FromString( const char* str, const ae::Color& defaultValue )
+inline bool TryFromString( const char* str, ae::Color* out )
 {
 	ae::Color r;
-	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) != 4 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline bool FromString( const char* str, const bool& defaultValue )
+inline bool TryFromString( const char* str, bool* out )
 {
 	auto StrCmp = []( const char* boolStr, const char* inputStr )
 	{
 		while( *boolStr && *inputStr )
 		{
-			if( *boolStr != tolower( *inputStr ) ) { return false; }
+			if( *boolStr != tolower( *inputStr ) )
+			{
+				return false;
+			}
 			boolStr++;
 			inputStr++;
 		}
 		return ( !*boolStr && !*inputStr );
 	};
-	
 	float f;
-	if( StrCmp( "true", str ) ) { return true; }
-	if( StrCmp( "false", str ) ) { return false; }
+	if( StrCmp( "true", str ) )
+	{
+		*out = true;
+		return true;
+	}
+	if( StrCmp( "false", str ) )
+	{
+		*out = false;
+		return true;
+	}
 	// @TODO: Check int first
-	if( sscanf( str, "%f", &f ) == 1 ) { return (bool)f; }
-	return defaultValue;
+	if( sscanf( str, "%f", &f ) == 1 )
+	{
+		*out = (bool)f;
+		return true;
+	}
+	return false;
 }
 
 template<>
-inline ae::UUID FromString( const char* str, const ae::UUID& defaultValue )
+inline bool TryFromString( const char* str, ae::UUID* out )
 {
-	ae::UUID r = defaultValue;
+	ae::UUID r;
 #define _aescn8 "%2" SCNx8
-	sscanf( str, _aescn8 _aescn8 _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 _aescn8 _aescn8 _aescn8 _aescn8,
-		&r.data[ 0 ], &r.data[ 1 ], &r.data[ 2 ], &r.data[ 3 ], &r.data[ 4 ], &r.data[ 5 ], &r.data[ 6 ], &r.data[ 7 ],
-		&r.data[ 8 ], &r.data[ 9 ], &r.data[ 10 ], &r.data[ 11 ], &r.data[ 12 ], &r.data[ 13 ], &r.data[ 14 ], &r.data[ 15 ]
-	);
+	const int32_t count = sscanf( str, _aescn8 _aescn8 _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 _aescn8 _aescn8 _aescn8 _aescn8, &r.data[ 0 ], &r.data[ 1 ], &r.data[ 2 ], &r.data[ 3 ], &r.data[ 4 ], &r.data[ 5 ], &r.data[ 6 ], &r.data[ 7 ], &r.data[ 8 ],
+		&r.data[ 9 ], &r.data[ 10 ], &r.data[ 11 ], &r.data[ 12 ], &r.data[ 13 ], &r.data[ 14 ], &r.data[ 15 ] );
 #undef _aescn8
-	return r;
+	if( count != 16 )
+	{
+		return false;
+	}
+	*out = r;
+	return true;
+}
+
+//------------------------------------------------------------------------------
+// ae::FromString functions
+//------------------------------------------------------------------------------
+//! Convenience wrapper around ae::TryFromString(). Returns the parsed value on
+//! success, or \p defaultValue if parsing fails.
+template< typename T >
+inline T FromString( const char* str, const T& defaultValue )
+{
+	T v = defaultValue;
+	TryFromString( str, &v );
+	return v;
 }
 
 //------------------------------------------------------------------------------
@@ -13671,7 +13723,7 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	struct _EnumValues##E { _EnumValues##E( const char* values = #__VA_ARGS__ ) : values( values ) {} const char* values; };\
 	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnumType< E >()->GetNameByValue( e ); return os; }\
 	namespace ae { template<> inline std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
-	namespace ae { template<> inline E FromString( const char* str, const E& e ) { return ae::GetEnumType< E >()->GetValueFromString( str, e ); } }\
+	namespace ae { template<> inline bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }\
 	namespace ae { template<> inline uint32_t GetHash32( const E& e ) { return ae::GetHash32( static_cast< T >( e ) ); } }
 
 #define AE_REGISTER_ENUM_CLASS_IMPL( E )\
@@ -13700,7 +13752,7 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
 	namespace ae { template<> std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
-	namespace ae { template<> E FromString( const char* str, const E& e ) { return ae::GetEnumType< E >()->GetValueFromString( str, e ); } }
+	namespace ae { template<> bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }
 
 #define AE_REGISTER_ENUM_PREFIX_IMPL( E, PREFIX )\
 	template<> const ae::EnumType* ae::GetEnumType< E >() {\
@@ -14436,10 +14488,8 @@ bool ae::EnumType::GetValueFromString( const char* str, T* valueOut ) const
 	}
 	else if( TypeIsSigned() )
 	{
-		errno = 0;
-		char* endPtr = nullptr;
-		const int64_t value = strtoll( str, &endPtr, 10 );
-		if( endPtr == str || *endPtr != '\0' || errno == ERANGE )
+		int64_t value = 0;
+		if( !ae::TryFromString( str, &value ) )
 		{
 			return false;
 		}
@@ -14464,10 +14514,8 @@ bool ae::EnumType::GetValueFromString( const char* str, T* valueOut ) const
 		{
 			return false;
 		}
-		errno = 0;
-		char* endPtr = nullptr;
-		const uint64_t value = strtoull( str, &endPtr, 10 );
-		if( endPtr == str || *endPtr != '\0' || errno == ERANGE )
+		uint64_t value = 0;
+		if( !ae::TryFromString( str, &value ) )
 		{
 			return false;
 		}
@@ -32421,120 +32469,160 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 		case BasicType::UInt8:
 		{
 			AE_ASSERT( typeSize == sizeof(uint8_t) );
-			*(uint8_t*)varData = ae::FromString< uint8_t >( value, 0 );
+			uint8_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(uint8_t*)varData = v;
 			return true;
 		}
 		case BasicType::UInt16:
 		{
 			AE_ASSERT( typeSize == sizeof(uint16_t) );
-			*(uint16_t*)varData = ae::FromString< uint16_t >( value, 0 );
+			uint16_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(uint16_t*)varData = v;
 			return true;
 		}
 		case BasicType::UInt32:
 		{
 			AE_ASSERT( typeSize == sizeof(uint32_t) );
-			*(uint32_t*)varData = ae::FromString< uint32_t >( value, 0 );
+			uint32_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(uint32_t*)varData = v;
 			return true;
 		}
 		case BasicType::UInt64:
 		{
 			AE_ASSERT( typeSize == sizeof(uint64_t) );
-			*(uint64_t*)varData = ae::FromString< uint64_t >( value, 0 );
+			uint64_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(uint64_t*)varData = v;
 			return true;
 		}
 		case BasicType::Int8:
 		{
 			AE_ASSERT( typeSize == sizeof(int8_t) );
-			*(int8_t*)varData = ae::FromString< int8_t >( value, 0 );
+			int8_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(int8_t*)varData = v;
 			return true;
 		}
 		case BasicType::Int16:
 		{
 			AE_ASSERT( typeSize == sizeof(int16_t) );
-			*(int16_t*)varData = ae::FromString< int16_t >( value, 0 );
+			int16_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(int16_t*)varData = v;
 			return true;
 		}
 		case BasicType::Int32:
 		{
 			AE_ASSERT( typeSize == sizeof(int32_t) );
-			*(int32_t*)varData = ae::FromString< int32_t >( value, 0 );
+			int32_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(int32_t*)varData = v;
 			return true;
 		}
 		case BasicType::Int64:
 		{
 			AE_ASSERT( typeSize == sizeof(int64_t) );
-			*(int64_t*)varData = ae::FromString< int64_t >( value, 0 );
+			int64_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(int64_t*)varData = v;
 			return true;
 		}
 		case BasicType::Int2:
 		{
 			AE_ASSERT( typeSize == sizeof( ae::Int2 ) );
-			*(ae::Int2*)varData = ae::FromString< ae::Int2 >( value, ae::Int2( 0.0f ) );
+			ae::Int2 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Int2*)varData = v;
 			return true;
 		}
 		case BasicType::Int3:
 		{
 			AE_ASSERT( typeSize == sizeof( ae::Int3 ) );
-			*(ae::Int3*)varData = ae::FromString< ae::Int3 >( value, ae::Int3( 0.0f ) );
+			ae::Int3 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Int3*)varData = v;
 			return true;
 		}
 		case BasicType::Bool:
 		{
-			*(bool*)varData = ae::FromString< bool >( value, false );
+			bool v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(bool*)varData = v;
 			return true;
 		}
 		case BasicType::Float:
 		{
 			AE_ASSERT( typeSize == sizeof(float) );
-			*(float*)varData = ae::FromString< float >( value, 0.0f );
+			float v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(float*)varData = v;
 			return true;
 		}
 		case BasicType::Double:
 		{
 			AE_ASSERT( typeSize == sizeof(double) );
-			*(double*)varData = ae::FromString< double >( value, 0.0 );
+			double v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(double*)varData = v;
 			return true;
 		}
 		case BasicType::Vec2:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Vec2) );
-			*(ae::Vec2*)varData = ae::FromString< ae::Vec2 >( value, ae::Vec2( 0.0f ) );
+			ae::Vec2 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Vec2*)varData = v;
 			return true;
 		}
 		case BasicType::Vec3:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Vec3) );
-			*(ae::Vec3*)varData = ae::FromString< ae::Vec3 >( value, ae::Vec3( 0.0f ) );
+			ae::Vec3 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Vec3*)varData = v;
 			return true;
 		}
 		case BasicType::Vec4:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Vec4) );
-			*(ae::Vec4*)varData = ae::FromString< ae::Vec4 >( value, ae::Vec4( 0.0f ) );
+			ae::Vec4 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Vec4*)varData = v;
 			return true;
 		}
 		case BasicType::Quaternion:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Quaternion) );
-			*(ae::Quaternion*)varData = ae::FromString< ae::Quaternion >( value, ae::Quaternion::Identity() );
+			ae::Quaternion v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Quaternion*)varData = v;
 			return true;
 		}
 		case BasicType::Matrix4:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Matrix4) );
-			*(ae::Matrix4*)varData = ae::FromString< ae::Matrix4 >( value, ae::Matrix4::Identity() );
+			ae::Matrix4 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Matrix4*)varData = v;
 			return true;
 		}
 		case BasicType::Color:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Color) );
-			*(ae::Color*)varData = ae::FromString( value, ae::Color::Black() );
+			ae::Color v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Color*)varData = v;
 			return true;
 		}
 		case BasicType::UUID:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::UUID) );
-			*(ae::UUID*)varData = ae::FromString< ae::UUID >( value, ae::UUID() );
+			ae::UUID v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::UUID*)varData = v;
 			return true;
 		}
 #if AE_DEPRECATED
