@@ -262,6 +262,7 @@
 #include <algorithm>
 #include <array> // @TODO: Remove. For _GetTypeName().
 #include <cassert>
+#include <cerrno> // @TODO: Remove when the errno usage is cleaned up in ae::EnumType
 #include <chrono>
 #include <cinttypes>
 #include <climits>
@@ -6648,12 +6649,31 @@ public:
 	//--------------------------------------------------------------------------
 	// Enum values
 	//--------------------------------------------------------------------------
+	//! Returns the registered enum member name for \p value, or an empty string
+	//! if \p value does not exactly match a registered enum member.
 	template< typename T > std::string GetNameByValue( T value ) const;
+	//! Returns a value through \p valueOut for the registered enum member named
+	//! in \p str. \p str can be either the full name of the enum member or a
+	//! numeric string that exactly matches the value of the enum member. T
+	//! must be an integral or enum type, and must be be large enough to hold
+	//! the enum's underlying type. Returns false on failure.
 	template< typename T > bool GetValueFromString( const char* str, T* valueOut ) const;
+	//! Returns the registered enum member value for \p str, or \p defaultValue
+	//! if \p str does not match any registered enum member name or value. T
+	//! must be an integral or enum type, and must be be large enough to hold
+	//! the enum's underlying type.
 	template< typename T > T GetValueFromString( const char* str, T defaultValue ) const;
+	//! Returns true if \p value exactly matches a registered enum member value.
 	template< typename T > bool HasValue( T value ) const;
-	int32_t GetValueByIndex( int32_t index ) const;
+	//! Returns the registered enum member value for \p index. Asserts if
+	//! \p index is out of range. The result will be returned as the type
+	//! specified by T, but the value is not checked for narrowing, so it may be
+	//! truncated if T is smaller than the enum's underlying type.
+	template< typename T > T GetValueByIndex( int32_t index ) const;
+	//! Returns the registered enum member name for \p index, or an empty string
+	//! if \p index is out of range.
 	std::string GetNameByIndex( int32_t index ) const;
+	//! Returns the number of registered enum members.
 	uint32_t Length() const;
 
 	//--------------------------------------------------------------------------
@@ -6663,10 +6683,10 @@ public:
 	//! enum value name), or an empty string if the value is not a named enum
 	//! member or \p varData is null.
 	std::string GetVarDataAsString( ae::ConstDataPointer varData ) const;
-	//! Parses \p value as an enum name or integer string and writes the result
-	//! to \p varData. Returns true on success. Returns false if \p varData is
-	//! null or \p value does not match any enum name and cannot be parsed as
-	//! a valid integer for this enum's underlying type.
+	//! Parses \p value as an enum name or numeric string for a registered enum
+	//! member and writes the result to \p varData. Returns true on success.
+	//! Returns false if \p varData is null, if \p value does not match any enum
+	//! name, or if the numeric string does not fit the enum's underlying type.
 	bool SetVarDataFromString( ae::DataPointer varData, const char* value ) const;
 	//! Copies the enum value at \p varData into \p valueOut. Returns false if
 	//! \p varData is null or T does not match the exact registered enum type
@@ -6690,13 +6710,13 @@ private:
 	ae::TypeName m_prefix;
 	uint32_t m_size;
 	bool m_isSigned;
-	ae::Map< int32_t, std::string, kMaxMetaEnumValues > m_enumValueToName;
-	ae::Map< std::string, int32_t, kMaxMetaEnumValues > m_enumNameToValue;
+	ae::Map< uint64_t, std::string, kMaxMetaEnumValues > m_enumValueToName;
+	ae::Map< std::string, uint64_t, kMaxMetaEnumValues > m_enumNameToValue;
 protected:
 	EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned );
 public:
 	const ae::EnumType* GetEnumType() const { return this; } // @TODO: Remove
-	void m_AddValue( const char* name, int32_t value );
+	template< typename T > void m_AppendValue( const char* name, T value );
 	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< EnumType >(); }
 };
 
@@ -13649,10 +13669,10 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	struct _EnumValues##E { _EnumValues##E( const char* values = #__VA_ARGS__ ) : values( values ) {} const char* values; };\
-	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnumType< E >()->GetNameByValue( (int32_t)e ); return os; }\
+	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnumType< E >()->GetNameByValue( e ); return os; }\
 	namespace ae { template<> inline std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
 	namespace ae { template<> inline E FromString( const char* str, const E& e ) { return ae::GetEnumType< E >()->GetValueFromString( str, e ); } }\
-	namespace ae { template<> inline uint32_t GetHash32( const E& e ) { return (uint32_t)e; } }
+	namespace ae { template<> inline uint32_t GetHash32( const E& e ) { return ae::GetHash32( static_cast< T >( e ) ); } }
 
 #define AE_REGISTER_ENUM_CLASS_IMPL( E )\
 	ae::_RegisterEnum< E > ae_enum_creator_##E( #E, _EnumValues##E().values );\
@@ -13866,7 +13886,7 @@ public:
 				}
 			}
 				
-			enumType->m_AddValue( enumName.c_str(), currentValue );
+			enumType->m_AppendValue( enumName.c_str(), currentValue );
 			currentValue++;
 		}
 		globals->metaCacheSeq++;
@@ -13922,7 +13942,7 @@ public:
 		const uint32_t prefixLen = (uint32_t)strlen( prefix );
 		AE_ASSERT( prefixLen < strlen( valueName ) );
 		AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
-		enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
+		enumType->m_AppendValue( valueName + prefixLen, value );
 		ae::_Globals::Get()->metaCacheSeq++;
 	}
 };
@@ -14390,32 +14410,82 @@ const ae::ClassType* ae::GetClassType()
 template< typename T >
 std::string ae::EnumType::GetNameByValue( T value ) const
 {
-	return m_enumValueToName.Get( (int32_t)value, "" );
+	if constexpr( std::is_integral_v< T > || std::is_enum_v< T > )
+	{
+		return m_enumValueToName.Get( static_cast< uint64_t >( value ), "" );
+	}
+	return "";
 }
 
 template< typename T >
 bool ae::EnumType::GetValueFromString( const char* str, T* valueOut ) const
 {
-	if( !str )
+	if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
 	{
 		return false;
 	}
-	int32_t value = 0;
-	if( m_enumNameToValue.TryGet( str, &value ) ) // Set object var with named enum value
+	else if( !str || !valueOut )
 	{
-		*valueOut = (T)value;
+		return false;
+	}
+	uint64_t storedValue = 0;
+	if( m_enumNameToValue.TryGet( str, &storedValue ) )
+	{
+		*valueOut = static_cast< T >( storedValue );
 		return true;
 	}
-	else if( isdigit( str[ 0 ] ) || str[ 0 ] == '-' ) // Set object var with a numerical enum value
+	else if( TypeIsSigned() )
 	{
-		value = atoi( str );
-		if( HasValue( value ) )
+		errno = 0;
+		char* endPtr = nullptr;
+		const int64_t value = strtoll( str, &endPtr, 10 );
+		if( endPtr == str || *endPtr != '\0' || errno == ERANGE )
 		{
-			*valueOut = (T)value;
-			return true;
+			return false;
 		}
+		switch( TypeSize() )
+		{
+			case 1: if( value < (int64_t)INT8_MIN || value > (int64_t)INT8_MAX ) { return false; } break;
+			case 2: if( value < (int64_t)INT16_MIN || value > (int64_t)INT16_MAX ) { return false; } break;
+			case 4: if( value < (int64_t)INT32_MIN || value > (int64_t)INT32_MAX ) { return false; } break;
+			case 8: break;
+			default: AE_DEBUG_FAIL(); return false;
+		}
+		if( !m_enumValueToName.TryGet( static_cast< uint64_t >( value ) ) )
+		{
+			return false; // Valid integer, but not a valid enum value
+		}
+		*valueOut = static_cast< T >( value );
+		return true;
 	}
-	return false;
+	else
+	{
+		if( str[ 0 ] == '-' )
+		{
+			return false;
+		}
+		errno = 0;
+		char* endPtr = nullptr;
+		const uint64_t value = strtoull( str, &endPtr, 10 );
+		if( endPtr == str || *endPtr != '\0' || errno == ERANGE )
+		{
+			return false;
+		}
+		switch( TypeSize() )
+		{
+			case 1: if( value > (uint64_t)UINT8_MAX ) { return false; } break;
+			case 2: if( value > (uint64_t)UINT16_MAX ) { return false; } break;
+			case 4: if( value > (uint64_t)UINT32_MAX ) { return false; } break;
+			case 8: break;
+			default: AE_DEBUG_FAIL(); return false;
+		}
+		if( !m_enumValueToName.TryGet( static_cast< uint64_t >( value ) ) )
+		{
+			return false; // Valid integer, but not a valid enum value
+		}
+		*valueOut = static_cast< T >( value );
+		return true;
+	}
 }
 
 template< typename T >
@@ -14428,7 +14498,28 @@ T ae::EnumType::GetValueFromString( const char* str, T defaultValue ) const
 template< typename T >
 bool ae::EnumType::HasValue( T value ) const
 {
-	return m_enumValueToName.TryGet( value );
+	if constexpr( std::is_integral_v< T > || std::is_enum_v< T > )
+	{
+		return m_enumValueToName.TryGet( static_cast< uint64_t >( value ) );
+	}
+	return false;
+}
+
+template< typename T >
+T ae::EnumType::GetValueByIndex( int32_t index ) const
+{
+	AE_STATIC_ASSERT( std::is_integral_v< T > || std::is_enum_v< T > );
+	AE_ASSERT_MSG( 0 <= index && (uint32_t)index < m_enumValueToName.Length(), "Invalid index # #", GetName(), index );
+	return static_cast< T >( m_enumValueToName.GetKey( index ) );
+}
+
+template< typename T >
+void ae::EnumType::m_AppendValue( const char* name, T value )
+{
+	AE_ASSERT_MSG( m_enumValueToName.Length() < m_enumValueToName.Size(), "Set/increase AE_MAX_META_ENUM_VALUES_CONFIG (Currently: #)", m_enumValueToName.Size() );
+	const uint64_t storedValue = uint64_t( value );
+	m_enumValueToName.Set( storedValue, name );
+	m_enumNameToValue.Set( name, storedValue );
 }
 
 //------------------------------------------------------------------------------
@@ -32210,16 +32301,16 @@ ae::EnumType::EnumType( const char* name, const char* prefix, uint32_t size, boo
 	m_size( size ),
 	m_isSigned( isSigned )
 {}
-int32_t ae::EnumType::GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
-std::string ae::EnumType::GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
-uint32_t ae::EnumType::Length() const { return m_enumValueToName.Length(); }
 
-void ae::EnumType::m_AddValue( const char* name, int32_t value )
+std::string ae::EnumType::GetNameByIndex( int32_t index ) const
 {
-	AE_ASSERT_MSG( m_enumValueToName.Length() < m_enumValueToName.Size(), "Set/increase AE_MAX_META_ENUM_VALUES_CONFIG (Currently: #)", m_enumValueToName.Size() );
-	m_enumValueToName.Set( value, name );
-	m_enumNameToValue.Set( name, value );
+	if( index < 0 || index >= (int32_t)m_enumValueToName.Length() )
+	{
+		return "";
+	}
+	return m_enumValueToName.GetValue( index );
 }
+uint32_t ae::EnumType::Length() const { return m_enumValueToName.Length(); }
 
 //------------------------------------------------------------------------------
 // ae::Type member functions
@@ -32467,24 +32558,16 @@ std::string ae::EnumType::GetVarDataAsString( ae::ConstDataPointer _varData ) co
 	{
 		return "";
 	}
-	
-	// @NOTE: Enums with very large or small values (outside the range of int32) are not currently supported
-	int32_t value = 0;
+
+	uint64_t storedValue = 0;
 	if( TypeIsSigned() )
 	{
 		switch( TypeSize() )
 		{
-			case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
-			case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
-			case 4: value = *reinterpret_cast< const int32_t* >( varData ); break;
-			case 8:
-			{
-				auto v = *reinterpret_cast< const int64_t* >( varData );
-				AE_DEBUG_ASSERT( v <= (int64_t)INT32_MAX );
-				AE_DEBUG_ASSERT( v >= (int64_t)INT32_MIN );
-				value = (int32_t)v;
-				break;
-			}
+			case 1: storedValue = static_cast< uint64_t >( *reinterpret_cast< const int8_t* >( varData ) ); break;
+			case 2: storedValue = static_cast< uint64_t >( *reinterpret_cast< const int16_t* >( varData ) ); break;
+			case 4: storedValue = static_cast< uint64_t >( *reinterpret_cast< const int32_t* >( varData ) ); break;
+			case 8: storedValue = static_cast< uint64_t >( *reinterpret_cast< const int64_t* >( varData ) ); break;
 			default: AE_FAIL();
 		}
 	}
@@ -32492,26 +32575,14 @@ std::string ae::EnumType::GetVarDataAsString( ae::ConstDataPointer _varData ) co
 	{
 		switch( TypeSize() )
 		{
-			case 1: value = *reinterpret_cast< const uint8_t* >( varData ); break;
-			case 2: value = *reinterpret_cast< const uint16_t* >( varData ); break;
-			case 4:
-			{
-				auto v = *reinterpret_cast< const uint32_t* >( varData );
-				AE_DEBUG_ASSERT( v <= (uint32_t)INT32_MAX );
-				value = v;
-				break;
-			}
-			case 8:
-			{
-				auto v = *reinterpret_cast< const uint64_t* >( varData );
-				AE_DEBUG_ASSERT( v <= (uint64_t)INT32_MAX );
-				value = (int32_t)v;
-				break;
-			}
+			case 1: storedValue = static_cast< uint64_t >( *reinterpret_cast< const uint8_t* >( varData ) ); break;
+			case 2: storedValue = static_cast< uint64_t >( *reinterpret_cast< const uint16_t* >( varData ) ); break;
+			case 4: storedValue = static_cast< uint64_t >( *reinterpret_cast< const uint32_t* >( varData ) ); break;
+			case 8: storedValue = static_cast< uint64_t >( *reinterpret_cast< const uint64_t* >( varData ) ); break;
 			default: AE_FAIL();
 		}
 	}
-	return GetNameByValue( value );
+	return m_enumValueToName.Get( storedValue, "" );
 }
 
 bool ae::EnumType::SetVarDataFromString( ae::DataPointer _varData, const char* value ) const

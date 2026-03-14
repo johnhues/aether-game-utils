@@ -41,6 +41,57 @@ AE_REGISTER_ENUM_CLASS( PlayerState );
 AE_REGISTER_ENUM_CLASS( TestEnumClass );
 
 //------------------------------------------------------------------------------
+// Enum width coverage
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM_CLASS2( EnumInt8 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt8, Min );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt8, NegativeOne );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt8, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt8, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumUInt8 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt8, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt8, One );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt8, HighBit );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt8, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumInt16 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt16, Min );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt16, NegativeOne );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt16, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt16, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumUInt16 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt16, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt16, One );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt16, HighBit );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt16, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumInt32 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt32, Min );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt32, NegativeOne );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt32, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt32, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumUInt32 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt32, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt32, One );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt32, HighBit );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt32, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumInt64 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt64, Min );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt64, NegativeOne );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt64, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt64, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumUInt64 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt64, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt64, One );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt64, HighBit );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt64, Max );
+
+//------------------------------------------------------------------------------
 // Namespace0::Namespace1::NamespaceClass registration
 //------------------------------------------------------------------------------
 AE_FORCE_LINK_CLASS( Namespace0, Namespace1, NamespaceClass );

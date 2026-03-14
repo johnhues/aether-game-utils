@@ -57,6 +57,73 @@ AE_DEFINE_ENUM_CLASS( PlayerState, uint16_t,
 );
 
 //------------------------------------------------------------------------------
+// Enum width coverage
+//------------------------------------------------------------------------------
+enum class EnumInt8 : int8_t
+{
+	Min = INT8_MIN,
+	NegativeOne = -1,
+	Zero = 0,
+	Max = INT8_MAX
+};
+
+enum class EnumUInt8 : uint8_t
+{
+	Zero = 0,
+	One = 1,
+	HighBit = 128,
+	Max = UINT8_MAX
+};
+
+enum class EnumInt16 : int16_t
+{
+	Min = INT16_MIN,
+	NegativeOne = -1,
+	Zero = 0,
+	Max = INT16_MAX
+};
+
+enum class EnumUInt16 : uint16_t
+{
+	Zero = 0,
+	One = 1,
+	HighBit = 32768,
+	Max = UINT16_MAX
+};
+
+enum class EnumInt32 : int32_t
+{
+	Min = INT32_MIN,
+	NegativeOne = -1,
+	Zero = 0,
+	Max = INT32_MAX
+};
+
+enum class EnumUInt32 : uint32_t
+{
+	Zero = 0,
+	One = 1,
+	HighBit = 2147483648u,
+	Max = UINT32_MAX
+};
+
+enum class EnumInt64 : int64_t
+{
+	Min = INT64_MIN,
+	NegativeOne = -1,
+	Zero = 0,
+	Max = INT64_MAX
+};
+
+enum class EnumUInt64 : uint64_t
+{
+	Zero = 0,
+	One = 1,
+	HighBit = 9223372036854775808ull,
+	Max = UINT64_MAX
+};
+
+//------------------------------------------------------------------------------
 // SomeClass
 //------------------------------------------------------------------------------
 class SomeClass : public ae::Inheritor< ae::Object, SomeClass >

@@ -28,6 +28,98 @@
 #include <catch2/catch_test_macros.hpp>
 
 //------------------------------------------------------------------------------
+// Enum helpers
+//------------------------------------------------------------------------------
+template< typename T >
+static void RequireEnumValueByIndex( const ae::EnumType* enumType, int32_t index, const T& expectedValue )
+{
+	T valueOut = enumType->GetValueByIndex< T >( index );
+	REQUIRE( valueOut == expectedValue );
+}
+
+template< typename T >
+struct EnumMetaCase
+{
+	const char* name;
+	T value;
+};
+
+template< typename T, uint32_t N >
+static void CheckEnumMetadata(
+	const char* typeName,
+	bool isSigned,
+	const EnumMetaCase< T >( &cases )[ N ],
+	std::underlying_type_t< T > missingValue,
+	const char* outOfRangeValue )
+{
+	using U = std::underlying_type_t< T >;
+
+	const ae::EnumType* enumType = ae::GetEnumType< T >();
+	REQUIRE( enumType == ae::GetEnumType( typeName ) );
+	REQUIRE( enumType->TypeSize() == sizeof(T) );
+	REQUIRE( enumType->TypeIsSigned() == isSigned );
+	REQUIRE( enumType->Length() == N );
+
+	for( uint32_t i = 0; i < N; i++ )
+	{
+		const std::string numericValue = ae::ToString( static_cast< U >( cases[ i ].value ) );
+
+		REQUIRE( enumType->GetNameByIndex( i ) == cases[ i ].name );
+		RequireEnumValueByIndex( enumType, i, cases[ i ].value );
+
+		REQUIRE( enumType->GetNameByValue( cases[ i ].value ) == cases[ i ].name );
+		REQUIRE( enumType->GetNameByValue( static_cast< U >( cases[ i ].value ) ) == cases[ i ].name );
+		REQUIRE( enumType->HasValue( cases[ i ].value ) );
+		REQUIRE( enumType->HasValue( static_cast< U >( cases[ i ].value ) ) );
+
+		T parsedEnum = static_cast< T >( missingValue );
+		REQUIRE( enumType->GetValueFromString( cases[ i ].name, &parsedEnum ) );
+		REQUIRE( parsedEnum == cases[ i ].value );
+
+		parsedEnum = static_cast< T >( missingValue );
+		REQUIRE( enumType->GetValueFromString( numericValue.c_str(), &parsedEnum ) );
+		REQUIRE( parsedEnum == cases[ i ].value );
+
+		T varValue = cases[ 0 ].value;
+		ae::DataPointer varData( &varValue );
+		REQUIRE( enumType->SetVarData( varData, cases[ i ].value ) );
+		REQUIRE( varValue == cases[ i ].value );
+		REQUIRE( enumType->GetVarDataAsString( ae::ConstDataPointer( varData ) ) == cases[ i ].name );
+
+		U underlyingValue = 0;
+		REQUIRE( enumType->GetVarData( ae::ConstDataPointer( varData ), &underlyingValue ) );
+		REQUIRE( underlyingValue == static_cast< U >( cases[ i ].value ) );
+
+		varValue = cases[ 0 ].value;
+		REQUIRE( enumType->SetVarDataFromString( varData, cases[ i ].name ) );
+		REQUIRE( varValue == cases[ i ].value );
+		REQUIRE( enumType->SetVarDataFromString( varData, numericValue.c_str() ) );
+		REQUIRE( varValue == cases[ i ].value );
+	}
+
+	const T missingEnumValue = static_cast< T >( missingValue );
+	const std::string missingNumericValue = ae::ToString( missingValue );
+
+	REQUIRE( enumType->GetNameByValue( missingEnumValue ) == "" );
+	REQUIRE( !enumType->HasValue( missingEnumValue ) );
+
+	T parsedEnum = cases[ 0 ].value;
+	REQUIRE( !enumType->GetValueFromString( "MissingValue", &parsedEnum ) );
+	REQUIRE( parsedEnum == cases[ 0 ].value );
+	REQUIRE( !enumType->GetValueFromString( missingNumericValue.c_str(), &parsedEnum ) );
+	REQUIRE( parsedEnum == cases[ 0 ].value );
+	REQUIRE( !enumType->GetValueFromString( outOfRangeValue, &parsedEnum ) );
+	REQUIRE( parsedEnum == cases[ 0 ].value );
+
+	T varValue = cases[ 0 ].value;
+	ae::DataPointer varData( &varValue );
+	REQUIRE( !enumType->SetVarDataFromString( varData, missingNumericValue.c_str() ) );
+	REQUIRE( varValue == cases[ 0 ].value );
+	REQUIRE( !enumType->SetVarDataFromString( varData, outOfRangeValue ) );
+	REQUIRE( varValue == cases[ 0 ].value );
+}
+
+//------------------------------------------------------------------------------
 // Types
 //------------------------------------------------------------------------------
 TEST_CASE( "Can get base type by name", "[aeMeta]" )
@@ -212,13 +304,97 @@ TEST_CASE( "enum registration", "[aeMeta]" )
 	REQUIRE( playerStateEnum->Length() == 3 );
 	
 	REQUIRE( playerStateEnum->GetNameByIndex( 0 ) == "Idle" );
-	REQUIRE( playerStateEnum->GetValueByIndex( 0 ) == 0 );
+	RequireEnumValueByIndex( playerStateEnum, 0, PlayerState::Idle );
 	
 	REQUIRE( playerStateEnum->GetNameByIndex( 1 ) == "Run" );
-	REQUIRE( playerStateEnum->GetValueByIndex( 1 ) == 1 );
+	RequireEnumValueByIndex( playerStateEnum, 1, PlayerState::Run );
 	
 	REQUIRE( playerStateEnum->GetNameByIndex( 2 ) == "Jump" );
-	REQUIRE( playerStateEnum->GetValueByIndex( 2 ) == 2 );
+	RequireEnumValueByIndex( playerStateEnum, 2, PlayerState::Jump );
+}
+
+TEST_CASE( "enum metadata supports all fixed-width underlying types", "[aeMeta]" )
+{
+	{
+		const EnumMetaCase< EnumInt8 > cases[] =
+		{
+			{ "Min", EnumInt8::Min },
+			{ "NegativeOne", EnumInt8::NegativeOne },
+			{ "Zero", EnumInt8::Zero },
+			{ "Max", EnumInt8::Max },
+		};
+		CheckEnumMetadata( "EnumInt8", true, cases, (int8_t)1, "128" );
+	}
+	{
+		const EnumMetaCase< EnumUInt8 > cases[] =
+		{
+			{ "Zero", EnumUInt8::Zero },
+			{ "One", EnumUInt8::One },
+			{ "HighBit", EnumUInt8::HighBit },
+			{ "Max", EnumUInt8::Max },
+		};
+		CheckEnumMetadata( "EnumUInt8", false, cases, (uint8_t)2, "256" );
+	}
+	{
+		const EnumMetaCase< EnumInt16 > cases[] =
+		{
+			{ "Min", EnumInt16::Min },
+			{ "NegativeOne", EnumInt16::NegativeOne },
+			{ "Zero", EnumInt16::Zero },
+			{ "Max", EnumInt16::Max },
+		};
+		CheckEnumMetadata( "EnumInt16", true, cases, (int16_t)1, "32768" );
+	}
+	{
+		const EnumMetaCase< EnumUInt16 > cases[] =
+		{
+			{ "Zero", EnumUInt16::Zero },
+			{ "One", EnumUInt16::One },
+			{ "HighBit", EnumUInt16::HighBit },
+			{ "Max", EnumUInt16::Max },
+		};
+		CheckEnumMetadata( "EnumUInt16", false, cases, (uint16_t)2, "65536" );
+	}
+	{
+		const EnumMetaCase< EnumInt32 > cases[] =
+		{
+			{ "Min", EnumInt32::Min },
+			{ "NegativeOne", EnumInt32::NegativeOne },
+			{ "Zero", EnumInt32::Zero },
+			{ "Max", EnumInt32::Max },
+		};
+		CheckEnumMetadata( "EnumInt32", true, cases, (int32_t)1, "2147483648" );
+	}
+	{
+		const EnumMetaCase< EnumUInt32 > cases[] =
+		{
+			{ "Zero", EnumUInt32::Zero },
+			{ "One", EnumUInt32::One },
+			{ "HighBit", EnumUInt32::HighBit },
+			{ "Max", EnumUInt32::Max },
+		};
+		CheckEnumMetadata( "EnumUInt32", false, cases, (uint32_t)2, "4294967296" );
+	}
+	{
+		const EnumMetaCase< EnumInt64 > cases[] =
+		{
+			{ "Min", EnumInt64::Min },
+			{ "NegativeOne", EnumInt64::NegativeOne },
+			{ "Zero", EnumInt64::Zero },
+			{ "Max", EnumInt64::Max },
+		};
+		CheckEnumMetadata( "EnumInt64", true, cases, (int64_t)1, "9223372036854775808" );
+	}
+	{
+		const EnumMetaCase< EnumUInt64 > cases[] =
+		{
+			{ "Zero", EnumUInt64::Zero },
+			{ "One", EnumUInt64::One },
+			{ "HighBit", EnumUInt64::HighBit },
+			{ "Max", EnumUInt64::Max },
+		};
+		CheckEnumMetadata( "EnumUInt64", false, cases, (uint64_t)2, "18446744073709551616" );
+	}
 }
 
 TEST_CASE( "Aggregate vars", "[aeMeta]" )
@@ -967,9 +1143,9 @@ TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
 	REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
-	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
-	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
-	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+	RequireEnumValueByIndex( enumType, 0, SomeOldEnum::Bleep );
+	RequireEnumValueByIndex( enumType, 1, SomeOldEnum::Bloop );
+	RequireEnumValueByIndex( enumType, 2, SomeOldEnum::Blop );
 }
 
 TEST_CASE( "existing c-style enum string conversions", "[aeMeta]" )
@@ -1021,9 +1197,9 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
 	REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
-	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
-	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
-	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+	RequireEnumValueByIndex( enumType, 0, SomeOldPrefixEnum::kSomeOldPrefixEnum_Bleep );
+	RequireEnumValueByIndex( enumType, 1, SomeOldPrefixEnum::kSomeOldPrefixEnum_Bloop );
+	RequireEnumValueByIndex( enumType, 2, SomeOldPrefixEnum::kSomeOldPrefixEnum_Blop );
 }
 
 //------------------------------------------------------------------------------
@@ -1037,9 +1213,9 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
 	REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
-	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
-	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
-	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+	RequireEnumValueByIndex( enumType, 0, SomeOldRenamedEnum::BLEEP );
+	RequireEnumValueByIndex( enumType, 1, SomeOldRenamedEnum::BLOOP );
+	RequireEnumValueByIndex( enumType, 2, SomeOldRenamedEnum::BLOP );
 }
 
 //------------------------------------------------------------------------------
@@ -1053,9 +1229,9 @@ TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
 	REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
-	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
-	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
-	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+	RequireEnumValueByIndex( enumType, 0, SomeNewEnum::Bleep );
+	RequireEnumValueByIndex( enumType, 1, SomeNewEnum::Bloop );
+	RequireEnumValueByIndex( enumType, 2, SomeNewEnum::Blop );
 }
 
 //------------------------------------------------------------------------------
@@ -1069,9 +1245,9 @@ TEST_CASE( "can register an already existing enum class in a nested namespace", 
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
 	REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
-	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
-	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
-	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+	RequireEnumValueByIndex( enumType, 0, A::B::SomeNewEnum::Bleep );
+	RequireEnumValueByIndex( enumType, 1, A::B::SomeNewEnum::Bloop );
+	RequireEnumValueByIndex( enumType, 2, A::B::SomeNewEnum::Blop );
 }
 
 //------------------------------------------------------------------------------
