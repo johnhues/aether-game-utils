@@ -1248,7 +1248,7 @@ void Editor::Update()
 				ae::Str32 varName;
 				ae::Str256 varValue;
 				rStream.SerializeUInt32( entity );
-				rStream.SerializeUInt32( typeId );
+				rStream.SerializeObject( typeId );
 				rStream.SerializeString( varName );
 				rStream.SerializeString( varValue );
 				if( rStream.IsValid() )
@@ -3151,7 +3151,7 @@ void EditorServer::BroadcastVarChange( const ae::ClassVar* var, const ae::Compon
 	ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
 	wStream.SerializeEnum( EditorNetMsg::Modification );
 	wStream.SerializeUInt32( component->GetEntity() );
-	wStream.SerializeUInt32( ae::GetObjectTypeId( component ) );
+	wStream.SerializeObject( ae::GetObjectTypeId( component ) );
 	wStream.SerializeString( var->GetName() );
 	wStream.SerializeString( var->GetObjectValueAsString( component ).c_str() );
 	if( wStream.IsValid() )
@@ -3981,9 +3981,10 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 	ae::RaycastParams raycastParams;
 	raycastParams.source = mouseRaySrc;
 	raycastParams.ray = mouseRay * kEditorViewDistance;
-	raycastParams.hitClockwise = false;
-	raycastParams.hitCounterclockwise = true;
-	// raycastParams.debug = &program->debugLines; // Debug only
+	ae::CollisionMeshRaycastParams meshParams;
+	meshParams.hitClockwise = false;
+	meshParams.hitCounterclockwise = true;
+	// meshParams.debug = &program->debugLines; // Debug only
 	ae::RaycastResult result;
 	for( auto& [ _, plugin ] : program->plugins )
 	{
@@ -4001,8 +4002,8 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 				continue;
 			}
 			raycastParams.userData = editorObj;
-			raycastParams.transform = instance->transform;
-			result = instance->m_mesh->collision.Raycast( raycastParams, result );
+			meshParams.transform = instance->transform;
+			result = instance->m_mesh->collision.Raycast( raycastParams, meshParams, result );
 		}
 	}
 	const uint32_t editorObjectCount = m_objects.Length();
@@ -4016,15 +4017,8 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 			const ae::Sphere sphere( editorObj->GetTransform().GetTranslation(), 0.5f );
 			if( sphere.IntersectRay( mouseRaySrc, mouseRay, &hitPos, nullptr, &hitT ) )
 			{
-				raycastParams.userData = nullptr;
-				raycastParams.transform = ae::Matrix4::Identity();
-				ae::RaycastResult sphereResult;
-				auto* hit = &sphereResult.hits.Append( {} );
-				hit->position = hitPos;
-				hit->normal = ( mouseRaySrc - hitPos ).SafeNormalizeCopy();
-				hit->distance = hitT;
-				hit->userData = editorObj;
-				ae::RaycastResult::Accumulate( raycastParams, sphereResult, &result );
+				raycastParams.userData = editorObj;
+				result = ae::Raycast( sphere, raycastParams, result );
 			}
 		}
 	}
@@ -4032,7 +4026,7 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 	{
 		*hitOut = result.hits[ 0 ].position;
 		*normalOut = result.hits[ 0 ].normal;
-		const EditorServerObject* editorObj = (const EditorServerObject*)result.hits[ 0 ].userData;
+		const EditorServerObject* editorObj = result.hits[ 0 ].userData.Get< const EditorServerObject* >();
 		return editorObj ? editorObj->entity : kNullEntity;
 	}
 

@@ -5141,7 +5141,6 @@ struct CollisionMeshPushOutParams
 //------------------------------------------------------------------------------
 struct PushOutParams
 {
-	ae::Matrix4 transform = ae::Matrix4::Identity();
 	ae::Any< 32, 16 > userData;
 };
 
@@ -13090,7 +13089,7 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 		debug->AddSphere( prevInfo.sphere.center, prevInfo.sphere.radius, meshParams.debugColor, 8 );
 	}
 
-	ae::OBB obb( params.transform * m_aabb.GetTransform() );
+	ae::OBB obb( meshParams.transform * m_aabb.GetTransform() );
 	if( obb.GetSignedDistanceFromSurface( prevInfo.sphere.center ) > prevInfo.sphere.radius )
 	{
 		return prevInfo; // Early out if sphere is to far from mesh
@@ -13105,7 +13104,7 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 	PushOutInfo result;
 	result.sphere = prevInfo.sphere;
 	result.velocity = prevInfo.velocity;
-	const bool hasIdentityTransform = ( params.transform == ae::Matrix4::Identity() );
+	const bool hasIdentityTransform = ( meshParams.transform == ae::Matrix4::Identity() );
 	
 	auto bvhFn = [&]( auto&& bvhFn, const ae::BVH< BVHTri, B >* bvh, const BVHNode* current ) -> void
 	{
@@ -13124,7 +13123,7 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 		}
 		else
 		{
-			ae::OBB obb( params.transform * aabb.GetTransform() );
+			ae::OBB obb( meshParams.transform * aabb.GetTransform() );
 			if( obb.GetSignedDistanceFromSurface( prevInfo.sphere.center ) > prevInfo.sphere.radius )
 			{
 				return;
@@ -13146,9 +13145,9 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 				ae::Vec3 c = m_positions[ leaf->data[ i ].idx[ 2 ] ];
 				if( !hasIdentityTransform )
 				{
-					a = ae::Vec3( params.transform * ae::Vec4( a, 1.0f ) );
-					b = ae::Vec3( params.transform * ae::Vec4( b, 1.0f ) );
-					c = ae::Vec3( params.transform * ae::Vec4( c, 1.0f ) );
+					a = ae::Vec3( meshParams.transform * ae::Vec4( a, 1.0f ) );
+					b = ae::Vec3( meshParams.transform * ae::Vec4( b, 1.0f ) );
+					c = ae::Vec3( meshParams.transform * ae::Vec4( c, 1.0f ) );
 				}
 		
 				const ae::Vec3 triNormal = ( ( b - a ).Cross( c - a ) ).SafeNormalizeCopy();

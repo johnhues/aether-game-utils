@@ -2647,9 +2647,6 @@ bool Terrain::Raycast( const ae::RaycastParams& _params, ae::RaycastResult* outR
 
 ae::PushOutInfo Terrain::PushOutSphere( const ae::PushOutParams& _params, const ae::PushOutInfo& info ) const
 {
-  ae::PushOutParams params = _params;
-  params.transform = ae::Matrix4::Identity();
-  
   ae::Int3 sphereMin, sphereMax;
   ae::AABB sphereAABB( info.sphere );
   TerrainChunk::GetPosFromWorld( sphereAABB.GetMin().FloorCopy(), &sphereMin, nullptr );
@@ -2662,7 +2659,7 @@ ae::PushOutInfo Terrain::PushOutSphere( const ae::PushOutParams& _params, const 
   {
     if( const TerrainChunk* chunk = GetChunk( ae::Int3( x, y, z ) ) )
     {
-      results = chunk->m_mesh.PushOut( params, {}, results );
+      results = chunk->m_mesh.PushOut( _params, {}, results );
     }
   }
   
