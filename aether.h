@@ -260,7 +260,7 @@
 // System Headers
 //------------------------------------------------------------------------------
 #include <algorithm>
-#include <array> // @TODO: Remove. For _GetTypeName().
+#include <array>
 #include <cassert>
 #include <cerrno> // strtoll/strtoull error checking
 
@@ -417,11 +417,11 @@ bool IsDebuggerAttached();
 //! Returns the name of the given class or basic type from an instance. Note
 //! that this does not return the name of the derived class if the instance is
 //! a base class (get the ae::ClassType of an ae::Object in that case).
-template< typename T > const char* GetTypeName();
+template< typename T > constexpr const char* GetTypeName();
 //! Returns the name of the given class or basic type from an instance. Note
 //! that this does not return the name of the derived class if the instance is
 //! a base class (get the ae::ClassType of an ae::Object in that case).
-template< typename T > const char* GetTypeName( const T& );
+template< typename T > constexpr const char* GetTypeName( const T& );
 //! Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
 double GetTime();
 //! Shows a generic message box
@@ -6421,10 +6421,10 @@ ae::TypeId GetObjectTypeId( const ae::Object* obj );
 constexpr ae::TypeId GetTypeIdFromName( const char* name );
 //! Returns an integer id for the given type, which ignores const, pointer, and
 //! reference qualifiers.
-template< typename T > ae::TypeId GetTypeIdWithoutQualifiers();
+template< typename T > constexpr ae::TypeId GetTypeIdWithoutQualifiers();
 //! Returns an integer id for the given type, which respects const, pointer, and
 //! reference qualifiers.
-template< typename T > ae::TypeId GetTypeIdWithQualifiers();
+template< typename T > constexpr ae::TypeId GetTypeIdWithQualifiers();
 
 //------------------------------------------------------------------------------
 // ae::Attribute class
@@ -7302,8 +7302,13 @@ private:
 // GetTypeName() internal implementation
 // https://stackoverflow.com/a/59522794
 //------------------------------------------------------------------------------
+} // ae end
+
+// Get a string representation of this functions signature, which includes the
+// type name of T. This is declared in the global namespace, so aether type
+// names are always prepended with "ae::".
 template< typename T >
-constexpr const auto& _RawTypeName()
+constexpr const auto& _ae_CompilerTypeName()
 {
 #ifdef _MSC_VER
 	return __FUNCSIG__;
@@ -7312,62 +7317,127 @@ constexpr const auto& _RawTypeName()
 #endif
 }
 
-struct _RawTypeNameFormat
-{
-	std::size_t leadingJunk = 0;
-	std::size_t trailingJunk = 0;
-};
-
-inline constexpr bool _GetRawTypeNameFormat( ae::_RawTypeNameFormat* format )
-{
-	const auto& str = ae::_RawTypeName< int >();
-	for( std::size_t i = 0; str[ i ]; i++ )
-	{
-		if( str[ i ] == 'i' && str[ i + 1 ] == 'n' && str[ i + 2 ] == 't' )
-		{
-			if( format )
-			{
-				format->leadingJunk = i;
-				format->trailingJunk = sizeof( str ) - i - sizeof( "int" );
-			}
-			return true;
-		}
-	}
-	return false;
-}
-
-inline static constexpr _RawTypeNameFormat _rawTypeNameFormat = []
-{
-	static_assert( ae::_GetRawTypeNameFormat( nullptr ), "Unable to figure out how to generate type names on this compiler." );
-	ae::_RawTypeNameFormat format;
-	ae::_GetRawTypeNameFormat( &format );
-	return format;
-}();
-
 template< typename T >
-constexpr auto _GetTypeName() // @TODO: Return ae::Str
+constexpr auto _ae_RawTypeName()
 {
-	constexpr std::size_t len = sizeof( ae::_RawTypeName< T >() ) - ae::_rawTypeNameFormat.leadingJunk - ae::_rawTypeNameFormat.trailingJunk;
-	std::array< char, len > name{}; // @TODO: Compile time ae::Array
-	for( std::size_t i = 0; i < len - 1; i++ )
+	// This "searches" the string at compile time to find the known "int" string
+	// and records the substring start and end, relative to the start and end of
+	// the full string. This allows the extraction of unknown type names.
+	struct RawTypeNameFormat
 	{
-		name[ i ] = ae::_RawTypeName< T >()[ i + ae::_rawTypeNameFormat.leadingJunk ];
+		std::size_t leadingChars = 0;
+		std::size_t trailingChars = 0;
+		bool found = false;
+	};
+	constexpr RawTypeNameFormat format = []
+	{
+		RawTypeNameFormat rv;
+		const auto& str = ::_ae_CompilerTypeName< int >();
+		for( std::size_t i = 0; str[ i ]; i++ )
+		{
+			if( str[ i ] == 'i' && str[ i + 1 ] && str[ i + 1 ] == 'n' && str[ i + 2 ] && str[ i + 2 ] == 't' )
+			{
+				rv.leadingChars = i;
+				rv.trailingChars = sizeof( str ) - i - sizeof( "int" );
+				rv.found = true;
+				break;
+			}
+		}
+		return rv;
+	}();
+	static_assert( format.found, "Unable to figure out how to generate type names on this compiler." );
+	
+	const auto& compilerName = ::_ae_CompilerTypeName< T >();
+	constexpr std::size_t rawLen = sizeof( compilerName ) - format.leadingChars - format.trailingChars;
+	constexpr std::size_t normalizedLen = [ &compilerName, format, rawLen ]()
+	{
+		std::size_t len = 1;
+		char prevOut = '\0';
+		bool hasOut = false;
+		for( std::size_t i = 0; i < rawLen - 1; i++ )
+		{
+			const char c = compilerName[ i + format.leadingChars ];
+			if( c == '[' && hasOut && prevOut == ' ' )
+			{
+				len--;
+			}
+			if( ( c == '*' || c == '&' ) && hasOut && prevOut != ' ' )
+			{
+				len++;
+			}
+			len++;
+			prevOut = c;
+			hasOut = true;
+		}
+		return len;
+	}();
+	
+	// Normalize the compiler string name so:
+	// 'ae::Object*' changes to 'ae::Object *'
+	// 'const ae::Object &' stays normalized
+	// 'ae::Object [3]' changes to 'ae::Object[3]'
+	std::array< char, normalizedLen > name{};
+	std::size_t out = 0;
+	for( std::size_t i = 0; i < rawLen - 1; i++ )
+	{
+		const char c = compilerName[ i + format.leadingChars ];
+		if( c == '[' && out && name[ out - 1 ] == ' ' )
+		{
+			out--;
+		}
+		if( ( c == '*' || c == '&' ) && out && name[ out - 1 ] != ' ' )
+		{
+			name[ out++ ] = ' ';
+		}
+		name[ out++ ] = c;
 	}
+	name[ out ] = '\0';
 	return name;
 }
 
+namespace ae {
+
 template< typename T >
-const char* GetTypeName()
+struct _GetTypeNameImpl
 {
-	static constexpr auto name = ae::_GetTypeName< T >();
-	return name.data();
+	// Keep this storage at namespace scope. A function-local static inside the
+	// constexpr GetTypeName<T>() body would require the C++23 local-static-in-
+	// constexpr rules, while an inline static data member like this is valid in
+	// C++17.
+	inline static constexpr auto value = ::_ae_RawTypeName< T >();
+};
+
+template< typename T >
+constexpr const char* GetTypeName()
+{
+	return ae::_GetTypeNameImpl< T >::value.data();
 }
 
 template< typename T >
-const char* GetTypeName( const T& )
+constexpr const char* GetTypeName( const T& )
 {
 	return ae::GetTypeName< T >();
 }
+
+//------------------------------------------------------------------------------
+// ae::GetTypeName() constexpr validation
+//------------------------------------------------------------------------------
+constexpr bool _GetTypeNameValidation( const char* lhs, const char* rhs )
+{
+	for( std::size_t i = 0; ; i++ )
+	{
+		if( lhs[ i ] != rhs[ i ] )
+		{
+			return false;
+		}
+		if( !lhs[ i ] )
+		{
+			return true;
+		}
+	}
+}
+static_assert( ae::_GetTypeNameValidation( ::_ae_RawTypeName< int >().data(), "int" ), "_ae_RawTypeName() must remain constexpr." );
+static_assert( ae::_GetTypeNameValidation( ae::GetTypeName< int >(), "int" ), "GetTypeName() must remain constexpr." );
 
 //------------------------------------------------------------------------------
 // Log levels internal implementation
@@ -13833,14 +13903,14 @@ constexpr ae::TypeId GetTypeIdFromName( const char* name )
 	return ae::TypeId( name[ 0 ] ? ae::Hash32().HashString( name ).Get() : 0u );
 }
 
-template< typename T > ae::TypeId GetTypeIdWithoutQualifiers()
+template< typename T > constexpr ae::TypeId GetTypeIdWithoutQualifiers()
 {
 	return ae::GetTypeIdWithQualifiers< ae::RemoveTypeQualifiers< T > >();
 }
 
-template< typename T > ae::TypeId GetTypeIdWithQualifiers()
+template< typename T > constexpr ae::TypeId GetTypeIdWithQualifiers()
 {
-	return ae::GetTypeIdFromName( ae::_GetTypeName< T >().data() );
+	return ae::GetTypeIdFromName( ae::GetTypeName< T >() );
 }
 
 template< typename T >
@@ -14436,7 +14506,7 @@ bool ae::ClassType::IsType() const
 	return IsType( type );
 }
 
-template< typename T >
+template< typename _T >
 const ae::ClassType* ae::GetClassType()
 {
 	static _StaticCacheVar< const ae::ClassType* > s_type = nullptr;
@@ -14446,11 +14516,12 @@ const ae::ClassType* ae::GetClassType()
 	}
 	else
 	{
+		using T = ae::RemoveTypeQualifiers< _T >;
 		_Globals* globals = _Globals::Get();
 		// @TODO: Conditionally enable this check when T is not a forward declaration
 		//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
 		s_type = globals->classTypes.Get( ae::GetTypeIdWithoutQualifiers< T >(), nullptr );
-		AE_ASSERT_MSG( s_type, "No meta info for type name: #", ae::GetTypeName< ae::RemoveTypeQualifiers< T > >() );
+		AE_ASSERT_MSG( s_type, "No meta info for type name: #", ae::GetTypeName< T >() );
 		return s_type;
 	}
 }

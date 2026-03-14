@@ -119,6 +119,19 @@ static void CheckEnumMetadata(
 	REQUIRE( varValue == cases[ 0 ].value );
 }
 
+template< std::size_t N >
+constexpr bool ConstexprStringEquals( const char* lhs, const char( &rhs )[ N ] )
+{
+	for( std::size_t i = 0; i < N; i++ )
+	{
+		if( lhs[ i ] != rhs[ i ] )
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 //------------------------------------------------------------------------------
 // Types
 //------------------------------------------------------------------------------
@@ -147,6 +160,20 @@ TEST_CASE( "Can get base type by name", "[aeMeta]" )
 	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object* > >() == ae::Str32( "ae::Object" ) );
 	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object& > >() == ae::Str32( "ae::Object" ) );
 	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object[ 3 ] > >() == ae::Str32( "ae::Object" ) );
+}
+
+TEST_CASE( "GetTypeName can be used in constexpr context", "[aeMeta]" )
+{
+	constexpr const char* objectName = ae::GetTypeName< ae::Object >();
+	constexpr const char* objectPtrName = ae::GetTypeName< ae::Object* >();
+	constexpr const char* constArrayName = ae::GetTypeName< const ae::Object[ 3 ] >();
+	static_assert( ConstexprStringEquals( objectName, "ae::Object" ) );
+	static_assert( ConstexprStringEquals( objectPtrName, "ae::Object *" ) );
+	static_assert( ConstexprStringEquals( constArrayName, "const ae::Object[3]" ) );
+	static_assert( ae::GetTypeIdFromName( objectName ) == ae::TypeId( "ae::Object" ) );
+	REQUIRE( objectName == ae::Str32( "ae::Object" ) );
+	REQUIRE( objectPtrName == ae::Str32( "ae::Object *" ) );
+	REQUIRE( constArrayName == ae::Str32( "const ae::Object[3]" ) );
 }
 
 TEST_CASE( "Can get base type with templates", "[aeMeta]" )

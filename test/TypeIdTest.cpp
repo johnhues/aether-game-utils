@@ -126,14 +126,38 @@ TEST_CASE( "TypeId is usable as a constexpr value", "[ae::TypeId]" )
 	constexpr ae::TypeId id( "ConstexprType" );
 	constexpr ae::TypeId same( "ConstexprType" );
 	constexpr ae::TypeId diff( "OtherType" );
+	constexpr const char* objectName = ae::GetTypeName< ae::Object >();
+	constexpr ae::TypeId objectTypeId = ae::GetTypeIdFromName( objectName );
+	constexpr ae::TypeId objectTypedHelperId = ae::GetTypeIdWithQualifiers< ae::Object >();
+	constexpr ae::TypeId objectUnqualifiedHelperId = ae::GetTypeIdWithoutQualifiers< const ae::Object* >();
 	static_assert( id == same, "Same string should produce same TypeId" );
 	static_assert( id != diff, "Different strings should produce different TypeIds" );
 	static_assert( ae::kInvalidTypeId == ae::TypeId(), "kInvalidTypeId should equal default TypeId" );
+	static_assert( objectTypeId == ae::TypeId( "ae::Object" ), "TypeId should be constexpr when generated from a constexpr type name." );
+	static_assert( objectTypedHelperId == objectTypeId, "GetTypeIdWithQualifiers<T>() should be constexpr." );
+	static_assert( objectUnqualifiedHelperId == ae::TypeId( "ae::Object" ), "GetTypeIdWithoutQualifiers<T>() should be constexpr." );
 
 	// Runtime checks to satisfy Catch2
 	REQUIRE( id == same );
 	REQUIRE( id != diff );
 	REQUIRE( ae::kInvalidTypeId == ae::TypeId() );
+	REQUIRE( objectTypeId == ae::TypeId( "ae::Object" ) );
+	REQUIRE( objectTypeId == objectTypedHelperId );
+	REQUIRE( objectUnqualifiedHelperId == ae::TypeId( "ae::Object" ) );
+}
+
+TEST_CASE( "TypeId from runtime type name is validated at runtime", "[ae::TypeId]" )
+{
+	constexpr ae::TypeId constexprTypeId = ae::GetTypeIdFromName( ae::GetTypeName< ae::Object >() );
+	static_assert( constexprTypeId == ae::TypeId( "ae::Object" ) );
+
+	const std::string runtimeTypeName = ae::GetTypeName< ae::Object >();
+	const ae::TypeId runtimeTypeId = ae::GetTypeIdFromName( runtimeTypeName.c_str() );
+
+	// This path must still work for runtime-provided names, but it cannot be
+	// verified with static_assert because the input string is no longer constexpr.
+	REQUIRE( runtimeTypeId == constexprTypeId );
+	REQUIRE( runtimeTypeId == ae::GetTypeIdWithQualifiers< ae::Object >() );
 }
 
 TEST_CASE( "TypeId operator uint32_t returns underlying value", "[ae::TypeId]" )
