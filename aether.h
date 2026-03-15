@@ -6261,8 +6261,9 @@ private:
 // External enum definer and registerer
 //------------------------------------------------------------------------------
 //! Define a new enum (must register with AE_REGISTER_ENUM_CLASS)
-#define AE_DEFINE_ENUM_CLASS( E, T, ... ) AE_DEFINE_ENUM_CLASS_IMPL( E, T, ##__VA_ARGS__ )
-
+#define AE_DEFINE_ENUM_CLASS( E, T, ... ) AE_DEFINE_ENUM_CLASS_IMPL( E, T, false, ##__VA_ARGS__ )
+//! Define a new bit field enum (must register with AE_REGISTER_ENUM_CLASS)
+#define AE_DEFINE_BIT_FIELD_ENUM_CLASS( E, T, ... ) AE_DEFINE_BIT_FIELD_ENUM_CLASS_IMPL( E, T, ##__VA_ARGS__ )
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
 #define AE_REGISTER_ENUM_CLASS( E ) AE_REGISTER_ENUM_CLASS_IMPL( E )
 
@@ -6271,13 +6272,14 @@ private:
 //------------------------------------------------------------------------------
 //! Register an already defined c-style enum type
 #define AE_REGISTER_ENUM( E ) AE_REGISTER_ENUM_IMPL( E )
-
+//! Register an already defined c-style bit field enum type
+#define AE_REGISTER_BIT_FIELD_ENUM( E ) AE_REGISTER_BIT_FIELD_ENUM_IMPL( E )
 //! Register an already defined c-style enum type where each value has a prefix
 #define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) AE_REGISTER_ENUM_PREFIX_IMPL( E, PREFIX )
-
+//! Register an already defined c-style bit field enum type where each value has a prefix
+#define AE_REGISTER_BIT_FIELD_ENUM_PREFIX( E, PREFIX ) AE_REGISTER_BIT_FIELD_ENUM_PREFIX_IMPL( E, PREFIX )
 //! Register c-style enum value
 #define AE_REGISTER_ENUM_VALUE( E, V ) ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #V, V );
-
 //! Register c-style enum value with a manually specified name
 #define AE_REGISTER_ENUM_VALUE_NAME( E, V, N ) ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #N, V );
 
@@ -6286,7 +6288,8 @@ private:
 //------------------------------------------------------------------------------
 //! Register an already defined enum class type
 #define AE_REGISTER_ENUM_CLASS2( E ) AE_REGISTER_ENUM_CLASS2_IMPL( E )
-
+//! Register an already defined bit field enum class type
+#define AE_REGISTER_BIT_FIELD_ENUM_CLASS2( E ) AE_REGISTER_BIT_FIELD_ENUM_CLASS2_IMPL( E )
 //! Register enum class value
 #define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##V( #V, E::V ); }
 
@@ -6653,6 +6656,7 @@ public:
 	const char* GetPrefix() const { return m_prefix.c_str(); }
 	uint32_t TypeSize() const { return m_size; }
 	bool TypeIsSigned() const { return m_isSigned; }
+	bool TypeIsBitField() const { return m_isBitField; }
 
 	//--------------------------------------------------------------------------
 	// Enum values
@@ -6718,10 +6722,11 @@ private:
 	ae::TypeName m_prefix;
 	uint32_t m_size;
 	bool m_isSigned;
+	bool m_isBitField;
 	ae::Map< uint64_t, std::string, kMaxMetaEnumValues > m_enumValueToName;
 	ae::Map< std::string, uint64_t, kMaxMetaEnumValues > m_enumNameToValue;
 protected:
-	EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned );
+	EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned, bool isBitField );
 public:
 	const ae::EnumType* GetEnumType() const { return this; } // @TODO: Remove
 	template< typename T > void m_AppendValue( const char* name, T value );
@@ -13803,14 +13808,24 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
 //------------------------------------------------------------------------------
-#define AE_DEFINE_ENUM_CLASS_IMPL( E, T, ... )\
+#define _AE_DEFINE_BIT_FIELD_OPS( E )\
+	typedef std::underlying_type_t< E > _ae_##E;\
+	inline E operator|( E a, E b ) { return E( (_ae_##E)a | (_ae_##E)b ); }\
+	inline E operator&( E a, E b ) { return E( (_ae_##E)a & (_ae_##E)b ); }\
+	inline E operator^( E a, E b ) { return E( (_ae_##E)a ^ (_ae_##E)b ); }\
+	inline E& operator|=( E& a, E b ) { a = ( a | b ); return a; }\
+	inline E& operator&=( E& a, E b ) { a = ( a & b ); return a; }\
+	inline E& operator^=( E& a, E b ) { a = ( a ^ b ); return a; }\
+	inline E operator~( E a ) { return (E)~(_ae_##E)a; } /* @TODO: Is this necessary? */
+
+#define AE_DEFINE_ENUM_CLASS_IMPL( E, T, B, ... )\
 	enum class E : T {\
 		__VA_ARGS__\
 	};\
 	template<> const ae::EnumType* ae::GetEnumType< E >();\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< T > ) {}\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< T >, B ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
@@ -13819,6 +13834,10 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	namespace ae { template<> inline std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
 	namespace ae { template<> inline bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }\
 	namespace ae { template<> inline uint32_t GetHash32( const E& e ) { return ae::GetHash32( static_cast< T >( e ) ); } }
+
+#define AE_DEFINE_BIT_FIELD_ENUM_CLASS_IMPL( E, T, ... )\
+	AE_DEFINE_ENUM_CLASS_IMPL( E, T, true, ##__VA_ARGS__ )\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
 
 #define AE_REGISTER_ENUM_CLASS_IMPL( E )\
 	ae::_RegisterEnum< E > ae_enum_creator_##E( #E, _EnumValues##E().values );\
@@ -13839,7 +13858,7 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	}\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, false ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
@@ -13856,12 +13875,46 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	}\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, false ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+
+#define AE_REGISTER_BIT_FIELD_ENUM_IMPL( E )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, true ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	namespace ae { template<> std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
+	namespace ae { template<> bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
+
+#define AE_REGISTER_BIT_FIELD_ENUM_PREFIX_IMPL( E, PREFIX )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, true ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
 
 //------------------------------------------------------------------------------
 // External enum class registerer
@@ -13874,13 +13927,29 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	}\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, false ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }
 	// @NOTE: Nested namespace declaration requires C++17
+
+#define AE_REGISTER_BIT_FIELD_ENUM_CLASS2_IMPL( E )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, true ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
@@ -14010,6 +14079,7 @@ public:
 		strMap.erase( std::remove( strMap.begin(), strMap.end(), '\n' ), strMap.end() );
 
 		T currentValue = 0;
+		std::vector< std::pair< std::string, uint64_t > > registeredValues;
 		std::vector< std::string > enumTokens( m_SplitString( strMap, ',' ) );
 		for( auto iter = enumTokens.begin(); iter != enumTokens.end(); ++iter )
 		{
@@ -14020,18 +14090,14 @@ public:
 			}
 			else
 			{
-				std::vector<std::string> enumNameValue( m_SplitString( *iter, '=' ) );
-				enumName = enumNameValue[ 0 ];
-				if( std::is_unsigned< T >::value )
-				{
-					currentValue = static_cast< T >( std::stoull( enumNameValue[ 1 ], 0, 0 ) );
-				}
-				else
-				{
-					currentValue = static_cast< T >( std::stoll( enumNameValue[ 1 ], 0, 0 ) );
-				}
+				// Split on the first '=' only — value expressions may not contain '='
+				std::size_t eqPos = iter->find( '=' );
+				enumName = iter->substr( 0, eqPos );
+				const std::string valueExpr = iter->substr( eqPos + 1 );
+				currentValue = static_cast< T >( m_ParseValueExpression( valueExpr, registeredValues, typeName ) );
 			}
-				
+			AE_ASSERT_MSG( !enumName.empty(), "Enum '#' has an empty member name", typeName );
+			registeredValues.push_back( { enumName, static_cast< uint64_t >( currentValue ) } );
 			enumType->m_AppendValue( enumName.c_str(), currentValue );
 			currentValue++;
 		}
@@ -14046,6 +14112,95 @@ public:
 	}
 		
 private:
+	using RegisteredValues = std::vector< std::pair< std::string, uint64_t > >;
+
+	// Try to parse a string as an integer literal (decimal, 0x hex, 0 octal, or negative).
+	// Returns false without modifying *out if the string is not a valid literal.
+	static bool m_TryParseIntLiteral( const std::string& s, uint64_t* out )
+	{
+		if( s.empty() ) { return false; }
+		const char* p = s.c_str();
+		char* end = nullptr;
+		if( p[ 0 ] == '-' )
+		{
+			const int64_t v = std::strtoll( p, &end, 0 );
+			if( !end || end != p + s.size() || end == p ) { return false; }
+			*out = static_cast< uint64_t >( v );
+		}
+		else
+		{
+			const uint64_t v = std::strtoull( p, &end, 0 );
+			if( !end || end != p + s.size() || end == p ) { return false; }
+			*out = v;
+		}
+		return true;
+	}
+
+	// Evaluate a single token: an integer literal, a '<<' shift (both sides integer literals),
+	// or a previously-registered member name. Fatal assert on any parse failure.
+	static uint64_t m_ParseToken(
+		const std::string& token,
+		const RegisteredValues& registered,
+		const char* typeName,
+		const std::string& fullExpr )
+	{
+		// Check for left-shift operator
+		const std::size_t shiftPos = token.find( "<<" );
+		if( shiftPos != std::string::npos )
+		{
+			const std::string lhsStr = token.substr( 0, shiftPos );
+			const std::string rhsStr = token.substr( shiftPos + 2 );
+			uint64_t lhs = 0, rhs = 0;
+			AE_ASSERT_MSG( m_TryParseIntLiteral( lhsStr, &lhs ),
+				"Enum '#' value expression '#': left side of '<<' must be an integer literal (got '#')",
+				typeName, fullExpr.c_str(), lhsStr.c_str() );
+			AE_ASSERT_MSG( m_TryParseIntLiteral( rhsStr, &rhs ),
+				"Enum '#' value expression '#': right side of '<<' must be an integer literal (got '#')",
+				typeName, fullExpr.c_str(), rhsStr.c_str() );
+			return lhs << rhs;
+		}
+
+		// Try integer literal
+		uint64_t intVal = 0;
+		if( m_TryParseIntLiteral( token, &intVal ) ) { return intVal; }
+
+		// Try previously registered member name (linear search — registration-time only)
+		for( const auto& kv : registered )
+		{
+			if( kv.first == token ) { return kv.second; }
+		}
+
+		AE_FAIL_MSG(
+			"Enum '#' value expression '#': '#' is not an integer literal and is not a previously defined member name. "
+			"Supported syntax: integer literals (e.g. 4, 0x4), bit shifts (e.g. 1<<2), "
+			"and '|'-separated combinations of the above (e.g. Player|Camera, 1<<0|1<<1).",
+			typeName, fullExpr.c_str(), token.c_str() );
+		return 0;
+	}
+
+	// Evaluate a value expression as a '|'-separated combination of tokens.
+	static uint64_t m_ParseValueExpression(
+		const std::string& expr,
+		const RegisteredValues& registered,
+		const char* typeName )
+	{
+		AE_ASSERT_MSG( !expr.empty(), "Enum '#' has a member with an empty value expression", typeName );
+		uint64_t result = 0;
+		std::size_t start = 0;
+		while( true )
+		{
+			const std::size_t end = expr.find( '|', start );
+			const std::string token = expr.substr( start, end == std::string::npos ? std::string::npos : end - start );
+			AE_ASSERT_MSG( !token.empty(),
+				"Enum '#' value expression '#': empty token (stray '|'?)",
+				typeName, expr.c_str() );
+			result |= m_ParseToken( token, registered, typeName, expr );
+			if( end == std::string::npos ) { break; }
+			start = end + 1;
+		}
+		return result;
+	}
+
 	static std::vector< std::string > m_SplitString( std::string str, char separator )
 	{
 		std::vector< std::string > result;
@@ -14559,7 +14714,26 @@ std::string ae::EnumType::GetNameByValue( T value ) const
 {
 	if constexpr( std::is_integral_v< T > || std::is_enum_v< T > )
 	{
-		return m_enumValueToName.Get( static_cast< uint64_t >( value ), "" );
+		const uint64_t storedValue = static_cast< uint64_t >( value );
+		if( m_isBitField )
+		{
+			if( storedValue == 0 )
+			{
+				return m_enumValueToName.Get( 0, "0" );
+			}
+			std::string result;
+			for( int32_t i = 0; i < m_enumValueToName.Length(); i++ )
+			{
+				const uint64_t entryValue = m_enumValueToName.GetKey( i );
+				if( entryValue != 0 && ( entryValue & storedValue ) == entryValue )
+				{
+					if( !result.empty() ) { result += ' '; }
+					result += m_enumValueToName.GetValue( i );
+				}
+			}
+			return result;
+		}
+		return m_enumValueToName.Get( storedValue, "" );
 	}
 	return "";
 }
@@ -14574,6 +14748,88 @@ bool ae::EnumType::GetValueFromString( const char* str, T* valueOut ) const
 	else if( !str || !valueOut )
 	{
 		return false;
+	}
+	if( m_isBitField )
+	{
+		// Check for a single integer value first (applies to both flags and regular enums)
+		// by falling through only when the string contains spaces or is a pure name token.
+		// Split by spaces and OR the token values together.
+		const char* p = str;
+		// Skip leading spaces
+		while( *p == ' ' ) { p++; }
+		if( *p == '\0' ) { return false; }
+		// Check if it looks like a numeric string (no spaces, starts with digit or '-')
+		bool hasSpace = ( strchr( str, ' ' ) != nullptr );
+		if( !hasSpace )
+		{
+			// Single token: try name lookup first, then integer parse
+			uint64_t storedValue = 0;
+			if( m_enumNameToValue.TryGet( str, &storedValue ) )
+			{
+				*valueOut = static_cast< T >( storedValue );
+				return true;
+			}
+			// Try numeric parse with bounds check
+			if( TypeIsSigned() )
+			{
+				int64_t value = 0;
+				if( !ae::TryFromString( str, &value ) ) { return false; }
+				switch( TypeSize() )
+				{
+					case 1: if( value < (int64_t)INT8_MIN || value > (int64_t)INT8_MAX ) { return false; } break;
+					case 2: if( value < (int64_t)INT16_MIN || value > (int64_t)INT16_MAX ) { return false; } break;
+					case 4: if( value < (int64_t)INT32_MIN || value > (int64_t)INT32_MAX ) { return false; } break;
+					case 8: break;
+					default: AE_DEBUG_FAIL(); return false;
+				}
+				*valueOut = static_cast< T >( value );
+				return true;
+			}
+			else
+			{
+				if( str[ 0 ] == '-' ) { return false; }
+				uint64_t value = 0;
+				if( !ae::TryFromString( str, &value ) ) { return false; }
+				switch( TypeSize() )
+				{
+					case 1: if( value > (uint64_t)UINT8_MAX ) { return false; } break;
+					case 2: if( value > (uint64_t)UINT16_MAX ) { return false; } break;
+					case 4: if( value > (uint64_t)UINT32_MAX ) { return false; } break;
+					case 8: break;
+					default: AE_DEBUG_FAIL(); return false;
+				}
+				*valueOut = static_cast< T >( value );
+				return true;
+			}
+		}
+		// Multiple space-separated tokens: OR the named values together
+		uint64_t combined = 0;
+		std::string token;
+		const char* cur = str;
+		while( true )
+		{
+			if( *cur == ' ' || *cur == '\0' )
+			{
+				if( !token.empty() )
+				{
+					uint64_t tokenValue = 0;
+					if( !m_enumNameToValue.TryGet( token.c_str(), &tokenValue ) )
+					{
+						return false; // Unknown flag name
+					}
+					combined |= tokenValue;
+					token.clear();
+				}
+				if( *cur == '\0' ) { break; }
+			}
+			else
+			{
+				token += *cur;
+			}
+			cur++;
+		}
+		*valueOut = static_cast< T >( combined );
+		return true;
 	}
 	uint64_t storedValue = 0;
 	if( m_enumNameToValue.TryGet( str, &storedValue ) )
@@ -32433,11 +32689,12 @@ ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 //------------------------------------------------------------------------------
 // ae::EnumType member functions
 //------------------------------------------------------------------------------
-ae::EnumType::EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned ) :
+ae::EnumType::EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned, bool isBitField ) :
 	m_name( name ),
 	m_prefix( prefix ),
 	m_size( size ),
-	m_isSigned( isSigned )
+	m_isSigned( isSigned ),
+	m_isBitField( isBitField )
 {}
 
 std::string ae::EnumType::GetNameByIndex( int32_t index ) const
@@ -32760,7 +33017,7 @@ std::string ae::EnumType::GetVarDataAsString( ae::ConstDataPointer _varData ) co
 			default: AE_FAIL();
 		}
 	}
-	return m_enumValueToName.Get( storedValue, "" );
+	return m_isBitField ? GetNameByValue( storedValue ) : m_enumValueToName.Get( storedValue, "" );
 }
 
 bool ae::EnumType::SetVarDataFromString( ae::DataPointer _varData, const char* value ) const

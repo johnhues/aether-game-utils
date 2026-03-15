@@ -316,16 +316,7 @@ namespace A
 // 	inline E operator ^ ( E a, E b ) { return (E)( (_ae_##E)a ^ (_ae_##E)b ); }\
 // 	inline E operator ~ ( E e ) { return (E)( ~(_ae_##E)e ); }
 
-#define AE_DEFINE_ENUM_BITFIELD( E )\
-	typedef std::underlying_type< E >::type _ae_##E;\
-	inline _ae_##E operator | ( E a, E b ) { return ( (_ae_##E)a | (_ae_##E)b ); }\
-	inline _ae_##E operator | ( _ae_##E a, E b ) { return ( a | (_ae_##E)b ); }\
-	inline _ae_##E operator | ( E a, _ae_##E b ) { return ( (_ae_##E)a | b ); }\
-	inline _ae_##E operator & ( E a, E b ) { return ( (_ae_##E)a & (_ae_##E)b ); }\
-	inline _ae_##E operator ^ ( E a, E b ) { return ( (_ae_##E)a ^ (_ae_##E)b ); }\
-	inline _ae_##E operator ~ ( E e ) { return ~(_ae_##E)e; }
-
-AE_DEFINE_ENUM_CLASS( GamePadBitField, uint16_t,
+AE_DEFINE_BIT_FIELD_ENUM_CLASS( GamePadBitField, uint16_t,
 	None,
 	A,
 	B,
@@ -338,7 +329,50 @@ AE_DEFINE_ENUM_CLASS( GamePadBitField, uint16_t,
 	Left,
 	Right
 );
-AE_DEFINE_ENUM_BITFIELD( GamePadBitField );
+
+//------------------------------------------------------------------------------
+// SceneFlags - proper power-of-2 bit field enum for combination tests
+//------------------------------------------------------------------------------
+AE_DEFINE_BIT_FIELD_ENUM_CLASS( SceneFlags, uint32_t,
+	None = 0,
+	Player = 1 << 0,
+	Camera = 1 << 1,
+	Mesh = 1 << 2,
+	All = Player | Camera | Mesh
+);
+
+//------------------------------------------------------------------------------
+// OldBitFieldFlags - c-style bit field enum (AE_REGISTER_BIT_FIELD_ENUM)
+//------------------------------------------------------------------------------
+enum OldBitFieldFlags : uint32_t
+{
+	OldBitFieldFlags_None    = 0,
+	OldBitFieldFlags_Read    = 1 << 0,
+	OldBitFieldFlags_Write   = 1 << 1,
+	OldBitFieldFlags_Execute = 1 << 2
+};
+
+//------------------------------------------------------------------------------
+// OldBitFieldPrefixFlags - c-style bit field enum with prefix (AE_REGISTER_BIT_FIELD_ENUM_PREFIX)
+//------------------------------------------------------------------------------
+enum OldBitFieldPrefixFlags : uint32_t
+{
+	kOBPF_None    = 0,
+	kOBPF_Read    = 1 << 0,
+	kOBPF_Write   = 1 << 1,
+	kOBPF_Execute = 1 << 2
+};
+
+//------------------------------------------------------------------------------
+// NewBitFieldFlags - pre-existing enum class (AE_REGISTER_BIT_FIELD_ENUM_CLASS2)
+//------------------------------------------------------------------------------
+enum class NewBitFieldFlags : uint32_t
+{
+	None    = 0,
+	Read    = 1 << 0,
+	Write   = 1 << 1,
+	Execute = 1 << 2
+};
 
 //------------------------------------------------------------------------------
 // Reference testing

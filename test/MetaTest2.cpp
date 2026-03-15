@@ -41,6 +41,12 @@ AE_REGISTER_ENUM_CLASS( PlayerState );
 AE_REGISTER_ENUM_CLASS( TestEnumClass );
 
 //------------------------------------------------------------------------------
+// Bit field enums
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM_CLASS( GamePadBitField );
+AE_REGISTER_ENUM_CLASS( SceneFlags );
+
+//------------------------------------------------------------------------------
 // Enum width coverage
 //------------------------------------------------------------------------------
 AE_REGISTER_ENUM_CLASS2( EnumInt8 );
@@ -198,9 +204,31 @@ AE_REGISTER_ENUM_CLASS2_VALUE( A::B::SomeNewEnum, Bloop );
 AE_REGISTER_ENUM_CLASS2_VALUE( A::B::SomeNewEnum, Blop );
 
 //------------------------------------------------------------------------------
-// GamePadBitField
+// OldBitFieldFlags
 //------------------------------------------------------------------------------
-AE_REGISTER_ENUM_CLASS( GamePadBitField );
+AE_REGISTER_BIT_FIELD_ENUM( OldBitFieldFlags );
+AE_REGISTER_ENUM_VALUE_NAME( OldBitFieldFlags, OldBitFieldFlags_None, None );
+AE_REGISTER_ENUM_VALUE_NAME( OldBitFieldFlags, OldBitFieldFlags_Read, Read );
+AE_REGISTER_ENUM_VALUE_NAME( OldBitFieldFlags, OldBitFieldFlags_Write, Write );
+AE_REGISTER_ENUM_VALUE_NAME( OldBitFieldFlags, OldBitFieldFlags_Execute, Execute );
+
+//------------------------------------------------------------------------------
+// OldBitFieldPrefixFlags
+//------------------------------------------------------------------------------
+AE_REGISTER_BIT_FIELD_ENUM_PREFIX( OldBitFieldPrefixFlags, kOBPF_ );
+AE_REGISTER_ENUM_VALUE( OldBitFieldPrefixFlags, kOBPF_None );
+AE_REGISTER_ENUM_VALUE( OldBitFieldPrefixFlags, kOBPF_Read );
+AE_REGISTER_ENUM_VALUE( OldBitFieldPrefixFlags, kOBPF_Write );
+AE_REGISTER_ENUM_VALUE( OldBitFieldPrefixFlags, kOBPF_Execute );
+
+//------------------------------------------------------------------------------
+// NewBitFieldFlags
+//------------------------------------------------------------------------------
+AE_REGISTER_BIT_FIELD_ENUM_CLASS2( NewBitFieldFlags );
+AE_REGISTER_ENUM_CLASS2_VALUE( NewBitFieldFlags, None );
+AE_REGISTER_ENUM_CLASS2_VALUE( NewBitFieldFlags, Read );
+AE_REGISTER_ENUM_CLASS2_VALUE( NewBitFieldFlags, Write );
+AE_REGISTER_ENUM_CLASS2_VALUE( NewBitFieldFlags, Execute );
 
 //------------------------------------------------------------------------------
 // Reference testing
