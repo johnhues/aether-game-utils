@@ -422,6 +422,8 @@ template< typename T > constexpr const char* GetTypeName();
 //! that this does not return the name of the derived class if the instance is
 //! a base class (get the ae::ClassType of an ae::Object in that case).
 template< typename T > constexpr const char* GetTypeName( const T& );
+//! TODO
+constexpr uint32_t NormalizedWhiteSpaceTypeName( const char* str, char* out, uint32_t outSize );
 //! Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
 double GetTime();
 //! Shows a generic message box
@@ -7302,6 +7304,53 @@ private:
 // GetTypeName() internal implementation
 // https://stackoverflow.com/a/59522794
 //------------------------------------------------------------------------------
+constexpr uint32_t NormalizedWhiteSpaceTypeName( const char* str, char* out, uint32_t outSize )
+{
+	if( outSize == 0 )
+	{
+		return 0;
+	}
+	auto isws = []( char c ) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'; };
+	uint32_t length = 0;
+	for( ; *str; str++ )
+	{
+		const char c = isws( *str ) ? ' ' : *str;
+		if( c == ' ' )
+		{
+			// Skip leading, consecutive, and post-'['/post-'::' spaces
+			if( length == 0 || out[ length - 1 ] == ' ' || out[ length - 1 ] == '[' )
+			{
+				continue;
+			}
+			if( length >= 2 && out[ length - 1 ] == ':' && out[ length - 2 ] == ':' )
+			{
+				continue;
+			}
+			// Skip space if next non-space token doesn't need a leading space
+			const char* peek = str + 1;
+			while( isws( *peek ) ) { peek++; }
+			if( *peek == '\0' || *peek == '[' || *peek == ']' || *peek == '*' || *peek == '&'
+				|| ( *peek == ':' && *(peek + 1) == ':' ) )
+			{
+				continue;
+			}
+		}
+		if( length >= outSize - 1 )
+		{
+			out[ 0 ] = '\0';
+			return 0;
+		}
+		out[ length++ ] = c;
+	}
+	// Remove trailing space
+	if( length && out[ length - 1 ] == ' ' )
+	{
+		length--;
+	}
+	out[ length ] = '\0';
+	return length;
+}
+
 } // ae end
 
 // Get a string representation of this functions signature, which includes the
@@ -7349,49 +7398,9 @@ constexpr auto _ae_RawTypeName()
 	
 	const auto& compilerName = ::_ae_CompilerTypeName< T >();
 	constexpr std::size_t rawLen = sizeof( compilerName ) - format.leadingChars - format.trailingChars;
-	constexpr std::size_t normalizedLen = [ &compilerName, format, rawLen ]()
-	{
-		std::size_t len = 1;
-		char prevOut = '\0';
-		bool hasOut = false;
-		for( std::size_t i = 0; i < rawLen - 1; i++ )
-		{
-			const char c = compilerName[ i + format.leadingChars ];
-			if( c == '[' && hasOut && prevOut == ' ' )
-			{
-				len--;
-			}
-			if( ( c == '*' || c == '&' ) && hasOut && prevOut != ' ' )
-			{
-				len++;
-			}
-			len++;
-			prevOut = c;
-			hasOut = true;
-		}
-		return len;
-	}();
-	
-	// Normalize the compiler string name so:
-	// 'ae::Object*' changes to 'ae::Object *'
-	// 'const ae::Object &' stays normalized
-	// 'ae::Object [3]' changes to 'ae::Object[3]'
-	std::array< char, normalizedLen > name{};
-	std::size_t out = 0;
-	for( std::size_t i = 0; i < rawLen - 1; i++ )
-	{
-		const char c = compilerName[ i + format.leadingChars ];
-		if( c == '[' && out && name[ out - 1 ] == ' ' )
-		{
-			out--;
-		}
-		if( ( c == '*' || c == '&' ) && out && name[ out - 1 ] != ' ' )
-		{
-			name[ out++ ] = ' ';
-		}
-		name[ out++ ] = c;
-	}
-	name[ out ] = '\0';
+	std::array< char, rawLen > name{};
+	for( std::size_t i = 0; i < rawLen - 1; i++ ) { name[ i ] = compilerName[ i + format.leadingChars ]; }
+	ae::NormalizedWhiteSpaceTypeName( name.data(), name.data(), (uint32_t)rawLen );
 	return name;
 }
 

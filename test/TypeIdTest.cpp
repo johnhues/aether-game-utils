@@ -259,3 +259,209 @@ TEST_CASE( "TypeId kInvalidTypeId round-trips through BinaryStream", "[ae::TypeI
 	REQUIRE( reader.IsValid() );
 	REQUIRE( restored == ae::kInvalidTypeId );
 }
+
+TEST_CASE( "NormalizedWhiteSpaceTypeName returns correct normalized name", "[ae::TypeId]" )
+{
+	uint32_t resultLength;
+	char resultStr[ 128 ];
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "ae::TypeId", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "ae::TypeId" ) );
+	REQUIRE( std::string( resultStr ) == "ae::TypeId" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "const ae::TypeId*", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "const ae::TypeId*" ) );
+	REQUIRE( std::string( resultStr ) == "const ae::TypeId*" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "const ae::TypeId&", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "const ae::TypeId&" ) );
+	REQUIRE( std::string( resultStr ) == "const ae::TypeId&" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "ae::TypeId[123]", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "ae::TypeId[123]" ) );
+	REQUIRE( std::string( resultStr ) == "ae::TypeId[123]" );
+
+	
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  ae :: TypeId  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "ae::TypeId" ) );
+	REQUIRE( std::string( resultStr ) == "ae::TypeId" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  const ae :: TypeId   *  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "const ae::TypeId*" ) );
+	REQUIRE( std::string( resultStr ) == "const ae::TypeId*" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  const ae  ::  TypeId   & ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "const ae::TypeId&" ) );
+	REQUIRE( std::string( resultStr ) == "const ae::TypeId&" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  ae  ::   TypeId  [ 123  ]  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "ae::TypeId[123]" ) );
+	REQUIRE( std::string( resultStr ) == "ae::TypeId[123]" );
+
+	// Empty and whitespace-only inputs
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == 0 );
+	REQUIRE( std::string( resultStr ) == "" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "   ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == 0 );
+	REQUIRE( std::string( resultStr ) == "" );
+
+	// Non-space whitespace normalization
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "ae\t::\nTypeId", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "ae::TypeId" ) );
+	REQUIRE( std::string( resultStr ) == "ae::TypeId" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "\t\r\n ae::TypeId \t\r\n", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "ae::TypeId" ) );
+	REQUIRE( std::string( resultStr ) == "ae::TypeId" );
+
+	// Already normalized (passthrough)
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int" ) );
+	REQUIRE( std::string( resultStr ) == "int" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int*", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int*" ) );
+	REQUIRE( std::string( resultStr ) == "int*" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int&", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int&" ) );
+	REQUIRE( std::string( resultStr ) == "int&" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int[4]", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int[4]" ) );
+	REQUIRE( std::string( resultStr ) == "int[4]" );
+
+	// Spaces around * and &
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int *", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int*" ) );
+	REQUIRE( std::string( resultStr ) == "int*" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int &", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int&" ) );
+	REQUIRE( std::string( resultStr ) == "int&" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( " int * ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int*" ) );
+	REQUIRE( std::string( resultStr ) == "int*" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( " int & ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int&" ) );
+	REQUIRE( std::string( resultStr ) == "int&" );
+
+	// Spaces around []
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int [4]", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int[4]" ) );
+	REQUIRE( std::string( resultStr ) == "int[4]" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int[ 4 ]", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int[4]" ) );
+	REQUIRE( std::string( resultStr ) == "int[4]" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( " int [ 4 ] ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int[4]" ) );
+	REQUIRE( std::string( resultStr ) == "int[4]" );
+
+	// Spaces around ::
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "ae ::TypeId", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "ae::TypeId" ) );
+	REQUIRE( std::string( resultStr ) == "ae::TypeId" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "ae:: TypeId", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "ae::TypeId" ) );
+	REQUIRE( std::string( resultStr ) == "ae::TypeId" );
+
+	// Deeply nested namespaces
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "a :: b :: c :: Type", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "a::b::c::Type" ) );
+	REQUIRE( std::string( resultStr ) == "a::b::c::Type" );
+
+	// Multiple qualifiers
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "const int", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "const int" ) );
+	REQUIRE( std::string( resultStr ) == "const int" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  const   int  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "const int" ) );
+	REQUIRE( std::string( resultStr ) == "const int" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "const  int *", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "const int*" ) );
+	REQUIRE( std::string( resultStr ) == "const int*" );
+
+	// Output buffer exactly fits result (null terminator at boundary) - success
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int", resultStr, 4 );
+	REQUIRE( resultLength == 3 );
+	REQUIRE( std::string( resultStr ) == "int" );
+
+	// Output buffer too small - returns 0 (error)
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int", resultStr, 3 );
+	REQUIRE( resultLength == 0 );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int", resultStr, 1 );
+	REQUIRE( resultLength == 0 );
+
+	// Function pointer types - already normalized (passthrough)
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "void ()", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "void ()" ) );
+	REQUIRE( std::string( resultStr ) == "void ()" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "void (*)()", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "void (*)()" ) );
+	REQUIRE( std::string( resultStr ) == "void (*)()" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int (*)(int, float)", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int (*)(int, float)" ) );
+	REQUIRE( std::string( resultStr ) == "int (*)(int, float)" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "void (*)(int*)", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "void (*)(int*)" ) );
+	REQUIRE( std::string( resultStr ) == "void (*)(int*)" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int*(*)()", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int*(*)()" ) );
+	REQUIRE( std::string( resultStr ) == "int*(*)()" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "void (ae::Object::*)()", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "void (ae::Object::*)()" ) );
+	REQUIRE( std::string( resultStr ) == "void (ae::Object::*)()" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "int (ae::Object::*)(int) const", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int (ae::Object::*)(int) const" ) );
+	REQUIRE( std::string( resultStr ) == "int (ae::Object::*)(int) const" );
+
+	// Function pointer types - leading/trailing whitespace removed
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  void ()  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "void ()" ) );
+	REQUIRE( std::string( resultStr ) == "void ()" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  void (*)()  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "void (*)()" ) );
+	REQUIRE( std::string( resultStr ) == "void (*)()" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  int (*)(int, float)  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int (*)(int, float)" ) );
+	REQUIRE( std::string( resultStr ) == "int (*)(int, float)" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  void (*)(int*)  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "void (*)(int*)" ) );
+	REQUIRE( std::string( resultStr ) == "void (*)(int*)" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  int*(*)()  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int*(*)()" ) );
+	REQUIRE( std::string( resultStr ) == "int*(*)()" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  void  (ae::Object::*)()  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "void (ae::Object::*)()" ) );
+	REQUIRE( std::string( resultStr ) == "void (ae::Object::*)()" );
+
+	// Member function pointer types - namespace whitespace normalized
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "void ( ae :: Object :: * )()", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "void ( ae::Object::* )()" ) );
+	REQUIRE( std::string( resultStr ) == "void ( ae::Object::* )()" );
+
+	resultLength = ae::NormalizedWhiteSpaceTypeName( "  int  ( ae :: Object :: * )(  int  )  const  ", resultStr, sizeof( resultStr ) );
+	REQUIRE( resultLength == strlen( "int ( ae::Object::* )( int ) const" ) );
+	REQUIRE( std::string( resultStr ) == "int ( ae::Object::* )( int ) const" );
+}
