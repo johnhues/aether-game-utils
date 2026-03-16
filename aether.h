@@ -1121,8 +1121,8 @@ public:
 	Triangle( Vec3 (&v)[ 3 ] );
 	explicit Triangle( const Vec3* p012 );
 
-	bool IntersectRay( Vec3 source, Vec3 ray, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
-	bool SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
+	bool Raycast( Vec3 source, Vec3 ray, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* distanceOut = nullptr ) const;
+	bool SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* distanceOut = nullptr ) const;
 	Vec3 ClosestPoint( Vec3 p ) const;
 	Vec3 CounterClockwiseNormal() const;
 	Vec3 ClockwiseNormal() const;
@@ -1141,7 +1141,7 @@ public:
 	explicit Sphere( const class OBB& obb );
 	void Expand( ae::Vec3 p );
 
-	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
+	bool Raycast( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* distanceOut = nullptr ) const;
 	bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* hitOut = nullptr ) const;
 	ae::Vec3 GetNearestPointOnSurface( ae::Vec3 p, float* signedDistOut = nullptr ) const;
 
@@ -1167,7 +1167,7 @@ public:
 	ae::Vec3 GetClosestPointToOrigin() const;
 
 	bool IntersectLine( ae::Vec3 p, ae::Vec3 d, ae::Vec3* hitOut = nullptr, float* tOut = nullptr ) const; // @TODO: Handle ray hitting normal reverse
-	bool IntersectRay( ae::Vec3 source, ae::Vec3 ray, ae::Vec3* hitOut = nullptr, float* tOut = nullptr ) const; // @TODO: Handle ray hitting normal reverse
+	bool Raycast( ae::Vec3 source, ae::Vec3 ray, ae::Vec3* hitOut = nullptr, float* distanceOut = nullptr ) const;
 	ae::Vec3 GetClosestPoint( ae::Vec3 pos, float* distanceOut = nullptr ) const;
 	float GetSignedDistance( ae::Vec3 pos ) const;
 
@@ -1305,9 +1305,9 @@ public:
 	//! will be set to the first intersection point on the surface (or to \p source
 	//! if the ray starts within the aabb). \p normOut will be set to the normal of
 	//! the face of the contact point, or to the normal of the nearest face to
-	//! \p source if it is inside the aabb. \p tOut will be set to a value so that
-	//! \p source + \p ray * \p tOut = \p hitOut.
-	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
+	//! \p source if it is inside the aabb. \p distanceOut will be set to the
+	//! world-space distance from \p source to \p hitOut along \p ray.
+	bool Raycast( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* distanceOut = nullptr ) const;
 
 private:
 	Vec3 m_min = Vec3( INFINITY );
@@ -1349,9 +1349,9 @@ public:
 	//! will be set to the first intersection point on the surface (or to \p source
 	//! if the ray starts within the obb). \p normOut will be set to the normal of
 	//! the face of the contact point, or to the normal of the nearest face to
-	//! \p source if it is inside the obb. \p tOut will be set to a value so that
-	//! \p source + \p ray * \p tOut = \p hitOut.
-	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
+	//! \p source if it is inside the obb. \p distanceOut will be set to the
+	//! world-space distance from \p source to \p hitOut along \p ray.
+	bool Raycast( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* distanceOut = nullptr ) const;
 	//! Returns an AABB that tightly fits this obb.
 	AABB GetAABB() const;
 	
@@ -5117,7 +5117,7 @@ struct CollisionMeshRaycastParams
 //------------------------------------------------------------------------------
 // ae::Raycast free functions
 //------------------------------------------------------------------------------
-//! These wrap the shapes' IntersectRay() methods using the RaycastParams /
+//! These wrap the shapes' Raycast() methods using the RaycastParams /
 //! RaycastResult pattern, matching CollisionMesh::Raycast. Passing the result
 //! of a previous call as \p prevResult chains multiple shape raycasts together.
 //------------------------------------------------------------------------------
@@ -13104,7 +13104,7 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 
 	auto bvhFn = [&]( auto&& bvhFn, const ae::BVH< BVHTri, B >* bvh, const BVHNode* current ) -> void
 	{
-		if( !current->aabb.IntersectRay( source, ray ) )
+		if( !current->aabb.Raycast( source, ray ) )
 		{
 			return;
 		}
@@ -13122,7 +13122,7 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 				ae::Vec3 a = m_positions[ idx0 ];
 				ae::Vec3 b = m_positions[ leaf->data[ i ].idx[ 1 ] ];
 				ae::Vec3 c = m_positions[ leaf->data[ i ].idx[ 2 ] ];
-				if( Triangle( a, b, c ).IntersectRay( source, ray, ccw, cw, &p, &n, nullptr ) )
+				if( Triangle( a, b, c ).Raycast( source, ray, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit hit;
 					hit.position = ae::Vec3( meshParams.transform * ae::Vec4( p, 1.0f ) ); // Undo local space transforms
@@ -16586,13 +16586,11 @@ void Sphere::Expand( ae::Vec3 p0 )
 	}
 }
 
-bool Sphere::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut, float* tOut ) const
+bool Sphere::Raycast( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut, float* distanceOut ) const
 {
-	const Vec3 direction = ray.SafeNormalizeCopy();
-	const float rayLength = ray.Length();
-
 	const Vec3 m = source - center;
-	const float b = m.Dot( direction );
+	const float a = ray.Dot( ray );
+	const float b = m.Dot( ray );
 	const float c = m.Dot( m ) - radius * radius;
 	// Exit if r's origin outside s (c > 0) and r pointing away from s (b > 0)
 	if( c > 0.0f && b > 0.0f )
@@ -16601,30 +16599,29 @@ bool Sphere::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut,
 	}
 
 	// A negative discriminant corresponds to ray missing sphere
-	const float discr = b * b - c;
+	const float discr = b * b - a * c;
 	if( discr < 0.0f )
 	{
 		return false;
 	}
 
 	// Ray now found to intersect sphere, compute smallest t value of intersection
-	float t = -b - sqrtf( discr );
+	float t = ( -b - sqrtf( discr ) ) / a;
 	if( t < 0.0f )
 	{
 		t = 0.0f; // If t is negative, ray started inside sphere so clamp t to zero
 	}
-	
 	// Check if hit is within ray length
-	if( t > rayLength )
+	else if( t > 1.0f )
 	{
 		return false;
 	}
-	
-	if( tOut )
+
+	if( distanceOut )
 	{
-		*tOut = t;
+		*distanceOut = ray.Length() * t;
 	}
-	const ae::Vec3 hit = source + direction * t;
+	const ae::Vec3 hit = source + ray * t;
 	if( hitOut )
 	{
 		*hitOut = hit;
@@ -16743,7 +16740,7 @@ bool Plane::IntersectLine( ae::Vec3 p, ae::Vec3 d, Vec3* hitOut, float* tOut ) c
 	return true;
 }
 
-bool Plane::IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* tOut ) const
+bool Plane::Raycast( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* distanceOut ) const
 {
 	const ae::Vec4 plane = GetSignedDistance( source ) >= 0.0f ? m_plane : -m_plane; // Plane normal towards ray source
 	const ae::Vec3 n = plane.GetXYZ();
@@ -16764,9 +16761,9 @@ bool Plane::IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* tO
 	{
 		*hitOut = source + ray * t;
 	}
-	if( tOut )
+	if( distanceOut )
 	{
-		*tOut = t;
+		*distanceOut = ray.Length() * t;
 	}
 	return true;
 }
@@ -17126,14 +17123,14 @@ bool AABB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* 
 	return true;
 }
 
-bool AABB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* tOut ) const
+bool AABB::Raycast( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* distanceOut ) const
 {
 	float t;
 	if( IntersectLine( source, ray, &t, nullptr, normOut, nullptr ) && t <= 1.0f )
 	{
 		if( t >= 0.0f )
 		{
-			if( tOut ) { *tOut = t; }
+			if( distanceOut ) { *distanceOut = ray.Length() * t; }
 			if( hitOut ) { *hitOut = source + ray * t; }
 			return true;
 		}
@@ -17143,7 +17140,7 @@ bool AABB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut,
 			ae::Vec3 closest = GetClosestPointOnSurface( source, &inside );
 			if( inside )
 			{
-				if( tOut ) { *tOut = 0.0f; }
+				if( distanceOut ) { *distanceOut = 0.0f; }
 				if( hitOut ) { *hitOut = source; }
 				if( normOut ) { *normOut = ( closest - source ).SafeNormalizeCopy(); }
 				return true;
@@ -17269,14 +17266,14 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* n
 	return true;
 }
 
-bool OBB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* tOut ) const
+bool OBB::Raycast( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* distanceOut ) const
 {
 	float t;
 	if( IntersectLine( source, ray, &t, nullptr, normOut, nullptr ) && t <= 1.0f )
 	{
 		if( t >= 0.0f )
 		{
-			if( tOut ) { *tOut = t; }
+			if( distanceOut ) { *distanceOut = ray.Length() * t; }
 			if( hitOut ) { *hitOut = source + ray * t; }
 			return true;
 		}
@@ -17286,7 +17283,7 @@ bool OBB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, 
 			ae::Vec3 closest = GetClosestPointOnSurface( source, &inside );
 			if( inside )
 			{
-				if( tOut ) { *tOut = 0.0f; }
+				if( distanceOut ) { *distanceOut = 0.0f; }
 				if( hitOut ) { *hitOut = source; }
 				if( normOut ) { *normOut = ( closest - source ).SafeNormalizeCopy(); }
 				return true;
@@ -17371,7 +17368,7 @@ AABB OBB::GetAABB() const
 //------------------------------------------------------------------------------
 // ae::Triangle member functions @TODO: move
 //------------------------------------------------------------------------------
-bool Triangle::IntersectRay( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut ) const
+bool Triangle::Raycast( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* distanceOut ) const
 {
 	// Möller–Trumbore ray-triangle intersection
 	const ae::Vec3 edge1 = vertices[ 1 ] - vertices[ 0 ];
@@ -17426,14 +17423,14 @@ bool Triangle::IntersectRay( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Ve
 		// Ensure normal orientation is consistent with det sign
 		*nOut = ( ray.Dot( normal ) > 0.0f ) ? -normal : normal;
 	}
-	if( tOut )
+	if( distanceOut )
 	{
-		*tOut = t;
+		*distanceOut = ray.Length() * t;
 	}
 	return true;
 }
 
-bool Triangle::SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut, Vec3* normalOut, float* tOut ) const
+bool Triangle::SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut, Vec3* normalOut, float* distanceOut ) const
 {
 	if( !ccw && !cw )
 	{
@@ -17643,9 +17640,9 @@ bool Triangle::SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool c
 	{
 		*normalOut = bestNormal;
 	}
-	if( tOut )
+	if( distanceOut )
 	{
-		*tOut = bestT;
+		*distanceOut = ray.Length() * bestT;
 	}
 	return true;
 }
@@ -28314,12 +28311,11 @@ float Spline::Segment::GetMinDistance( ae::Vec3 p, ae::Vec3* pOut, float* tOut )
 //------------------------------------------------------------------------------
 bool RaycastResult::EarlyOut( const RaycastParams& params, ae::Sphere sphere ) const
 {
-	float t = 0.0f;
-	if( !sphere.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
+	float distance = 0.0f;
+	if( !sphere.Raycast( params.source, params.ray, nullptr, nullptr, &distance ) )
 	{
 		return true; // Early out if ray doesn't touch sphere
 	}
-	const float distance = params.ray.Length() * t;
 	if( ( params.maxHits == hits.Length() ) && hits.Length() && hits.Last().distance < distance )
 	{
 		return true; // Early out if sphere is farther away than previous hits
@@ -28329,12 +28325,11 @@ bool RaycastResult::EarlyOut( const RaycastParams& params, ae::Sphere sphere ) c
 
 bool RaycastResult::EarlyOut( const RaycastParams& params, ae::OBB obb ) const
 {
-	float t = 0.0f;
-	if( !obb.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
+	float distance = 0.0f;
+	if( !obb.Raycast( params.source, params.ray, nullptr, nullptr, &distance ) )
 	{
 		return true; // Early out if ray doesn't touch obb
 	}
-	const float distance = params.ray.Length() * t;
 	if( ( params.maxHits == hits.Length() ) && hits.Length() && hits.Last().distance < distance )
 	{
 		return true; // Early out if obb is farther away than previous hits
@@ -28386,7 +28381,7 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 RaycastResult Raycast( const Triangle& tri, const RaycastParams& params, const TriangleRaycastParams& triParams, RaycastResult result )
 {
 	ae::Vec3 p, n;
-	if( tri.IntersectRay( params.source, params.ray, triParams.hitCounterclockwise, triParams.hitClockwise, &p, &n, nullptr ) )
+	if( tri.Raycast( params.source, params.ray, triParams.hitCounterclockwise, triParams.hitClockwise, &p, &n, nullptr ) )
 	{
 		RaycastResult::Hit hit;
 		hit.position = p;
@@ -28401,7 +28396,7 @@ RaycastResult Raycast( const Triangle& tri, const RaycastParams& params, const T
 RaycastResult Raycast( const Sphere& sphere, const RaycastParams& params, RaycastResult result )
 {
 	ae::Vec3 p, n;
-	if( sphere.IntersectRay( params.source, params.ray, &p, &n, nullptr ) )
+	if( sphere.Raycast( params.source, params.ray, &p, &n, nullptr ) )
 	{
 		RaycastResult::Hit hit;
 		hit.position = p;
@@ -28416,7 +28411,7 @@ RaycastResult Raycast( const Sphere& sphere, const RaycastParams& params, Raycas
 RaycastResult Raycast( const Plane& plane, const RaycastParams& params, RaycastResult result )
 {
 	ae::Vec3 p;
-	if( plane.IntersectRay( params.source, params.ray, &p, nullptr ) )
+	if( plane.Raycast( params.source, params.ray, &p, nullptr ) )
 	{
 		RaycastResult::Hit hit;
 		hit.position = p;
@@ -28431,7 +28426,7 @@ RaycastResult Raycast( const Plane& plane, const RaycastParams& params, RaycastR
 RaycastResult Raycast( const AABB& aabb, const RaycastParams& params, RaycastResult result )
 {
 	ae::Vec3 p, n;
-	if( aabb.IntersectRay( params.source, params.ray, &p, &n, nullptr ) )
+	if( aabb.Raycast( params.source, params.ray, &p, &n, nullptr ) )
 	{
 		RaycastResult::Hit hit;
 		hit.position = p;
@@ -28446,7 +28441,7 @@ RaycastResult Raycast( const AABB& aabb, const RaycastParams& params, RaycastRes
 RaycastResult Raycast( const OBB& obb, const RaycastParams& params, RaycastResult result )
 {
 	ae::Vec3 p, n;
-	if( obb.IntersectRay( params.source, params.ray, &p, &n, nullptr ) )
+	if( obb.Raycast( params.source, params.ray, &p, &n, nullptr ) )
 	{
 		RaycastResult::Hit hit;
 		hit.position = p;

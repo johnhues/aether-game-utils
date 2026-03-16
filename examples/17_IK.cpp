@@ -528,7 +528,7 @@ int main()
 			const ae::Vec3 rayDir = ( worldPos.GetXYZ() - rayOrigin ).SafeNormalizeCopy();
 			const ae::Plane plane( ae::Vec3( 0.0f ), ae::Vec3( 0, 0, 1 ) );
 			ae::Vec3 intersection;
-			if( plane.IntersectRay( rayOrigin, rayDir * 1000.0f, &intersection ) )
+			if( plane.Raycast( rayOrigin, rayDir * 1000.0f, &intersection ) )
 			{
 				debugLines.AddCircle( intersection, -rayDir, 0.1f, ae::Color::Red(), 16 );
 			}

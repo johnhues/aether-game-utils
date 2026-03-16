@@ -279,19 +279,17 @@ if(AE_LOADERS_OFBX)
 	)
 endif()
 
-if(AE_DEPRECATED) # @TODO: Fix deprecated ClassType/ClassVar usage
-	# Small Engine
-	ae_add_bundle("Small Engine"
-		TARGET_NAME "18_SmallEngine"
-		BUNDLE_ID "ae.18_SmallEngine"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
-		MAJOR_MINOR_PATCH_VERSION "0.0.0"
-		ICNS_FILE "data/Icon.icns"
-		SRC_FILES "18_SmallEngine.h;18_SmallEngine.cpp;18_Game.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/MeshEditorPlugin.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
-		RESOURCES "${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/tall_tree.obj;data/BlobCube.obj;data/level.tga;data/font.tga"
-		LIBS "ae;ae_extras;imgui;imguizmo;rapidjson"
-	)
-endif()
+# Small Engine
+ae_add_bundle("Small Engine"
+	TARGET_NAME "18_SmallEngine"
+	BUNDLE_ID "ae.18_SmallEngine"
+	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "18_SmallEngine.h;18_SmallEngine.cpp;18_Game.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/MeshEditorPlugin.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/tall_tree.obj;data/BlobCube.obj;data/level.tga;data/font.tga"
+	LIBS "ae;ae_extras;imgui;imguizmo;rapidjson"
+)
 
 # Mouse
 ae_add_bundle("Mouse"

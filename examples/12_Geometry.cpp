@@ -272,9 +272,12 @@ int main()
 				
 				ae::Vec3 p;
 				ae::Vec3 n;
-				float t;
-				if( ae::Triangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ] ).IntersectRay( raySource, ray, ccw, cw, &p, &n, &t ) )
+				float distance;
+				if( ae::Triangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ] ).Raycast( raySource, ray, ccw, cw, &p, &n, &distance ) )
 				{
+					const ae::Vec3 rayHit = raySource + ray.SafeNormalizeCopy() * distance;
+					debug.AddLine( raySource, rayHit, ae::Color::Green() );
+					debug.AddLine( rayHit, raySource + ray, ae::Color::Red() );
 					debug.AddSphere( p, 0.1f, ae::Color::Green(), 8 );
 					debug.AddLine( p, p + n, ae::Color::Green() );
 				}
@@ -509,14 +512,16 @@ int main()
 				
 				// Ray
 				ae::Vec3 rayHit( 0.0f );
+				float distance = 0.0f;
 				float t = 0.0f;
 				debug.AddSphere( raySource, 0.05f, ae::Color::PicoPeach(), 8 );
-				if( rayTest && plane.IntersectRay( raySource, ray, &rayHit ) )
+				if( rayTest && plane.Raycast( raySource, ray, &rayHit, &distance ) )
 				{
+					const ae::Vec3 rayDistancePoint = raySource + ray.SafeNormalizeCopy() * distance;
 					debug.AddSphere( rayHit, 0.05f, ae::Color::PicoPeach(), 8 );
-					debug.AddLine( raySource, rayHit, ae::Color::PicoPeach() );
+					debug.AddLine( raySource, rayDistancePoint, ae::Color::PicoPeach() );
 					debug.AddCircle( p, plane.GetNormal(), ( p - rayHit ).Length(), ae::Color::PicoPink(), 32 );
-					debug.AddLine( rayHit, raySource + ray, ae::Color::Red() );
+					debug.AddLine( rayDistancePoint, raySource + ray, ae::Color::Red() );
 				}
 				else if( !rayTest && plane.IntersectLine( raySource, ray, nullptr, &t ) )
 				{
@@ -590,11 +595,12 @@ int main()
 				debug.AddLine( p, p + toSurface, nearestColor );
 				
 				ae::Vec3 rayP, rayN;
-				float rayT;
-				if( aabb.IntersectRay( raySource, ray, &rayP, &rayN, &rayT ) )
+				float rayDistance;
+				if( aabb.Raycast( raySource, ray, &rayP, &rayN, &rayDistance ) )
 				{
-					debug.AddLine( raySource, raySource + ray * rayT, ae::Color::PicoBlue() );
-					debug.AddLine( rayP, raySource + ray, ae::Color::Red() );
+					const ae::Vec3 rayDistancePoint = raySource + ray.SafeNormalizeCopy() * rayDistance;
+					debug.AddLine( raySource, rayDistancePoint, ae::Color::PicoBlue() );
+					debug.AddLine( rayDistancePoint, raySource + ray, ae::Color::Red() );
 
 					debug.AddSphere( rayP, 0.05f, ae::Color::PicoBlue(), 8 );
 					debug.AddLine( rayP, rayP + rayN, ae::Color::PicoBlue() );
@@ -669,7 +675,7 @@ int main()
 				debug.AddLine( p, p + toSurface, nearestColor );
 				
 				ae::Vec3 rayP, rayN;
-				float rayT;
+				float rayDistance;
 				
 				struct
 				{
@@ -687,14 +693,15 @@ int main()
 				for( uint32_t i = 0; i < countof(rays); i++ )
 				{
 					rayP = rays[ i ].to;
-					obb.IntersectRay( rays[ i ].from, rays[ i ].to - rays[ i ].from, &rayP );
+					obb.Raycast( rays[ i ].from, rays[ i ].to - rays[ i ].from, &rayP );
 					debug.AddLine( rays[ i ].from, rayP, rays[ i ].color );
 				}
 				
-				if( obb.IntersectRay( raySource, ray, &rayP, &rayN, &rayT ) )
+				if( obb.Raycast( raySource, ray, &rayP, &rayN, &rayDistance ) )
 				{
-					debug.AddLine( raySource, raySource + ray * rayT, ae::Color::PicoBlue() );
-					debug.AddLine( rayP, raySource + ray, ae::Color::Red() );
+					const ae::Vec3 rayDistancePoint = raySource + ray.SafeNormalizeCopy() * rayDistance;
+					debug.AddLine( raySource, rayDistancePoint, ae::Color::PicoBlue() );
+					debug.AddLine( rayDistancePoint, raySource + ray, ae::Color::Red() );
 					
 					debug.AddSphere( rayP, 0.05f, ae::Color::PicoBlue(), 8 );
 					debug.AddLine( rayP, rayP + rayN, ae::Color::PicoBlue() );
@@ -919,10 +926,13 @@ int main()
 				bool cw = false;
 
 				ae::Vec3 p, n;
-				float t;
-				if( ae::Triangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ] ).SphereCast( raySource, ray, r, ccw, cw, &p, &n, &t ) )
+				float distance;
+				if( ae::Triangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ] ).SphereCast( raySource, ray, r, ccw, cw, &p, &n, &distance ) )
 				{
-					debug.AddSphere( raySource + ray * t, r, ae::Color::Green(), 16 );
+					const ae::Vec3 sphereCenter = raySource + ray.SafeNormalizeCopy() * distance;
+					debug.AddLine( raySource, sphereCenter, ae::Color::Green() );
+					debug.AddLine( sphereCenter, raySource + ray, ae::Color::Red() );
+					debug.AddSphere( sphereCenter, r, ae::Color::Green(), 16 );
 					debug.AddSphere( p, 0.05f, ae::Color::Green(), 8 );
 					debug.AddLine( p, p + n, ae::Color::Green() );
 				}
