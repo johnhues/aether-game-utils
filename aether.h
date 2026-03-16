@@ -62,6 +62,7 @@
 #define _AE_MINGW_ 0
 #define _AE_LINUX_ 0
 #define _AE_EMSCRIPTEN_ 0
+#define _AE_WASM_ 0
 #if defined(__EMSCRIPTEN__)
 	#undef _AE_EMSCRIPTEN_
 	#define _AE_EMSCRIPTEN_ 1
@@ -91,6 +92,9 @@
 #elif defined(__linux__)
 	#undef _AE_LINUX_
 	#define _AE_LINUX_ 1
+#elif defined(__wasi__)
+	#undef _AE_WASM_
+	#define _AE_WASM_ 1
 #else
 	#error "Platform not supported"
 #endif
@@ -305,7 +309,7 @@
 	#include <emscripten/html5.h>
 	#include <webgl/webgl1.h> // For Emscripten WebGL API headers (see also webgl/webgl1_ext.h and webgl/webgl2.h)
 #endif
-#if !_AE_WINDOWS_
+#if !_AE_WINDOWS_ && !_AE_WASM_
 	#include <cxxabi.h>
 	#if defined(__SSE3__)
 		#include <pmmintrin.h>
@@ -3189,7 +3193,11 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 // Assertion functions
 //------------------------------------------------------------------------------
 #ifndef AE_ASSERT_IMPL
+#	if _AE_WASM_
+#		define AE_ASSERT_IMPL( _msgStr ) __builtin_trap()
+#	else
 	#define AE_ASSERT_IMPL( msgStr ) { if( !ae::IsDebuggerAttached() ) { ae::ShowMessage( msgStr ? msgStr : "Unspecified Fatal Error" ); } else { AE_BREAK(); } }
+#	endif
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 #define AE_ASSERT( _x ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
@@ -15226,6 +15234,13 @@ T* ae::Cast( C* obj )
 	typedef char _ae_sock_buff_t;
 	#define _ae_sock_poll WSAPoll
 	#define _ae_ioctl ioctlsocket
+#elif _AE_WASM_
+	typedef uint16_t _ae_sa_family_t;
+	typedef int _ae_sock_err_t;
+	struct _ae_poll_fd_t { int fd; short events; short revents; };
+	typedef uint8_t _ae_sock_buff_t;
+	inline int _ae_sock_poll( _ae_poll_fd_t*, unsigned int, int ) { return -1; }
+	inline int _ae_ioctl( int, unsigned long, ... ) { return -1; }
 #else
 	#include <netdb.h>
 	#include <netinet/in.h>
@@ -15319,7 +15334,7 @@ uint32_t GetPID()
 {
 #if _AE_WINDOWS_
 	return GetCurrentProcessId();
-#elif _AE_EMSCRIPTEN_
+#elif _AE_EMSCRIPTEN_ || _AE_WASM_
 	return 0;
 #else
 	return getpid();
@@ -15328,7 +15343,11 @@ uint32_t GetPID()
 
 uint32_t GetMaxConcurrentThreads()
 {
+#if _AE_WASM_
+	return 1;
+#else
 	return std::thread::hardware_concurrency();
+#endif
 }
 
 #if _AE_APPLE_
@@ -15388,6 +15407,10 @@ double GetTime()
 	return performanceCount.QuadPart / (double)counterFrequency.QuadPart;
 #elif _AE_EMSCRIPTEN_
 	return _ae_performance_now() / 1000.0f;
+#elif _AE_WASM_
+	struct timespec ts;
+	clock_gettime( CLOCK_MONOTONIC, &ts );
+	return ts.tv_sec + ts.tv_nsec * 1e-9;
 #else
 	return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::high_resolution_clock::now().time_since_epoch() ).count() / 1000000.0;
 #endif
@@ -18074,8 +18097,8 @@ void TimeStep::SetDt( float sec )
 
 void TimeStep::Tick()
 {
-#if _AE_EMSCRIPTEN_
-	// Frame rate of emscripten builds is controlled by the browser
+#if _AE_EMSCRIPTEN_ || _AE_WASM_
+	// Frame rate of emscripten/WASM builds is controlled externally
 	const bool allowSleep = false;
 #else
 	const bool allowSleep = ( m_timeStep > 0.0 );
@@ -21682,6 +21705,15 @@ void _ae_GetCurrentWorkingDir( Str256* outDir )
 	EM_ASM( { stringToUTF8(window.location.href, $0, 256) }, url );
 	*outDir = ae::FileSystem::GetDirectoryFromPath( url );
 }
+#elif _AE_WASM_
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+	return false;
+}
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+	return false;
+}
 #endif
 
 } // namespace ae
@@ -23075,6 +23107,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 //------------------------------------------------------------------------------
 // ae::Socket and ae::ListenerSocket helpers
 //------------------------------------------------------------------------------
+#if !_AE_WASM_
 uint32_t _winsockCount = 0;
 bool _WinsockInit()
 {
@@ -23846,6 +23879,8 @@ uint32_t ListenerSocket::GetConnectionCount() const
 	return m_connections.Length();
 }
 
+#endif // !_AE_WASM_
+
 }  // ae end
 
 #if AE_ENABLE_OPENGL
@@ -23864,6 +23899,9 @@ uint32_t ListenerSocket::GetConnectionCount() const
 	#include <GL/glcorearb.h>
 #elif _AE_IOS_
 	#include <OpenGLES/ES3/gl.h>
+#elif _AE_WASM_
+	#include "aether_gl_wasm.h"
+	#define glClearDepth glClearDepthf
 #else
 	#include <OpenGL/glext.h>
 	#include <OpenGL/gl3.h>
@@ -23872,7 +23910,7 @@ uint32_t ListenerSocket::GetConnectionCount() const
 
 namespace ae
 {
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_ || _AE_WASM_
 	int32_t GLMajorVersion = 3;
 	int32_t GLMinorVersion = 0;
 #else
@@ -24511,7 +24549,7 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 		}
 
 		// Wireframe
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_ || _AE_WASM_
 		AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on this platform" );
 #else
 		glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
@@ -26170,6 +26208,10 @@ GraphicsDevice::~GraphicsDevice()
 
 void GraphicsDevice::Initialize( class Window* window )
 {
+#if _AE_WASM_
+	// No-op: the host environment owns the GL context for WASM builds.
+	(void)window;
+#else
 	AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
 	_Globals* globals = ae::_Globals::Get();
@@ -26368,6 +26410,7 @@ void GraphicsDevice::Initialize( class Window* window )
 	Activate(); // Init primary render target
 	AE_ASSERT( GetWidth() && GetHeight() );
 	AE_ASSERT( m_context );
+#endif // !_AE_WASM_
 }
 
 void GraphicsDevice::SetVsyncEnabled( bool enabled )
