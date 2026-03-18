@@ -112,7 +112,7 @@ int main()
 			player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
 			player.velocity.y -= dt * 20.0f;
 			player.sphere.center += player.velocity * dt;
-			player = collisionMesh.PushOut( ae::PushOutParams(), player );
+			player = collisionMesh.PushOut( ae::PushOutParams(), {}, player );
 			ae::RaycastParams raycastParams;
 			raycastParams.source = player.sphere.center;
 			raycastParams.ray = ae::Vec3( 0, player.sphere.radius * -1.1f, 0 );

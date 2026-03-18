@@ -1,4 +1,4 @@
-name: Ubuntu deprecated
+name: Ubuntu Deprecated
 on: [push]
 jobs:
   build-and-test:

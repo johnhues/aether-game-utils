@@ -268,6 +268,55 @@ TEST_CASE( "FromString fail", "[aeString]" )
 	REQUIRE( ae::FromString( ".", true ) == true );
 }
 
+TEST_CASE( "TryFromString success", "[aeString]" )
+{
+	// integer types
+	int8_t i8 = 0; REQUIRE( ae::TryFromString( "-128", &i8 ) ); REQUIRE( i8 == INT8_MIN );
+	int8_t i8b = 0; REQUIRE( ae::TryFromString( "127", &i8b ) ); REQUIRE( i8b == INT8_MAX );
+	int16_t i16 = 0; REQUIRE( ae::TryFromString( "-32768", &i16 ) ); REQUIRE( i16 == INT16_MIN );
+	int16_t i16b = 0; REQUIRE( ae::TryFromString( "32767", &i16b ) ); REQUIRE( i16b == INT16_MAX );
+	int32_t i32 = 0; REQUIRE( ae::TryFromString( "-2147483648", &i32 ) ); REQUIRE( i32 == INT32_MIN );
+	int32_t i32b = 0; REQUIRE( ae::TryFromString( "2147483647", &i32b ) ); REQUIRE( i32b == INT32_MAX );
+	int64_t i64 = 0; REQUIRE( ae::TryFromString( "-9223372036854775808", &i64 ) ); REQUIRE( i64 == INT64_MIN );
+	int64_t i64b = 0; REQUIRE( ae::TryFromString( "9223372036854775807", &i64b ) ); REQUIRE( i64b == INT64_MAX );
+	uint8_t u8 = 0; REQUIRE( ae::TryFromString( "255", &u8 ) ); REQUIRE( u8 == UINT8_MAX );
+	uint16_t u16 = 0; REQUIRE( ae::TryFromString( "65535", &u16 ) ); REQUIRE( u16 == UINT16_MAX );
+	uint32_t u32 = 0; REQUIRE( ae::TryFromString( "4294967295", &u32 ) ); REQUIRE( u32 == UINT32_MAX );
+	uint64_t u64 = 0; REQUIRE( ae::TryFromString( "18446744073709551615", &u64 ) ); REQUIRE( u64 == UINT64_MAX );
+	// float / double
+	float f = 0.0f; REQUIRE( ae::TryFromString( "1.5", &f ) ); REQUIRE( f == 1.5f );
+	double d = 0.0; REQUIRE( ae::TryFromString( "1.5", &d ) ); REQUIRE( d == 1.5 );
+	// composite
+	ae::Vec2 v2; REQUIRE( ae::TryFromString( "1 2", &v2 ) ); REQUIRE( v2 == ae::Vec2( 1.0f, 2.0f ) );
+	ae::Vec3 v3; REQUIRE( ae::TryFromString( "1 2 3", &v3 ) ); REQUIRE( v3 == ae::Vec3( 1.0f, 2.0f, 3.0f ) );
+	ae::Vec4 v4; REQUIRE( ae::TryFromString( "1 2 3 4", &v4 ) ); REQUIRE( v4 == ae::Vec4( 1.0f, 2.0f, 3.0f, 4.0f ) );
+	bool b = false; REQUIRE( ae::TryFromString( "true", &b ) ); REQUIRE( b == true );
+	bool b2 = true; REQUIRE( ae::TryFromString( "false", &b2 ) ); REQUIRE( b2 == false );
+	// permissive: leading whitespace, + prefix, trailing garbage
+	int32_t perm = 0;
+	REQUIRE( ae::TryFromString( " 5", &perm ) ); REQUIRE( perm == 5 );
+	REQUIRE( ae::TryFromString( "+5", &perm ) ); REQUIRE( perm == 5 );
+	REQUIRE( ae::TryFromString( "5abc", &perm ) ); REQUIRE( perm == 5 );
+	// out param unchanged on failure
+	int32_t unchanged = 99;
+	REQUIRE( !ae::TryFromString( "abc", &unchanged ) ); REQUIRE( unchanged == 99 );
+}
+
+TEST_CASE( "TryFromString fail", "[aeString]" )
+{
+	int32_t i = 0;
+	REQUIRE( !ae::TryFromString( "", &i ) );
+	REQUIRE( !ae::TryFromString( "abc", &i ) );
+	// 64-bit overflow
+	int64_t i64 = 0; REQUIRE( !ae::TryFromString( "9223372036854775808", &i64 ) );
+	uint64_t u64 = 0; REQUIRE( !ae::TryFromString( "18446744073709551616", &u64 ) );
+	// incomplete component count
+	ae::Vec3 v3 = ae::Vec3( 1.0f ); REQUIRE( !ae::TryFromString( "1 2", &v3 ) ); REQUIRE( v3 == ae::Vec3( 1.0f ) );
+	ae::Matrix4 m = ae::Matrix4::Identity();
+	REQUIRE( !ae::TryFromString( "1 0 0 0 0 1 0 0 0 0 1 0 0 0 2", &m ) );
+	REQUIRE( m == ae::Matrix4::Identity() );
+}
+
 TEST_CASE( "Str::Append", "[aeString]" )
 {
 	SECTION( "append const char*" )

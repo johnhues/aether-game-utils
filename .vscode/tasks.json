@@ -25,71 +25,14 @@
 			}
 		},
 		{
-			"label": "Build Target",
+			"label": "Build Emscripten Test",
 			"type": "shell",
-			"command": "cd build_em && ninja ${input:buildTarget}",
+			"command": "cd build_em && ninja -f build-${command:cmake.buildType}.ninja test",
 			"problemMatcher": ["$gcc"],
 			"presentation": {
 				"reveal": "always",
 				"panel": "new"
 			}
-		},
-		{
-			"label": "Configure Emscripten",
-			"type": "shell",
-			"command": "emcmake cmake -G Ninja -B build_em -DCMAKE_BUILD_TYPE=${input:buildType} -DAE_LEAN_AND_MEAN=0",
-			"problemMatcher": [],
-			"presentation": {
-				"reveal": "always",
-				"panel": "new"
-			}
-		}
-	],
-	"inputs": [
-		{
-			"id": "buildTarget",
-			"type": "pickString",
-			"description": "Select build target",
-			"options": [
-				"all",
-				"test",
-				"01_example",
-				"02_sprites",
-				"03_client",
-				"03_server",
-				"04_net_object_client",
-				"04_net_object_server",
-				"05_text",
-				"06_triangle",
-				"07_cube",
-				"08_audio",
-				"09_platformer2d",
-				"10_splines",
-				"11_terrain",
-				"12_geometry",
-				"13_file_dialogs",
-				"15_obj_viewer",
-				"19_mouse",
-				"20_render_target",
-				"21_instancing",
-				"22_read_me",
-				"25_a_star",
-				"26_gamepad",
-				"27_sdf_to_mesh"
-			],
-			"default": "all"
-		},
-		{
-			"id": "buildType",
-			"type": "pickString",
-			"description": "Select build type",
-			"options": [
-				"Debug",
-				"Release",
-				"RelWithDebInfo",
-				"MinSizeRel"
-			],
-			"default": "Release"
 		}
 	]
 }

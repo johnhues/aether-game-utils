@@ -3,11 +3,13 @@
 </p>
 
 # aether game utils
-[![Windows](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml)
-[![MacOS](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml)
 [![Emscripten](https://github.com/johnhues/aether-game-utils/actions/workflows/emscripten.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/emscripten.yml)
+[![MacOS](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml)
+[![Windows](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml)
 [![Ubuntu clang](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml)
 [![Ubuntu g++](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml)
+[![Ubuntu MinGW](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_mingw.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_mingw.yml)
+[![Ubuntu Deprecated](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_deprecated.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_deprecated.yml)
 
 [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) is a single-header collection of cross platform C++ utilities for quickly creating small games. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:
 * Providing useful and performant utilities tailored for game development

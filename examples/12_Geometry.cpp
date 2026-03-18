@@ -31,6 +31,36 @@
 const ae::Tag TAG_EXAMPLE = "example";
 
 //------------------------------------------------------------------------------
+// Helpers
+//------------------------------------------------------------------------------
+template< typename Fn >
+void UpdateResource( ae::FileSystem* fileSystem, const ae::File** _resourceFile, const Fn& fn )
+{
+	const ae::File* resourceFile = *_resourceFile;
+	if( !resourceFile || resourceFile->GetStatus() == ae::File::Status::Pending )
+	{
+		return;
+	}
+	else if( resourceFile->GetStatus() == ae::File::Status::Success && resourceFile->GetLength() )
+	{
+		if( fn() )
+		{
+			AE_INFO( "Successfully loaded resource file '#'", resourceFile->GetURL() );
+		}
+		else
+		{
+			AE_ERR( "Error parsing resource file '#'", resourceFile->GetURL() );
+		}
+	}
+	else
+	{
+		AE_ERR( "Could not access file '#'", resourceFile->GetURL() );
+	}
+	fileSystem->Destroy( resourceFile );
+	*_resourceFile = nullptr;
+}
+
+//------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
 int main()
@@ -57,16 +87,8 @@ int main()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	fileSystem.Initialize( "data", "ae", "geometry" );
 	debug.Initialize( 2048 );
-	{
-		const char* fileName = "font.tga";
-		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
-		AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
-		ae::Scratch< uint8_t > fileBuffer( fileSize );
-		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-		ae::TargaFile targa = TAG_EXAMPLE;
-		targa.Load( fileBuffer.Data(), fileSize );
-		fontTexture.Initialize( targa.textureParams );
-	}
+	const ae::File* fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
+	AE_INFO( "Loading '#'", fontFile->GetURL() );
 	meshShader.Initialize(
 		R"(
 			AE_UNIFORM_HIGHP mat4 u_modelToProj;
@@ -91,20 +113,8 @@ int main()
 	);
 	meshShader.SetDepthWrite( true );
 	meshShader.SetDepthTest( true );
-	{
-		const char* fileName = "bunny.obj";
-		ae::OBJLoader objLoader = TAG_EXAMPLE;
-		const uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
-		AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
-		ae::Scratch< uint8_t > fileBuffer( fileSize );
-		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-		const ae::OBJLoader::InitializeParams initParams = { .data = fileBuffer.Data(), .length = fileBuffer.Length() };
-		const ae::OBJLoader::VertexDataParams vertexParams = { .vertexData = &meshVertexData };
-		objLoader.Load( initParams );
-		objLoader.InitializeVertexData( vertexParams );
-		objLoader.InitializeCollisionMesh( &meshCollision );
-	}
-	text.Initialize( 16, 512, &fontTexture, 8, 1.0f );
+	const ae::File* objFile = fileSystem.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
+	AE_INFO( "Loading '#'", objFile->GetURL() );
 	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 	
 	// AABB and OBB test state
@@ -115,10 +125,44 @@ int main()
 	static float s_pb = 0.0f;
 
 	AE_INFO( "Run" );
-	while( !input.quit )
+	auto UpdateResources = [&]()
+	{
+		UpdateResource( &fileSystem, &fontFile, [&]()
+		{
+			ae::TargaFile targa = TAG_EXAMPLE;
+			targa.Load( fontFile->GetData(), fontFile->GetLength() );
+			fontTexture.Initialize( targa.textureParams );
+			text.Initialize( 16, 512, &fontTexture, 8, 1.0f );
+			return true;
+		} );
+
+		UpdateResource( &fileSystem, &objFile, [&]()
+		{
+			ae::OBJLoader objLoader = TAG_EXAMPLE;
+			const ae::OBJLoader::InitializeParams initParams = { .data = objFile->GetData(), .length = objFile->GetLength() };
+			const ae::OBJLoader::VertexDataParams vertexParams = { .vertexData = &meshVertexData };
+			objLoader.Load( initParams );
+			objLoader.InitializeVertexData( vertexParams );
+			objLoader.InitializeCollisionMesh( &meshCollision );
+			return true;
+		} );
+
+		return fileSystem.GetFileCount();
+	};
+
+	auto Update = [&]()
 	{
 		const float dt = timeStep.GetTimeStep();
 		input.Pump();
+
+		if( UpdateResources() )
+		{
+			render.Activate();
+			render.Clear( ae::Color::PicoDarkPurple() );
+			render.Present();
+			timeStep.Tick();
+			return !input.quit;
+		}
 
 		if( input.Get( ae::Key::F ) && !input.GetPrev( ae::Key::F ) )
 		{
@@ -189,7 +233,7 @@ int main()
 		{
 			currentTest++;
 		}
-		currentTest = ae::Mod( currentTest, 11 );
+		currentTest = ae::Mod( currentTest, 12 );
 
 		// Geometry calculations / rendering
 		switch( currentTest )
@@ -228,9 +272,12 @@ int main()
 				
 				ae::Vec3 p;
 				ae::Vec3 n;
-				float t;
-				if( ae::Triangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ] ).IntersectRay( raySource, ray, ccw, cw, &p, &n, &t ) )
+				float distance;
+				if( ae::Triangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ] ).Raycast( raySource, ray, ccw, cw, &p, &n, &distance ) )
 				{
+					const ae::Vec3 rayHit = raySource + ray.SafeNormalizeCopy() * distance;
+					debug.AddLine( raySource, rayHit, ae::Color::Green() );
+					debug.AddLine( rayHit, raySource + ray, ae::Color::Red() );
 					debug.AddSphere( p, 0.1f, ae::Color::Green(), 8 );
 					debug.AddLine( p, p + n, ae::Color::Green() );
 				}
@@ -465,14 +512,16 @@ int main()
 				
 				// Ray
 				ae::Vec3 rayHit( 0.0f );
+				float distance = 0.0f;
 				float t = 0.0f;
 				debug.AddSphere( raySource, 0.05f, ae::Color::PicoPeach(), 8 );
-				if( rayTest && plane.IntersectRay( raySource, ray, &rayHit ) )
+				if( rayTest && plane.Raycast( raySource, ray, &rayHit, &distance ) )
 				{
+					const ae::Vec3 rayDistancePoint = raySource + ray.SafeNormalizeCopy() * distance;
 					debug.AddSphere( rayHit, 0.05f, ae::Color::PicoPeach(), 8 );
-					debug.AddLine( raySource, rayHit, ae::Color::PicoPeach() );
+					debug.AddLine( raySource, rayDistancePoint, ae::Color::PicoPeach() );
 					debug.AddCircle( p, plane.GetNormal(), ( p - rayHit ).Length(), ae::Color::PicoPink(), 32 );
-					debug.AddLine( rayHit, raySource + ray, ae::Color::Red() );
+					debug.AddLine( rayDistancePoint, raySource + ray, ae::Color::Red() );
 				}
 				else if( !rayTest && plane.IntersectLine( raySource, ray, nullptr, &t ) )
 				{
@@ -546,11 +595,12 @@ int main()
 				debug.AddLine( p, p + toSurface, nearestColor );
 				
 				ae::Vec3 rayP, rayN;
-				float rayT;
-				if( aabb.IntersectRay( raySource, ray, &rayP, &rayN, &rayT ) )
+				float rayDistance;
+				if( aabb.Raycast( raySource, ray, &rayP, &rayN, &rayDistance ) )
 				{
-					debug.AddLine( raySource, raySource + ray * rayT, ae::Color::PicoBlue() );
-					debug.AddLine( rayP, raySource + ray, ae::Color::Red() );
+					const ae::Vec3 rayDistancePoint = raySource + ray.SafeNormalizeCopy() * rayDistance;
+					debug.AddLine( raySource, rayDistancePoint, ae::Color::PicoBlue() );
+					debug.AddLine( rayDistancePoint, raySource + ray, ae::Color::Red() );
 
 					debug.AddSphere( rayP, 0.05f, ae::Color::PicoBlue(), 8 );
 					debug.AddLine( rayP, rayP + rayN, ae::Color::PicoBlue() );
@@ -625,7 +675,7 @@ int main()
 				debug.AddLine( p, p + toSurface, nearestColor );
 				
 				ae::Vec3 rayP, rayN;
-				float rayT;
+				float rayDistance;
 				
 				struct
 				{
@@ -643,14 +693,15 @@ int main()
 				for( uint32_t i = 0; i < countof(rays); i++ )
 				{
 					rayP = rays[ i ].to;
-					obb.IntersectRay( rays[ i ].from, rays[ i ].to - rays[ i ].from, &rayP );
+					obb.Raycast( rays[ i ].from, rays[ i ].to - rays[ i ].from, &rayP );
 					debug.AddLine( rays[ i ].from, rayP, rays[ i ].color );
 				}
 				
-				if( obb.IntersectRay( raySource, ray, &rayP, &rayN, &rayT ) )
+				if( obb.Raycast( raySource, ray, &rayP, &rayN, &rayDistance ) )
 				{
-					debug.AddLine( raySource, raySource + ray * rayT, ae::Color::PicoBlue() );
-					debug.AddLine( rayP, raySource + ray, ae::Color::Red() );
+					const ae::Vec3 rayDistancePoint = raySource + ray.SafeNormalizeCopy() * rayDistance;
+					debug.AddLine( raySource, rayDistancePoint, ae::Color::PicoBlue() );
+					debug.AddLine( rayDistancePoint, raySource + ray, ae::Color::Red() );
 					
 					debug.AddSphere( rayP, 0.05f, ae::Color::PicoBlue(), 8 );
 					debug.AddLine( rayP, rayP + rayN, ae::Color::PicoBlue() );
@@ -801,14 +852,16 @@ int main()
 				meshUniforms.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
 				meshVertexData.Bind( &meshShader, meshUniforms );
 				meshVertexData.Draw();
+
+				const ae::CollisionMeshRaycastParams meshParams = { .transform = modelToWorld };
 				
-				const auto drawRaycast = [ &debug, &meshCollision ]( const ae::RaycastParams& params, ae::Color color )
+				const auto drawRaycast = [ &debug, &meshCollision, &meshParams ]( const ae::RaycastParams& params, ae::Color color )
 				{
-					const ae::Vec3 scale = params.transform.GetScale();
+					const ae::Vec3 scale = meshParams.transform.GetScale();
 					const float radius = 0.002f * ae::Max( scale.x, scale.y, scale.z );
 					const float normLength = 0.02f * ae::Max( scale.x, scale.y, scale.z );
 					debug.AddLine( params.source, params.source + params.ray, color );
-					const ae::RaycastResult result = meshCollision.Raycast( params );
+					const ae::RaycastResult result = meshCollision.Raycast( params, meshParams );
 					if( result.hits.Length() )
 					{
 						const auto hit = result.hits[ 0 ];
@@ -835,12 +888,58 @@ int main()
 				};
 				for( uint32_t i = 0; i < countof(rays); i++ )
 				{
-					const ae::RaycastParams params = { .transform = modelToWorld, .source = rays[ i ].source, .ray = -rays[ i ].source };
+					const ae::RaycastParams params = { .source = rays[ i ].source, .ray = -rays[ i ].source };
 					drawRaycast( params, rays[ i ].color );
 				}
 
-				const ae::RaycastParams params = { .transform = modelToWorld, .source = raySource, .ray = ray };
+				const ae::RaycastParams params = { .source = raySource, .ray = ray };
 				drawRaycast( params, ae::Color::PicoPink() );
+				break;
+			}
+			case 11:
+			{
+				infoText.Append( "Triangle-SphereCast\n" );
+				doRay( true );
+				infoText.Append( "Radius: 3-4\n" );
+
+				static float s_triangleScale = 1.0f;
+				ae::Vec3 triangle[] =
+				{
+					ae::Vec3( 0.0f, -1.0f, -1.0f ) * s_triangleScale,
+					ae::Vec3( 0.0f, 1.0f, -1.0f ) * s_triangleScale,
+					ae::Vec3( 0.0f, 0.0f, 1.0f ) * s_triangleScale,
+				};
+				ae::Vec3 triangleCenter = ( triangle[ 0 ] + triangle[ 1 ] + triangle[ 2 ] ) / 3.0f;
+				ae::Vec3 normal = ( triangle[ 1 ] - triangle[ 0 ] ).Cross( triangle[ 2 ] - triangle[ 0 ] );
+				normal.SafeNormalize();
+				debug.AddLine( triangle[ 0 ], triangle[ 1 ], ae::Color::Red() );
+				debug.AddLine( triangle[ 1 ], triangle[ 2 ], ae::Color::Red() );
+				debug.AddLine( triangle[ 2 ], triangle[ 0 ], ae::Color::Red() );
+				debug.AddLine( triangleCenter, triangleCenter + normal, ae::Color::Red() );
+
+				static float r = 0.5f;
+				if( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
+				if( input.Get( ae::Key::Num4 ) ) r += 0.016f;
+				r = ae::Clip( r, 0.01f, 8.0f );
+
+				bool ccw = true;
+				bool cw = false;
+
+				ae::Vec3 p, n;
+				float distance;
+				if( ae::Triangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ] ).SphereCast( raySource, ray, r, ccw, cw, &p, &n, &distance ) )
+				{
+					const ae::Vec3 sphereCenter = raySource + ray.SafeNormalizeCopy() * distance;
+					debug.AddLine( raySource, sphereCenter, ae::Color::Green() );
+					debug.AddLine( sphereCenter, raySource + ray, ae::Color::Red() );
+					debug.AddSphere( sphereCenter, r, ae::Color::Green(), 16 );
+					debug.AddSphere( p, 0.05f, ae::Color::Green(), 8 );
+					debug.AddLine( p, p + n, ae::Color::Green() );
+				}
+				else
+				{
+					debug.AddSphere( raySource + ray, r, ae::Color::Red(), 16 );
+				}
 				break;
 			}
 			default:
@@ -865,7 +964,14 @@ int main()
 		render.Present();
 
 		timeStep.Tick();
-	}
+		return !input.quit;
+	};
+
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
+#else
+	while( Update() ) {}
+#endif
 
 	AE_INFO( "Terminate" );
 	text.Terminate();

@@ -147,7 +147,12 @@ void Player::Update( SmallEngine* engine )
 	velocity.SetXY( ae::DtSlerp( velocity.GetXY(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
 	position += velocity * dt;
 	ae::RaycastResult raycastResult;
-	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m ) { raycastResult = m->meshResource ? m->meshResource->collision.Raycast( ae::RaycastParams{ .transform = m->transform, .source = position, .ray = ae::Vec3( 0.0f, 0.0f, -0.9f ) }, raycastResult ) : raycastResult; } );
+	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m )
+	{
+		const ae::RaycastParams params = { .source = position, .ray = ae::Vec3( 0.0f, 0.0f, -0.9f ) };
+		const ae::CollisionMeshRaycastParams meshParams = { .transform = m->transform };
+		raycastResult = m->meshResource ? m->meshResource->collision.Raycast( params, meshParams, raycastResult ) : raycastResult;
+	} );
 	if( raycastResult.hits.Length() )
 	{
 		position.z = raycastResult.hits[ 0 ].position.z + 0.8f;
@@ -158,7 +163,11 @@ void Player::Update( SmallEngine* engine )
 		velocity.z -= dt * 10.0f;
 	}
 	ae::PushOutInfo pushOutInfo = { .sphere = ae::Sphere( position, 0.6f ), .velocity = velocity };
-	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m ) { pushOutInfo = m->meshResource ? m->meshResource->collision.PushOut( ae::PushOutParams{ .transform = m->transform }, pushOutInfo ) : pushOutInfo; } );
+	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m )
+	{
+		const ae::CollisionMeshPushOutParams meshParams = { .transform = m->transform };
+		pushOutInfo = m->meshResource ? m->meshResource->collision.PushOut( {}, meshParams, pushOutInfo ) : pushOutInfo;
+	} );
 	position = pushOutInfo.sphere.center;
 
 	// Update engine camera

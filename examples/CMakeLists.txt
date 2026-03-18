@@ -279,7 +279,7 @@ if(AE_LOADERS_OFBX)
 	)
 endif()
 
-if(AE_DEPRECATED) # @TODO: Fix deprecated ClassType/ClassVar usage
+if(AE_DEPRECATED)
 	# Small Engine
 	ae_add_bundle("Small Engine"
 		TARGET_NAME "18_SmallEngine"

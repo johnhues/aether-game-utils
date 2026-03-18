@@ -28,6 +28,111 @@
 #include <catch2/catch_test_macros.hpp>
 
 //------------------------------------------------------------------------------
+// Enum helpers
+//------------------------------------------------------------------------------
+template< typename T >
+static void RequireEnumValueByIndex( const ae::EnumType* enumType, int32_t index, const T& expectedValue )
+{
+	T valueOut = enumType->GetValueByIndex< T >( index );
+	REQUIRE( valueOut == expectedValue );
+}
+
+template< typename T >
+struct EnumMetaCase
+{
+	const char* name;
+	T value;
+};
+
+template< typename T, uint32_t N >
+static void CheckEnumMetadata(
+	const char* typeName,
+	bool isSigned,
+	const EnumMetaCase< T >( &cases )[ N ],
+	std::underlying_type_t< T > missingValue,
+	const char* outOfRangeValue )
+{
+	using U = std::underlying_type_t< T >;
+
+	const ae::EnumType* enumType = ae::GetEnumType< T >();
+	REQUIRE( enumType == ae::GetEnumType( typeName ) );
+	REQUIRE( enumType->TypeSize() == sizeof(T) );
+	REQUIRE( enumType->TypeIsSigned() == isSigned );
+	REQUIRE( enumType->Length() == N );
+
+	for( uint32_t i = 0; i < N; i++ )
+	{
+		const std::string numericValue = ae::ToString( static_cast< U >( cases[ i ].value ) );
+
+		REQUIRE( enumType->GetNameByIndex( i ) == cases[ i ].name );
+		RequireEnumValueByIndex( enumType, i, cases[ i ].value );
+
+		REQUIRE( enumType->GetNameByValue( cases[ i ].value ) == cases[ i ].name );
+		REQUIRE( enumType->GetNameByValue( static_cast< U >( cases[ i ].value ) ) == cases[ i ].name );
+		REQUIRE( enumType->HasValue( cases[ i ].value ) );
+		REQUIRE( enumType->HasValue( static_cast< U >( cases[ i ].value ) ) );
+
+		T parsedEnum = static_cast< T >( missingValue );
+		REQUIRE( enumType->GetValueFromString( cases[ i ].name, &parsedEnum ) );
+		REQUIRE( parsedEnum == cases[ i ].value );
+
+		parsedEnum = static_cast< T >( missingValue );
+		REQUIRE( enumType->GetValueFromString( numericValue.c_str(), &parsedEnum ) );
+		REQUIRE( parsedEnum == cases[ i ].value );
+
+		T varValue = cases[ 0 ].value;
+		ae::DataPointer varData( &varValue );
+		REQUIRE( enumType->SetVarData( varData, cases[ i ].value ) );
+		REQUIRE( varValue == cases[ i ].value );
+		REQUIRE( enumType->GetVarDataAsString( ae::ConstDataPointer( varData ) ) == cases[ i ].name );
+
+		U underlyingValue = 0;
+		REQUIRE( enumType->GetVarData( ae::ConstDataPointer( varData ), &underlyingValue ) );
+		REQUIRE( underlyingValue == static_cast< U >( cases[ i ].value ) );
+
+		varValue = cases[ 0 ].value;
+		REQUIRE( enumType->SetVarDataFromString( varData, cases[ i ].name ) );
+		REQUIRE( varValue == cases[ i ].value );
+		REQUIRE( enumType->SetVarDataFromString( varData, numericValue.c_str() ) );
+		REQUIRE( varValue == cases[ i ].value );
+	}
+
+	const T missingEnumValue = static_cast< T >( missingValue );
+	const std::string missingNumericValue = ae::ToString( missingValue );
+
+	REQUIRE( enumType->GetNameByValue( missingEnumValue ) == "" );
+	REQUIRE( !enumType->HasValue( missingEnumValue ) );
+
+	T parsedEnum = cases[ 0 ].value;
+	REQUIRE( !enumType->GetValueFromString( "MissingValue", &parsedEnum ) );
+	REQUIRE( parsedEnum == cases[ 0 ].value );
+	REQUIRE( !enumType->GetValueFromString( missingNumericValue.c_str(), &parsedEnum ) );
+	REQUIRE( parsedEnum == cases[ 0 ].value );
+	REQUIRE( !enumType->GetValueFromString( outOfRangeValue, &parsedEnum ) );
+	REQUIRE( parsedEnum == cases[ 0 ].value );
+
+	T varValue = cases[ 0 ].value;
+	ae::DataPointer varData( &varValue );
+	REQUIRE( !enumType->SetVarDataFromString( varData, missingNumericValue.c_str() ) );
+	REQUIRE( varValue == cases[ 0 ].value );
+	REQUIRE( !enumType->SetVarDataFromString( varData, outOfRangeValue ) );
+	REQUIRE( varValue == cases[ 0 ].value );
+}
+
+template< std::size_t N >
+constexpr bool ConstexprStringEquals( const char* lhs, const char( &rhs )[ N ] )
+{
+	for( std::size_t i = 0; i < N; i++ )
+	{
+		if( lhs[ i ] != rhs[ i ] )
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+//------------------------------------------------------------------------------
 // Types
 //------------------------------------------------------------------------------
 TEST_CASE( "Can get base type by name", "[aeMeta]" )
@@ -39,12 +144,12 @@ TEST_CASE( "Can get base type by name", "[aeMeta]" )
 	REQUIRE( ae::GetClassTypeByName( "ae::Object" ) == objType );
 
 	REQUIRE( ae::GetTypeName< ae::Object >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::Object* >() == ae::Str32( "ae::Object *" ) );
-	REQUIRE( ae::GetTypeName< ae::Object& >() == ae::Str32( "ae::Object &" ) );
+	REQUIRE( ae::GetTypeName< ae::Object* >() == ae::Str32( "ae::Object*" ) );
+	REQUIRE( ae::GetTypeName< ae::Object& >() == ae::Str32( "ae::Object&" ) );
 	REQUIRE( ae::GetTypeName< ae::Object[ 3 ] >() == ae::Str32( "ae::Object[3]" ) );
 	REQUIRE( ae::GetTypeName< const ae::Object >() == ae::Str32( "const ae::Object" ) );
-	REQUIRE( ae::GetTypeName< const ae::Object* >() == ae::Str32( "const ae::Object *" ) );
-	REQUIRE( ae::GetTypeName< const ae::Object& >() == ae::Str32( "const ae::Object &" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object* >() == ae::Str32( "const ae::Object*" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object& >() == ae::Str32( "const ae::Object&" ) );
 	REQUIRE( ae::GetTypeName< const ae::Object[ 3 ] >() == ae::Str32( "const ae::Object[3]" ) );
 
 	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< ae::Object > >() == ae::Str32( "ae::Object" ) );
@@ -55,6 +160,20 @@ TEST_CASE( "Can get base type by name", "[aeMeta]" )
 	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object* > >() == ae::Str32( "ae::Object" ) );
 	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object& > >() == ae::Str32( "ae::Object" ) );
 	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object[ 3 ] > >() == ae::Str32( "ae::Object" ) );
+}
+
+TEST_CASE( "GetTypeName can be used in constexpr context", "[aeMeta]" )
+{
+	constexpr const char* objectName = ae::GetTypeName< ae::Object >();
+	constexpr const char* objectPtrName = ae::GetTypeName< ae::Object* >();
+	constexpr const char* constArrayName = ae::GetTypeName< const ae::Object[ 3 ] >();
+	static_assert( ConstexprStringEquals( objectName, "ae::Object" ) );
+	static_assert( ConstexprStringEquals( objectPtrName, "ae::Object*" ) );
+	static_assert( ConstexprStringEquals( constArrayName, "const ae::Object[3]" ) );
+	static_assert( ae::GetTypeIdFromName( objectName ) == ae::TypeId( "ae::Object" ) );
+	REQUIRE( objectName == ae::Str32( "ae::Object" ) );
+	REQUIRE( objectPtrName == ae::Str32( "ae::Object*" ) );
+	REQUIRE( constArrayName == ae::Str32( "const ae::Object[3]" ) );
 }
 
 TEST_CASE( "Can get base type with templates", "[aeMeta]" )
@@ -212,13 +331,97 @@ TEST_CASE( "enum registration", "[aeMeta]" )
 	REQUIRE( playerStateEnum->Length() == 3 );
 	
 	REQUIRE( playerStateEnum->GetNameByIndex( 0 ) == "Idle" );
-	REQUIRE( playerStateEnum->GetValueByIndex( 0 ) == 0 );
+	RequireEnumValueByIndex( playerStateEnum, 0, PlayerState::Idle );
 	
 	REQUIRE( playerStateEnum->GetNameByIndex( 1 ) == "Run" );
-	REQUIRE( playerStateEnum->GetValueByIndex( 1 ) == 1 );
+	RequireEnumValueByIndex( playerStateEnum, 1, PlayerState::Run );
 	
 	REQUIRE( playerStateEnum->GetNameByIndex( 2 ) == "Jump" );
-	REQUIRE( playerStateEnum->GetValueByIndex( 2 ) == 2 );
+	RequireEnumValueByIndex( playerStateEnum, 2, PlayerState::Jump );
+}
+
+TEST_CASE( "enum metadata supports all fixed-width underlying types", "[aeMeta]" )
+{
+	{
+		const EnumMetaCase< EnumInt8 > cases[] =
+		{
+			{ "Min", EnumInt8::Min },
+			{ "NegativeOne", EnumInt8::NegativeOne },
+			{ "Zero", EnumInt8::Zero },
+			{ "Max", EnumInt8::Max },
+		};
+		CheckEnumMetadata( "EnumInt8", true, cases, (int8_t)1, "128" );
+	}
+	{
+		const EnumMetaCase< EnumUInt8 > cases[] =
+		{
+			{ "Zero", EnumUInt8::Zero },
+			{ "One", EnumUInt8::One },
+			{ "HighBit", EnumUInt8::HighBit },
+			{ "Max", EnumUInt8::Max },
+		};
+		CheckEnumMetadata( "EnumUInt8", false, cases, (uint8_t)2, "256" );
+	}
+	{
+		const EnumMetaCase< EnumInt16 > cases[] =
+		{
+			{ "Min", EnumInt16::Min },
+			{ "NegativeOne", EnumInt16::NegativeOne },
+			{ "Zero", EnumInt16::Zero },
+			{ "Max", EnumInt16::Max },
+		};
+		CheckEnumMetadata( "EnumInt16", true, cases, (int16_t)1, "32768" );
+	}
+	{
+		const EnumMetaCase< EnumUInt16 > cases[] =
+		{
+			{ "Zero", EnumUInt16::Zero },
+			{ "One", EnumUInt16::One },
+			{ "HighBit", EnumUInt16::HighBit },
+			{ "Max", EnumUInt16::Max },
+		};
+		CheckEnumMetadata( "EnumUInt16", false, cases, (uint16_t)2, "65536" );
+	}
+	{
+		const EnumMetaCase< EnumInt32 > cases[] =
+		{
+			{ "Min", EnumInt32::Min },
+			{ "NegativeOne", EnumInt32::NegativeOne },
+			{ "Zero", EnumInt32::Zero },
+			{ "Max", EnumInt32::Max },
+		};
+		CheckEnumMetadata( "EnumInt32", true, cases, (int32_t)1, "2147483648" );
+	}
+	{
+		const EnumMetaCase< EnumUInt32 > cases[] =
+		{
+			{ "Zero", EnumUInt32::Zero },
+			{ "One", EnumUInt32::One },
+			{ "HighBit", EnumUInt32::HighBit },
+			{ "Max", EnumUInt32::Max },
+		};
+		CheckEnumMetadata( "EnumUInt32", false, cases, (uint32_t)2, "4294967296" );
+	}
+	{
+		const EnumMetaCase< EnumInt64 > cases[] =
+		{
+			{ "Min", EnumInt64::Min },
+			{ "NegativeOne", EnumInt64::NegativeOne },
+			{ "Zero", EnumInt64::Zero },
+			{ "Max", EnumInt64::Max },
+		};
+		CheckEnumMetadata( "EnumInt64", true, cases, (int64_t)1, "9223372036854775808" );
+	}
+	{
+		const EnumMetaCase< EnumUInt64 > cases[] =
+		{
+			{ "Zero", EnumUInt64::Zero },
+			{ "One", EnumUInt64::One },
+			{ "HighBit", EnumUInt64::HighBit },
+			{ "Max", EnumUInt64::Max },
+		};
+		CheckEnumMetadata( "EnumUInt64", false, cases, (uint64_t)2, "18446744073709551616" );
+	}
 }
 
 TEST_CASE( "Aggregate vars", "[aeMeta]" )
@@ -967,9 +1170,9 @@ TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
 	REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
-	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
-	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
-	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+	RequireEnumValueByIndex( enumType, 0, SomeOldEnum::Bleep );
+	RequireEnumValueByIndex( enumType, 1, SomeOldEnum::Bloop );
+	RequireEnumValueByIndex( enumType, 2, SomeOldEnum::Blop );
 }
 
 TEST_CASE( "existing c-style enum string conversions", "[aeMeta]" )
@@ -1021,9 +1224,9 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
 	REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
-	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
-	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
-	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+	RequireEnumValueByIndex( enumType, 0, SomeOldPrefixEnum::kSomeOldPrefixEnum_Bleep );
+	RequireEnumValueByIndex( enumType, 1, SomeOldPrefixEnum::kSomeOldPrefixEnum_Bloop );
+	RequireEnumValueByIndex( enumType, 2, SomeOldPrefixEnum::kSomeOldPrefixEnum_Blop );
 }
 
 //------------------------------------------------------------------------------
@@ -1037,9 +1240,9 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
 	REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
-	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
-	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
-	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+	RequireEnumValueByIndex( enumType, 0, SomeOldRenamedEnum::BLEEP );
+	RequireEnumValueByIndex( enumType, 1, SomeOldRenamedEnum::BLOOP );
+	RequireEnumValueByIndex( enumType, 2, SomeOldRenamedEnum::BLOP );
 }
 
 //------------------------------------------------------------------------------
@@ -1053,9 +1256,9 @@ TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
 	REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
-	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
-	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
-	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+	RequireEnumValueByIndex( enumType, 0, SomeNewEnum::Bleep );
+	RequireEnumValueByIndex( enumType, 1, SomeNewEnum::Bloop );
+	RequireEnumValueByIndex( enumType, 2, SomeNewEnum::Blop );
 }
 
 //------------------------------------------------------------------------------
@@ -1069,9 +1272,9 @@ TEST_CASE( "can register an already existing enum class in a nested namespace", 
 	REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
 	REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
 	REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
-	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
-	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
-	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+	RequireEnumValueByIndex( enumType, 0, A::B::SomeNewEnum::Bleep );
+	RequireEnumValueByIndex( enumType, 1, A::B::SomeNewEnum::Bloop );
+	RequireEnumValueByIndex( enumType, 2, A::B::SomeNewEnum::Blop );
 }
 
 //------------------------------------------------------------------------------
@@ -1323,9 +1526,9 @@ TEST_CASE( "BasicType can read and write values via DataPointer", "[aeMeta]" )
 	REQUIRE( intVarType->SetVarDataFromString( intData, "77" ) );
 	REQUIRE( c.intMember == 77 );
 
-	// Non-numeric string falls back to 0 (SetVarDataFromString always succeeds for numeric types)
-	REQUIRE( intVarType->SetVarDataFromString( intData, "hello" ) );
-	REQUIRE( c.intMember == 0 );
+	// Non-numeric string: SetVarDataFromString returns false, member unchanged
+	REQUIRE( !intVarType->SetVarDataFromString( intData, "hello" ) );
+	REQUIRE( c.intMember == 77 );
 
 	// bool: GetVarData reads the correct value
 	REQUIRE( boolVarType->GetVarData( ae::ConstDataPointer( boolData ), &boolOut ) );
@@ -1394,6 +1597,12 @@ TEST_CASE( "EnumType can read and write values via DataPointer", "[aeMeta]" )
 
 	// Unknown name returns false and leaves value unchanged
 	REQUIRE( !enumVarType->SetVarDataFromString( enumData, "Unknown" ) );
+	REQUIRE( c.enumTest == TestEnumClass::Two );
+
+	// Permissive numeric parsing: leading whitespace and + prefix
+	REQUIRE( enumVarType->SetVarDataFromString( enumData, " 1" ) );
+	REQUIRE( c.enumTest == TestEnumClass::One );
+	REQUIRE( enumVarType->SetVarDataFromString( enumData, "+2" ) );
 	REQUIRE( c.enumTest == TestEnumClass::Two );
 
 	// GetVarDataAsString returns empty string for value not in the enum
@@ -1654,7 +1863,9 @@ TEST_CASE( "ClassType hierarchy and DataPointer operations", "[aeMeta]" )
 
 	// GetId() equals FNV1a-32 hash of the registered type name
 	REQUIRE( typeSomeClass->GetId() ==
-		ae::Hash32().HashString( typeSomeClass->GetName() ).Get() );
+		ae::TypeId( ae::Hash32().HashString( typeSomeClass->GetName() ).Get() ) );
+	// GetId() matches GetTypeIdFromName()
+	REQUIRE( typeSomeClass->GetId() == ae::GetTypeIdFromName( typeSomeClass->GetName() ) );
 
 	// GetParentTypeName for SomeClass is "ae::Object"
 	REQUIRE( ae::Str32( typeSomeClass->GetParentTypeName() ) == "ae::Object" );
@@ -1706,30 +1917,323 @@ TEST_CASE( "ClassType hierarchy and DataPointer operations", "[aeMeta]" )
 	ae::Free( storage );
 }
 
+TEST_CASE( "can register an existing c-style bit field enum (AE_REGISTER_BIT_FIELD_ENUM)", "[aeMeta]" )
+{
+	const ae::EnumType* e = ae::GetEnumType< OldBitFieldFlags >();
+	REQUIRE( e );
+	REQUIRE( e == ae::GetEnumType( "OldBitFieldFlags" ) );
+	REQUIRE( e->TypeIsBitField() );
+	REQUIRE( e->TypeSize() == 4 );
+	REQUIRE( e->TypeIsSigned() == false );
+	REQUIRE( e->Length() == 4 ); // None, Read, Write, Execute
+
+	REQUIRE( e->GetNameByIndex( 0 ) == "None" );
+	REQUIRE( e->GetNameByIndex( 1 ) == "Read" );
+	REQUIRE( e->GetNameByIndex( 2 ) == "Write" );
+	REQUIRE( e->GetNameByIndex( 3 ) == "Execute" );
+
+	// GetNameByValue: zero value
+	REQUIRE( e->GetNameByValue( OldBitFieldFlags_None ) == "None" );
+
+	// GetNameByValue: single flags
+	REQUIRE( e->GetNameByValue( OldBitFieldFlags_Read ) == "Read" );
+	REQUIRE( e->GetNameByValue( OldBitFieldFlags_Write ) == "Write" );
+	REQUIRE( e->GetNameByValue( OldBitFieldFlags_Execute ) == "Execute" );
+
+	// GetNameByValue: combined flags (explicit cast since operators are defined in the .cpp)
+	REQUIRE( e->GetNameByValue( (OldBitFieldFlags)( OldBitFieldFlags_Read | OldBitFieldFlags_Write ) ) == "Read Write" );
+	REQUIRE( e->GetNameByValue( (OldBitFieldFlags)( OldBitFieldFlags_Read | OldBitFieldFlags_Write | OldBitFieldFlags_Execute ) ) == "Read Write Execute" );
+
+	// GetValueFromString: by name
+	OldBitFieldFlags parsed = (OldBitFieldFlags)666;
+	REQUIRE( e->GetValueFromString( "Read", &parsed ) );
+	REQUIRE( parsed == OldBitFieldFlags_Read );
+
+	// GetValueFromString: space-separated names
+	parsed = (OldBitFieldFlags)666;
+	REQUIRE( e->GetValueFromString( "Read Write", &parsed ) );
+	REQUIRE( parsed == (OldBitFieldFlags)( OldBitFieldFlags_Read | OldBitFieldFlags_Write ) );
+
+	// GetValueFromString: integer string
+	parsed = (OldBitFieldFlags)666;
+	REQUIRE( e->GetValueFromString( "1", &parsed ) );
+	REQUIRE( parsed == OldBitFieldFlags_Read );
+
+	// ae::ToString / ae::TryFromString (generated by AE_REGISTER_BIT_FIELD_ENUM)
+	REQUIRE( ae::ToString( OldBitFieldFlags_Read ) == "Read" );
+	REQUIRE( ae::ToString( (OldBitFieldFlags)( OldBitFieldFlags_Read | OldBitFieldFlags_Write ) ) == "Read Write" );
+	OldBitFieldFlags tfOut = (OldBitFieldFlags)666;
+	REQUIRE( ae::TryFromString( "Read Execute", &tfOut ) );
+	REQUIRE( tfOut == (OldBitFieldFlags)( OldBitFieldFlags_Read | OldBitFieldFlags_Execute ) );
+
+	// Round-trip
+	const OldBitFieldFlags original = (OldBitFieldFlags)( OldBitFieldFlags_Write | OldBitFieldFlags_Execute );
+	OldBitFieldFlags roundTrip = OldBitFieldFlags_None;
+	REQUIRE( ae::TryFromString( ae::ToString( original ).c_str(), &roundTrip ) );
+	REQUIRE( roundTrip == original );
+
+	// Error cases
+	parsed = (OldBitFieldFlags)666;
+	REQUIRE( !e->GetValueFromString( "UnknownFlag", &parsed ) );
+	REQUIRE( parsed == (OldBitFieldFlags)666 );
+
+	parsed = (OldBitFieldFlags)666;
+	REQUIRE( !e->GetValueFromString( "Read Unknown", &parsed ) );
+	REQUIRE( parsed == (OldBitFieldFlags)666 );
+}
+
+TEST_CASE( "can register an existing c-style bit field enum with prefix (AE_REGISTER_BIT_FIELD_ENUM_PREFIX)", "[aeMeta]" )
+{
+	const ae::EnumType* e = ae::GetEnumType< OldBitFieldPrefixFlags >();
+	REQUIRE( e );
+	REQUIRE( e == ae::GetEnumType( "OldBitFieldPrefixFlags" ) );
+	REQUIRE( e->TypeIsBitField() );
+	REQUIRE( e->TypeSize() == 4 );
+	REQUIRE( e->TypeIsSigned() == false );
+	REQUIRE( e->Length() == 4 ); // None, Read, Write, Execute (prefix stripped)
+
+	// Prefix is stripped from registered names
+	REQUIRE( e->GetNameByIndex( 0 ) == "None" );
+	REQUIRE( e->GetNameByIndex( 1 ) == "Read" );
+	REQUIRE( e->GetNameByIndex( 2 ) == "Write" );
+	REQUIRE( e->GetNameByIndex( 3 ) == "Execute" );
+
+	// GetNameByValue: zero value
+	REQUIRE( e->GetNameByValue( kOBPF_None ) == "None" );
+
+	// GetNameByValue: single flags (stripped names)
+	REQUIRE( e->GetNameByValue( kOBPF_Read ) == "Read" );
+	REQUIRE( e->GetNameByValue( kOBPF_Write ) == "Write" );
+	REQUIRE( e->GetNameByValue( kOBPF_Execute ) == "Execute" );
+
+	// GetNameByValue: combined flags (explicit cast since operators are defined in the .cpp)
+	REQUIRE( e->GetNameByValue( (OldBitFieldPrefixFlags)( kOBPF_Read | kOBPF_Write ) ) == "Read Write" );
+	REQUIRE( e->GetNameByValue( (OldBitFieldPrefixFlags)( kOBPF_Read | kOBPF_Write | kOBPF_Execute ) ) == "Read Write Execute" );
+
+	// GetValueFromString: stripped names
+	OldBitFieldPrefixFlags parsed = (OldBitFieldPrefixFlags)666;
+	REQUIRE( e->GetValueFromString( "Read", &parsed ) );
+	REQUIRE( parsed == kOBPF_Read );
+
+	// GetValueFromString: space-separated stripped names
+	parsed = (OldBitFieldPrefixFlags)666;
+	REQUIRE( e->GetValueFromString( "Read Write", &parsed ) );
+	REQUIRE( parsed == (OldBitFieldPrefixFlags)( kOBPF_Read | kOBPF_Write ) );
+
+	// GetValueFromString: integer string
+	parsed = (OldBitFieldPrefixFlags)666;
+	REQUIRE( e->GetValueFromString( "2", &parsed ) );
+	REQUIRE( parsed == kOBPF_Write );
+
+	// Round-trip via GetNameByValue / GetValueFromString
+	const OldBitFieldPrefixFlags original = (OldBitFieldPrefixFlags)( kOBPF_Write | kOBPF_Execute );
+	OldBitFieldPrefixFlags roundTrip = kOBPF_None;
+	REQUIRE( e->GetValueFromString( e->GetNameByValue( original ).c_str(), &roundTrip ) );
+	REQUIRE( roundTrip == original );
+
+	// Error cases
+	parsed = (OldBitFieldPrefixFlags)666;
+	REQUIRE( !e->GetValueFromString( "UnknownFlag", &parsed ) );
+	REQUIRE( parsed == (OldBitFieldPrefixFlags)666 );
+
+	// Prefixed names should NOT be found (prefix was stripped on registration)
+	parsed = (OldBitFieldPrefixFlags)666;
+	REQUIRE( !e->GetValueFromString( "kOBPF_Read", &parsed ) );
+	REQUIRE( parsed == (OldBitFieldPrefixFlags)666 );
+}
+
+TEST_CASE( "can register an existing enum class bit field (AE_REGISTER_BIT_FIELD_ENUM_CLASS2)", "[aeMeta]" )
+{
+	const ae::EnumType* e = ae::GetEnumType< NewBitFieldFlags >();
+	REQUIRE( e );
+	REQUIRE( e == ae::GetEnumType( "NewBitFieldFlags" ) );
+	REQUIRE( e->TypeIsBitField() );
+	REQUIRE( e->TypeSize() == 4 );
+	REQUIRE( e->TypeIsSigned() == false );
+	REQUIRE( e->Length() == 4 ); // None, Read, Write, Execute
+
+	REQUIRE( e->GetNameByIndex( 0 ) == "None" );
+	REQUIRE( e->GetNameByIndex( 1 ) == "Read" );
+	REQUIRE( e->GetNameByIndex( 2 ) == "Write" );
+	REQUIRE( e->GetNameByIndex( 3 ) == "Execute" );
+
+	// GetNameByValue: zero value
+	REQUIRE( e->GetNameByValue( NewBitFieldFlags::None ) == "None" );
+
+	// GetNameByValue: single flags
+	REQUIRE( e->GetNameByValue( NewBitFieldFlags::Read ) == "Read" );
+	REQUIRE( e->GetNameByValue( NewBitFieldFlags::Write ) == "Write" );
+	REQUIRE( e->GetNameByValue( NewBitFieldFlags::Execute ) == "Execute" );
+
+	// GetNameByValue: combined flags (explicit cast since operators are defined in the .cpp)
+	REQUIRE( e->GetNameByValue( (NewBitFieldFlags)( (uint32_t)NewBitFieldFlags::Read | (uint32_t)NewBitFieldFlags::Write ) ) == "Read Write" );
+	REQUIRE( e->GetNameByValue( (NewBitFieldFlags)7 ) == "Read Write Execute" );
+
+	// GetValueFromString: by name
+	NewBitFieldFlags parsed = (NewBitFieldFlags)666;
+	REQUIRE( e->GetValueFromString( "Read", &parsed ) );
+	REQUIRE( parsed == NewBitFieldFlags::Read );
+
+	// GetValueFromString: space-separated names
+	parsed = (NewBitFieldFlags)666;
+	REQUIRE( e->GetValueFromString( "Read Write", &parsed ) );
+	REQUIRE( parsed == (NewBitFieldFlags)3 );
+
+	// GetValueFromString: integer string
+	parsed = (NewBitFieldFlags)666;
+	REQUIRE( e->GetValueFromString( "4", &parsed ) );
+	REQUIRE( parsed == NewBitFieldFlags::Execute );
+
+	// GetVarDataAsString / SetVarDataFromString
+	NewBitFieldFlags varValue = NewBitFieldFlags::None;
+	ae::DataPointer varData( &varValue );
+	REQUIRE( e->SetVarDataFromString( varData, "Read Execute" ) );
+	REQUIRE( varValue == (NewBitFieldFlags)5 );
+	REQUIRE( e->GetVarDataAsString( ae::ConstDataPointer( varData ) ) == "Read Execute" );
+
+	// Round-trip
+	const NewBitFieldFlags original = (NewBitFieldFlags)6; // Write | Execute
+	NewBitFieldFlags roundTrip = NewBitFieldFlags::None;
+	REQUIRE( e->GetValueFromString( e->GetNameByValue( original ).c_str(), &roundTrip ) );
+	REQUIRE( roundTrip == original );
+
+	// Error cases
+	parsed = (NewBitFieldFlags)666;
+	REQUIRE( !e->GetValueFromString( "UnknownFlag", &parsed ) );
+	REQUIRE( parsed == (NewBitFieldFlags)666 );
+
+	parsed = (NewBitFieldFlags)666;
+	REQUIRE( !e->GetValueFromString( "Read Unknown", &parsed ) );
+	REQUIRE( parsed == (NewBitFieldFlags)666 );
+}
+
 TEST_CASE( "bitfield registration", "[aeMeta]" )
 {
+	// Regular enum should not be a bit field
+	REQUIRE( !ae::GetEnumType( "PlayerState" )->TypeIsBitField() );
+
+	// Bit field enums should be marked as such
 	const ae::EnumType* gamePadBitFieldEnum = ae::GetEnumType( "GamePadBitField" );
+	REQUIRE( gamePadBitFieldEnum );
+	REQUIRE( gamePadBitFieldEnum->TypeIsBitField() );
+	REQUIRE( gamePadBitFieldEnum->TypeSize() == 2 );
+	REQUIRE( gamePadBitFieldEnum->TypeIsSigned() == false );
+	REQUIRE( gamePadBitFieldEnum->Length() == 11 );
 
-	REQUIRE( gamePadBitFieldEnum->GetName() == ae::Str32( "GamePadBitField" ) );
-	REQUIRE( gamePadBitFieldEnum->GetValueFromString( "A", (GamePadBitField)666 ) == GamePadBitField::A );
-	REQUIRE( gamePadBitFieldEnum->GetValueFromString( "1", (GamePadBitField)666 ) == GamePadBitField::A );
-
-	uint16_t something = GamePadBitField::Y | GamePadBitField::X;
+	// Operators should compile and work (return type is E)
+	GamePadBitField something = GamePadBitField::Y | GamePadBitField::X;
 	something = something | GamePadBitField::A;
 	something = GamePadBitField::B | something;
-	//something |= GamePadBitField::B;
-	
-	// REQUIRE( playerStateEnum->TypeSize() == 2 );
-	// REQUIRE( playerStateEnum->TypeIsSigned() == false );
-	
-	// REQUIRE( playerStateEnum->Length() == 3 );
-	
-	// REQUIRE( playerStateEnum->GetNameByIndex( 0 ) == "Idle" );
-	// REQUIRE( playerStateEnum->GetValueByIndex( 0 ) == 0 );
-	
-	// REQUIRE( playerStateEnum->GetNameByIndex( 1 ) == "Run" );
-	// REQUIRE( playerStateEnum->GetValueByIndex( 1 ) == 1 );
-	
-	// REQUIRE( playerStateEnum->GetNameByIndex( 2 ) == "Jump" );
-	// REQUIRE( playerStateEnum->GetValueByIndex( 2 ) == 2 );
+	something |= GamePadBitField::L;
+	something &= ~GamePadBitField::L;
+	(void)something;
+
+	// Single flag: name lookup by value
+	REQUIRE( gamePadBitFieldEnum->GetNameByValue( GamePadBitField::A ) == "A" );
+	REQUIRE( gamePadBitFieldEnum->GetNameByValue( GamePadBitField::None ) == "None" );
+
+	// Single flag: value lookup by name
+	GamePadBitField parsed = (GamePadBitField)666;
+	REQUIRE( gamePadBitFieldEnum->GetValueFromString( "A", &parsed ) );
+	REQUIRE( parsed == GamePadBitField::A );
+
+	// Integer string lookup
+	parsed = (GamePadBitField)666;
+	REQUIRE( gamePadBitFieldEnum->GetValueFromString( "1", &parsed ) );
+	REQUIRE( parsed == GamePadBitField::A );
+
+	// GetVarDataAsString / SetVarDataFromString round-trip for single flag
+	GamePadBitField varValue = GamePadBitField::None;
+	ae::DataPointer varData( &varValue );
+	REQUIRE( gamePadBitFieldEnum->SetVarDataFromString( varData, "B" ) );
+	REQUIRE( varValue == GamePadBitField::B );
+	REQUIRE( gamePadBitFieldEnum->GetVarDataAsString( ae::ConstDataPointer( varData ) ) == "B" );
+
+	// Error: unknown flag name
+	parsed = (GamePadBitField)666;
+	REQUIRE( !gamePadBitFieldEnum->GetValueFromString( "UnknownFlag", &parsed ) );
+	REQUIRE( parsed == (GamePadBitField)666 ); // unchanged
+
+	// Error: space-separated with unknown token
+	parsed = (GamePadBitField)666;
+	REQUIRE( !gamePadBitFieldEnum->GetValueFromString( "A UnknownFlag", &parsed ) );
+	REQUIRE( parsed == (GamePadBitField)666 ); // unchanged
+}
+
+TEST_CASE( "bitfield string conversions", "[aeMeta]" )
+{
+	const ae::EnumType* e = ae::GetEnumType< SceneFlags >();
+	REQUIRE( e );
+	REQUIRE( e->TypeIsBitField() );
+	REQUIRE( e->TypeSize() == 4 );
+	REQUIRE( e->TypeIsSigned() == false );
+	REQUIRE( e->Length() == 5 ); // None, Player, Camera, Mesh, All
+
+	// Zero: returns registered name for 0
+	REQUIRE( e->GetNameByValue( SceneFlags::None ) == "None" );
+	REQUIRE( ae::ToString( SceneFlags::None ) == "None" );
+
+	// Individual power-of-2 flags
+	REQUIRE( e->GetNameByValue( SceneFlags::Player ) == "Player" );
+	REQUIRE( e->GetNameByValue( SceneFlags::Camera ) == "Camera" );
+	REQUIRE( e->GetNameByValue( SceneFlags::Mesh ) == "Mesh" );
+
+	// Combined flags: subset rule — All(7) is a subset of Player|Camera|Mesh(7)
+	REQUIRE( e->GetNameByValue( SceneFlags::Player | SceneFlags::Camera ) == "Player Camera" );
+	REQUIRE( e->GetNameByValue( SceneFlags::Player | SceneFlags::Mesh ) == "Player Mesh" );
+	REQUIRE( e->GetNameByValue( SceneFlags::Camera | SceneFlags::Mesh ) == "Camera Mesh" );
+	// All = Player|Camera|Mesh, so All is also a subset of itself
+	REQUIRE( e->GetNameByValue( SceneFlags::All ) == "Player Camera Mesh All" );
+	REQUIRE( ae::ToString( SceneFlags::All ) == "Player Camera Mesh All" );
+
+	// GetVarDataAsString matches GetNameByValue
+	SceneFlags varValue = SceneFlags::Player | SceneFlags::Camera;
+	ae::DataPointer varData( &varValue );
+	REQUIRE( e->GetVarDataAsString( ae::ConstDataPointer( varData ) ) == "Player Camera" );
+
+	// GetValueFromString: single name
+	SceneFlags parsed = SceneFlags::None;
+	REQUIRE( e->GetValueFromString( "Player", &parsed ) );
+	REQUIRE( parsed == SceneFlags::Player );
+
+	// GetValueFromString: space-separated names
+	parsed = SceneFlags::None;
+	REQUIRE( e->GetValueFromString( "Player Camera", &parsed ) );
+	REQUIRE( parsed == (SceneFlags::Player | SceneFlags::Camera) );
+
+	parsed = SceneFlags::None;
+	REQUIRE( e->GetValueFromString( "Player Camera Mesh", &parsed ) );
+	REQUIRE( parsed == SceneFlags::All );
+
+	// GetValueFromString: integer string
+	parsed = SceneFlags::None;
+	REQUIRE( e->GetValueFromString( "1", &parsed ) );
+	REQUIRE( parsed == SceneFlags::Player );
+
+	// ae::TryFromString integration
+	SceneFlags tfOut = SceneFlags::None;
+	REQUIRE( ae::TryFromString( "Player Camera", &tfOut ) );
+	REQUIRE( tfOut == (SceneFlags::Player | SceneFlags::Camera) );
+	REQUIRE( ae::ToString( SceneFlags::Player | SceneFlags::Camera ) == "Player Camera" );
+
+	// SetVarDataFromString with space-separated flags
+	varValue = SceneFlags::None;
+	REQUIRE( e->SetVarDataFromString( varData, "Camera Mesh" ) );
+	REQUIRE( varValue == (SceneFlags::Camera | SceneFlags::Mesh) );
+	REQUIRE( e->GetVarDataAsString( ae::ConstDataPointer( varData ) ) == "Camera Mesh" );
+
+	// Round-trip: ToString then TryFromString
+	const SceneFlags original = SceneFlags::Player | SceneFlags::Mesh;
+	SceneFlags roundTrip = SceneFlags::None;
+	REQUIRE( ae::TryFromString( ae::ToString( original ).c_str(), &roundTrip ) );
+	REQUIRE( roundTrip == original );
+
+	// Error cases
+	parsed = (SceneFlags)999;
+	REQUIRE( !e->GetValueFromString( "UnknownFlag", &parsed ) );
+	REQUIRE( parsed == (SceneFlags)999 ); // unchanged
+
+	parsed = (SceneFlags)999;
+	REQUIRE( !e->GetValueFromString( "Player Unknown", &parsed ) );
+	REQUIRE( parsed == (SceneFlags)999 ); // unchanged
 }
