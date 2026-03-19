@@ -417,11 +417,11 @@ bool IsDebuggerAttached();
 //! Returns the name of the given class or basic type from an instance. Note
 //! that this does not return the name of the derived class if the instance is
 //! a base class (get the ae::ClassType of an ae::Object in that case).
-template< typename T > constexpr const char* GetTypeName();
+template< typename T > const char* GetTypeName();
 //! Returns the name of the given class or basic type from an instance. Note
 //! that this does not return the name of the derived class if the instance is
 //! a base class (get the ae::ClassType of an ae::Object in that case).
-template< typename T > constexpr const char* GetTypeName( const T& );
+template< typename T > const char* GetTypeName( const T& );
 //! TODO
 constexpr uint32_t NormalizedWhiteSpaceTypeName( const char* str, char* out, uint32_t outSize );
 //! Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
@@ -6640,7 +6640,7 @@ public:
 	template< typename T > bool SetVarData( ae::DataPointer varData, const T& value ) const;
 	
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< BasicType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6730,7 +6730,7 @@ protected:
 public:
 	const ae::EnumType* GetEnumType() const { return this; } // @TODO: Remove
 	template< typename T > void m_AppendValue( const char* name, T value );
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< EnumType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6763,7 +6763,7 @@ public:
 	virtual std::string ToString( ae::ConstDataPointer pointer, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< PointerType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 #if AE_DEPRECATED
 	virtual ae::BasicType::Type GetBasicType() const { return ae::BasicType::Pointer; } // @HACK: Remove
 #endif // AE_DEPRECATED
@@ -6796,7 +6796,7 @@ public:
 	virtual void Clear( ae::DataPointer optional ) const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< OptionalType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6836,7 +6836,7 @@ public:
 	virtual uint32_t IsFixedLength() const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< ArrayType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6877,7 +6877,7 @@ public:
 	virtual uint32_t GetMaxLength() const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< MapType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -7085,7 +7085,7 @@ public:
 	template< typename T > typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type Init( const char* name );
 	template< typename T > typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type Init( const char* name );
 	void m_AddVar( const ae::ClassVar* var );
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< ClassType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 #if AE_DEPRECATED
 	void m_AddProp( const char* prop, const char* value );
 	const ae::ClassType* GetClassType() const { return this; }
@@ -7428,13 +7428,13 @@ struct _GetTypeNameImpl
 };
 
 template< typename T >
-constexpr const char* GetTypeName()
+const char* GetTypeName()
 {
 	return ae::_GetTypeNameImpl< T >::value.data();
 }
 
 template< typename T >
-constexpr const char* GetTypeName( const T& )
+const char* GetTypeName( const T& )
 {
 	return ae::GetTypeName< T >();
 }
@@ -7457,7 +7457,6 @@ constexpr bool _GetTypeNameValidation( const char* lhs, const char* rhs )
 	}
 }
 static_assert( ae::_GetTypeNameValidation( ::_ae_RawTypeName< int >().data(), "int" ), "_ae_RawTypeName() must remain constexpr." );
-static_assert( ae::_GetTypeNameValidation( ae::GetTypeName< int >(), "int" ), "GetTypeName() must remain constexpr." );
 
 //------------------------------------------------------------------------------
 // Log levels internal implementation
@@ -10006,75 +10005,6 @@ inline void Serialize( ae::BinaryWriter* stream, const ae::TypeId* id )
 }
 
 //------------------------------------------------------------------------------
-// ae::GetHash32 inline helpers
-//------------------------------------------------------------------------------
-// Use the non-fixed size integer types for GetHash32. int8_t cannot be passed
-// as char without an explicit cast, where the reverse does not need a cast.
-// long/unsigned long are normalized to int64_t/uint64_t first for
-// platform-independent results (long is 32-bit on Windows, 64-bit on
-// macOS/Linux).
-template<> inline uint32_t GetHash32( const bool& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const signed char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const short& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned short& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const int& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned int& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const long& value ) { const int64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
-template<> inline uint32_t GetHash32( const unsigned long& value ) { const uint64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
-template<> inline uint32_t GetHash32( const long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const unsigned long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const float& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const double& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec2& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec3& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Matrix4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
-template<> inline uint32_t GetHash32( char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
-template< uint32_t N > inline uint32_t GetHash32( const char (&value)[ N ] ) { return ae::Hash32().HashString( value ).Get(); }
-template<> inline uint32_t GetHash32( const std::string& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Hash32& value ) { return value.Get(); }
-template<> inline uint32_t GetHash32( const ae::TypeId& value ) { return (uint32_t)value; }
-template< typename T > inline uint32_t GetHash32( T* const& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
-
-//------------------------------------------------------------------------------
-// ae::GetHash64 inline helpers
-//------------------------------------------------------------------------------
-// Use the non-fixed size integer types for GetHash64. int8_t cannot be passed
-// as char without an explicit cast, where the reverse does not need a cast.
-// long/unsigned long are casted wide to uint64_t. This is always safe
-// regardless of long's native size (32-bit on Windows, 64-bit on macOS/Linux).
-template<> inline uint64_t GetHash64( const bool& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const signed char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const short& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned short& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const int& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned int& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const long long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned long long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const float& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint64_t GetHash64( const double& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec2& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec3& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Matrix4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
-template<> inline uint64_t GetHash64( char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
-template< uint32_t N > inline uint64_t GetHash64( const char (&value)[ N ] ) { return ae::Hash64().HashString( value ).Get(); }
-template<> inline uint64_t GetHash64( const std::string& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Hash64& value ) { return value.Get(); }
-template<> inline uint64_t GetHash64( const ae::TypeId& value ) { return (uint64_t)(uint32_t)value; }
-template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
-
-//------------------------------------------------------------------------------
 // ae::GetHash
 //------------------------------------------------------------------------------
 template< class C >
@@ -10194,6 +10124,75 @@ constexpr U Hash< U >::Get() const
 {
 	return m_hash;
 }
+
+//------------------------------------------------------------------------------
+// ae::GetHash32 inline helpers
+//------------------------------------------------------------------------------
+// Note that this has to be after the ae::Hash member function definitions since
+// some compilers are stricter about the order of constexpr functions. The
+// non-explicitly sized integer types must be used for these GetHash32 and
+// GetHash64 functions, because int8_t cannot be passed as char reference
+// without an explicit cast, where the reverse does not need a cast.
+// long/unsigned long are normalized to int64_t/uint64_t first for
+// platform-independent results (long is 32-bit on Windows, 64-bit on
+// macOS/Linux).
+template<> inline uint32_t GetHash32( const bool& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const signed char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const short& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned short& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const int& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned int& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const long& value ) { const int64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
+template<> inline uint32_t GetHash32( const unsigned long& value ) { const uint64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
+template<> inline uint32_t GetHash32( const long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const unsigned long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const float& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const double& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec2& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec3& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Matrix4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
+template<> inline uint32_t GetHash32( char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
+template< uint32_t N > inline uint32_t GetHash32( const char (&value)[ N ] ) { return ae::Hash32().HashString( value ).Get(); }
+template<> inline uint32_t GetHash32( const std::string& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Hash32& value ) { return value.Get(); }
+template<> inline uint32_t GetHash32( const ae::TypeId& value ) { return (uint32_t)value; }
+template< typename T > inline uint32_t GetHash32( T* const& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+//------------------------------------------------------------------------------
+// ae::GetHash64 inline helpers
+//------------------------------------------------------------------------------
+// See ae::GetHash32 comments above.
+//------------------------------------------------------------------------------
+template<> inline uint64_t GetHash64( const bool& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const signed char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const short& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned short& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const int& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned int& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const long long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned long long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const float& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint64_t GetHash64( const double& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec2& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec3& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Matrix4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
+template<> inline uint64_t GetHash64( char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
+template< uint32_t N > inline uint64_t GetHash64( const char (&value)[ N ] ) { return ae::Hash64().HashString( value ).Get(); }
+template<> inline uint64_t GetHash64( const std::string& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Hash64& value ) { return value.Get(); }
+template<> inline uint64_t GetHash64( const ae::TypeId& value ) { return (uint64_t)(uint32_t)value; }
+template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
 // ae::Optional templated member functions
@@ -19219,7 +19218,7 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 		{
 			// Validate type consistency with data contents
 			AE_DEBUG_ASSERT( target->m_string.length() == 0 || target->m_type == DocumentValueType::String );
-			AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
+			AE_DEBUG_ASSERT( !target->m_value.GetTypeId() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
 			AE_DEBUG_ASSERT( target->m_array.Length() == 0 || target->m_type == DocumentValueType::Array );
 			AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Object );
 			AE_DEBUG_ASSERT( target->m_refCount >= 0 );
@@ -32983,6 +32982,8 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 	return false;
 }
 
+ae::TypeId ae::BasicType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< BasicType >(); }
+
 //------------------------------------------------------------------------------
 // ae::EnumType member functions
 //------------------------------------------------------------------------------
@@ -33052,6 +33053,8 @@ bool ae::EnumType::SetVarDataFromString( ae::DataPointer _varData, const char* v
 	return false;
 }
 
+ae::TypeId ae::EnumType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< EnumType >(); }
+
 //------------------------------------------------------------------------------
 // ae::PointerType
 //------------------------------------------------------------------------------
@@ -33063,6 +33066,23 @@ ae::DataPointer ae::PointerType::Dereference( ae::ConstDataPointer varData ) con
 	}
 	return {};
 }
+
+ae::TypeId ae::PointerType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< PointerType >(); }
+
+//------------------------------------------------------------------------------
+// ae::OptionalType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::OptionalType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< OptionalType >(); }
+
+//------------------------------------------------------------------------------
+// ae::ArrayType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::ArrayType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< ArrayType >(); }
+
+//------------------------------------------------------------------------------
+// ae::MapType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::MapType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< MapType >(); }
 
 //------------------------------------------------------------------------------
 // ae::ClassType member functions
@@ -33186,6 +33206,8 @@ void ae::ClassType::m_AddVar( const ae::ClassVar* var )
 		return a->GetOffset() < b->GetOffset();
 	} );
 }
+
+ae::TypeId ae::ClassType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< ClassType >(); }
 
 //------------------------------------------------------------------------------
 // ae::AttributeList member functions
