@@ -100,3 +100,79 @@ TEST_CASE( "Delerp function", "[ae::Delerp]" )
 	REQUIRE( IsCloseEnough( ae::Delerp01( 1.0f, 0.0f, 1.5f ), 0.0f ) );
 	REQUIRE( IsCloseEnough( ae::Delerp01( 1.0f, 0.0f, -0.5f ), 1.0f ) );
 }
+
+//------------------------------------------------------------------------------
+// ae::Matrix4::Determinant tests
+//------------------------------------------------------------------------------
+TEST_CASE( "Determinant of identity is 1", "[ae::Matrix4::Determinant]" )
+{
+REQUIRE( IsCloseEnough( ae::Matrix4::Identity().Determinant(), 1.0f ) );
+}
+
+TEST_CASE( "Determinant of uniform scale", "[ae::Matrix4::Determinant]" )
+{
+REQUIRE( IsCloseEnough( ae::Matrix4::Scaling( 2.0f ).Determinant(), 8.0f ) );
+}
+
+TEST_CASE( "Determinant of non-uniform scale", "[ae::Matrix4::Determinant]" )
+{
+REQUIRE( IsCloseEnough( ae::Matrix4::Scaling( ae::Vec3( 2.0f, 3.0f, 4.0f ) ).Determinant(), 24.0f ) );
+}
+
+TEST_CASE( "Determinant negated by single negative axis", "[ae::Matrix4::Determinant]" )
+{
+REQUIRE( IsCloseEnough( ae::Matrix4::Scaling( ae::Vec3( -1.0f, 1.0f, 1.0f ) ).Determinant(), -1.0f ) );
+REQUIRE( IsCloseEnough( ae::Matrix4::Scaling( ae::Vec3( 1.0f, -1.0f, 1.0f ) ).Determinant(), -1.0f ) );
+REQUIRE( IsCloseEnough( ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, -1.0f ) ).Determinant(), -1.0f ) );
+}
+
+TEST_CASE( "Determinant positive with two negative axes", "[ae::Matrix4::Determinant]" )
+{
+REQUIRE( IsCloseEnough( ae::Matrix4::Scaling( ae::Vec3( -1.0f, -1.0f, 1.0f ) ).Determinant(), 1.0f ) );
+}
+
+TEST_CASE( "Determinant of rotation is 1", "[ae::Matrix4::Determinant]" )
+{
+const ae::Quaternion q = ae::Quaternion( ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::HalfPi );
+REQUIRE( IsCloseEnough( ae::Matrix4::Rotation( q ).Determinant(), 1.0f ) );
+}
+
+//------------------------------------------------------------------------------
+// ae::Matrix4::GetScale tests
+//------------------------------------------------------------------------------
+TEST_CASE( "GetScale round-trips positive scale", "[ae::Matrix4::GetScale]" )
+{
+const ae::Vec3 s( 2.0f, 3.0f, 4.0f );
+const ae::Vec3 result = ae::Matrix4::Scaling( s ).GetScale();
+REQUIRE( IsCloseEnough( result.x, s.x ) );
+REQUIRE( IsCloseEnough( result.y, s.y ) );
+REQUIRE( IsCloseEnough( result.z, s.z ) );
+}
+
+TEST_CASE( "GetScale round-trips negative z scale", "[ae::Matrix4::GetScale]" )
+{
+const ae::Vec3 s( 1.0f, 1.0f, -2.0f );
+const ae::Vec3 result = ae::Matrix4::Scaling( s ).GetScale();
+REQUIRE( IsCloseEnough( result.x, s.x ) );
+REQUIRE( IsCloseEnough( result.y, s.y ) );
+REQUIRE( IsCloseEnough( result.z, s.z ) );
+}
+
+TEST_CASE( "GetScale z negated for negative-determinant matrix", "[ae::Matrix4::GetScale]" )
+{
+// Single negative x — det < 0, convention negates z
+const ae::Vec3 s( -2.0f, 3.0f, 4.0f );
+const ae::Vec3 result = ae::Matrix4::Scaling( s ).GetScale();
+REQUIRE( result.z < 0.0f );
+}
+
+TEST_CASE( "GetScale from TRS round-trip", "[ae::Matrix4::GetScale]" )
+{
+const ae::Vec3 s( 1.5f, 2.0f, 0.5f );
+const ae::Quaternion r = ae::Quaternion( ae::Vec3( 0.0f, 0.0f, 1.0f ), ae::QuarterPi );
+const ae::Matrix4 m = ae::Matrix4::LocalToWorld( ae::Vec3( 5.0f, 0.0f, -3.0f ), r, s );
+const ae::Vec3 result = m.GetScale();
+REQUIRE( IsCloseEnough( result.x, s.x ) );
+REQUIRE( IsCloseEnough( result.y, s.y ) );
+REQUIRE( IsCloseEnough( result.z, s.z ) );
+}

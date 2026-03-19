@@ -917,11 +917,16 @@ public:
 	// Get transformation properties
 	ae::Vec3 GetTranslation() const;
 	ae::Quaternion GetRotation() const;
+	//! Returns the scale encoded in this matrix. Assumes TRS decomposable.
+	//! When the determinant is negative (odd number of negative scale axes),
+	//! the z component, as it's ambiguous which axis was negated originally.
 	ae::Vec3 GetScale() const;
 	ae::Matrix4 GetTranspose() const;
 	ae::Matrix4 GetInverse() const; // @TODO: Handle non-invertible matrices in API
 	ae::Matrix4 GetNormalMatrix() const;
 	ae::Matrix4 GetScaleRemoved() const;
+	//! Returns the determinant of the full 4x4 matrix.
+	float Determinant() const;
 	ae::Vec3 GetAxis( uint32_t column ) const;
 	ae::Vec4 GetColumn( uint32_t column ) const;
 	ae::Vec4 GetRow( uint32_t row ) const;
@@ -16092,18 +16097,19 @@ Matrix4& Matrix4::SetTranslation( const Vec3& translation )
 	return *this;
 }
 
-Matrix4& Matrix4::SetRotation( const Quaternion& q2 )
+Matrix4& Matrix4::SetRotation( const Quaternion& _q )
 {
-	Quaternion q = q2.GetInverse();
-	data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
-	data[4] = 2*q.i*q.j + 2*q.k*q.r;
-	data[8] = 2*q.i*q.k - 2*q.j*q.r;
-	data[1] = 2*q.i*q.j - 2*q.k*q.r;
-	data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
-	data[9] = 2*q.j*q.k + 2*q.i*q.r;
-	data[2] = 2*q.i*q.k + 2*q.j*q.r;
-	data[6] = 2*q.j*q.k - 2*q.i*q.r;
-	data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+	const ae::Vec3 s = GetScale();
+	const ae::Quaternion q = _q.GetInverse();
+	data[ 0 ] = s.x * ( 1 - ( 2 * q.j * q.j + 2 * q.k * q.k ) );
+	data[ 1 ] = s.x * ( 2 * q.i * q.j - 2 * q.k * q.r );
+	data[ 2 ] = s.x * ( 2 * q.i * q.k + 2 * q.j * q.r );
+	data[ 4 ] = s.y * ( 2 * q.i * q.j + 2 * q.k * q.r );
+	data[ 5 ] = s.y * ( 1 - ( 2 * q.i * q.i + 2 * q.k * q.k ) );
+	data[ 6 ] = s.y * ( 2 * q.j * q.k - 2 * q.i * q.r );
+	data[ 8 ] = s.z * ( 2 * q.i * q.k - 2 * q.j * q.r );
+	data[ 9 ] = s.z * ( 2 * q.j * q.k + 2 * q.i * q.r );
+	data[ 10 ] = s.z * ( 1 - ( 2 * q.i * q.i + 2 * q.j * q.j ) );
 	return *this;
 }
 
@@ -16251,11 +16257,34 @@ Quaternion Matrix4::GetRotation() const
 
 Vec3 Matrix4::GetScale() const
 {
-	return Vec3(
+	Vec3 scale(
 		Vec3( &data[ 0 ] ).Length(),
 		Vec3( &data[ 4 ] ).Length(),
 		Vec3( &data[ 8 ] ).Length()
 	);
+	if( Determinant() < 0.0f ) { scale.z = -scale.z; }
+	return scale;
+}
+
+float Matrix4::Determinant() const
+{
+	const float c0 =
+		  data[ 5 ] * ( data[ 10 ] * data[ 15 ] - data[ 11 ] * data[ 14 ] )
+		- data[ 9 ] * ( data[  6 ] * data[ 15 ] - data[  7 ] * data[ 14 ] )
+		+ data[ 13] * ( data[  6 ] * data[ 11 ] - data[  7 ] * data[ 10 ] );
+	const float c1 =
+		- data[ 4 ] * ( data[ 10 ] * data[ 15 ] - data[ 11 ] * data[ 14 ] )
+		+ data[ 8 ] * ( data[  6 ] * data[ 15 ] - data[  7 ] * data[ 14 ] )
+		- data[ 12] * ( data[  6 ] * data[ 11 ] - data[  7 ] * data[ 10 ] );
+	const float c2 =
+		  data[ 4 ] * ( data[  9 ] * data[ 15 ] - data[ 11 ] * data[ 13 ] )
+		- data[ 8 ] * ( data[  5 ] * data[ 15 ] - data[  7 ] * data[ 13 ] )
+		+ data[ 12] * ( data[  5 ] * data[ 11 ] - data[  7 ] * data[  9 ] );
+	const float c3 =
+		- data[ 4 ] * ( data[  9 ] * data[ 14 ] - data[ 10 ] * data[ 13 ] )
+		+ data[ 8 ] * ( data[  5 ] * data[ 14 ] - data[  6 ] * data[ 13 ] )
+		- data[ 12] * ( data[  5 ] * data[ 10 ] - data[  6 ] * data[  9 ] );
+	return data[ 0 ] * c0 + data[ 1 ] * c1 + data[ 2 ] * c2 + data[ 3 ] * c3;
 }
 
 Matrix4 Matrix4::GetTranspose() const
