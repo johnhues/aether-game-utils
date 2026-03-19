@@ -417,11 +417,11 @@ bool IsDebuggerAttached();
 //! Returns the name of the given class or basic type from an instance. Note
 //! that this does not return the name of the derived class if the instance is
 //! a base class (get the ae::ClassType of an ae::Object in that case).
-template< typename T > const char* GetTypeName();
+template< typename T > constexpr const char* GetTypeName();
 //! Returns the name of the given class or basic type from an instance. Note
 //! that this does not return the name of the derived class if the instance is
 //! a base class (get the ae::ClassType of an ae::Object in that case).
-template< typename T > const char* GetTypeName( const T& );
+template< typename T > constexpr const char* GetTypeName( const T& );
 //! TODO
 constexpr uint32_t NormalizedWhiteSpaceTypeName( const char* str, char* out, uint32_t outSize );
 //! Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
@@ -7433,13 +7433,13 @@ struct _GetTypeNameImpl
 };
 
 template< typename T >
-const char* GetTypeName()
+constexpr const char* GetTypeName()
 {
 	return ae::_GetTypeNameImpl< T >::value.data();
 }
 
 template< typename T >
-const char* GetTypeName( const T& )
+constexpr const char* GetTypeName( const T& )
 {
 	return ae::GetTypeName< T >();
 }
@@ -7462,6 +7462,7 @@ constexpr bool _GetTypeNameValidation( const char* lhs, const char* rhs )
 	}
 }
 static_assert( ae::_GetTypeNameValidation( ::_ae_RawTypeName< int >().data(), "int" ), "_ae_RawTypeName() must remain constexpr." );
+static_assert( ae::_GetTypeNameValidation( ae::GetTypeName< int >(), "int" ), "GetTypeName() must remain constexpr." );
 
 //------------------------------------------------------------------------------
 // Log levels internal implementation
