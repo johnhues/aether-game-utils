@@ -19219,7 +19219,7 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 		{
 			// Validate type consistency with data contents
 			AE_DEBUG_ASSERT( target->m_string.length() == 0 || target->m_type == DocumentValueType::String );
-			AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
+			AE_DEBUG_ASSERT( !target->m_value.GetTypeId() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
 			AE_DEBUG_ASSERT( target->m_array.Length() == 0 || target->m_type == DocumentValueType::Array );
 			AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Object );
 			AE_DEBUG_ASSERT( target->m_refCount >= 0 );

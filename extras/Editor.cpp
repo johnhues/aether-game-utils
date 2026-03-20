@@ -3302,6 +3302,7 @@ EditorServerObject* EditorServer::CreateObject( EditorProgram* program, Entity e
 		m_lastEntity++;
 		entity = m_lastEntity;
 	}
+	m_lastEntity = ae::Max( m_lastEntity, entity );
 	ae::DocumentValue* docObject = &m_docObjects->ObjectSet( ae::ToString( entity ).c_str() );
 	const ae::DocumentCallback action = [ this, entity, docObject ]()
 	{
@@ -4512,7 +4513,7 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 			for( uint32_t i = 0; i < result.hits.Length(); i++ )
 			{
 				const EditorServerObject* editorObj = result.hits[ i ].userData.Get< const EditorServerObject* >();
-				str += ae::Str256::Format( "Hit # at #, object: #\n", i, result.hits[ i ].distance, editorObj ? editorObj->entity : 0 ).c_str();
+				str += ae::Str256::Format( "Hit # at #, object: #\n", i, result.hits[ i ].distance, editorObj ? editorObj->GetEntity() : 0 ).c_str();
 			}
 			ImGui::SetTooltip( "%s", str.c_str() );
 		}
