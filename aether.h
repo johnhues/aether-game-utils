@@ -573,11 +573,21 @@ inline float Atan2( float y, float x );
 inline float Sqrt( float x );
 
 inline uint32_t Mod( uint32_t i, uint32_t n );
+//! A mathematical modulo operation. Identical to C++ remainder operator '%' for
+//! positive values, but returns a "clock arithmetic" result for negative values.
+//! Eg. `ae::Mod( -3, 12 ) == 9`. Always returns a non-negative result in [0, n),
+//! regardless of the sign of \p i.
 inline int Mod( int32_t i, int32_t n );
+//! A mathematical modulo operation. Identical to C++ remainder operator '%' for
+//! positive values, but returns a "clock arithmetic" result for negative values.
+//! Eg. `ae::Mod( -2.5, 12 ) == 9.5`. Always returns a non-negative result in
+//! [0, n), regardless of the sign of \p f.
 inline float Mod( float f, float n );
 
 inline int32_t Ceil( float f );
 inline int32_t Floor( float f );
+//! A true mathematical floor division toward negative infinity. Unlike C++
+//! operator/ (which truncates toward zero), `Floor( -7, 2 ) == -4` not -3.
 inline int32_t Floor( int32_t value, int32_t divisor );
 inline int32_t Round( float f );
 
@@ -602,12 +612,22 @@ inline float Clip01( float x );
 // Interpolation
 //------------------------------------------------------------------------------
 template< typename T0, typename T1 > T0 Lerp( T0 start, T0 end, T1 t );
+//! Returns the shortest signed angular difference from \p start to \p end,
+//! in the range (-PI, PI]. Note parameter order: \p end comes first.
+//! Example: `AngleDifference(PI*1.5f, 0.0f) == -PI*0.5f` (takes short path).
 inline float AngleDifference( float end, float start );
 inline float LerpAngle( float start, float end, float t );
 inline float Delerp( float start, float end, float value );
 inline float Delerp01( float start, float end, float value );
+//! Frame-rate independent exponential lerp. Returns \p start unchanged when
+//! \p snappiness or \p dt is zero. Higher \p snappiness = faster convergence
+//! (double-exponential: `exp2(-exp2(snappiness) * dt)`).
 template< typename T > T DtLerp( T start, float snappiness, float dt, T end );
+//! Frame-rate independent exponential slerp. Same \p snappiness semantics as
+//! DtLerp. Delegates to \p start.DtSlerp().
 template< typename T > T DtSlerp( T start, float snappiness, float dt, T end );
+//! Frame-rate independent angular lerp with wrapping. Same \p snappiness
+//! semantics as DtLerp.
 inline float DtLerpAngle( float start, float snappiness, float dt, float end );
 // @TODO: Cleanup duplicate interpolation functions
 template< typename T > T CosineInterpolate( T start, T end, float t );
@@ -715,10 +735,15 @@ struct VecT
 	float Length() const;
 	float LengthSquared() const;
 	
+	//! Normalizes the vector in-place. Returns the previous length.
 	float Normalize();
+	//! Normalizes the vector in-place. Returns the previous length, or zero if
+	//! it was below \p epsilon (in which case the vector is left unchanged).
 	float SafeNormalize( float epsilon = 0.000001f );
 	T NormalizeCopy() const;
 	T SafeNormalizeCopy( float epsilon = 0.000001f ) const;
+	//! Clamps the vector length to \p length in-place. Returns the resulting
+	//! (possibly clamped) length. If already shorter than \p length, no change.
 	float Trim( float length );
 	T TrimCopy( float length ) const;
 
@@ -740,13 +765,19 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 	Vec2( float x, float y );
 	explicit Vec2( const float* xy );
 	explicit Vec2( struct Int2 i2 );
+	//! Returns a unit vector at the given angle in radians. Angle 0 maps to
+	//! +X; positive angles rotate CCW toward +Y (standard math convention).
 	static Vec2 FromAngle( float angle );
 
 	struct Int2 NearestCopy() const;
 	struct Int2 FloorCopy() const;
 	struct Int2 CeilCopy() const;
 	
+	//! Rotates CCW by \p rotation radians in the XY plane. Positive angle
+	//! rotates +X toward +Y (standard right-hand/math convention).
 	Vec2 RotateCopy( float rotation ) const;
+	//! Returns the angle of this vector in radians via atan2(y,x).
+	//! Angle 0 == +X axis; positive = CCW toward +Y.
 	float GetAngle() const;
 	Vec2 DtSlerp( const Vec2& end, float snappiness, float dt, float epsilon = 0.0001f ) const;
 	Vec2 Slerp( const Vec2& end, float t, float epsilon = 0.0001f ) const;
@@ -792,9 +823,14 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	struct Int3 FloorCopy() const;
 	struct Int3 CeilCopy() const;
 	
-	void AddRotationXY( float rotation ); // @TODO: Support Y up
+	//! Rotates the XY components CCW by \p rotation radians around the Z axis
+	//! (Z-up assumed). Positive angle rotates +X toward +Y. @TODO: Support Y up
+	void AddRotationXY( float rotation );
 	Vec3 AddRotationXYCopy( float rotation ) const;
 	float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
+	//! Rotates this vector around \p axis by \p angle radians using the
+	//! right-hand rule (Rodrigues' formula). Positive angle = CCW when viewed
+	//! from the tip of \p axis toward the origin.
 	Vec3 RotateCopy( Vec3 axis, float angle ) const;
 	
 	Vec3 Lerp( const Vec3& end, float t ) const;
@@ -808,6 +844,8 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	Vec3 ZeroAxisCopy( Vec3 axis ) const; // Zero component along arbitrary axis (ie vec dot axis == 0)
 	Vec3 ZeroDirectionCopy( Vec3 direction ) const; // Zero component along positive half of axis (ie vec dot dir > 0)
 
+	//! Transforms \p p by \p projection and performs a perspective divide (divides
+	//! xyz by w). Use Matrix4::TransformPoint3x4 for affine transforms.
 	static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p );
 
 	//! Define conversion functions etc for ae::Vec3. See AE_CONFIG_FILE for more info.
@@ -898,7 +936,13 @@ public:
 	static ae::Matrix4 Scaling( const ae::Vec3& s );
 	static ae::Matrix4 Scaling( float sx, float sy, float sz );
 	static ae::Matrix4 LocalToWorld( ae::Vec3 position, ae::Quaternion rotation, ae::Vec3 scale );
+	//! Builds a right-handed view matrix. \p forward is the camera's look direction
+	//! in world space; it maps to -Z in view space. Internally the \p forward row
+	//! stores the negated value.
 	static ae::Matrix4 WorldToView( ae::Vec3 position, ae::Vec3 forward, ae::Vec3 up );
+	//! Builds a perspective projection matrix. \p fov is the vertical field-of-view
+	//! in radians. Output clips-space conventions depend on the global `ae::ReverseZ`
+	//! setting (default: standard depth range).
 	static ae::Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
 	// Set transformation properties
@@ -923,7 +967,13 @@ public:
 	ae::Vec3 GetScale() const;
 	ae::Matrix4 GetTranspose() const;
 	ae::Matrix4 GetInverse() const; // @TODO: Handle non-invertible matrices in API
+	//! Returns the inverse transpose of this matrix. This is useful to preserve
+	//! the direction (but not length) of transformed normals when the matrix
+	//! has non-uniform scale. Assumes TRS decomposable.
 	ae::Matrix4 GetNormalMatrix() const;
+	//! Returns a matrix where the each column of the upper 3x3 rotation portion
+	//! of this matrix has been normalized to remove any scale. Assumes TRS
+	//! decomposable.
 	ae::Matrix4 GetScaleRemoved() const;
 	//! Returns the determinant of the full 4x4 matrix.
 	float Determinant() const;
@@ -988,6 +1038,10 @@ public:
 
 	Quaternion( const float i, const float j, const float k, const float r ) : i(i), j(j), k(k), r(r) {}
 	explicit Quaternion( Vec3 v ) : i(v.x), j(v.y), k(v.z), r(0.0f) {}
+	//! Constructs a quaternion from a look direction. \p forward and \p up should
+	//! be orthogonal; if not, one is adjusted. When \p prioritizeUp is true \p forward
+	//! is corrected to be perpendicular to \p up; when false \p up is corrected.
+	//! Convention: right-handed (`forward.Cross(up)` = right).
 	Quaternion( Vec3 forward, Vec3 up, bool prioritizeUp = true );
 	Quaternion( Vec3 axis, float angle );
 	static Quaternion Identity() { return Quaternion( 0.0f, 0.0f, 0.0f, 1.0f ); }
@@ -998,13 +1052,26 @@ public:
 	bool operator!=( const Quaternion& q ) const;
 	Quaternion& operator*= ( const Quaternion& q );
 	Quaternion operator* ( const Quaternion& q ) const;
+	//! Returns the antipodal quaternion (negates all four components i,j,k,r).
+	//! This is NOT the conjugate or inverse; both q and -q represent the same
+	//! rotation but may interpolate differently.
 	Quaternion operator- () const;
 	float Dot( const Quaternion& q ) const;
 	Quaternion operator* ( float s ) const;
+	//! Physics angular velocity integration: applies half-step `v*s` (where \p v
+	//! is angular velocity in rad/s and \p s is half dt). Leaves quat un-normalized.
 	void AddScaledVector( const Vec3& v, float s );
+	//! Rotates this quaternion by the rotation encoded in \p v: `|v|` is the
+	//! angle in radians, `v/|v|` is the axis. No-op if \p v is zero.
 	void RotateByVector( const Vec3& v );
+	//! Sets the Z-rotation so that the local X axis points toward the XY direction
+	//! of \p v. The Z component of \p v is ignored (Z-up assumed).
 	void SetDirectionXY( const Vec3& v );
+	//! Returns the XY direction the local X axis points after this quaternion's
+	//! Z-rotation. Returned vector always has z == 0.
 	Vec3 GetDirectionXY() const;
+	//! Zeroes the i and j components (XY rotation) without renormalizing.
+	//! The quaternion will be invalid until manually renormalized.
 	void ZeroXY();
 	void GetAxisAngle( Vec3* axis, float* angle ) const;
 	void AddRotationXY( float rotation );
@@ -1233,6 +1300,9 @@ public:
 	void SetCenter( ae::Vec2 point ) { m_point = point; }
 	void SetRadius( float radius ) { m_radius = radius; }
 
+	//! Returns true if the two circles overlap. If \p out is non-null it receives
+	//! the midpoint of the overlap zone (midpoint between the two intersection points
+	//! projected onto the line between centers), NOT a contact normal or deepest point.
 	bool Intersect( const Circle& other, ae::Vec2* out ) const;
 	ae::Vec2 GetRandomPoint( uint64_t* seed = &_randomSeed ) const;
 
