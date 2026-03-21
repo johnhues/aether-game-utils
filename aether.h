@@ -2735,9 +2735,9 @@ struct Any
 	//! Returns true if any value is stored.
 	operator bool() const;
 
-	enum class StoredKind : uint8_t { Empty, Value, Pointer, ConstPointer };
 private:
-	StoredKind m_storedKind = StoredKind::Empty;
+	enum class TypeType : uint8_t { Empty, Value, Pointer, ConstPointer };
+	TypeType m_typeType = TypeType::Empty;
 	uint32_t m_typeId = 0; // ae::TypeId
 	alignas( Alignment ) std::byte m_data[ Size ] = {};
 };
@@ -12596,36 +12596,26 @@ void Any< Size, Alignment >::operator=( const T& value )
 	{
 		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T has too large an alignment to store in DocumentValue" );
 	}
-	else if constexpr( std::is_same_v< T, char* > ||
-		std::is_same_v< T, const char* > ||
-		( std::is_array_v< T > && std::is_same_v< std::remove_extent_t< T >, char > ) )
+	else if constexpr( std::is_same_v< T, char* > || std::is_same_v< T, const char* > || (std::is_array_v< T > && std::is_same_v< std::remove_extent_t< T >, char >))
 	{
 		AE_STATIC_ASSERT_MSG( ae::_False< T >, "ae::Any is not compatible with c-strings" );
 	}
+	else if constexpr( std::is_pointer_v< T > )
+	{
+		using Pointee = std::remove_const_t< std::remove_pointer_t< T > >;
+		const ae::ClassType* type = ae::GetClassTypeById( ae::GetTypeIdWithoutQualifiers< Pointee >() );
+		m_typeType = std::is_const_v< std::remove_pointer_t< T > > ? TypeType::ConstPointer : TypeType::Pointer;
+		m_typeId = type ? (uint32_t)type->GetTypeId() : (uint32_t)ae::GetTypeIdWithQualifiers< Pointee* >();
+		new( &m_data ) T( value );
+	}
 	else
 	{
-		if constexpr( std::is_pointer_v< T > )
-		{
-			using Pointee = std::remove_const_t< std::remove_pointer_t< T > >;
-			m_storedKind = std::is_const_v< std::remove_pointer_t< T > >
-				? StoredKind::ConstPointer : StoredKind::Pointer;
-			const ae::ClassType* type = ae::GetClassTypeById(
-				ae::GetTypeIdWithoutQualifiers< Pointee >() );
-			m_typeId = type ? (uint32_t)type->GetTypeId()
-				: (uint32_t)ae::GetTypeIdWithQualifiers< Pointee* >();
-			new ( &m_data ) T( value );
-			return;
-		}
 		using StoredT = std::remove_const_t< T >;
-		m_storedKind = StoredKind::Value;
-		const ae::ClassType* type = ae::GetClassTypeById(
-			ae::GetTypeIdWithoutQualifiers< StoredT >() );
-		m_typeId = type ? (uint32_t)type->GetTypeId()
-			: (uint32_t)ae::GetTypeIdWithQualifiers< StoredT >();
-		new ( &m_data ) StoredT( value );
-		return;
+		const ae::ClassType* type = ae::GetClassTypeById( ae::GetTypeIdWithoutQualifiers< StoredT >() );
+		m_typeType = TypeType::Value;
+		m_typeId = type ? (uint32_t)type->GetTypeId() : (uint32_t)ae::GetTypeIdWithQualifiers< StoredT >();
+		new( &m_data ) StoredT( value );
 	}
-	AE_FAIL_MSG( "Unreachable" );
 }
 
 template< uint32_t Size, uint32_t Alignment >
@@ -12650,10 +12640,10 @@ const T* Any< Size, Alignment >::TryGet() const
 	if constexpr( std::is_pointer_v< T > )
 	{
 		// Prevent TypeId collision: value storage must not match pointer retrieval
-		if( m_storedKind == StoredKind::Value ) { return nullptr; }
+		if( m_typeType == TypeType::Value ) { return nullptr; }
 		using Pointee = std::remove_const_t< std::remove_pointer_t< T > >;
 		const bool retrievingConst = std::is_const_v< std::remove_pointer_t< T > >;
-		if( !retrievingConst && m_storedKind == StoredKind::ConstPointer ) { return nullptr; }
+		if( !retrievingConst && m_typeType == TypeType::ConstPointer ) { return nullptr; }
 		const ae::ClassType* storedType = ae::GetClassTypeById( ae::TypeId( m_typeId ) );
 		if( storedType )
 		{
@@ -12674,7 +12664,7 @@ const T* Any< Size, Alignment >::TryGet() const
 	}
 
 	// Prevent TypeId collision: pointer storage must not match value retrieval
-	if( m_storedKind != StoredKind::Value ) { return nullptr; }
+	if( m_typeType != TypeType::Value ) { return nullptr; }
 	if( m_typeId == (uint32_t)ae::GetTypeIdWithQualifiers< std::remove_const_t< T > >() )
 	{
 		return reinterpret_cast< const T* >( &m_data );
@@ -12691,7 +12681,7 @@ uint32_t Any< Size, Alignment >::GetTypeId() const
 template< uint32_t Size, uint32_t Alignment >
 Any< Size, Alignment >::operator bool() const
 {
-	return m_storedKind != StoredKind::Empty;
+	return m_typeType != TypeType::Empty;
 }
 
 //------------------------------------------------------------------------------
