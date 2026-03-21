@@ -35,6 +35,13 @@ struct AnyTestPod
 	int32_t y;
 };
 
+struct AnyBase { AE_BASE_TYPE(); };
+AE_REGISTER_CLASS( AnyBase );
+struct AnyDerived : public ae::Inheritor< AnyBase, AnyDerived > {};
+AE_REGISTER_CLASS( AnyDerived );
+struct AnyUnrelated : public ae::Inheritor< ae::Object, AnyUnrelated > {};
+AE_REGISTER_CLASS( AnyUnrelated );
+
 using AnySmall = ae::Any< sizeof( int32_t ), alignof( int32_t ) >;
 using AnyPtr = ae::Any< sizeof( void* ), alignof( void* ) >;
 
@@ -153,7 +160,7 @@ TEST_CASE( "ae::Any pointer type mismatch returns nullptr", "[ae::Any]" )
 }
 
 //------------------------------------------------------------------------------
-// ae::BinaryStream user data tests
+// ae::BinaryStream user data tests (uses ae::Any internally)
 //------------------------------------------------------------------------------
 TEST_CASE( "ae::BinaryStream GetUserData returns nullptr by default", "[ae::BinaryStream][UserData]" )
 {
@@ -219,4 +226,135 @@ TEST_CASE( "ae::BinaryStream SetUserData overwrites previous", "[ae::BinaryStrea
 	stream.SetUserData( &value );
 	REQUIRE( stream.GetUserData< AnyTestPod >() == nullptr );
 	REQUIRE( stream.GetUserData< int32_t >() == &value );
+}
+
+//------------------------------------------------------------------------------
+// ae::Any const value type tests
+//------------------------------------------------------------------------------
+TEST_CASE( "ae::Any TryGet<const T> succeeds when T is stored", "[ae::Any]" )
+{
+	AnySmall a( (int32_t)7 );
+	REQUIRE( a.TryGet< const int32_t >() != nullptr );
+	REQUIRE( *a.TryGet< const int32_t >() == 7 );
+}
+
+TEST_CASE( "ae::Any TryGet<T> succeeds when T is stored (const value source)", "[ae::Any]" )
+{
+	const int32_t v = 7;
+	AnySmall a( v );
+	REQUIRE( a.TryGet< int32_t >() != nullptr );
+	REQUIRE( *a.TryGet< int32_t >() == 7 );
+}
+
+TEST_CASE( "ae::Any TryGet<const T> does not widen across types", "[ae::Any]" )
+{
+	AnySmall a( (int32_t)7 );
+	REQUIRE( a.TryGet< const float >() == nullptr );
+}
+
+//------------------------------------------------------------------------------
+// ae::Any ClassType registered pointer tests (non-const stored)
+//------------------------------------------------------------------------------
+TEST_CASE( "ae::Any store Derived* retrieve as Derived*", "[ae::Any][ClassType]" )
+{
+	AnyDerived obj;
+	AnyPtr a( &obj );
+	REQUIRE( a.TryGet< AnyDerived* >() != nullptr );
+	REQUIRE( *a.TryGet< AnyDerived* >() == &obj );
+}
+
+TEST_CASE( "ae::Any store Derived* retrieve as Base*", "[ae::Any][ClassType]" )
+{
+	AnyDerived obj;
+	AnyPtr a( &obj );
+	REQUIRE( a.TryGet< AnyBase* >() != nullptr );
+	REQUIRE( *a.TryGet< AnyBase* >() == &obj );
+}
+
+TEST_CASE( "ae::Any store Derived* cannot retrieve as unrelated type", "[ae::Any][ClassType]" )
+{
+	AnyDerived obj;
+	AnyPtr a( &obj );
+	REQUIRE( a.TryGet< AnyUnrelated* >() == nullptr );
+}
+
+TEST_CASE( "ae::Any store Derived* retrieve as const Derived*", "[ae::Any][ClassType]" )
+{
+	AnyDerived obj;
+	AnyPtr a( &obj );
+	REQUIRE( a.TryGet< const AnyDerived* >() != nullptr );
+	REQUIRE( *a.TryGet< const AnyDerived* >() == &obj );
+}
+
+TEST_CASE( "ae::Any store Derived* retrieve as const Base*", "[ae::Any][ClassType]" )
+{
+	AnyDerived obj;
+	AnyPtr a( &obj );
+	REQUIRE( a.TryGet< const AnyBase* >() != nullptr );
+	REQUIRE( *a.TryGet< const AnyBase* >() == &obj );
+}
+
+//------------------------------------------------------------------------------
+// ae::Any ClassType registered pointer tests (const stored)
+//------------------------------------------------------------------------------
+TEST_CASE( "ae::Any store const Derived* retrieve as const Derived*", "[ae::Any][ClassType]" )
+{
+	AnyDerived obj;
+	const AnyDerived* ptr = &obj;
+	AnyPtr a( ptr );
+	REQUIRE( a.TryGet< const AnyDerived* >() != nullptr );
+	REQUIRE( *a.TryGet< const AnyDerived* >() == ptr );
+}
+
+TEST_CASE( "ae::Any store const Derived* retrieve as const Base*", "[ae::Any][ClassType]" )
+{
+	AnyDerived obj;
+	const AnyDerived* ptr = &obj;
+	AnyPtr a( ptr );
+	REQUIRE( a.TryGet< const AnyBase* >() != nullptr );
+	REQUIRE( *a.TryGet< const AnyBase* >() == ptr );
+}
+
+TEST_CASE( "ae::Any store const Derived* cannot retrieve as non-const Derived*", "[ae::Any][ClassType]" )
+{
+	AnyDerived obj;
+	const AnyDerived* ptr = &obj;
+	AnyPtr a( ptr );
+	REQUIRE( a.TryGet< AnyDerived* >() == nullptr );
+}
+
+TEST_CASE( "ae::Any store const Derived* cannot retrieve as non-const Base*", "[ae::Any][ClassType]" )
+{
+	AnyDerived obj;
+	const AnyDerived* ptr = &obj;
+	AnyPtr a( ptr );
+	REQUIRE( a.TryGet< AnyBase* >() == nullptr );
+}
+
+//------------------------------------------------------------------------------
+// ae::Any GetTypeId returns ClassType TypeId for registered pointers
+//------------------------------------------------------------------------------
+TEST_CASE( "ae::Any GetTypeId returns ClassType TypeId for registered pointer", "[ae::Any][ClassType]" )
+{
+	AnyDerived obj;
+	AnyPtr a( &obj );
+	REQUIRE( a.GetTypeId() == ae::GetClassType< AnyDerived >()->GetTypeId() );
+}
+
+//------------------------------------------------------------------------------
+// ae::Any unregistered pointer const-widening regression
+//------------------------------------------------------------------------------
+TEST_CASE( "ae::Any store int32_t* retrieve as const int32_t*", "[ae::Any]" )
+{
+	int32_t v = 5;
+	AnyPtr a( &v );
+	REQUIRE( a.TryGet< const int32_t* >() != nullptr );
+	REQUIRE( *a.TryGet< const int32_t* >() == &v );
+}
+
+TEST_CASE( "ae::Any store const int32_t* cannot retrieve as int32_t*", "[ae::Any]" )
+{
+	const int32_t v = 5;
+	AnyPtr a( &v );
+	REQUIRE( a.TryGet< int32_t* >() == nullptr );
 }

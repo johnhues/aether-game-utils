@@ -2237,3 +2237,79 @@ TEST_CASE( "bitfield string conversions", "[aeMeta]" )
 	REQUIRE( !e->GetValueFromString( "Player Unknown", &parsed ) );
 	REQUIRE( parsed == (SceneFlags)999 ); // unchanged
 }
+
+//------------------------------------------------------------------------------
+// CustomBaseType ClassType retrieval
+//------------------------------------------------------------------------------
+TEST_CASE( "Can retrieve ClassType for a custom (non-ae::Object) base type", "[aeMeta]" )
+{
+	const ae::ClassType* baseType = ae::GetClassType< CustomBaseType >();
+	REQUIRE( baseType );
+	REQUIRE( ae::GetClassTypeByName( "CustomBaseType" ) == baseType );
+	REQUIRE( ae::GetClassTypeById( baseType->GetId() ) == baseType );
+
+	const ae::ClassType* derivedType = ae::GetClassType< CustomBaseTypeTest >();
+	REQUIRE( derivedType );
+	REQUIRE( ae::GetClassTypeByName( "CustomBaseTypeTest" ) == derivedType );
+	REQUIRE( ae::GetClassTypeById( derivedType->GetId() ) == derivedType );
+
+	// CustomBaseType is the root: no parent
+	REQUIRE( baseType->GetParentType() == nullptr );
+	REQUIRE( ae::Str32( baseType->GetParentTypeName() ) == "" );
+
+	// CustomBaseTypeTest's parent is CustomBaseType
+	REQUIRE( derivedType->GetParentType() == baseType );
+	REQUIRE( ae::Str32( derivedType->GetParentTypeName() ) == "CustomBaseType" );
+
+	// IsType hierarchy checks
+	REQUIRE( derivedType->IsType( baseType ) );
+	REQUIRE( derivedType->IsType< CustomBaseType >() );
+	REQUIRE( derivedType->IsType< CustomBaseTypeTest >() );
+	REQUIRE( !baseType->IsType< CustomBaseTypeTest >() );
+
+	// Retrieve ClassType from an instance via GetObjectTypeId
+	const CustomBaseTypeTest instance;
+	const ae::TypeId instanceTypeId = ae::GetObjectTypeId( &instance );
+	REQUIRE( instanceTypeId != ae::kInvalidTypeId );
+	REQUIRE( ae::GetClassTypeById( instanceTypeId ) == derivedType );
+}
+
+TEST_CASE( "CustomBaseTypeTest::testInt var name, offset, type, and DataPointer read/write", "[aeMeta]" )
+{
+	const ae::ClassType* type = ae::GetClassType< CustomBaseTypeTest >();
+	REQUIRE( type );
+
+	// Only one registered var, no inherited vars from CustomBaseType
+	REQUIRE( type->GetVarCount( false ) == 1 );
+
+	const ae::ClassVar* var = type->GetVarByName( "testInt", false );
+	REQUIRE( var );
+	REQUIRE( var == type->GetVarByIndex( 0, false ) );
+	REQUIRE( ae::Str32( var->GetName() ) == "testInt" );
+AE_DISABLE_INVALID_OFFSET_WARNING
+	REQUIRE( var->GetOffset() == offsetof( CustomBaseTypeTest, testInt ) );
+AE_ENABLE_INVALID_OFFSET_WARNING
+	REQUIRE( &var->GetClassType() == type );
+
+	const ae::BasicType* varType = var->GetOuterVarType().AsVarType< ae::BasicType >();
+	REQUIRE( varType );
+	REQUIRE( varType->GetType() == ae::BasicType::Int32 );
+	REQUIRE( varType->GetSize() == sizeof( int32_t ) );
+
+	// Read via DataPointer
+	CustomBaseTypeTest obj;
+	obj.testInt = 42;
+	const ae::DataPointer data( var, &obj );
+	int32_t readOut = 0;
+	REQUIRE( varType->GetVarData( ae::ConstDataPointer( data ), &readOut ) );
+	REQUIRE( readOut == 42 );
+
+	// Write via DataPointer
+	REQUIRE( varType->SetVarData( data, (int32_t)99 ) );
+	REQUIRE( obj.testInt == 99 );
+
+	// String round-trip
+	REQUIRE( varType->GetVarDataAsString( ae::ConstDataPointer( data ) ) == "99" );
+	REQUIRE( varType->SetVarDataFromString( data, "7" ) );
+	REQUIRE( obj.testInt == 7 );
+}

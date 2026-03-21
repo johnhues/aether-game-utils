@@ -34,6 +34,16 @@
 //------------------------------------------------------------------------------
 const ae::Tag AE_ALLOC_TAG_META_TEST = "MetaTest";
 
+struct CustomBaseType
+{
+	AE_BASE_TYPE();
+};
+
+struct CustomBaseTypeTest : public ae::Inheritor< CustomBaseType, CustomBaseTypeTest >
+{
+	int testInt = 0;
+};
+
 //------------------------------------------------------------------------------
 // TestEnumClass
 //------------------------------------------------------------------------------
