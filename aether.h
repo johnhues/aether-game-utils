@@ -2702,6 +2702,11 @@ template< uint32_t Size, uint32_t Alignment >
 struct Any
 {
 	Any() = default;
+	//! Stores a non-const copy of \p value. The type of \p value must be
+	//! trivially copyable and trivially destructible, and must fit within the
+	//! internal buffer. Pointers to registered ae::ClassTypes have special
+	//! handling: the pointer itself is stored, but the type id of the TODO
+	//!  C-strings are explicitly rejected; use an ae::Str instead.
 	template< typename T > Any( const T& value );
 	template< typename T > void operator=( const T& value );
 
@@ -2730,9 +2735,10 @@ struct Any
 	//! Returns true if any value is stored.
 	operator bool() const;
 
+	enum class StoredKind : uint8_t { Empty, Value, Pointer, ConstPointer };
 private:
+	StoredKind m_storedKind = StoredKind::Empty;
 	uint32_t m_typeId = 0; // ae::TypeId
-	bool m_constPtr = false;
 	alignas( Alignment ) std::byte m_data[ Size ] = {};
 };
 
@@ -6316,7 +6322,7 @@ private:
 //! Call signature: AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
 #define AE_FORCE_LINK_CLASS( ... ) AE_FORCE_LINK_CLASS_IMPL( __VA_ARGS__ )
 
-#define AE_BASE_TYPE()\
+#define AE_BASE_TYPE\
 	static const char* GetParentTypeName() { return ""; }\
 	static const ae::ClassType* GetParentType() { return nullptr; }\
 	ae::TypeId GetTypeId() const { return _metaTypeId; }\
@@ -6488,7 +6494,7 @@ class Object
 {
 public:
 	virtual ~Object() {}
-	AE_BASE_TYPE();
+	AE_BASE_TYPE;
 };
 // #endif
 
@@ -6544,7 +6550,7 @@ template< typename T > constexpr ae::TypeId GetTypeIdWithQualifiers();
 class Attribute
 {
 public:
-	AE_BASE_TYPE();
+	AE_BASE_TYPE;
 };
 
 //------------------------------------------------------------------------------
@@ -6672,7 +6678,7 @@ public:
 	virtual ae::TypeId GetBaseVarTypeId() const = 0;
 	virtual ae::TypeId GetExactVarTypeId() const = 0;
 
-	AE_BASE_TYPE();
+	AE_BASE_TYPE;
 
 protected:
 	Type() = default;
@@ -12570,9 +12576,6 @@ Any< Size, Alignment >::Any( const T& value )
 // on a template parameter.
 template< typename... > inline constexpr bool _False = false;
 
-template< typename T > struct _RemovePointerConst { using Type = T; };
-template< typename U > struct _RemovePointerConst< const U* > { using Type = U*; };
-
 template< uint32_t Size, uint32_t Alignment >
 template< typename T >
 void Any< Size, Alignment >::operator=( const T& value )
@@ -12603,20 +12606,23 @@ void Any< Size, Alignment >::operator=( const T& value )
 	{
 		if constexpr( std::is_pointer_v< T > )
 		{
-			using Pointee = std::remove_pointer_t< T >;
+			using Pointee = std::remove_const_t< std::remove_pointer_t< T > >;
+			m_storedKind = std::is_const_v< std::remove_pointer_t< T > >
+				? StoredKind::ConstPointer : StoredKind::Pointer;
 			const ae::ClassType* type = ae::GetClassTypeById(
 				ae::GetTypeIdWithoutQualifiers< Pointee >() );
-			if( type )
-			{
-				m_typeId = type->GetTypeId();
-				m_constPtr = std::is_const_v< Pointee >;
-				new ( &m_data ) T( value );
-				return;
-			}
+			m_typeId = type ? (uint32_t)type->GetTypeId()
+				: (uint32_t)ae::GetTypeIdWithQualifiers< Pointee* >();
+			new ( &m_data ) T( value );
+			return;
 		}
-		m_typeId = ae::GetTypeIdWithQualifiers< std::remove_const_t< T > >();
-		m_constPtr = false;
-		new ( &m_data ) std::remove_const_t< T >( value );
+		using StoredT = std::remove_const_t< T >;
+		m_storedKind = StoredKind::Value;
+		const ae::ClassType* type = ae::GetClassTypeById(
+			ae::GetTypeIdWithoutQualifiers< StoredT >() );
+		m_typeId = type ? (uint32_t)type->GetTypeId()
+			: (uint32_t)ae::GetTypeIdWithQualifiers< StoredT >();
+		new ( &m_data ) StoredT( value );
 		return;
 	}
 	AE_FAIL_MSG( "Unreachable" );
@@ -12643,39 +12649,35 @@ const T* Any< Size, Alignment >::TryGet() const
 {
 	if constexpr( std::is_pointer_v< T > )
 	{
+		// Prevent TypeId collision: value storage must not match pointer retrieval
+		if( m_storedKind == StoredKind::Value ) { return nullptr; }
+		using Pointee = std::remove_const_t< std::remove_pointer_t< T > >;
+		const bool retrievingConst = std::is_const_v< std::remove_pointer_t< T > >;
+		if( !retrievingConst && m_storedKind == StoredKind::ConstPointer ) { return nullptr; }
 		const ae::ClassType* storedType = ae::GetClassTypeById( ae::TypeId( m_typeId ) );
 		if( storedType )
 		{
-			using Pointee = std::remove_pointer_t< T >;
 			const ae::ClassType* returnType = ae::GetClassTypeById(
 				ae::GetTypeIdWithoutQualifiers< Pointee >() );
-			const bool retrievingConst = std::is_const_v< Pointee >;
 			if( returnType && storedType->IsType( returnType ) )
 			{
-				if( retrievingConst || !m_constPtr )
-				{
-					return reinterpret_cast< const T* >( &m_data );
-				}
+				return reinterpret_cast< const T* >( &m_data );
 			}
 			return nullptr;
 		}
-	}
-
-	const ae::TypeId returnTypeId =
-		ae::GetTypeIdWithQualifiers< std::remove_const_t< T > >();
-	if( m_typeId == returnTypeId )
-	{
-		return reinterpret_cast< const T* >( &m_data );
-	}
-
-	// Allow retrieving as 'const U*' when 'U*' was stored
-	using NonConstPtrType = typename ae::_RemovePointerConst< T >::Type;
-	if constexpr( !std::is_same_v< T, NonConstPtrType > )
-	{
-		if( m_typeId == ae::GetTypeIdWithQualifiers< NonConstPtrType >() )
+		// Unregistered pointer: compare const-stripped TypeId
+		if( m_typeId == (uint32_t)ae::GetTypeIdWithQualifiers< Pointee* >() )
 		{
 			return reinterpret_cast< const T* >( &m_data );
 		}
+		return nullptr;
+	}
+
+	// Prevent TypeId collision: pointer storage must not match value retrieval
+	if( m_storedKind != StoredKind::Value ) { return nullptr; }
+	if( m_typeId == (uint32_t)ae::GetTypeIdWithQualifiers< std::remove_const_t< T > >() )
+	{
+		return reinterpret_cast< const T* >( &m_data );
 	}
 	return nullptr;
 }
@@ -12689,7 +12691,7 @@ uint32_t Any< Size, Alignment >::GetTypeId() const
 template< uint32_t Size, uint32_t Alignment >
 Any< Size, Alignment >::operator bool() const
 {
-	return m_typeId != 0;
+	return m_storedKind != StoredKind::Empty;
 }
 
 //------------------------------------------------------------------------------

@@ -35,7 +35,7 @@ struct AnyTestPod
 	int32_t y;
 };
 
-struct AnyBase { AE_BASE_TYPE(); };
+struct AnyBase { AE_BASE_TYPE; };
 AE_REGISTER_CLASS( AnyBase );
 struct AnyDerived : public ae::Inheritor< AnyBase, AnyDerived > {};
 AE_REGISTER_CLASS( AnyDerived );
@@ -357,4 +357,27 @@ TEST_CASE( "ae::Any store const int32_t* cannot retrieve as int32_t*", "[ae::Any
 	const int32_t v = 5;
 	AnyPtr a( &v );
 	REQUIRE( a.TryGet< int32_t* >() == nullptr );
+}
+
+//------------------------------------------------------------------------------
+// ae::Any registered type by value (TypeId collision regression)
+//------------------------------------------------------------------------------
+TEST_CASE( "ae::Any store AnyBase by value: value retrieval succeeds, pointer retrieval fails", "[ae::Any][ClassType]" )
+{
+	AnyBase b;
+	AnySmall a( b );
+	REQUIRE( a.TryGet< AnyBase >() != nullptr );
+	REQUIRE( a.TryGet< AnyBase* >() == nullptr );
+	REQUIRE( a.TryGet< AnyDerived* >() == nullptr );
+}
+
+TEST_CASE( "ae::Any store AnyDerived by value: value retrieval succeeds, pointer and upcast retrieval fail", "[ae::Any][ClassType]" )
+{
+	AnyDerived d;
+	AnySmall a( d );
+	REQUIRE( a.TryGet< AnyDerived >() != nullptr );
+	REQUIRE( a.TryGet< AnyDerived* >() == nullptr );
+	REQUIRE( a.TryGet< AnyBase* >() == nullptr );
+	// Value storage must NOT upcast (not a pointer)
+	REQUIRE( a.TryGet< AnyBase >() == nullptr );
 }
