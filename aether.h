@@ -2713,20 +2713,21 @@ struct Any
 	//! Returns the stored value only when \p T matches the stored type exactly.
 	//! For non-pointer types, const is ignored: 'TryGet<const T>()' succeeds
 	//! when 'T' is stored (use 'const ae::Any<>' for const access). For
-	//! registered ClassType pointers, retrieval as a base class pointer or const
-	//! pointer is also allowed. Returns \p defaultValue otherwise.
+	//! registered ClassTypes, retrieval as a base class (value or pointer) is
+	//! also allowed. For pointers, retrieval as a const pointer is allowed.
+	//! Returns \p defaultValue otherwise.
 	template< typename T > T Get( const T& defaultValue = {} ) const;
 	//! Returns a pointer to the stored value only when \p T matches the stored
 	//! type exactly. For non-pointer types, const is ignored: 'TryGet<const T>()'
-	//! succeeds when 'T' is stored. For registered ClassType pointers, retrieval
-	//! as a base class pointer or const pointer is also allowed. Returns nullptr
-	//! otherwise.
+	//! succeeds when 'T' is stored. For registered ClassTypes, retrieval as a
+	//! base class (value or pointer) is also allowed. For pointers, retrieval as
+	//! a const pointer is allowed. Returns nullptr otherwise.
 	template< typename T > T* TryGet();
 	//! Returns a pointer to the stored value only when \p T matches the stored
 	//! type exactly. For non-pointer types, const is ignored: 'TryGet<const T>()'
-	//! succeeds when 'T' is stored. For registered ClassType pointers, retrieval
-	//! as a base class pointer or const pointer is also allowed. Returns nullptr
-	//! otherwise.
+	//! succeeds when 'T' is stored. For registered ClassTypes, retrieval as a
+	//! base class (value or pointer) is also allowed. For pointers, retrieval as
+	//! a const pointer is allowed. Returns nullptr otherwise.
 	template< typename T > const T* TryGet() const;
 	//! Returns the type id of the stored value, or 0 if empty. For registered
 	//! ClassType pointers, returns the ClassType's type id. Otherwise returns
@@ -12639,16 +12640,19 @@ const T* Any< Size, Alignment >::TryGet() const
 {
 	if constexpr( std::is_pointer_v< T > )
 	{
-		// Prevent TypeId collision: value storage must not match pointer retrieval
-		if( m_typeType == TypeType::Value ) { return nullptr; }
 		using Pointee = std::remove_const_t< std::remove_pointer_t< T > >;
-		const bool retrievingConst = std::is_const_v< std::remove_pointer_t< T > >;
-		if( !retrievingConst && m_typeType == TypeType::ConstPointer ) { return nullptr; }
-		const ae::ClassType* storedType = ae::GetClassTypeById( ae::TypeId( m_typeId ) );
-		if( storedType )
+		// Prevent TypeId collision: value storage must not match pointer retrieval
+		if( m_typeType == TypeType::Value )
 		{
-			const ae::ClassType* returnType = ae::GetClassTypeById(
-				ae::GetTypeIdWithoutQualifiers< Pointee >() );
+			return nullptr;
+		}
+		else if( !std::is_const_v< std::remove_pointer_t< T > > && m_typeType == TypeType::ConstPointer )
+		{
+			return nullptr;
+		}
+		else if( const ae::ClassType* storedType = ae::GetClassTypeById( ae::TypeId( m_typeId ) ) )
+		{
+			const ae::ClassType* returnType = ae::GetClassTypeById( ae::GetTypeIdWithoutQualifiers< Pointee >() );
 			if( returnType && storedType->IsType( returnType ) )
 			{
 				return reinterpret_cast< const T* >( &m_data );
@@ -12656,18 +12660,29 @@ const T* Any< Size, Alignment >::TryGet() const
 			return nullptr;
 		}
 		// Unregistered pointer: compare const-stripped TypeId
-		if( m_typeId == (uint32_t)ae::GetTypeIdWithQualifiers< Pointee* >() )
+		else if( m_typeId == (uint32_t)ae::GetTypeIdWithQualifiers< Pointee* >() )
 		{
 			return reinterpret_cast< const T* >( &m_data );
 		}
 		return nullptr;
 	}
-
 	// Prevent TypeId collision: pointer storage must not match value retrieval
-	if( m_typeType != TypeType::Value ) { return nullptr; }
-	if( m_typeId == (uint32_t)ae::GetTypeIdWithQualifiers< std::remove_const_t< T > >() )
+	else if( m_typeType != TypeType::Value )
+	{
+		return nullptr;
+	}
+	else if( m_typeId == (uint32_t)ae::GetTypeIdWithQualifiers< std::remove_const_t< T > >() )
 	{
 		return reinterpret_cast< const T* >( &m_data );
+	}
+	else // Registered ClassType value: allow retrieval as base class
+	{
+		const ae::ClassType* storedType = ae::GetClassTypeById( ae::TypeId( m_typeId ) );
+		const ae::ClassType* returnType = ae::GetClassTypeById( ae::GetTypeIdWithoutQualifiers< std::remove_const_t< T > >() );
+		if( storedType && returnType && storedType->IsType( returnType ) )
+		{
+			return reinterpret_cast< const T* >( &m_data );
+		}
 	}
 	return nullptr;
 }

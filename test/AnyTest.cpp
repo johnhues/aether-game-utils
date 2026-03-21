@@ -371,13 +371,14 @@ TEST_CASE( "ae::Any store TestAnyBase by value: value retrieval succeeds, pointe
 	REQUIRE( a.TryGet< TestAnyDerived* >() == nullptr );
 }
 
-TEST_CASE( "ae::Any store TestAnyDerived by value: value retrieval succeeds, pointer and upcast retrieval fail", "[ae::Any][ClassType]" )
+TEST_CASE( "ae::Any store TestAnyDerived by value: exact and base value retrieval succeed, pointer retrieval fails", "[ae::Any][ClassType]" )
 {
 	TestAnyDerived d;
 	AnySmall a( d );
 	REQUIRE( a.TryGet< TestAnyDerived >() != nullptr );
 	REQUIRE( a.TryGet< TestAnyDerived* >() == nullptr );
 	REQUIRE( a.TryGet< TestAnyBase* >() == nullptr );
-	// Value storage must NOT upcast (not a pointer)
-	REQUIRE( a.TryGet< TestAnyBase >() == nullptr );
+	// Registered ClassType value: upcast to base succeeds (single-inheritance, base at offset 0)
+	REQUIRE( a.TryGet< TestAnyBase >() != nullptr );
+	REQUIRE( a.TryGet< TestAnyUnrelated >() == nullptr );
 }
