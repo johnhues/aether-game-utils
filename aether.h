@@ -5312,34 +5312,45 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::AStarNode example interface
-// ae::AStar is a generic A* algorithm implementation. It requires a type T
-// which requires the following interface:
+//------------------------------------------------------------------------------
+//! ae::AStar() is a generic A* algorithm implementation. It requires a type T
+//! which has an interface with the three functions below: GetNext(),
+//! GetNextCount(), and GetHeuristic(). Note that the template N in AStarNode is
+//! not part of the required interface and is only for convenience. N can be set
+//! to 0 for dynamic 'next' node limits, 4 for a 2d grid with cartesian
+//! connections, 8 for a 2d grid with diagonal connections, or 26 for a full 3d
+//! 'voxel' grid, etc. If the topology of your graph is very well defined you
+//! would probably want to copy and replace this struct to calculate the next
+//! nodes on the fly instead of storing them in an array.
 //------------------------------------------------------------------------------
 template< uint32_t N = 0 >
 struct AStarNode
 {
-	AStarNode() : pos( 0.0f ) {}
-	AStarNode( const ae::Tag& tag ) : next( tag ), pos( 0.0f ) {}
+	using AStarNodeT = AStarNode< N >;
+	AStarNode() = default;
+	AStarNode( const ae::Tag& tag ) : next( tag ) {}
+	ae::Array< const AStarNodeT*, N > next;
+	ae::Vec3 pos = ae::Vec3( 0.0f );
 
+	//--------------------------------------------------------------------------
 	// ae::AStar type T must implement these following functions:
+	//--------------------------------------------------------------------------
 	//! Returns the next node in the path. \p index is the index of the next
 	//! node in the path. Edges between paths can be uni-directional or
 	//! bi-directional.
-	const ae::AStarNode< N >* GetNext( uint32_t index ) const { return next[ index ]; }
+	const AStarNodeT* GetNext( uint32_t index ) const { return next[ index ]; }
 	//! Returns the number of nodes directly visitable from this node.
 	uint32_t GetNextCount() const { return next.Length(); }
 	//! Returns the heuristic distance between this node and \p other. For
 	//! ae::AStar to return a least cost path, this function must be 'admissible'.
 	//! This means this function should never overestimate the cost of
 	//! traveling between this node and \p other.
-	float GetHeuristic( const ae::AStarNode< N >* other ) const { return ( pos - other->pos ).Length(); }
-
-	ae::Array< const ae::AStarNode< N >*, N > next;
-	ae::Vec3 pos = ae::Vec3( 0.0f );
+	float GetHeuristic( const AStarNodeT* other ) const { return ( pos - other->pos ).Length(); }
 };
 
 //------------------------------------------------------------------------------
 // ae::AStar algorithm
+//------------------------------------------------------------------------------
 //! \brief A generic A* algorithm implementation. Requires a type T which
 //! implements the functions: GetNext(), GetNextCount(), and GetHeuristic().
 //! See ae::AStarNode for exact function signatures. \p startNode is the node
