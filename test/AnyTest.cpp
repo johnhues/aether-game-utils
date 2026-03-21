@@ -159,6 +159,38 @@ TEST_CASE( "ae::Any pointer type mismatch returns nullptr", "[ae::Any]" )
 	REQUIRE( a.TryGet< int32_t* >() == nullptr );
 }
 
+TEST_CASE( "ae::Any Get pointer returns stored pointer on match", "[ae::Any]" )
+{
+	AnyTestPod pod{ 1, 2 };
+	AnyPtr a( &pod );
+	REQUIRE( a.Get< AnyTestPod* >( nullptr ) == &pod );
+}
+
+TEST_CASE( "ae::Any Get pointer returns default on type mismatch", "[ae::Any]" )
+{
+	AnyTestPod pod{ 3, 4 };
+	AnyPtr a( &pod );
+	float other = 0;
+	REQUIRE( a.Get< float* >( nullptr ) == nullptr );
+	REQUIRE( a.Get< float* >( &other ) == &other );
+}
+
+TEST_CASE( "ae::Any Get const pointer from non-const pointer", "[ae::Any]" )
+{
+	AnyTestPod pod{ 5, 6 };
+	AnyPtr a( &pod );
+	REQUIRE( a.Get< const AnyTestPod* >( nullptr ) == &pod );
+}
+
+TEST_CASE( "ae::Any Get non-const pointer from const pointer returns default", "[ae::Any]" )
+{
+	const AnyTestPod pod{ 7, 8 };
+	AnyPtr a( &pod );
+	AnyTestPod other{};
+	REQUIRE( a.Get< AnyTestPod* >( nullptr ) == nullptr );
+	REQUIRE( a.Get< AnyTestPod* >( &other ) == &other );
+}
+
 //------------------------------------------------------------------------------
 // ae::BinaryStream user data tests (uses ae::Any internally)
 //------------------------------------------------------------------------------
@@ -342,7 +374,7 @@ TEST_CASE( "ae::Any store int32_t* retrieve as const int32_t*", "[ae::Any]" )
 	REQUIRE( *a.TryGet< const int32_t* >() == &v );
 }
 
-TEST_CASE( "ae::Any store const int32_t* cannot retrieve as int32_t*", "[ae::Any]" )
+TEST_CASE( "ae::Any store const int32_t* cannot remove const with retrieval as int32_t*", "[ae::Any]" )
 {
 	const int32_t v = 5;
 	AnyPtr a( &v );
@@ -352,6 +384,13 @@ TEST_CASE( "ae::Any store const int32_t* cannot retrieve as int32_t*", "[ae::Any
 //------------------------------------------------------------------------------
 // ae::Any registered type by value (TypeId collision regression)
 //------------------------------------------------------------------------------
+TEST_CASE( "ae::Any Get Derived* as Base* returns stored pointer", "[ae::Any][ClassType]" )
+{
+	TestAnyDerived obj;
+	AnyPtr a( &obj );
+	REQUIRE( a.Get< TestAnyBase* >( nullptr ) == &obj );
+}
+
 TEST_CASE( "ae::Any store TestAnyBase by value: value retrieval succeeds, pointer retrieval fails", "[ae::Any][ClassType]" )
 {
 	TestAnyBase b;
