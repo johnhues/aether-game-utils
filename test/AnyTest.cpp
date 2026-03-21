@@ -51,14 +51,14 @@ using AnyPtr = ae::Any< sizeof( void* ), alignof( void* ) >;
 TEST_CASE( "ae::Any default construction is empty", "[ae::Any]" )
 {
 	const AnySmall a;
-	REQUIRE( a.GetTypeId() == ae::TypeId() );
+	REQUIRE( !a );
 	REQUIRE( a.TryGet< int32_t >() == nullptr );
 }
 
 TEST_CASE( "ae::Any construct from value", "[ae::Any]" )
 {
 	const AnySmall a( (int32_t)42 );
-	REQUIRE( a.GetTypeId() == ae::GetTypeIdWithQualifiers< int32_t >() );
+	REQUIRE( a );
 	REQUIRE( a.TryGet< int32_t >() != nullptr );
 	REQUIRE( *a.TryGet< int32_t >() == 42 );
 }
@@ -146,7 +146,7 @@ TEST_CASE( "ae::Any store and retrieve null pointer", "[ae::Any]" )
 {
 	AnyTestPod* null = nullptr;
 	AnyPtr a( null );
-	REQUIRE( a.GetTypeId() == ae::GetTypeIdWithQualifiers< AnyTestPod* >() );
+	REQUIRE( a );
 	REQUIRE( a.TryGet< AnyTestPod* >() != nullptr );  // pointer to the stored null
 	REQUIRE( *a.TryGet< AnyTestPod* >() == nullptr ); // stored value is null
 }
@@ -329,16 +329,6 @@ TEST_CASE( "ae::Any store const Derived* cannot retrieve as non-const Base*", "[
 	const TestAnyDerived* ptr = &obj;
 	AnyPtr a( ptr );
 	REQUIRE( a.TryGet< TestAnyBase* >() == nullptr );
-}
-
-//------------------------------------------------------------------------------
-// ae::Any GetTypeId returns ClassType TypeId for registered pointers
-//------------------------------------------------------------------------------
-TEST_CASE( "ae::Any GetTypeId returns ClassType TypeId for registered pointer", "[ae::Any][ClassType]" )
-{
-	TestAnyDerived obj;
-	AnyPtr a( &obj );
-	REQUIRE( a.GetTypeId() == ae::GetClassType< TestAnyDerived >()->GetTypeId() );
 }
 
 //------------------------------------------------------------------------------

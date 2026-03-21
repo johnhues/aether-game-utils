@@ -2704,10 +2704,12 @@ struct Any
 	Any() = default;
 	//! Stores a non-const copy of \p value. The type of \p value must be
 	//! trivially copyable and trivially destructible, and must fit within the
-	//! internal buffer. Pointers to registered ae::ClassTypes have special
-	//! handling: the pointer itself is stored, but the type id of the TODO
-	//!  C-strings are explicitly rejected; use an ae::Str instead.
+	//! internal buffer. The type used for retrieval must match exactly (aside
+	//! from const-ness), with the exception of registered types registered with
+	//! ae::ClassType, which are stored so that retrieval is hierarchy aware.
+	//! C-strings are explicitly rejected; use an ae::Str instead.
 	template< typename T > Any( const T& value );
+	//! See ae::Any( const T& value ).
 	template< typename T > void operator=( const T& value );
 
 	//! Returns the stored value only when \p T matches the stored type exactly.
@@ -2729,17 +2731,13 @@ struct Any
 	//! base class (value or pointer) is also allowed. For pointers, retrieval as
 	//! a const pointer is allowed. Returns nullptr otherwise.
 	template< typename T > const T* TryGet() const;
-	//! Returns the type id of the stored value, or 0 if empty. For registered
-	//! ClassType pointers, returns the ClassType's type id. Otherwise returns
-	//! ae::GetTypeIdWithQualifiers< T >().
-	uint32_t GetTypeId() const;
 	//! Returns true if any value is stored.
 	operator bool() const;
 
 private:
 	enum class TypeType : uint8_t { Empty, Value, Pointer, ConstPointer };
 	TypeType m_typeType = TypeType::Empty;
-	uint32_t m_typeId = 0; // ae::TypeId
+	uint32_t m_typeId = 0; // ae::TypeId. Note that external retrieval of this is not meaningful, because it's interpretation depends on TypeType
 	alignas( Alignment ) std::byte m_data[ Size ] = {};
 };
 
@@ -12688,12 +12686,6 @@ const T* Any< Size, Alignment >::TryGet() const
 }
 
 template< uint32_t Size, uint32_t Alignment >
-uint32_t Any< Size, Alignment >::GetTypeId() const
-{
-	return m_typeId;
-}
-
-template< uint32_t Size, uint32_t Alignment >
 Any< Size, Alignment >::operator bool() const
 {
 	return m_typeType != TypeType::Empty;
@@ -18945,7 +18937,7 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 		case DocumentValueType::Number:
 		case DocumentValueType::Bool:
 		case DocumentValueType::Opaque:
-			if( m_value.GetTypeId() )
+			if( m_value )
 			{
 				UndoOp op;
 				op.type = UndoOpType::OpaqueSet;
@@ -18978,7 +18970,7 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 	}
 	// Data should already be cleared by the switch above
 	AE_ASSERT( m_string.empty() );
-	AE_ASSERT( !m_value.GetTypeId() );
+	AE_ASSERT( !m_value );
 	AE_ASSERT( m_array.Length() == 0 );
 	AE_ASSERT( m_map.Length() == 0 );
 	return *this;
@@ -19065,7 +19057,7 @@ void DocumentValue::BoolSet( bool value )
 bool DocumentValue::BoolGet() const
 {
 	AE_ASSERT( IsBool() );
-	AE_DEBUG_ASSERT( m_value.GetTypeId() == ae::GetTypeIdWithoutQualifiers< bool >() );
+	AE_DEBUG_ASSERT( m_value );
 	return m_value.Get< bool >( false );
 }
 
@@ -19351,7 +19343,7 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target )
 				// Data should always be empty when the type changes since
 				// Initialize() removes all elements first
 				AE_DEBUG_ASSERT( op.target->m_string.empty() );
-				AE_DEBUG_ASSERT( !op.target->m_value.GetTypeId() );
+				AE_DEBUG_ASSERT( !op.target->m_value );
 				AE_DEBUG_ASSERT( op.target->m_array.Length() == 0 );
 				AE_DEBUG_ASSERT( op.target->m_map.Length() == 0 );
 				break;
@@ -19441,7 +19433,7 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 		{
 			// Validate type consistency with data contents
 			AE_DEBUG_ASSERT( target->m_string.length() == 0 || target->m_type == DocumentValueType::String );
-			AE_DEBUG_ASSERT( !target->m_value.GetTypeId() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
+			AE_DEBUG_ASSERT( !target->m_value || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
 			AE_DEBUG_ASSERT( target->m_array.Length() == 0 || target->m_type == DocumentValueType::Array );
 			AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Object );
 			AE_DEBUG_ASSERT( target->m_refCount >= 0 );
