@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""anchors — work with mdbook-style anchor blocks in source files.
+
+Anchor comments follow the mdbook convention:
+
+    // ANCHOR: name
+    ...
+    // ANCHOR_END: name
+
+Subcommands
+-----------
+  extract   Extract a named anchor block to stdout.
+  list      List (and validate) all anchor blocks in files.
+
+Run `anchors <subcommand> -h` for per-command help.
+"""
+
+import sys
+import re
+import textwrap
+import argparse
+from dataclasses import dataclass, field
+
+
+# ---------------------------------------------------------------------------
+# Parsing
+# ---------------------------------------------------------------------------
+
+_RE_START      = re.compile(r"//\s*ANCHOR:\s*(.+?)\s*$")
+_RE_END        = re.compile(r"//\s*ANCHOR_END:\s*(.+?)\s*$")
+
+
+@dataclass
+class AnchorBlock:
+    name:         str
+    start_line:   int          # 1-based line number of the ANCHOR: comment
+    end_line:     int          # 1-based line number of the ANCHOR_END: comment
+    lines:        list[str] = field(default_factory=list)  # raw content lines
+
+
+def _to_plain_comment(line: str) -> str:
+    """Strip ANCHOR: metadata, keeping leading whitespace and // prefix.
+
+    '\\t// ANCHOR: Misc input\\n'  ->  '\\t// Misc input\\n'
+    """
+    return re.sub(r"ANCHOR:\s*", "", line, count=1)
+
+
+def parse_anchors(lines: list[str]) -> tuple[list[AnchorBlock], list[str]]:
+    """Return (blocks, errors).
+
+    errors is a list of human-readable problem descriptions.
+    A block is only added to the result list when it is properly closed.
+    """
+    open_blocks: dict[str, tuple[int, list[str]]] = {}  # name -> (start_lineno, lines)
+    closed: list[AnchorBlock] = []
+    errors: list[str] = []
+
+    for lineno, line in enumerate(lines, start=1):
+        m_start = _RE_START.search(line)
+        m_end   = _RE_END.search(line)
+
+        if m_start:
+            name = m_start.group(1)
+            if name in open_blocks:
+                errors.append(f"line {lineno}: nested ANCHOR '{name}' (already open from line {open_blocks[name][0]})")
+            else:
+                for start_lineno, content_list in open_blocks.values():
+                    content_list.append(_to_plain_comment(line))
+                open_blocks[name] = (lineno, [])
+        elif m_end:
+            name = m_end.group(1)
+            if name not in open_blocks:
+                errors.append(f"line {lineno}: ANCHOR_END '{name}' has no matching ANCHOR")
+            else:
+                start, content = open_blocks.pop(name)
+                closed.append(AnchorBlock(name, start, lineno, content))
+        else:
+            for content_lines in open_blocks.values():
+                content_lines[1].append(line)
+
+    for name, (start, _) in open_blocks.items():
+        errors.append(f"line {start}: ANCHOR '{name}' has no matching ANCHOR_END")
+
+    return closed, errors
+
+
+# ---------------------------------------------------------------------------
+# extract subcommand
+# ---------------------------------------------------------------------------
+
+def _leading_chars(lines: list[str]) -> int:
+    """Raw leading-whitespace count on the first non-empty content line."""
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.rstrip("\n\r"):
+            return len(line) - len(stripped)
+    return 0
+
+
+def cmd_extract(args: argparse.Namespace) -> int:
+    sources = _open_sources(args.files)
+    if sources is None:
+        return 1
+
+    found = False
+    for _path, fh in sources:
+        with fh:
+            lines = fh.readlines()
+        blocks, _errors = parse_anchors(lines)
+        for block in blocks:
+            if block.name != args.anchor:
+                continue
+            found = True
+            text = textwrap.dedent("".join(block.lines))
+            if args.tabsize > 0:
+                text = text.expandtabs(args.tabsize)
+            sys.stdout.write(text)
+
+    if not found:
+        print(f"anchors: anchor '{args.anchor}' not found", file=sys.stderr)
+        return 1
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# list subcommand
+# ---------------------------------------------------------------------------
+
+def cmd_list(args: argparse.Namespace) -> int:
+    sources = _open_sources(args.files)
+    if sources is None:
+        return 1
+
+    multi = len(args.files) > 1
+    exit_code = 0
+
+    for path, fh in sources:
+        with fh:
+            lines = fh.readlines()
+        blocks, errors = parse_anchors(lines)
+
+        for err in errors:
+            label = f"{path}: " if path else ""
+            print(f"anchors: {label}{err}", file=sys.stderr)
+            exit_code = 1
+
+        for block in blocks:
+            leading = _leading_chars(block.lines)
+            row = f"{block.name}\t{block.start_line}\t{block.end_line}\t{leading}"
+            if multi and path:
+                row = f"{path}:{row}"
+            print(row)
+
+    return exit_code
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _open_sources(files: list[str]):
+    if not files:
+        return [(None, sys.stdin)]
+    sources = []
+    for path in files:
+        try:
+            sources.append((path, open(path)))
+        except FileNotFoundError as e:
+            print(f"anchors: {e}", file=sys.stderr)
+            return None
+    return sources
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="anchors",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = parser.add_subparsers(dest="cmd", metavar="subcommand")
+    sub.required = True
+
+    # extract
+    p_ext = sub.add_parser("extract", help="extract a named anchor block")
+    p_ext.add_argument("anchor", metavar="ANCHOR_NAME")
+    p_ext.add_argument("files", metavar="FILE", nargs="*")
+    p_ext.add_argument(
+        "--tabsize", metavar="N", type=int, default=4,
+        help="replace tabs with N spaces after dedent (0 = keep tabs, default: 4)",
+    )
+
+    # list
+    p_lst = sub.add_parser("list", help="list and validate all anchor blocks")
+    p_lst.add_argument("files", metavar="FILE", nargs="*")
+
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    sys.exit(cmd_extract(args) if args.cmd == "extract" else cmd_list(args))
+
+
+if __name__ == "__main__":
+    main()

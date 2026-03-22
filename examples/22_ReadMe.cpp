@@ -1,3 +1,4 @@
+// ANCHOR: ae_22_read_me
 #define AE_MAIN
 #define AE_USE_MODULES
 #include "aether.h"
@@ -178,3 +179,4 @@ const char* kFragmentShader = R"(
 		AE_COLOR = mix( vec4( 0.15, 0.13, 0.25, 1.0 ), AE_TEXTURE2D( u_tex, v_uv ), pow( 1.0 - depth, 1.5 ) );
 	}
 )";
+// ANCHOR_END: ae_22_read_me
