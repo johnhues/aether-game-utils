@@ -6854,6 +6854,8 @@ public:
 	//! referenced value is separate from the const-ness of the pointer.
 	ae::DataPointer Dereference( ae::ConstDataPointer pointer ) const;
 	//! Writes \p value to the given \p pointer, returning true on success.
+	//! Fails when \p value is non-null and type-incompatible, or when
+	//! \p pointer has the wrong type.
 	virtual bool Set( ae::DataPointer pointer, ae::Object* value ) const = 0;
 	//! Returns a pointer to the inner value of \p pointer, unless given null.
 	template< typename T > T** Get( ae::DataPointer pointer ) const;
@@ -6864,9 +6866,9 @@ public:
 	//! \p pointer, returning true on success. The encoding of \p value should
 	//! match the encoding used by ObjectPointerToStringFn.
 	virtual bool FromString( ae::DataPointer pointer, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
-	//! Returns a string representation of the object pointer at \p pointer, or
-	//! an empty string if \p pointer is null. The encoding of the returned
-	//! string should match the encoding expected by StringToObjectPointerFn.
+	//! Returns a string representation of the object pointer at \p pointer. The
+	//! encoding of the returned string should match the encoding expected by
+	//! StringToObjectPointerFn.
 	virtual std::string ToString( ae::ConstDataPointer pointer, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 
 	// Internal
