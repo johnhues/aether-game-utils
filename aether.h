@@ -573,11 +573,21 @@ inline float Atan2( float y, float x );
 inline float Sqrt( float x );
 
 inline uint32_t Mod( uint32_t i, uint32_t n );
+//! A mathematical modulo operation. Identical to C++ remainder operator '%' for
+//! positive values, but returns a "clock arithmetic" result for negative values.
+//! Eg. `ae::Mod( -3, 12 ) == 9`. Always returns a non-negative result in [0, n),
+//! regardless of the sign of \p i.
 inline int Mod( int32_t i, int32_t n );
+//! A mathematical modulo operation. Identical to C++ remainder operator '%' for
+//! positive values, but returns a "clock arithmetic" result for negative values.
+//! Eg. `ae::Mod( -2.5, 12 ) == 9.5`. Always returns a non-negative result in
+//! [0, n), regardless of the sign of \p f.
 inline float Mod( float f, float n );
 
 inline int32_t Ceil( float f );
 inline int32_t Floor( float f );
+//! A true mathematical floor division toward negative infinity. Unlike C++
+//! operator/ (which truncates toward zero), `Floor( -7, 2 ) == -4` not -3.
 inline int32_t Floor( int32_t value, int32_t divisor );
 inline int32_t Round( float f );
 
@@ -602,12 +612,22 @@ inline float Clip01( float x );
 // Interpolation
 //------------------------------------------------------------------------------
 template< typename T0, typename T1 > T0 Lerp( T0 start, T0 end, T1 t );
+//! Returns the shortest signed angular difference from \p start to \p end,
+//! in the range (-PI, PI]. Note parameter order: \p end comes first.
+//! Example: `AngleDifference(PI*1.5f, 0.0f) == -PI*0.5f` (takes short path).
 inline float AngleDifference( float end, float start );
 inline float LerpAngle( float start, float end, float t );
 inline float Delerp( float start, float end, float value );
 inline float Delerp01( float start, float end, float value );
+//! Frame-rate independent exponential lerp. Returns \p start unchanged when
+//! \p snappiness or \p dt is zero. Higher \p snappiness = faster convergence
+//! (double-exponential: `exp2(-exp2(snappiness) * dt)`).
 template< typename T > T DtLerp( T start, float snappiness, float dt, T end );
+//! Frame-rate independent exponential slerp. Same \p snappiness semantics as
+//! DtLerp. Delegates to \p start.DtSlerp().
 template< typename T > T DtSlerp( T start, float snappiness, float dt, T end );
+//! Frame-rate independent angular lerp with wrapping. Same \p snappiness
+//! semantics as DtLerp.
 inline float DtLerpAngle( float start, float snappiness, float dt, float end );
 // @TODO: Cleanup duplicate interpolation functions
 template< typename T > T CosineInterpolate( T start, T end, float t );
@@ -715,10 +735,15 @@ struct VecT
 	float Length() const;
 	float LengthSquared() const;
 	
+	//! Normalizes the vector in-place. Returns the previous length.
 	float Normalize();
+	//! Normalizes the vector in-place. Returns the previous length, or zero if
+	//! it was below \p epsilon (in which case the vector is left unchanged).
 	float SafeNormalize( float epsilon = 0.000001f );
 	T NormalizeCopy() const;
 	T SafeNormalizeCopy( float epsilon = 0.000001f ) const;
+	//! Clamps the vector length to \p length in-place. Returns the resulting
+	//! (possibly clamped) length. If already shorter than \p length, no change.
 	float Trim( float length );
 	T TrimCopy( float length ) const;
 
@@ -740,13 +765,19 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 	Vec2( float x, float y );
 	explicit Vec2( const float* xy );
 	explicit Vec2( struct Int2 i2 );
+	//! Returns a unit vector at the given angle in radians. Angle 0 maps to
+	//! +X; positive angles rotate CCW toward +Y (standard math convention).
 	static Vec2 FromAngle( float angle );
 
 	struct Int2 NearestCopy() const;
 	struct Int2 FloorCopy() const;
 	struct Int2 CeilCopy() const;
 	
+	//! Rotates CCW by \p rotation radians in the XY plane. Positive angle
+	//! rotates +X toward +Y (standard right-hand/math convention).
 	Vec2 RotateCopy( float rotation ) const;
+	//! Returns the angle of this vector in radians via atan2(y,x).
+	//! Angle 0 == +X axis; positive = CCW toward +Y.
 	float GetAngle() const;
 	Vec2 DtSlerp( const Vec2& end, float snappiness, float dt, float epsilon = 0.0001f ) const;
 	Vec2 Slerp( const Vec2& end, float t, float epsilon = 0.0001f ) const;
@@ -792,9 +823,14 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	struct Int3 FloorCopy() const;
 	struct Int3 CeilCopy() const;
 	
-	void AddRotationXY( float rotation ); // @TODO: Support Y up
+	//! Rotates the XY components CCW by \p rotation radians around the Z axis
+	//! (Z-up assumed). Positive angle rotates +X toward +Y. @TODO: Support Y up
+	void AddRotationXY( float rotation );
 	Vec3 AddRotationXYCopy( float rotation ) const;
 	float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
+	//! Rotates this vector around \p axis by \p angle radians using the
+	//! right-hand rule (Rodrigues' formula). Positive angle = CCW when viewed
+	//! from the tip of \p axis toward the origin.
 	Vec3 RotateCopy( Vec3 axis, float angle ) const;
 	
 	Vec3 Lerp( const Vec3& end, float t ) const;
@@ -808,6 +844,8 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	Vec3 ZeroAxisCopy( Vec3 axis ) const; // Zero component along arbitrary axis (ie vec dot axis == 0)
 	Vec3 ZeroDirectionCopy( Vec3 direction ) const; // Zero component along positive half of axis (ie vec dot dir > 0)
 
+	//! Transforms \p p by \p projection and performs a perspective divide (divides
+	//! xyz by w). Use Matrix4::TransformPoint3x4 for affine transforms.
 	static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p );
 
 	//! Define conversion functions etc for ae::Vec3. See AE_CONFIG_FILE for more info.
@@ -898,7 +936,13 @@ public:
 	static ae::Matrix4 Scaling( const ae::Vec3& s );
 	static ae::Matrix4 Scaling( float sx, float sy, float sz );
 	static ae::Matrix4 LocalToWorld( ae::Vec3 position, ae::Quaternion rotation, ae::Vec3 scale );
+	//! Builds a right-handed view matrix. \p forward is the camera's look direction
+	//! in world space; it maps to -Z in view space. Internally the \p forward row
+	//! stores the negated value.
 	static ae::Matrix4 WorldToView( ae::Vec3 position, ae::Vec3 forward, ae::Vec3 up );
+	//! Builds a perspective projection matrix. \p fov is the vertical field-of-view
+	//! in radians. Output clips-space conventions depend on the global `ae::ReverseZ`
+	//! setting (default: standard depth range).
 	static ae::Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
 	// Set transformation properties
@@ -917,11 +961,22 @@ public:
 	// Get transformation properties
 	ae::Vec3 GetTranslation() const;
 	ae::Quaternion GetRotation() const;
+	//! Returns the scale encoded in this matrix. Assumes TRS decomposable.
+	//! When the determinant is negative (odd number of negative scale axes),
+	//! the z component, as it's ambiguous which axis was negated originally.
 	ae::Vec3 GetScale() const;
 	ae::Matrix4 GetTranspose() const;
 	ae::Matrix4 GetInverse() const; // @TODO: Handle non-invertible matrices in API
+	//! Returns the inverse transpose of this matrix. This is useful to preserve
+	//! the direction (but not length) of transformed normals when the matrix
+	//! has non-uniform scale. Assumes TRS decomposable.
 	ae::Matrix4 GetNormalMatrix() const;
+	//! Returns a matrix where the each column of the upper 3x3 rotation portion
+	//! of this matrix has been normalized to remove any scale. Assumes TRS
+	//! decomposable.
 	ae::Matrix4 GetScaleRemoved() const;
+	//! Returns the determinant of the full 4x4 matrix.
+	float Determinant() const;
 	ae::Vec3 GetAxis( uint32_t column ) const;
 	ae::Vec4 GetColumn( uint32_t column ) const;
 	ae::Vec4 GetRow( uint32_t row ) const;
@@ -983,6 +1038,10 @@ public:
 
 	Quaternion( const float i, const float j, const float k, const float r ) : i(i), j(j), k(k), r(r) {}
 	explicit Quaternion( Vec3 v ) : i(v.x), j(v.y), k(v.z), r(0.0f) {}
+	//! Constructs a quaternion from a look direction. \p forward and \p up should
+	//! be orthogonal; if not, one is adjusted. When \p prioritizeUp is true \p forward
+	//! is corrected to be perpendicular to \p up; when false \p up is corrected.
+	//! Convention: right-handed (`forward.Cross(up)` = right).
 	Quaternion( Vec3 forward, Vec3 up, bool prioritizeUp = true );
 	Quaternion( Vec3 axis, float angle );
 	static Quaternion Identity() { return Quaternion( 0.0f, 0.0f, 0.0f, 1.0f ); }
@@ -993,13 +1052,26 @@ public:
 	bool operator!=( const Quaternion& q ) const;
 	Quaternion& operator*= ( const Quaternion& q );
 	Quaternion operator* ( const Quaternion& q ) const;
+	//! Returns the antipodal quaternion (negates all four components i,j,k,r).
+	//! This is NOT the conjugate or inverse; both q and -q represent the same
+	//! rotation but may interpolate differently.
 	Quaternion operator- () const;
 	float Dot( const Quaternion& q ) const;
 	Quaternion operator* ( float s ) const;
+	//! Physics angular velocity integration: applies half-step `v*s` (where \p v
+	//! is angular velocity in rad/s and \p s is half dt). Leaves quat un-normalized.
 	void AddScaledVector( const Vec3& v, float s );
+	//! Rotates this quaternion by the rotation encoded in \p v: `|v|` is the
+	//! angle in radians, `v/|v|` is the axis. No-op if \p v is zero.
 	void RotateByVector( const Vec3& v );
+	//! Sets the Z-rotation so that the local X axis points toward the XY direction
+	//! of \p v. The Z component of \p v is ignored (Z-up assumed).
 	void SetDirectionXY( const Vec3& v );
+	//! Returns the XY direction the local X axis points after this quaternion's
+	//! Z-rotation. Returned vector always has z == 0.
 	Vec3 GetDirectionXY() const;
+	//! Zeroes the i and j components (XY rotation) without renormalizing.
+	//! The quaternion will be invalid until manually renormalized.
 	void ZeroXY();
 	void GetAxisAngle( Vec3* axis, float* angle ) const;
 	void AddRotationXY( float rotation );
@@ -1228,6 +1300,9 @@ public:
 	void SetCenter( ae::Vec2 point ) { m_point = point; }
 	void SetRadius( float radius ) { m_radius = radius; }
 
+	//! Returns true if the two circles overlap. If \p out is non-null it receives
+	//! the midpoint of the overlap zone (midpoint between the two intersection points
+	//! projected onto the line between centers), NOT a contact normal or deepest point.
 	bool Intersect( const Circle& other, ae::Vec2* out ) const;
 	ae::Vec2 GetRandomPoint( uint64_t* seed = &_randomSeed ) const;
 
@@ -5237,34 +5312,45 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::AStarNode example interface
-// ae::AStar is a generic A* algorithm implementation. It requires a type T
-// which requires the following interface:
+//------------------------------------------------------------------------------
+//! ae::AStar() is a generic A* algorithm implementation. It requires a type T
+//! which has an interface with the three functions below: GetNext(),
+//! GetNextCount(), and GetHeuristic(). Note that the template N in AStarNode is
+//! not part of the required interface and is only for convenience. N can be set
+//! to 0 for dynamic 'next' node limits, 4 for a 2d grid with cartesian
+//! connections, 8 for a 2d grid with diagonal connections, or 26 for a full 3d
+//! 'voxel' grid, etc. If the topology of your graph is very well defined you
+//! would probably want to copy and replace this struct to calculate the next
+//! nodes on the fly instead of storing them in an array.
 //------------------------------------------------------------------------------
 template< uint32_t N = 0 >
 struct AStarNode
 {
-	AStarNode() : pos( 0.0f ) {}
-	AStarNode( const ae::Tag& tag ) : next( tag ), pos( 0.0f ) {}
+	using AStarNodeT = AStarNode< N >;
+	AStarNode() = default;
+	AStarNode( const ae::Tag& tag ) : next( tag ) {}
+	ae::Array< const AStarNodeT*, N > next;
+	ae::Vec3 pos = ae::Vec3( 0.0f );
 
+	//--------------------------------------------------------------------------
 	// ae::AStar type T must implement these following functions:
+	//--------------------------------------------------------------------------
 	//! Returns the next node in the path. \p index is the index of the next
 	//! node in the path. Edges between paths can be uni-directional or
 	//! bi-directional.
-	const ae::AStarNode< N >* GetNext( uint32_t index ) const { return next[ index ]; }
+	const AStarNodeT* GetNext( uint32_t index ) const { return next[ index ]; }
 	//! Returns the number of nodes directly visitable from this node.
 	uint32_t GetNextCount() const { return next.Length(); }
 	//! Returns the heuristic distance between this node and \p other. For
 	//! ae::AStar to return a least cost path, this function must be 'admissible'.
 	//! This means this function should never overestimate the cost of
 	//! traveling between this node and \p other.
-	float GetHeuristic( const ae::AStarNode< N >* other ) const { return ( pos - other->pos ).Length(); }
-
-	ae::Array< const ae::AStarNode< N >*, N > next;
-	ae::Vec3 pos = ae::Vec3( 0.0f );
+	float GetHeuristic( const AStarNodeT* other ) const { return ( pos - other->pos ).Length(); }
 };
 
 //------------------------------------------------------------------------------
 // ae::AStar algorithm
+//------------------------------------------------------------------------------
 //! \brief A generic A* algorithm implementation. Requires a type T which
 //! implements the functions: GetNext(), GetNextCount(), and GetHeuristic().
 //! See ae::AStarNode for exact function signatures. \p startNode is the node
@@ -6640,7 +6726,7 @@ public:
 	template< typename T > bool SetVarData( ae::DataPointer varData, const T& value ) const;
 	
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< BasicType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6730,7 +6816,7 @@ protected:
 public:
 	const ae::EnumType* GetEnumType() const { return this; } // @TODO: Remove
 	template< typename T > void m_AppendValue( const char* name, T value );
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< EnumType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6763,7 +6849,7 @@ public:
 	virtual std::string ToString( ae::ConstDataPointer pointer, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< PointerType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 #if AE_DEPRECATED
 	virtual ae::BasicType::Type GetBasicType() const { return ae::BasicType::Pointer; } // @HACK: Remove
 #endif // AE_DEPRECATED
@@ -6796,7 +6882,7 @@ public:
 	virtual void Clear( ae::DataPointer optional ) const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< OptionalType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6836,7 +6922,7 @@ public:
 	virtual uint32_t IsFixedLength() const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< ArrayType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6877,7 +6963,7 @@ public:
 	virtual uint32_t GetMaxLength() const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< MapType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -7085,7 +7171,7 @@ public:
 	template< typename T > typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type Init( const char* name );
 	template< typename T > typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type Init( const char* name );
 	void m_AddVar( const ae::ClassVar* var );
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< ClassType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 #if AE_DEPRECATED
 	void m_AddProp( const char* prop, const char* value );
 	const ae::ClassType* GetClassType() const { return this; }
@@ -10006,75 +10092,6 @@ inline void Serialize( ae::BinaryWriter* stream, const ae::TypeId* id )
 }
 
 //------------------------------------------------------------------------------
-// ae::GetHash32 inline helpers
-//------------------------------------------------------------------------------
-// Use the non-fixed size integer types for GetHash32. int8_t cannot be passed
-// as char without an explicit cast, where the reverse does not need a cast.
-// long/unsigned long are normalized to int64_t/uint64_t first for
-// platform-independent results (long is 32-bit on Windows, 64-bit on
-// macOS/Linux).
-template<> inline uint32_t GetHash32( const bool& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const signed char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const short& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned short& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const int& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned int& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const long& value ) { const int64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
-template<> inline uint32_t GetHash32( const unsigned long& value ) { const uint64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
-template<> inline uint32_t GetHash32( const long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const unsigned long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const float& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const double& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec2& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec3& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Matrix4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
-template<> inline uint32_t GetHash32( char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
-template< uint32_t N > inline uint32_t GetHash32( const char (&value)[ N ] ) { return ae::Hash32().HashString( value ).Get(); }
-template<> inline uint32_t GetHash32( const std::string& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Hash32& value ) { return value.Get(); }
-template<> inline uint32_t GetHash32( const ae::TypeId& value ) { return (uint32_t)value; }
-template< typename T > inline uint32_t GetHash32( T* const& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
-
-//------------------------------------------------------------------------------
-// ae::GetHash64 inline helpers
-//------------------------------------------------------------------------------
-// Use the non-fixed size integer types for GetHash64. int8_t cannot be passed
-// as char without an explicit cast, where the reverse does not need a cast.
-// long/unsigned long are casted wide to uint64_t. This is always safe
-// regardless of long's native size (32-bit on Windows, 64-bit on macOS/Linux).
-template<> inline uint64_t GetHash64( const bool& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const signed char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const short& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned short& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const int& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned int& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const long long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned long long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const float& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint64_t GetHash64( const double& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec2& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec3& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Matrix4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
-template<> inline uint64_t GetHash64( char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
-template< uint32_t N > inline uint64_t GetHash64( const char (&value)[ N ] ) { return ae::Hash64().HashString( value ).Get(); }
-template<> inline uint64_t GetHash64( const std::string& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Hash64& value ) { return value.Get(); }
-template<> inline uint64_t GetHash64( const ae::TypeId& value ) { return (uint64_t)(uint32_t)value; }
-template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
-
-//------------------------------------------------------------------------------
 // ae::GetHash
 //------------------------------------------------------------------------------
 template< class C >
@@ -10194,6 +10211,75 @@ constexpr U Hash< U >::Get() const
 {
 	return m_hash;
 }
+
+//------------------------------------------------------------------------------
+// ae::GetHash32 inline helpers
+//------------------------------------------------------------------------------
+// Note that this has to be after the ae::Hash member function definitions since
+// some compilers are stricter about the order of constexpr functions. The
+// non-explicitly sized integer types must be used for these GetHash32 and
+// GetHash64 functions, because int8_t cannot be passed as char reference
+// without an explicit cast, where the reverse does not need a cast.
+// long/unsigned long are normalized to int64_t/uint64_t first for
+// platform-independent results (long is 32-bit on Windows, 64-bit on
+// macOS/Linux).
+template<> inline uint32_t GetHash32( const bool& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const signed char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const short& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned short& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const int& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned int& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const long& value ) { const int64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
+template<> inline uint32_t GetHash32( const unsigned long& value ) { const uint64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
+template<> inline uint32_t GetHash32( const long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const unsigned long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const float& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const double& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec2& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec3& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Matrix4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
+template<> inline uint32_t GetHash32( char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
+template< uint32_t N > inline uint32_t GetHash32( const char (&value)[ N ] ) { return ae::Hash32().HashString( value ).Get(); }
+template<> inline uint32_t GetHash32( const std::string& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Hash32& value ) { return value.Get(); }
+template<> inline uint32_t GetHash32( const ae::TypeId& value ) { return (uint32_t)value; }
+template< typename T > inline uint32_t GetHash32( T* const& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+//------------------------------------------------------------------------------
+// ae::GetHash64 inline helpers
+//------------------------------------------------------------------------------
+// See ae::GetHash32 comments above.
+//------------------------------------------------------------------------------
+template<> inline uint64_t GetHash64( const bool& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const signed char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const short& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned short& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const int& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned int& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const long long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned long long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const float& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint64_t GetHash64( const double& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec2& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec3& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Matrix4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
+template<> inline uint64_t GetHash64( char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
+template< uint32_t N > inline uint64_t GetHash64( const char (&value)[ N ] ) { return ae::Hash64().HashString( value ).Get(); }
+template<> inline uint64_t GetHash64( const std::string& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Hash64& value ) { return value.Get(); }
+template<> inline uint64_t GetHash64( const ae::TypeId& value ) { return (uint64_t)(uint32_t)value; }
+template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
 // ae::Optional templated member functions
@@ -16093,18 +16179,19 @@ Matrix4& Matrix4::SetTranslation( const Vec3& translation )
 	return *this;
 }
 
-Matrix4& Matrix4::SetRotation( const Quaternion& q2 )
+Matrix4& Matrix4::SetRotation( const Quaternion& _q )
 {
-	Quaternion q = q2.GetInverse();
-	data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
-	data[4] = 2*q.i*q.j + 2*q.k*q.r;
-	data[8] = 2*q.i*q.k - 2*q.j*q.r;
-	data[1] = 2*q.i*q.j - 2*q.k*q.r;
-	data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
-	data[9] = 2*q.j*q.k + 2*q.i*q.r;
-	data[2] = 2*q.i*q.k + 2*q.j*q.r;
-	data[6] = 2*q.j*q.k - 2*q.i*q.r;
-	data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+	const ae::Vec3 s = GetScale();
+	const ae::Quaternion q = _q.GetInverse();
+	data[ 0 ] = s.x * ( 1 - ( 2 * q.j * q.j + 2 * q.k * q.k ) );
+	data[ 1 ] = s.x * ( 2 * q.i * q.j - 2 * q.k * q.r );
+	data[ 2 ] = s.x * ( 2 * q.i * q.k + 2 * q.j * q.r );
+	data[ 4 ] = s.y * ( 2 * q.i * q.j + 2 * q.k * q.r );
+	data[ 5 ] = s.y * ( 1 - ( 2 * q.i * q.i + 2 * q.k * q.k ) );
+	data[ 6 ] = s.y * ( 2 * q.j * q.k - 2 * q.i * q.r );
+	data[ 8 ] = s.z * ( 2 * q.i * q.k - 2 * q.j * q.r );
+	data[ 9 ] = s.z * ( 2 * q.j * q.k + 2 * q.i * q.r );
+	data[ 10 ] = s.z * ( 1 - ( 2 * q.i * q.i + 2 * q.j * q.j ) );
 	return *this;
 }
 
@@ -16252,11 +16339,34 @@ Quaternion Matrix4::GetRotation() const
 
 Vec3 Matrix4::GetScale() const
 {
-	return Vec3(
+	Vec3 scale(
 		Vec3( &data[ 0 ] ).Length(),
 		Vec3( &data[ 4 ] ).Length(),
 		Vec3( &data[ 8 ] ).Length()
 	);
+	if( Determinant() < 0.0f ) { scale.z = -scale.z; }
+	return scale;
+}
+
+float Matrix4::Determinant() const
+{
+	const float c0 =
+		  data[ 5 ] * ( data[ 10 ] * data[ 15 ] - data[ 11 ] * data[ 14 ] )
+		- data[ 9 ] * ( data[  6 ] * data[ 15 ] - data[  7 ] * data[ 14 ] )
+		+ data[ 13] * ( data[  6 ] * data[ 11 ] - data[  7 ] * data[ 10 ] );
+	const float c1 =
+		- data[ 4 ] * ( data[ 10 ] * data[ 15 ] - data[ 11 ] * data[ 14 ] )
+		+ data[ 8 ] * ( data[  6 ] * data[ 15 ] - data[  7 ] * data[ 14 ] )
+		- data[ 12] * ( data[  6 ] * data[ 11 ] - data[  7 ] * data[ 10 ] );
+	const float c2 =
+		  data[ 4 ] * ( data[  9 ] * data[ 15 ] - data[ 11 ] * data[ 13 ] )
+		- data[ 8 ] * ( data[  5 ] * data[ 15 ] - data[  7 ] * data[ 13 ] )
+		+ data[ 12] * ( data[  5 ] * data[ 11 ] - data[  7 ] * data[  9 ] );
+	const float c3 =
+		- data[ 4 ] * ( data[  9 ] * data[ 14 ] - data[ 10 ] * data[ 13 ] )
+		+ data[ 8 ] * ( data[  5 ] * data[ 14 ] - data[  6 ] * data[ 13 ] )
+		- data[ 12] * ( data[  5 ] * data[ 10 ] - data[  6 ] * data[  9 ] );
+	return data[ 0 ] * c0 + data[ 1 ] * c1 + data[ 2 ] * c2 + data[ 3 ] * c3;
 }
 
 Matrix4 Matrix4::GetTranspose() const
@@ -32983,6 +33093,8 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 	return false;
 }
 
+ae::TypeId ae::BasicType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< BasicType >(); }
+
 //------------------------------------------------------------------------------
 // ae::EnumType member functions
 //------------------------------------------------------------------------------
@@ -33052,6 +33164,8 @@ bool ae::EnumType::SetVarDataFromString( ae::DataPointer _varData, const char* v
 	return false;
 }
 
+ae::TypeId ae::EnumType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< EnumType >(); }
+
 //------------------------------------------------------------------------------
 // ae::PointerType
 //------------------------------------------------------------------------------
@@ -33063,6 +33177,23 @@ ae::DataPointer ae::PointerType::Dereference( ae::ConstDataPointer varData ) con
 	}
 	return {};
 }
+
+ae::TypeId ae::PointerType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< PointerType >(); }
+
+//------------------------------------------------------------------------------
+// ae::OptionalType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::OptionalType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< OptionalType >(); }
+
+//------------------------------------------------------------------------------
+// ae::ArrayType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::ArrayType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< ArrayType >(); }
+
+//------------------------------------------------------------------------------
+// ae::MapType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::MapType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< MapType >(); }
 
 //------------------------------------------------------------------------------
 // ae::ClassType member functions
@@ -33186,6 +33317,8 @@ void ae::ClassType::m_AddVar( const ae::ClassVar* var )
 		return a->GetOffset() < b->GetOffset();
 	} );
 }
+
+ae::TypeId ae::ClassType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< ClassType >(); }
 
 //------------------------------------------------------------------------------
 // ae::AttributeList member functions
