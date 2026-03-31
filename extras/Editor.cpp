@@ -256,6 +256,7 @@ public:
 	EditorServerMesh( const ae::Tag& tag ) : tag( tag ), vertices( tag ), collision( tag ) {}
 	void Initialize( const ae::EditorMesh* mesh );
 	const ae::Tag tag;
+	std::string info;
 	ae::Array< Vertex > vertices;
 	ae::VertexBuffer data;
 	ae::CollisionMesh<> collision;
@@ -359,11 +360,13 @@ public:
 	const ae::Component* GetComponent( const EditorServerObject* obj, const ae::ClassType* type ) const;
 	
 	uint32_t GetObjectCount() const { return m_objects.Length(); }
+	const EditorServerObject* GetObjectFromComponent( const ae::Component* component ); // @TODO: Name this like the others
+	const EditorServerObject* GetObjectAssert( ae::Entity entity ) const; // Returns the component or fatally errors if it doesn't exist
+	const EditorServerObject* GetObjectNull( ae::Entity entity ) const; // Returns the component if entity is not kNullEntity, otherwise fatally errors if it doesn't exist
+	const EditorServerObject* GetObjectSafe( ae::Entity entity ) const; // Returns the component if it exists, otherwise returns nullptr
 	EditorServerObject* GetObjectAssert( ae::Entity entity ) { return AE_CALL_CONST_MEMBER_FUNCTION( GetObjectAssert( entity ) ); }
-	const EditorServerObject* GetObjectAssert( ae::Entity entity ) const;
-	EditorServerObject* TryGetObject( ae::Entity entity ) { return AE_CALL_CONST_MEMBER_FUNCTION( TryGetObject( entity ) ); }
-	const EditorServerObject* TryGetObject( ae::Entity entity ) const;
-	const EditorServerObject* GetObjectFromComponent( const ae::Component* component );
+	EditorServerObject* GetObjectNull( ae::Entity entity ) { return AE_CALL_CONST_MEMBER_FUNCTION( GetObjectNull( entity ) ); }
+	EditorServerObject* GetObjectSafe( ae::Entity entity ) { return AE_CALL_CONST_MEMBER_FUNCTION( GetObjectSafe( entity ) ); }
 	
 	bool GetRenderDisabled( ae::Entity entity ) const;
 	ae::AABB GetSelectedAABB( class EditorProgram* program ) const;
@@ -874,6 +877,8 @@ void EditorProgram::Initialize()
 void EditorProgram::Terminate()
 {
 	AE_INFO( "Terminate" );
+	// Note that unload sends an EditorEventType::LevelUnload here too alongside
+	// the following Terminate event.
 	editor.Unload( this );
 	
 	{
@@ -1074,13 +1079,14 @@ EditorPlugin::EditorPlugin( const ae::Tag& tag ) :
 	m_entityInstances( tag )
 {}
 
-EditorMeshInstance* EditorPlugin::CreateMesh( const EditorMesh& _mesh, ae::Entity selectEntity )
+EditorMeshInstance* EditorPlugin::CreateMesh( const EditorMesh& _mesh, const char* info, ae::Entity selectEntity )
 {
 	if( !_mesh.verts.Length() )
 	{
 		return nullptr;
 	}
 	EditorServerMesh* mesh = ae::New< EditorServerMesh >( m_tag, m_tag );
+	mesh->info = info ? info : "";
 	mesh->Initialize( &_mesh );
 	AE_DEBUG_ASSERT( !m_meshRefs.TryGet( mesh ) );
 	m_meshRefs.Set( mesh, 1 );
@@ -1099,7 +1105,7 @@ EditorMeshInstance* EditorPlugin::CreateMesh( const EditorMesh& _mesh, ae::Entit
 		entityInstances->Append( instance->m_entityInstance );
 	}
 	m_instances.Set( instance, true );
-	//AE_DEBUG( "Create mesh-># entity:# refs:1", instance, selectEntity );
+	AE_DEBUG( "Create mesh-># info:# entity:# refs:1", instance, mesh->info, selectEntity );
 	return instance;
 }
 
@@ -1129,7 +1135,7 @@ EditorMeshInstance* EditorPlugin::CloneMesh( const EditorMeshInstance* _instance
 		entityInstances->Append( instance->m_entityInstance );
 	}
 	m_instances.Set( instance, true );
-	//AE_DEBUG( "Clone mesh-># source:# entity:# refs:#", instance, _instance, selectEntity, refCount );
+	AE_DEBUG( "Clone mesh-># source:# info:# entity:# refs:#", instance, _instance, mesh->info, selectEntity, refCount );
 	return instance;
 }
 
@@ -1157,15 +1163,16 @@ void EditorPlugin::DestroyMesh( EditorMeshInstance* instance )
 
 	EditorServerMesh* mesh = instance->m_mesh;
 	int32_t& refCount = m_meshRefs.Get( mesh );
-	AE_ASSERT( refCount >= 1 );
+	AE_DEBUG_ASSERT_MSG( refCount >= 1, "Mesh has invalid reference count: # info:# entity:#", refCount, mesh->info, entity );
 	refCount--;
+	AE_DEBUG( "Destroy mesh instance:# info:# entity:# refs:#", instance, mesh->info, entity, refCount );
+	ae::Delete( instance );
 	if( refCount == 0 )
 	{
+		AE_DEBUG( "Destroy mesh entity:# info:# refs:#", entity, mesh->info, refCount );
 		m_meshRefs.Remove( mesh );
 		ae::Delete( mesh );
 	}
-	ae::Delete( instance );
-	//AE_DEBUG( "Destroy mesh entity:# refs:#", entity, refCount );
 }
 
 //------------------------------------------------------------------------------
@@ -1988,7 +1995,11 @@ void EditorServer::Render( EditorProgram* program )
 		{
 			if( instance->color.a > 0.01f && instance->m_mesh )
 			{
-				const EditorServerObject* obj = TryGetObject( instance->m_selectEntity ); // m_selectEntity is allowed to be invalid if the mesh isn't used for object selection
+				// m_selectEntity is allowed to be invalid if the mesh isn't
+				// used for object selection. The lifetime of the mesh instance
+				// is controlled by the plugin, so the mesh may outlive the
+				// object it represents.
+				const EditorServerObject* obj = GetObjectSafe( instance->m_selectEntity );
 				if( obj && obj->hidden )
 				{
 					continue;
@@ -2411,7 +2422,11 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 						{
 							continue;
 						}
-						const EditorServerObject* editorObj = TryGetObject( instance->m_selectEntity ); // m_selectEntity is allowed to be invalid if the mesh isn't used for object selection
+						// m_selectEntity is allowed to be invalid if the mesh isn't
+						// used for object selection. The lifetime of the mesh instance
+						// is controlled by the plugin, so the mesh may outlive the
+						// object it represents.
+						const EditorServerObject* editorObj = GetObjectSafe( instance->m_selectEntity );
 						if( editorObj && editorObj->hidden )
 						{
 							continue;
@@ -3444,6 +3459,11 @@ const ae::Component* EditorServer::GetComponent( const EditorServerObject* obj, 
 	return obj ? m_registry.TryGetComponent( obj->GetEntity(), type ) : nullptr;
 }
 
+const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Component* component )
+{
+	return component ? GetObjectAssert( component->GetEntity() ) : nullptr;
+}
+
 const EditorServerObject* EditorServer::GetObjectAssert( ae::Entity entity ) const
 {
 	AE_ASSERT_MSG( entity != ae::kNullEntity, "Invalid entity" );
@@ -3452,7 +3472,7 @@ const EditorServerObject* EditorServer::GetObjectAssert( ae::Entity entity ) con
 	return obj;
 }
 
-const EditorServerObject* EditorServer::TryGetObject( ae::Entity entity ) const
+const EditorServerObject* EditorServer::GetObjectNull( ae::Entity entity ) const
 {
 	if( entity == ae::kNullEntity )
 	{
@@ -3461,9 +3481,13 @@ const EditorServerObject* EditorServer::TryGetObject( ae::Entity entity ) const
 	return GetObjectAssert( entity );
 }
 
-const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Component* component )
+const EditorServerObject* EditorServer::GetObjectSafe( ae::Entity entity ) const
 {
-	return component ? GetObjectAssert( component->GetEntity() ) : nullptr;
+	if( entity == ae::kNullEntity )
+	{
+		return nullptr;
+	}
+	return m_objects.Get( entity, nullptr );
 }
 
 bool EditorServer::GetRenderDisabled( ae::Entity entity ) const
@@ -3723,12 +3747,6 @@ void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
 
 void EditorServer::Unload( EditorProgram* program )
 {
-	// @HACK: Currently two LevelUnload's are sent
-	EditorEvent event;
-	event.type = EditorEventType::LevelUnload;
-	event.path = m_levelPath.c_str();
-	SendPluginEvent( program->plugins, event );
-
 	m_lastEntity = kNullEntity;
 	m_objectListType = nullptr;
 	m_ClearSelection();
@@ -3747,15 +3765,26 @@ void EditorServer::Unload( EditorProgram* program )
 
 	m_registry.Clear();
 
-	// @TODO: Enable cleanup validation
+	// @HACK: Currently two LevelUnload's are sent
+	EditorEvent event;
+	event.type = EditorEventType::LevelUnload;
+	event.path = m_levelPath.c_str();
+	SendPluginEvent( program->plugins, event );
+	bool pluginUnloadError = false;
 	for( auto& [ config, plugin ] : program->plugins )
 	{
-		for( auto& [ instance, _ ] : plugin->m_instances )
+		if( plugin->m_instances.Length() )
 		{
-			// AE_ASSERT_MSG( !instance->m_selectEntity, "Plugin '#' has entity references on level unload", config.name );
+			AE_ERROR( "Plugin '#' has # unfreed mesh instances on level unload", config.name, plugin->m_instances.Length() );
+			pluginUnloadError = true;
 		}
-		AE_ASSERT_MSG( !plugin->m_entityInstances.Length(), "Plugin '#' still has entity instances on level unload", config.name );
+		if( plugin->m_entityInstances.Length() )
+		{
+			AE_ERROR( "Plugin '#' has # entity references remaining on level unload", config.name, plugin->m_entityInstances.Length() );
+			pluginUnloadError = true;
+		}
 	}
+	AE_DEBUG_ASSERT_MSG( !pluginUnloadError, "Plugin unload errors detected. See log for details." );
 }
 
 void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::ClassType*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const
@@ -3997,7 +4026,7 @@ void EditorServer::m_ParentSelected( EditorProgram* program )
 			{
 				return true;
 			}
-			current = current->GetParentEntity() ? TryGetObject( current->GetParentEntity() ) : nullptr;
+			current = current->GetParentEntity() ? GetObjectAssert( current->GetParentEntity() ) : nullptr;
 		}
 		return false;
 	};
@@ -4219,7 +4248,7 @@ ae::Array< ae::Entity > EditorServer::m_GetTreeFromEntities( const ae::Entity* e
 	};
 	for( uint32_t i = 0; i < count; i++ )
 	{
-		const EditorServerObject* editorObj = TryGetObject( entities[ i ] );
+		const EditorServerObject* editorObj = GetObjectAssert( entities[ i ] );
 		if( editorObj )
 		{
 			collectChildren( collectChildren, editorObj );
@@ -4478,7 +4507,11 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 			{
 				continue;
 			}
-			const EditorServerObject* editorObj = TryGetObject( instance->m_selectEntity ); // m_selectEntity is allowed to be invalid if the mesh isn't used for object selection
+			// m_selectEntity is allowed to be invalid if the mesh isn't used
+			// for object selection. The lifetime of the mesh instance is
+			// controlled by the plugin, so the mesh may outlive the object it
+			// represents.
+			const EditorServerObject* editorObj = GetObjectSafe( instance->m_selectEntity );
 			if( editorObj && editorObj->hidden )
 			{
 				continue;
@@ -4543,7 +4576,7 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) co
 			{
 				return true;
 			}
-			const EditorServerObject* currentObj = TryGetObject( current );
+			const EditorServerObject* currentObj = GetObjectAssert( current );
 			current = currentObj ? currentObj->GetParentEntity() : ae::kNullEntity;
 		}
 		return false;

@@ -63,7 +63,7 @@ private:
 	friend class EditorServer;
 	friend class EditorServerObject;
 	class EditorServerMesh* m_mesh = nullptr;
-	ae::Entity m_selectEntity = kNullEntity;
+	ae::Entity m_selectEntity = kNullEntity; // Null is valid. The entity that this references will be selected when this mesh instance is picked.
 	ae::ListNode< EditorMeshInstance > m_entityInstance = this;
 };
 
@@ -169,7 +169,7 @@ public:
 	virtual EditorPluginConfig GetConfig() = 0;
 	virtual void OnEvent( const ae::EditorEvent& event ) = 0; // @TODO: Should this return an enum code?
 
-	EditorMeshInstance* CreateMesh( const EditorMesh& mesh, ae::Entity selectEntity = kNullEntity );
+	EditorMeshInstance* CreateMesh( const EditorMesh& mesh, const char* info = "", ae::Entity selectEntity = kNullEntity );
 	EditorMeshInstance* CloneMesh( const EditorMeshInstance* mesh, ae::Entity selectEntity = kNullEntity );
 	void DestroyMesh( EditorMeshInstance* mesh );
 
