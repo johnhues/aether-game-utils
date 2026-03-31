@@ -276,8 +276,8 @@ public:
 	bool SetTransform( const ae::Matrix4& transform, class EditorProgram* program );
 	ae::Matrix4 GetTransform() const;
 
-	ae::Entity GetParentEntity() const { return m_parent; }
-	void SetParent( EditorServer* server_REMOVE,EditorServerObject* parent );
+	ae::Entity GetParentEntity() const { return m_object->ObjectTryGet( DOCUMENT_ENTITY_PARENT_MEMBER )->NumberGet< ae::Entity >(); }
+	void SetParent( EditorServer* server, EditorServerObject* parent );
 	
 	void HandleVarChange( class EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var );
 
@@ -298,11 +298,7 @@ public:
 	bool hidden = false;
 	bool renderDisabled = false;
 	
-	ae::List< EditorServerObject > children;
-	ae::ListNode< EditorServerObject > childNode = this;
-	
 private:
-	ae::Entity m_parent = ae::kNullEntity;
 	ae::DocumentValue* m_object = nullptr;
 };
 
@@ -1488,12 +1484,17 @@ bool EditorServerObject::SetTransform( const ae::Matrix4& _transform, EditorProg
 		m_object->GetDocument().AddUndoGroupAction( "Transform", fn, fn );
 		fn();
 
-		EditorServerObject* child = children.GetFirst();
 		const ae::Matrix4 relative = _transform * oldTransform.GetInverse();
-		while( child )
+		const ae::DocumentValue* childrenValue = m_object->ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
+		const uint32_t childCount = childrenValue ? childrenValue->ArrayLength() : 0;
+		for( uint32_t i = 0; i < childCount; i++ )
 		{
-			child->SetTransform( relative * child->GetTransform(), program );
-			child = child->childNode.GetNext();
+			const ae::Entity childEntity = childrenValue->ArrayGet( i ).NumberGet< ae::Entity >();
+			EditorServerObject* child = program->editor.GetObjectSafe( childEntity );
+			if( child )
+			{
+				child->SetTransform( relative * child->GetTransform(), program );
+			}
 		}
 		return true;
 	}
@@ -1510,8 +1511,6 @@ void EditorServerObject::SetParent( EditorServer* server, EditorServerObject* pa
 	const ae::Entity oldParent = GetParentEntity();
 	if( oldParent && ( !parent || oldParent != parent->GetEntity() ) )
 	{
-		this->childNode.Remove(); // @TODO: Remove
-		m_parent = ae::kNullEntity; // @TODO: Remove
 		// Clear reference to parent
 		GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_PARENT_MEMBER )->NumberSet( ae::kNullEntity );
 		// Remove this as child
@@ -1529,8 +1528,6 @@ void EditorServerObject::SetParent( EditorServer* server, EditorServerObject* pa
 
 	if( parent )
 	{
-		m_parent = parent->GetEntity(); // @TODO: Remove
-		parent->children.Append( this->childNode ); // @TODO: Remove
 		GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_PARENT_MEMBER )->NumberSet( parent->GetEntity() );
 		parent->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER )->ArrayAppend().NumberSet( GetEntity() );
 	}
@@ -2840,7 +2837,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 						m_lastCommandIdx = currentIdx;
 						if( !command.continuous )
 						{
-							AE_INFO( command.name.c_str() );
+							AE_INFO( "Command: #", command.name.c_str() );
 						}
 						command.fn( program );
 						break; // Only execute the first matching command
@@ -3150,32 +3147,35 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				{
 					auto hasDescendantWithType = [ & ]( auto& hasDescendantWithType, const EditorServerObject* obj ) -> bool
 					{
-						const EditorServerObject* childObj = obj->children.GetFirst();
-						while( childObj )
+						const ae::DocumentValue* childrenValue = obj->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
+						const uint32_t childCount = childrenValue ? childrenValue->ArrayLength() : 0;
+						for( uint32_t i = 0; i < childCount; i++ )
 						{
-							if( childObj->GetComponentByType( m_objectListType ) || hasDescendantWithType( hasDescendantWithType, childObj ) )
+							const EditorServerObject* childObj = m_objects.Get( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >(), nullptr );
+							if( childObj && ( childObj->GetComponentByType( m_objectListType ) || hasDescendantWithType( hasDescendantWithType, childObj ) ) )
 							{
 								return true;
 							}
-							childObj = childObj->childNode.GetNext();
 						}
 						return false;
 					};
 					auto hasSelectedDescendant = [ & ]( auto& hasSelectedDescendant, const EditorServerObject* obj ) -> bool
 					{
-						const EditorServerObject* childObj = obj->children.GetFirst();
-						while( childObj )
+						const ae::DocumentValue* childrenValue = obj->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
+						const uint32_t childCount = childrenValue ? childrenValue->ArrayLength() : 0;
+						for( uint32_t i = 0; i < childCount; i++ )
 						{
-							if( m_FindInSelection( childObj->GetEntity() ) >= 0 || hasSelectedDescendant( hasSelectedDescendant, childObj ) )
+							const EditorServerObject* childObj = m_objects.Get( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >(), nullptr );
+							if( childObj && ( m_FindInSelection( childObj->GetEntity() ) >= 0 || hasSelectedDescendant( hasSelectedDescendant, childObj ) ) )
 							{
 								return true;
 							}
-							childObj = childObj->childNode.GetNext();
 						}
 						return false;
 					};
 
-					const bool hasChildren = editorObj->children.Length();
+					const ae::DocumentValue* childrenValue = editorObj->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
+					const bool hasChildren = childrenValue && childrenValue->ArrayLength();
 					if( m_objectListType && !editorObj->GetComponentByType( m_objectListType ) && !hasDescendantWithType( hasDescendantWithType, editorObj ) )
 					{
 						return;
@@ -3257,11 +3257,9 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 						if( ImGui::MenuItem( selectChildrenLabel.c_str() ) )
 						{
 							ae::Array< ae::Entity > toSelect = m_tag;
-							const EditorServerObject* childObj = editorObj->children.GetFirst();
-							while( childObj )
+							for( uint32_t i = 0; i < childrenValue->ArrayLength(); i++ )
 							{
-								toSelect.Append( childObj->GetEntity() );
-								childObj = childObj->childNode.GetNext();
+								toSelect.Append( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >() );
 							}
 							m_SelectWithModifier( selectionModifier, toSelect.Data(), toSelect.Length() );
 							m_doc.EndUndoGroup();
@@ -3280,11 +3278,13 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 					
 					if( isExpanded )
 					{
-						const EditorServerObject* childObj = editorObj->children.GetFirst();
-						while( childObj )
+						for( uint32_t i = 0; i < childrenValue->ArrayLength(); i++ )
 						{
-							showObj( showObj, childObj );
-							childObj = childObj->childNode.GetNext();
+							const EditorServerObject* childObj = m_objects.Get( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >(), nullptr );
+							if( childObj )
+							{
+								showObj( showObj, childObj );
+							}
 						}
 						ImGui::TreePop();
 					}
@@ -4076,7 +4076,7 @@ void EditorServer::m_ParentSelected( EditorProgram* program )
 			continue;
 		}
 		childObject->SetParent( this, parentObject );
-		AE_INFO( "Set '#' as the parent of '#'", parentObject->GetEntity(), childObject->GetEntity() );
+		AE_DEBUG( "Set '#' as the parent of '#'", parentObject->GetEntity(), childObject->GetEntity() );
 	}
 }
 
@@ -4093,7 +4093,7 @@ void EditorServer::m_UnparentSelected( EditorProgram* program )
 		if( childObject->GetParentEntity() )
 		{
 			childObject->SetParent( this, nullptr );
-			AE_INFO( "Unparented #", childObject->GetEntity() );
+			AE_DEBUG( "Unparented #", childObject->GetEntity() );
 		}
 	}
 }
@@ -4271,11 +4271,15 @@ ae::Array< ae::Entity > EditorServer::m_GetTreeFromEntities( const ae::Entity* e
 		}
 		visited.Set( entity, true );
 		result.Append( entity );
-		const EditorServerObject* childObj = obj->children.GetFirst();
-		while( childObj )
+		const ae::DocumentValue* childrenValue = obj->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
+		const uint32_t childCount = childrenValue ? childrenValue->ArrayLength() : 0;
+		for( uint32_t i = 0; i < childCount; i++ )
 		{
-			collectChildren( collectChildren, childObj );
-			childObj = childObj->childNode.GetNext();
+			const EditorServerObject* childObj = m_objects.Get( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >(), nullptr );
+			if( childObj )
+			{
+				collectChildren( collectChildren, childObj );
+			}
 		}
 	};
 	for( uint32_t i = 0; i < count; i++ )
