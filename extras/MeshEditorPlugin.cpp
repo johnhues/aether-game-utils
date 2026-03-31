@@ -180,6 +180,7 @@ void MeshEditorPlugin::m_DestroyInstance( const ae::Component* component )
 		AE_DEBUG( "Destroy mesh instance-># entity:# component:#", instance, component->GetEntity(), component );
 		DestroyMesh( instance );
 		m_components.Remove( component );
+		AE_DEBUG( "Remove component reference entity:# remaining:#", component->GetEntity(), m_components.Length() );
 	}
 }
 void MeshEditorPlugin::m_Unload()

@@ -876,11 +876,11 @@ void EditorProgram::Initialize()
 
 void EditorProgram::Terminate()
 {
-	AE_INFO( "Terminate" );
-	// Note that unload sends an EditorEventType::LevelUnload here too alongside
-	// the following Terminate event.
+	// Note that Unload() sends an EditorEventType::LevelUnload here too
+	// alongside the following Terminate event.
 	editor.Unload( this );
 	
+	AE_INFO( "Terminate" );
 	{
 		EditorEvent event;
 		event.type = EditorEventType::Terminate;
@@ -3343,11 +3343,42 @@ void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity, boo
 {
 	if( entity && m_objects.TryGet( entity ) )
 	{
+		// Collect and destroy descendants first (before any document removal)
+		const ae::DocumentValue* docObject = m_docObjects->ObjectTryGet( ae::ToString( entity ).c_str() );
+		if( docObject )
+		{
+			const ae::DocumentValue* childrenValue = docObject->ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
+			if( childrenValue )
+			{
+				ae::Array< ae::Entity > childEntities = m_tag;
+				for( uint32_t i = 0; i < childrenValue->ArrayLength(); i++ )
+				{
+					childEntities.Append( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >() );
+				}
+				for( const ae::Entity child : childEntities )
+				{
+					DestroyObject( program, child, undo );
+				}
+			}
+		}
+		// Send ComponentDestroy events while editorObject and docObject are still valid
+		EditorServerObject* editorObject = GetObjectSafe( entity );
+		if( editorObject )
+		{
+			const uint32_t typeCount = m_registry.GetTypeCount();
+			for( uint32_t i = 0; i < typeCount; i++ )
+			{
+				ae::Component* component = m_registry.TryGetComponent( entity, m_registry.GetTypeByIndex( i ) );
+				if( component )
+				{
+					RemoveComponent( program, editorObject, component );
+				}
+			}
+		}
 		const ae::DocumentCallback action = [ this, entity ]()
 		{
-			// @TODO: m_RemoveFromSelection( entity )?
-			// @TODO: Delete components
-			// @TODO: Delete descendants
+			m_RemoveFromSelection( entity );
+			m_registry.Destroy( entity );
 			EditorServerObject* editorObject = nullptr;
 			if( m_objects.Remove( entity, &editorObject ) )
 			{
@@ -3357,7 +3388,6 @@ void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity, boo
 		if( undo )
 		{
 			m_RemoveFromSelection( entity );
-			const ae::DocumentValue* docObject = m_docObjects->ObjectTryGet( ae::ToString( entity ).c_str() );
 			AE_ASSERT( docObject );
 			m_doc.AddUndoGroupAction(
 				"Destroy Object",
@@ -3747,6 +3777,8 @@ void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
 
 void EditorServer::Unload( EditorProgram* program )
 {
+	AE_INFO( "Unload" );
+
 	m_lastEntity = kNullEntity;
 	m_objectListType = nullptr;
 	m_ClearSelection();
