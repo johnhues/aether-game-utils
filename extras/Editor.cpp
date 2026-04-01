@@ -278,6 +278,9 @@ public:
 
 	ae::Entity GetParentEntity() const { return m_object->ObjectTryGet( DOCUMENT_ENTITY_PARENT_MEMBER )->NumberGet< ae::Entity >(); }
 	void SetParent( EditorServer* server, EditorServerObject* parent );
+
+	uint32_t GetChildCount() const;
+	ae::Entity GetChildEntity( uint32_t index ) const;
 	
 	void HandleVarChange( class EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var );
 
@@ -1485,11 +1488,10 @@ bool EditorServerObject::SetTransform( const ae::Matrix4& _transform, EditorProg
 		fn();
 
 		const ae::Matrix4 relative = _transform * oldTransform.GetInverse();
-		const ae::DocumentValue* childrenValue = m_object->ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
-		const uint32_t childCount = childrenValue ? childrenValue->ArrayLength() : 0;
+		const uint32_t childCount = GetChildCount();
 		for( uint32_t i = 0; i < childCount; i++ )
 		{
-			const ae::Entity childEntity = childrenValue->ArrayGet( i ).NumberGet< ae::Entity >();
+			const ae::Entity childEntity = GetChildEntity( i );
 			EditorServerObject* child = program->editor.GetObjectSafe( childEntity );
 			if( child )
 			{
@@ -1531,6 +1533,17 @@ void EditorServerObject::SetParent( EditorServer* server, EditorServerObject* pa
 		GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_PARENT_MEMBER )->NumberSet( parent->GetEntity() );
 		parent->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER )->ArrayAppend().NumberSet( GetEntity() );
 	}
+}
+
+uint32_t EditorServerObject::GetChildCount() const
+{
+	const ae::DocumentValue* childrenValue = m_object->ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
+	return childrenValue ? childrenValue->ArrayLength() : 0;
+}
+
+ae::Entity EditorServerObject::GetChildEntity( uint32_t index ) const
+{
+	return m_object->ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER )->ArrayGet( index ).NumberGet< ae::Entity >();
 }
 
 void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var )
@@ -2333,10 +2346,11 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				const ae::Object* lastMatch = nullptr;
 				
 				const ae::ClassType* refType = m_selectRef.componentVar->GetSubType();
-				const uint32_t componentTypeCount = m_registry.GetTypeCount();
+				const uint32_t componentTypeCount = ae::GetClassTypeCount();
 				for( uint32_t i = 0; i < componentTypeCount; i++ )
 				{
-					const ae::ClassType* hoverType = m_registry.GetTypeByIndex( i );
+					const ae::ClassType* hoverType = ae::GetClassTypeByIndex( i );
+					if( !hoverType->attributes.Has< ae::EditorTypeAttribute >() ) { continue; }
 					if( hoverType->IsType( refType ) )
 					{
 						if( const ae::Component* hoverComponent = m_registry.TryGetComponent( hoverEntity, hoverType ) )
@@ -2945,7 +2959,8 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 			if( m_docSelection->ArrayLength() == 1 )
 			{
 				ae::Entity firstEntity = m_docSelection->ArrayGet( 0 ).NumberGet< ae::Entity >();
-				const char* name = m_registry.GetNameByEntity( firstEntity );
+				const EditorServerObject* const firstObj = GetObjectSafe( firstEntity );
+			const char* name = firstObj ? firstObj->GetName() : "";
 				if( name[ 0 ] )
 				{
 					return ae::Str64::Format( "[1] Entity # '#' Properties", firstEntity, name );
@@ -3147,11 +3162,10 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				{
 					auto hasDescendantWithType = [ & ]( auto& hasDescendantWithType, const EditorServerObject* obj ) -> bool
 					{
-						const ae::DocumentValue* childrenValue = obj->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
-						const uint32_t childCount = childrenValue ? childrenValue->ArrayLength() : 0;
+						const uint32_t childCount = obj->GetChildCount();
 						for( uint32_t i = 0; i < childCount; i++ )
 						{
-							const EditorServerObject* childObj = m_objects.Get( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >(), nullptr );
+							const EditorServerObject* childObj = GetObjectAssert( obj->GetChildEntity( i ) );
 							if( childObj && ( childObj->GetComponentByType( m_objectListType ) || hasDescendantWithType( hasDescendantWithType, childObj ) ) )
 							{
 								return true;
@@ -3161,11 +3175,10 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 					};
 					auto hasSelectedDescendant = [ & ]( auto& hasSelectedDescendant, const EditorServerObject* obj ) -> bool
 					{
-						const ae::DocumentValue* childrenValue = obj->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
-						const uint32_t childCount = childrenValue ? childrenValue->ArrayLength() : 0;
+						const uint32_t childCount = obj->GetChildCount();
 						for( uint32_t i = 0; i < childCount; i++ )
 						{
-							const EditorServerObject* childObj = m_objects.Get( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >(), nullptr );
+							const EditorServerObject* childObj = GetObjectAssert( obj->GetChildEntity( i ) );
 							if( childObj && ( m_FindInSelection( childObj->GetEntity() ) >= 0 || hasSelectedDescendant( hasSelectedDescendant, childObj ) ) )
 							{
 								return true;
@@ -3174,8 +3187,6 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 						return false;
 					};
 
-					const ae::DocumentValue* childrenValue = editorObj->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
-					const bool hasChildren = childrenValue && childrenValue->ArrayLength();
 					if( m_objectListType && !editorObj->GetComponentByType( m_objectListType ) && !hasDescendantWithType( hasDescendantWithType, editorObj ) )
 					{
 						return;
@@ -3224,6 +3235,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 					{
 						name += "*";
 					}
+					const bool hasChildren = editorObj->GetChildCount() > 0;
 					const ImGuiTreeNodeFlags flags = ( hasChildren ? 0 : ImGuiTreeNodeFlags_Leaf ) | ( isSelected ? ImGuiTreeNodeFlags_Selected : 0 ) | ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_OpenOnArrow;
 					name += "###";
 					name += ae::ToString( editorObj->GetEntity() ).c_str();
@@ -3257,9 +3269,10 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 						if( ImGui::MenuItem( selectChildrenLabel.c_str() ) )
 						{
 							ae::Array< ae::Entity > toSelect = m_tag;
-							for( uint32_t i = 0; i < childrenValue->ArrayLength(); i++ )
+							const uint32_t childCount = editorObj->GetChildCount();
+							for( uint32_t i = 0; i < childCount; i++ )
 							{
-								toSelect.Append( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >() );
+								toSelect.Append( editorObj->GetChildEntity( i ) );
 							}
 							m_SelectWithModifier( selectionModifier, toSelect.Data(), toSelect.Length() );
 							m_doc.EndUndoGroup();
@@ -3278,13 +3291,12 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 					
 					if( isExpanded )
 					{
-						for( uint32_t i = 0; i < childrenValue->ArrayLength(); i++ )
+						const uint32_t childCount = editorObj->GetChildCount();
+						for( uint32_t i = 0; i < childCount; i++ )
 						{
-							const EditorServerObject* childObj = m_objects.Get( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >(), nullptr );
-							if( childObj )
-							{
-								showObj( showObj, childObj );
-							}
+							const ae::Entity childEntity = editorObj->GetChildEntity( i );
+							const EditorServerObject* childObj = GetObjectAssert( childEntity );
+							showObj( showObj, childObj );
 						}
 						ImGui::TreePop();
 					}
@@ -3294,8 +3306,9 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				for( uint32_t i = 0; i < docObjectCount; i++ )
 				{
 					const ae::DocumentValue& docObject = m_docObjects->ObjectGetValue( i );
-					const EditorServerObject* editorObj = m_objects.Get( docObject.ObjectTryGet( "id" )->NumberGet< ae::Entity >() );
-					if( editorObj && !editorObj->GetParentEntity() )
+					const ae::Entity entity = docObject.ObjectTryGet( "id" )->NumberGet< ae::Entity >();
+					const EditorServerObject* editorObj = GetObjectAssert( entity );
+					if( !editorObj->GetParentEntity() )
 					{
 						showObj( showObj, editorObj );
 					}
@@ -3336,7 +3349,7 @@ EditorServerObject* EditorServer::CreateObject( EditorProgram* program, Entity e
 		docObject->GetDocument().AddUndoGroupAction( "Create Object", [ this, program, entity ]() { DestroyObject( program, entity, false ); }, action );
 	}
 	action();
-	return m_objects.Get( entity );
+	return GetObjectAssert( entity );
 }
 
 void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity, bool undo )
@@ -3344,31 +3357,31 @@ void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity, boo
 	if( entity && m_objects.TryGet( entity ) )
 	{
 		// Collect and destroy descendants first (before any document removal)
-		const ae::DocumentValue* docObject = m_docObjects->ObjectTryGet( ae::ToString( entity ).c_str() );
-		if( docObject )
-		{
-			const ae::DocumentValue* childrenValue = docObject->ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
-			if( childrenValue )
-			{
-				ae::Array< ae::Entity > childEntities = m_tag;
-				for( uint32_t i = 0; i < childrenValue->ArrayLength(); i++ )
-				{
-					childEntities.Append( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >() );
-				}
-				for( const ae::Entity child : childEntities )
-				{
-					DestroyObject( program, child, undo );
-				}
-			}
-		}
-		// Send ComponentDestroy events while editorObject and docObject are still valid
+		// Collect and destroy descendants first (before any document removal)
 		EditorServerObject* editorObject = GetObjectSafe( entity );
 		if( editorObject )
 		{
-			const uint32_t typeCount = m_registry.GetTypeCount();
+			ae::Array< ae::Entity > childEntities = m_tag;
+			const uint32_t childCount = editorObject->GetChildCount();
+			for( uint32_t i = 0; i < childCount; i++ )
+			{
+				childEntities.Append( editorObject->GetChildEntity( i ) );
+			}
+			for( const ae::Entity child : childEntities )
+			{
+				DestroyObject( program, child, undo );
+			}
+		}
+		const ae::DocumentValue* docObject = m_docObjects->ObjectTryGet( ae::ToString( entity ).c_str() );
+		// Send ComponentDestroy events while editorObject is still valid
+		if( editorObject )
+		{
+			const uint32_t typeCount = ae::GetClassTypeCount();
 			for( uint32_t i = 0; i < typeCount; i++ )
 			{
-				ae::Component* component = m_registry.TryGetComponent( entity, m_registry.GetTypeByIndex( i ) );
+				const ae::ClassType* type = ae::GetClassTypeByIndex( i );
+				if( !type->attributes.Has< ae::EditorTypeAttribute >() ) { continue; }
+				ae::Component* component = m_registry.TryGetComponent( entity, type );
 				if( component )
 				{
 					RemoveComponent( program, editorObject, component );
@@ -3497,7 +3510,7 @@ const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Compon
 const EditorServerObject* EditorServer::GetObjectAssert( ae::Entity entity ) const
 {
 	AE_ASSERT_MSG( entity != ae::kNullEntity, "Invalid entity" );
-	const ae::EditorServerObject* obj = m_objects.Get( entity, nullptr );
+	const ae::EditorServerObject* obj = GetObjectSafe( entity );
 	AE_ASSERT_MSG( obj, "Could not find object #", entity );
 	return obj;
 }
@@ -3565,10 +3578,11 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 	event.transform = editorObject->GetTransform();
 	SendPluginEvent( program->plugins, event );
 
-	const uint32_t typeCounts = m_registry.GetTypeCount();
+	const uint32_t typeCounts = ae::GetClassTypeCount();
 	for( uint32_t i = 0; i < typeCounts; i++ )
 	{
-		const ae::ClassType* componentType = m_registry.GetTypeByIndex( i );
+		const ae::ClassType* componentType = ae::GetClassTypeByIndex( i );
+		if( !componentType->attributes.Has< ae::EditorTypeAttribute >() ) { continue; }
 		if( ae::Component* component = m_registry.TryGetComponent( entity, componentType ) )
 		{
 			for( const auto& specialVar : kSpecialMemberVars )
@@ -3848,10 +3862,11 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 
 	// Components
 	rapidjson::Value jsonComponents( rapidjson::kObjectType );
-	const uint32_t componentTypeCount = m_registry.GetTypeCount();
+	const uint32_t componentTypeCount = ae::GetClassTypeCount();
 	for( uint32_t i = 0; i < componentTypeCount; i++ )
 	{
-		const ae::ClassType* type = m_registry.GetTypeByIndex( i );
+		const ae::ClassType* type = ae::GetClassTypeByIndex( i );
+		if( !type->attributes.Has< ae::EditorTypeAttribute >() ) { continue; }
 		if( const ae::Component* component = m_registry.TryGetComponent( entity, type ) )
 		{
 			const ae::Component* defaultComponent = defaults ? defaults->Get( type, nullptr ) : nullptr;
@@ -4271,11 +4286,10 @@ ae::Array< ae::Entity > EditorServer::m_GetTreeFromEntities( const ae::Entity* e
 		}
 		visited.Set( entity, true );
 		result.Append( entity );
-		const ae::DocumentValue* childrenValue = obj->GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER );
-		const uint32_t childCount = childrenValue ? childrenValue->ArrayLength() : 0;
+		const uint32_t childCount = obj->GetChildCount();
 		for( uint32_t i = 0; i < childCount; i++ )
 		{
-			const EditorServerObject* childObj = m_objects.Get( childrenValue->ArrayGet( i ).NumberGet< ae::Entity >(), nullptr );
+			const EditorServerObject* childObj = GetObjectAssert( obj->GetChildEntity( i ) );
 			if( childObj )
 			{
 				collectChildren( collectChildren, childObj );
