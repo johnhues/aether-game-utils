@@ -22,9 +22,9 @@ namespace ae {
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-std::pair< std::string, float > GetMeshResource( const ae::Object* object )
+std::pair< std::string, float > GetMeshResource( const ae::EditorComponent& comp, const ae::DocumentValue* componentDoc )
 {
-	const ae::ClassType* currentType = ae::GetClassTypeFromObject( object );
+	const ae::ClassType* currentType = ae::GetClassTypeByName( comp.typeName );
 	while( currentType )
 	{
 		if( const MeshAttrib* classAttribute = currentType->attributes.TryGet< MeshAttrib >() )
@@ -37,12 +37,12 @@ std::pair< std::string, float > GetMeshResource( const ae::Object* object )
 			const ae::ClassVar* var = currentType->GetVarByIndex( i, false );
 			const MeshAttrib* varAttribute = var->attributes.TryGet< MeshAttrib >();
 			const ae::BasicType* basicType = var->GetOuterVarType().AsVarType< ae::BasicType >();
-			if( varAttribute && basicType )
+			if( varAttribute && basicType && componentDoc )
 			{
 				if( basicType->GetType() == ae::BasicType::String )
 				{
-					const ae::ConstDataPointer varPointer( var, object );
-					return { basicType->GetVarDataAsString( varPointer ).c_str(), varAttribute->transparent ? 0.7f : 1.0f };
+					const ae::DocumentValue* varDoc = componentDoc->ObjectTryGet( var->GetName() );
+					return { varDoc ? varDoc->StringGet() : "", varAttribute->transparent ? 0.7f : 1.0f };
 				}
 				else
 				{
@@ -109,12 +109,14 @@ void MeshEditorPlugin::OnEvent( const ae::EditorEvent& event )
 		case ae::EditorEventType::ComponentCreate:
 		case ae::EditorEventType::ComponentEdit:
 		{
-			m_UpdateInstance( event.component, event.transform );
+			AE_ASSERT( event.component );
+			m_UpdateInstance( *event.component, event.componentDoc, event.transform );
 			break;
 		}
 		case ae::EditorEventType::ComponentDestroy:
 		{
-			m_DestroyInstance( event.component );
+			AE_ASSERT( event.component );
+			m_DestroyInstance( *event.component );
 			break;
 		}
 		case ae::EditorEventType::LevelUnload:
@@ -129,10 +131,10 @@ void MeshEditorPlugin::OnEvent( const ae::EditorEvent& event )
 	}
 }
 
-void MeshEditorPlugin::m_UpdateInstance( const ae::Component* component, const ae::Matrix4& transform )
+void MeshEditorPlugin::m_UpdateInstance( const ae::EditorComponent& comp, const ae::DocumentValue* componentDoc, const ae::Matrix4& transform )
 {
-	const auto[ resourceId, opacity ] = GetMeshResource( component );
-	ae::EditorMeshInstance* oldInstance = m_components.Get( component, nullptr );
+	const auto[ resourceId, opacity ] = GetMeshResource( comp, componentDoc );
+	ae::EditorMeshInstance* oldInstance = m_components.Get( &comp, nullptr );
 	ae::EditorMeshInstance* newInstance = nullptr;
 	if( !resourceId.empty() )
 	{
@@ -148,7 +150,7 @@ void MeshEditorPlugin::m_UpdateInstance( const ae::Component* component, const a
 				m_resources.Set( resourceId, resource );
 			}
 		}
-		newInstance = CloneMesh( resource, component->GetEntity() );
+		newInstance = CloneMesh( resource, comp.entity );
 		AE_ASSERT( !oldInstance || oldInstance != newInstance );
 		if( newInstance )
 		{
@@ -159,13 +161,13 @@ void MeshEditorPlugin::m_UpdateInstance( const ae::Component* component, const a
 
 	if( newInstance )
 	{
-		m_components.Set( component, newInstance );
-		AE_DEBUG( "Set component reference-># entity:# component:# resource:#", newInstance, component->GetEntity(), component, resourceId );
+		m_components.Set( &comp, newInstance );
+		AE_DEBUG( "Set component reference-># entity:# type:# resource:#", newInstance, comp.entity, comp.typeName, resourceId );
 	}
 	else if( oldInstance )
 	{
-		m_components.Remove( component );
-		AE_DEBUG( "Clear component reference-># entity:# component:# resource:#", oldInstance, component->GetEntity(), component, resourceId );
+		m_components.Remove( &comp );
+		AE_DEBUG( "Clear component reference-># entity:# type:# resource:#", oldInstance, comp.entity, comp.typeName, resourceId );
 	}
 
 	// Always free the old instance. A new instance is always created if the
@@ -173,14 +175,14 @@ void MeshEditorPlugin::m_UpdateInstance( const ae::Component* component, const a
 	DestroyMesh( oldInstance );
 }
 
-void MeshEditorPlugin::m_DestroyInstance( const ae::Component* component )
+void MeshEditorPlugin::m_DestroyInstance( const ae::EditorComponent& comp )
 {
-	if( ae::EditorMeshInstance* instance = m_components.Get( component, nullptr ) )
+	if( ae::EditorMeshInstance* instance = m_components.Get( &comp, nullptr ) )
 	{
-		AE_DEBUG( "Destroy mesh instance-># entity:# component:#", instance, component->GetEntity(), component );
+		AE_DEBUG( "Destroy mesh instance-># entity:# type:#", instance, comp.entity, comp.typeName );
 		DestroyMesh( instance );
-		m_components.Remove( component );
-		AE_DEBUG( "Remove component reference entity:# remaining:#", component->GetEntity(), m_components.Length() );
+		m_components.Remove( &comp );
+		AE_DEBUG( "Remove component reference entity:# remaining:#", comp.entity, m_components.Length() );
 	}
 }
 void MeshEditorPlugin::m_Unload()

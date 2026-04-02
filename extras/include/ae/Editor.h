@@ -137,6 +137,16 @@ enum class EditorEventType
 };
 
 //------------------------------------------------------------------------------
+// ae::EditorComponent
+//------------------------------------------------------------------------------
+// @TODO: Move to cpp? Needed currently for ae::EditorEvent::component
+struct EditorComponent
+{
+	ae::Entity entity = kNullEntity;
+	const char* typeName = "";
+};
+
+//------------------------------------------------------------------------------
 // ae::EditorEvent
 //------------------------------------------------------------------------------
 struct EditorEvent
@@ -145,7 +155,9 @@ struct EditorEvent
 	const char* path = "";
 	ae::Entity entity = kNullEntity;
 	ae::Matrix4 transform = ae::Matrix4::Identity();
-	const ae::Component* component = nullptr;
+	const EditorComponent* component = nullptr;
+	// @TODO: Replace componentDoc with typed accessor once MetaSystem design settles
+	const ae::DocumentValue* componentDoc = nullptr;
 	const ae::ClassVar* var = nullptr;
 };
 
