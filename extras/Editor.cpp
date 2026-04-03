@@ -289,9 +289,11 @@ public:
 
 	void AddComponent( const EditorComponent* component );
 	void RemoveComponent( const EditorComponent* component );
-	const EditorComponent* GetComponent( int32_t index ) const { return m_components[ index ]; }
-	const EditorComponent* ComponentOf( const ae::ClassType* type ) const;
+	const EditorComponent* GetComponentByIndex2( int32_t index ) const { return m_components[ index ]; }
+	const EditorComponent* GetComponentByType2( const ae::ClassType* type ) const;
 
+	// @TODO: These should be private, and EditorServerObject function should
+	// manage the DocumentValue internally instead of exposing it like this.
 	ae::DocumentValue& GetDocumentValue() { return *m_object; }
 	const ae::DocumentValue& GetDocumentValue() const { return *m_object; }
 	ae::DocumentValue* GetComponentByType( const char* typeName );
@@ -303,6 +305,7 @@ public:
 	const ae::DocumentValue& GetComponentByIndex( uint32_t index ) const;
 	const ae::ClassType* GetComponentTypeByIndex( uint32_t index ) const;
 	
+	// @TODO: Should be part of the document for undo/redo
 	bool hidden = false;
 	bool renderDisabled = false;
 	
@@ -1560,7 +1563,7 @@ void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component*
 	
 	program->editor.BroadcastVarChange( var, component );
 
-	const EditorComponent* comp = ComponentOf( type );
+	const EditorComponent* comp = GetComponentByType2( type );
 	AE_ASSERT( comp );
 	EditorEvent event;
 	event.type = EditorEventType::ComponentEdit;
@@ -1618,7 +1621,7 @@ void EditorServerObject::RemoveComponent( const EditorComponent* component )
 	m_components.Remove( index );
 }
 
-const EditorComponent* EditorServerObject::ComponentOf( const ae::ClassType* type ) const
+const EditorComponent* EditorServerObject::GetComponentByType2( const ae::ClassType* type ) const
 {
 	for( const EditorComponent* component : m_components )
 	{
@@ -3464,6 +3467,41 @@ void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity, boo
 	}
 }
 
+static void PopulateDocFromVarData( const ae::Type* varType, ae::ConstDataPointer varData, ae::DocumentValue* doc )
+{
+	if( const ae::ArrayType* arrayType = varType->AsVarType< ae::ArrayType >() )
+	{
+		doc->ArrayInitialize();
+		const ae::Type* innerType = &arrayType->GetInnerVarType();
+		const uint32_t len = arrayType->GetLength( varData );
+		for( uint32_t j = 0; j < len; j++ )
+		{
+			PopulateDocFromVarData( innerType, arrayType->GetElement( varData, j ), &doc->ArrayAppend() );
+		}
+	}
+	else if( const ae::BasicType* basicType = varType->AsVarType< ae::BasicType >() )
+	{
+		doc->StringSet( basicType->GetVarDataAsString( varData ).c_str() );
+	}
+	else if( const ae::EnumType* enumType = varType->AsVarType< ae::EnumType >() )
+	{
+		doc->StringSet( enumType->GetVarDataAsString( varData ).c_str() );
+	}
+	else if( const ae::ClassType* classType = varType->AsVarType< ae::ClassType >() )
+	{
+		doc->ObjectInitialize();
+		doc->ObjectSet( DOCUMENT_ENTITY_COMPONENT_TYPE_MEMBER ).StringSet( classType->GetName() );
+		const uint32_t varCount = classType->GetVarCount( true );
+		for( uint32_t i = 0; i < varCount; i++ )
+		{
+			const ae::ClassVar* var = classType->GetVarByIndex( i, true );
+			const void* varPtr = static_cast< const uint8_t* >( varData.Get() ) + var->GetOffset();
+			ae::ConstDataPointer nestedData( var->GetOuterVarType(), varPtr );
+			PopulateDocFromVarData( &var->GetOuterVarType(), nestedData, &doc->ObjectSet( var->GetName() ) );
+		}
+	}
+}
+
 ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj, const ae::ClassType* type )
 {
 	if( !type )
@@ -3490,30 +3528,8 @@ ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerO
 	{
 		ae::DocumentValue* objDocValue = m_docObjects->ObjectTryGet( ae::ToString( obj->GetEntity() ).c_str() );
 		AE_ASSERT( objDocValue );
-		ae::DocumentValue* component = &objDocValue->ObjectSet( DOCUMENT_ENTITY_COMPONENTS_MEMBER ).ObjectSet( type->GetName() );
-		component->ObjectInitialize();
-		component->ObjectSet( DOCUMENT_ENTITY_COMPONENT_TYPE_MEMBER ).StringSet( type->GetName() );
-		const uint32_t varCount = type->GetVarCount( true );
-		for( uint32_t i = 0; i < varCount; i++ )
-		{
-			const ae::ClassVar* var = type->GetVarByIndex( i, true );
-			ae::DocumentValue* varDocValue = &component->ObjectSet( var->GetName() );
-			// @TODO: Handle arrays to match m_ShowVar()
-			if( var->IsArray() )
-			{
-				varDocValue->ArrayInitialize();
-				const uint32_t fixedLength = var->IsArrayFixedLength() ? var->GetArrayMaxLength() : 0;
-				for( uint32_t j = 0; j < fixedLength; j++ )
-				{
-					varDocValue->ArrayAppend().StringSet( "" ); // @TODO: Default value
-				}
-			}
-			else
-			{
-				// @TODO: This could be any type here
-				varDocValue->StringSet( "" ); // @TODO: Default value
-			}
-		}
+		ae::DocumentValue* compDoc = &objDocValue->ObjectSet( DOCUMENT_ENTITY_COMPONENTS_MEMBER ).ObjectSet( type->GetName() );
+		PopulateDocFromVarData( type, ae::ConstDataPointer( *type, component ), compDoc );
 	}
 
 	if( component )
@@ -3537,7 +3553,7 @@ void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* 
 	if( obj && component )
 	{
 		const ae::ClassType* type = ae::GetClassTypeFromObject( component );
-		const EditorComponent* comp = obj->ComponentOf( type );
+		const EditorComponent* comp = obj->GetComponentByType2( type );
 		AE_ASSERT( comp );
 		EditorEvent event;
 		event.type = EditorEventType::ComponentDestroy;
@@ -3639,7 +3655,7 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 		if( !componentType->attributes.Has< ae::EditorTypeAttribute >() ) { continue; }
 		if( ae::Component* component = m_registry.TryGetComponent( entity, componentType ) )
 		{
-			event.component = editorObject->ComponentOf( componentType );
+			event.component = editorObject->GetComponentByType2( componentType );
 			event.componentDoc = editorObject->GetComponentByType( componentType );
 			SendPluginEvent( program->plugins, event );
 
