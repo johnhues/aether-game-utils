@@ -338,6 +338,7 @@ public:
 		m_objects( tag ),
 		m_componentPool( tag ),
 		m_registry( tag ),
+		m_defaults( tag ),
 		m_doc( tag ),
 		m_connections( tag ),
 		m_framePickableEntities( tag ),
@@ -394,7 +395,10 @@ public:
 	
 private:
 	// Serialization helpers
-	void m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::ClassType*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const;
+	void m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonEntity ) const;
+	const ae::Component* m_GetDefault( const ae::ClassType* type ) const;
+	void m_InitDefaults();
+	void m_ClearDefaults();
 	// Tools
 	void m_CopySelected() const;
 	void m_PasteFromClipboard( class EditorProgram* program );
@@ -454,6 +458,7 @@ private:
 	ae::Map< ae::Entity, EditorServerObject* > m_objects;
 	ae::ObjectPool< EditorComponent, 32, true > m_componentPool;
 	ae::Registry m_registry; // @TODO: Remove and rely on ae::Document data instead
+	ae::Map< ae::TypeId, ae::Component* > m_defaults;
 	ae::Document m_doc;
 	ae::DocumentValue* m_docSelection = nullptr;
 	ae::DocumentValue* m_docObjects = nullptr;
@@ -1696,6 +1701,7 @@ EditorServer::~EditorServer()
 {
 	AE_DEBUG_ASSERT( !m_objects.Length() );
 	AE_DEBUG_ASSERT( !m_connections.Length() );
+	m_ClearDefaults();
 }
 
 void EditorServer::Initialize( EditorProgram* program )
@@ -1767,6 +1773,8 @@ void EditorServer::Initialize( EditorProgram* program )
 	m_docSelection = &m_doc.ObjectSet( "selection" ).ArrayInitialize();
 	m_docObjects = &m_doc.ObjectSet( "objects" ).ObjectInitialize();
 	m_doc.ClearUndo();
+
+	m_InitDefaults();
 }
 
 // @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
@@ -3548,6 +3556,42 @@ ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerO
 	return component;
 }
 
+const ae::Component* EditorServer::m_GetDefault( const ae::ClassType* type ) const
+{
+	return m_defaults.Get( type->GetId(), nullptr );
+}
+
+void EditorServer::m_InitDefaults()
+{
+	AE_ASSERT( !m_defaults.Length() );
+	const uint32_t typeCount = ae::GetClassTypeCount();
+	for( uint32_t i = 0; i < typeCount; i++ )
+	{
+		const ae::ClassType* type = ae::GetClassTypeByIndex( i );
+		if( !type->attributes.Has< ae::EditorTypeAttribute >() )
+		{
+			continue;
+		}
+		if( !type->IsDefaultConstructible() )
+		{
+			continue;
+		}
+		ae::Component* component = type->New< ae::Component >( ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() ) );
+		m_defaults.Set( type->GetId(), component );
+	}
+}
+
+void EditorServer::m_ClearDefaults()
+{
+	for( auto& _component : m_defaults )
+	{
+		ae::Component* component = _component.value;
+		std::destroy_at( component );
+		ae::Free( component );
+	}
+	m_defaults.Clear();
+}
+
 void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* obj, ae::Component* component )
 {
 	if( obj && component )
@@ -3765,17 +3809,6 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 
 	AE_INFO( "Saving... '#'", m_levelPath );
 
-	ae::Map< const ae::ClassType*, ae::Component* > defaults = m_tag;
-	ae::RunOnDestroy destroyDefaults = [&]()
-	{
-		for( auto& _component : defaults )
-		{
-			ae::Component* component = _component.value;
-			std::destroy_at( component );
-			ae::Free( component );
-		}
-	};
-
 	rapidjson::Document document( rapidjson::kObjectType );
 	rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
 	{
@@ -3785,7 +3818,7 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 		for( const auto& _obj : m_objects )
 		{
 			rapidjson::Value jsonObject( rapidjson::kObjectType );
-			m_EntityToJson( _obj.value, allocator, &defaults, &jsonObject );
+			m_EntityToJson( _obj.value, allocator, &jsonObject );
 			jsonObjects.PushBack( jsonObject, allocator );
 		}
 
@@ -3907,7 +3940,7 @@ void EditorServer::Unload( EditorProgram* program )
 	AE_DEBUG_ASSERT_MSG( !pluginUnloadError, "Plugin unload errors detected. See log for details." );
 }
 
-void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::ClassType*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const
+void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonEntity ) const
 {
 	AE_ASSERT( levelObject );
 	AE_ASSERT( jsonEntity->IsObject() );
@@ -3943,12 +3976,7 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 		if( !type->attributes.Has< ae::EditorTypeAttribute >() ) { continue; }
 		if( const ae::Component* component = m_registry.TryGetComponent( entity, type ) )
 		{
-			const ae::Component* defaultComponent = defaults ? defaults->Get( type, nullptr ) : nullptr;
-			if( defaults && !defaultComponent )
-			{
-				defaultComponent = type->New< ae::Component >( ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() ) );
-				defaults->Set( type, const_cast< ae::Component* >( defaultComponent ) );
-			}
+			const ae::Component* defaultComponent = m_GetDefault( type );
 
 			rapidjson::Value jsonComponent( rapidjson::kObjectType );
 			ae::ComponentToJson( component, defaultComponent, allocator, &jsonComponent );
@@ -3986,7 +4014,7 @@ void EditorServer::m_CopySelected() const
 		for( ae::Entity entity : toCopy )
 		{
 			rapidjson::Value jsonObject( rapidjson::kObjectType );
-			m_EntityToJson( GetObjectAssert( entity ), allocator, nullptr, &jsonObject );
+			m_EntityToJson( GetObjectAssert( entity ), allocator, &jsonObject );
 			jsonObjects.PushBack( jsonObject, allocator );
 		}
 
