@@ -2791,6 +2791,25 @@ enum class DocumentUndoRedoOp
 //------------------------------------------------------------------------------
 // ae::DocumentValue
 //------------------------------------------------------------------------------
+//! DocumentValue is a handle to a value in a Document. It provides type-safe
+//! access and manipulation of its contents, as well as undo and redo support
+//! for all operations. When 'transforming' a DocumentValue hierarchy to json or
+//! into a UI representation, it's often useful to have a single recursive
+//! function that handles all types of DocumentValue.
+// eg:
+#if 0
+void PrintDocument( const DocumentValue& value )
+{
+	if( value.IsNull() ) { /* Print value here */ }
+	else if( value.IsString() ) { /* Print value here */ }
+	else if( value.IsNumber() ) { /* Print value here */ }
+	else if( value.IsBool() ) { /* Print value here */ }
+	else if( value.IsOpaque() ) { /* Print value here */ }
+	else if( value.IsArray() ) { for( uint32_t i = 0; i < value.ArrayLength(); i++ ) { PrintDocument( value.ArrayGet( i ) ); } }
+	else if( value.IsObject() ) { for( uint32_t i = 0; i < value.ObjectLength(); i++ ) { PrintDocument( value.ObjectGetValue( i ) ); } }
+}
+#endif
+//------------------------------------------------------------------------------
 class DocumentValue
 {
 public:
@@ -2845,7 +2864,7 @@ public:
 	//! types. Note that repeated calls to OpaqueSet will be coalesced into a
 	//! single undo operation. This behavior can be circumvented by ending the
 	//! current undo group between calls.
-	//! \param value The string value to set.
+	//! \param value The POD value to set.
 	template< typename T > void OpaqueSet( const T& value );
 	//! Returns ... Must only be called when IsOpaque() returns true.
 	//! \return The opaque value, or defaultValue otherwise

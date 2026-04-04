@@ -156,8 +156,7 @@ struct EditorEvent
 	ae::Entity entity = kNullEntity;
 	ae::Matrix4 transform = ae::Matrix4::Identity();
 	const EditorComponent* component = nullptr;
-	// @TODO: Replace componentDoc with typed accessor once MetaSystem design settles
-	const ae::DocumentValue* componentDoc = nullptr;
+	const ae::DocumentValue* componentDoc = nullptr; // @TODO: Replace componentDoc with typed accessor once MetaSystem design settles
 	const ae::ClassVar* var = nullptr;
 };
 

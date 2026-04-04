@@ -284,7 +284,7 @@ public:
 	uint32_t GetChildCount() const;
 	ae::Entity GetChildEntity( uint32_t index ) const;
 	
-	void HandleVarChange( class EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var, const ae::DocumentValue* componentDoc );
+	void HandleVarChange( class EditorProgram* program, ae::Entity entity, ae::TypeId typeId, const EditorComponent* comp, const ae::ClassVar* var, const ae::DocumentValue* doc );
 
 	ae::OBB GetOBB( class EditorProgram* program ) const;
 	ae::AABB GetAABB( class EditorProgram* program ) const;
@@ -425,7 +425,7 @@ private:
 	// UI helpers
 	bool m_ShowVar( class EditorProgram* program, ae::DocumentValue* docValue, ae::Object* component, const ae::ClassVar* var );
 	bool m_ShowVarValue( class EditorProgram* program, ae::DocumentValue* varDocValue, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
-	bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
+	bool m_ShowRefVar( class EditorProgram* program, ae::DocumentValue* varDocValue, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
 	ae::Entity m_PickObject( class EditorProgram* program, ae::Vec3* hitOut, ae::Vec3* normalOut );
 	ae::Color m_GetColor( ae::Entity entity, bool objectLineColor ) const;
 	void m_LoadLevel( class EditorProgram* program );
@@ -1564,22 +1564,21 @@ ae::Entity EditorServerObject::GetChildEntity( uint32_t index ) const
 	return m_object->ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER )->ArrayGet( index ).NumberGet< ae::Entity >();
 }
 
-void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var, const ae::DocumentValue* componentDoc )
+void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Entity entity, ae::TypeId typeId, const EditorComponent* comp, const ae::ClassVar* var, const ae::DocumentValue* doc )
 {
-	AE_ASSERT( component );
-	AE_ASSERT( componentDoc );
-	renderDisabled = program->editor.GetRenderDisabled( component->GetEntity() );
-
-	program->editor.BroadcastVarChange( var, component->GetEntity(), ae::GetObjectTypeId( component ), componentDoc );
-
-	const EditorComponent* comp = GetComponentByType2( type );
+	AE_ASSERT( entity );
 	AE_ASSERT( comp );
+	AE_ASSERT( doc );
+	renderDisabled = program->editor.GetRenderDisabled( entity );
+
+	program->editor.BroadcastVarChange( var, entity, typeId, doc );
+
 	EditorEvent event;
 	event.type = EditorEventType::ComponentEdit;
-	event.entity = component->GetEntity();
+	event.entity = entity;
 	event.transform = GetTransform();
 	event.component = comp;
-	event.componentDoc = GetComponentByType( type );
+	event.componentDoc = doc;
 	event.var = var;
 	SendPluginEvent( program->plugins, event );
 }
@@ -1782,6 +1781,25 @@ void EditorServer::Initialize( EditorProgram* program )
 }
 
 // @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
+static void BroadcastDocVarChanges( EditorProgram* program, EditorServerObject* object, ae::Entity entity, ae::TypeId componentTypeId, const EditorComponent* comp, const ae::ClassType* type, const ae::DocumentValue* doc )
+{
+	const uint32_t varCount = type->GetVarCount( true );
+	for( uint32_t i = 0; i < varCount; i++ )
+	{
+		const ae::ClassVar* var = type->GetVarByIndex( i, true );
+		const ae::DocumentValue* varDoc = doc->ObjectTryGet( var->GetName() );
+		if( !varDoc ) { continue; }
+		if( const ae::ClassType* nestedType = var->GetOuterVarType().AsVarType< ae::ClassType >() )
+		{
+			BroadcastDocVarChanges( program, object, entity, componentTypeId, comp, nestedType, varDoc );
+		}
+		else
+		{
+			object->HandleVarChange( program, entity, componentTypeId, comp, var, doc );
+		}
+	}
+}
+
 void EditorServer::m_LoadLevel( EditorProgram* program )
 {
 	if( !m_pendingLevel || m_pendingLevel->GetStatus() == ae::File::Status::Pending )
@@ -1871,14 +1889,9 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		for( const JsonComponent* sceneComponent : sceneEntity.components )
 		{
 			const ae::ClassType* type = sceneComponent->type;
-			ae::Component* component = &m_registry.GetComponent( entityId, type );
+			const EditorComponent* comp = object->GetComponentByType2( type );
 			const ae::DocumentValue* componentDoc = object->GetComponentByType( type );
-			const uint32_t varCount = type->GetVarCount( true );
-			for( uint32_t j = 0; j < varCount; j++ )
-			{
-				const ae::ClassVar* var = type->GetVarByIndex( j, true );
-				object->HandleVarChange( program, component, type, var, componentDoc );
-			}
+			BroadcastDocVarChanges( program, object, entityId, type->GetId(), comp, type, componentDoc );
 		}
 		// @TODO: Explicitly handle setting transform vars?
 	}
@@ -3088,6 +3101,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				const char* typeName = componentDocValue->ObjectTryGet( DOCUMENT_ENTITY_COMPONENT_TYPE_MEMBER )->StringGet();
 				const ae::ClassType* componentType = ae::GetClassTypeByName( typeName );
 				ae::Component* component = &m_registry.GetComponent( selectedObject->GetEntity(), componentType );
+				const EditorComponent* comp = selectedObject->GetComponentByType2( componentType );
 				{
 					ImGui::Separator();
 					if( ImGui::TreeNodeEx( componentType->GetName(), ImGuiTreeNodeFlags_DefaultOpen ) )
@@ -3104,7 +3118,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 									if( m_ShowVar( program, componentDocValue, component, var ) )
 									{
 										// Wrap variable change in undo group for undo/redo support
-										selectedObject->HandleVarChange( program, component, type, var, componentDocValue );
+										selectedObject->HandleVarChange( program, selectedObject->GetEntity(), componentType->GetId(), comp, var, componentDocValue );
 										m_doc.EndUndoGroup();
 									}
 								}
@@ -3722,7 +3736,7 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 						if( ae::DocumentValue* varDoc = componentDoc->ObjectTryGet( var->GetName() ) )
 						{
 							varDoc->StringSet( var->GetObjectValueAsString( component ).c_str() );
-							editorObject->HandleVarChange( program, component, componentType, var, componentDoc );
+							editorObject->HandleVarChange( program, entity, componentType->GetId(), editorComponent, var, componentDoc );
 							// Note: Undo group for transform changes is managed by the caller (e.g., ImGuizmo manipulation)
 						}
 					}
@@ -4118,14 +4132,9 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 		for( const JsonComponent* sceneComponent : sceneEntity.components )
 		{
 			const ae::ClassType* type = sceneComponent->type;
-			ae::Component* component = &m_registry.GetComponent( entityId, type );
+			const EditorComponent* comp = object->GetComponentByType2( type );
 			const ae::DocumentValue* componentDoc = object->GetComponentByType( type );
-			const uint32_t varCount = type->GetVarCount( true );
-			for( uint32_t j = 0; j < varCount; j++ )
-			{
-				const ae::ClassVar* var = type->GetVarByIndex( j, true );
-				object->HandleVarChange( program, component, type, var, componentDoc );
-			}
+			BroadcastDocVarChanges( program, object, entityId, type->GetId(), comp, type, componentDoc );
 		}
 		// @TODO: Explicitly handle setting transform vars?
 	}
@@ -4536,7 +4545,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* va
 		}
 		case ae::BasicType::Pointer:
 		{
-			return m_ShowRefVar( program, component, var, idx );
+			return m_ShowRefVar( program, varDocValue, component, var, idx );
 		}
 		// @TODO: case ae::BasicType::CustomRef
 		default:
@@ -4546,11 +4555,10 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* va
 	return false;
 }
 
-bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx )
+bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::DocumentValue* varDocValue, ae::Object* component, const ae::ClassVar* var, int32_t idx )
 {
-	const ae::ClassType* componentType = ae::GetClassTypeFromObject( component );
-	auto val = var->GetObjectValueAsString( component, idx );
-	
+	const char* val = varDocValue->StringGet();
+
 	if( idx < 0 )
 	{
 		ImGui::Text( "%s", var->GetName() );
@@ -4569,9 +4577,9 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, 
 	}
 	else
 	{
-		ImGui::Text( "%s", val.c_str() );
+		ImGui::Text( "%s", val );
 		ImGui::SameLine();
-		if( val == "NULL" )
+		if( strcmp( val, "NULL" ) == 0 )
 		{
 			if( ImGui::Button( "Set" ) )
 			{
@@ -4585,28 +4593,24 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, 
 		{
 			if( ImGui::Button( "Select" ) )
 			{
-				ae::Object* _selectComp = nullptr;
-				if( program->serializer.StringToObjectPointer( val.c_str(), &_selectComp ) )
+				ae::Entity selectEntity = 0;
+				char typeName[ 64 ];
+				typeName[ 0 ] = 0;
+				if( sscanf( val, "%u %63s", &selectEntity, typeName ) == 2 )
 				{
-					ae::Component* selectComp = ae::Cast< ae::Component >( _selectComp );
-					AE_ASSERT( selectComp );
-					const EditorServerObject* selectObj = GetObjectFromComponent( selectComp );
-					if( selectObj )
-					{
-						const ae::Entity selectEntity = selectObj->GetEntity();
-						m_SelectWithModifier( m_GetSelectionModifier( program ), &selectEntity, 1 );
-						m_doc.EndUndoGroup();
-					}
+					m_SelectWithModifier( m_GetSelectionModifier( program ), &selectEntity, 1 );
+					m_doc.EndUndoGroup();
 				}
 			}
 			ImGui::SameLine();
 			if( ImGui::Button( "Clear" ) )
 			{
-				var->SetObjectValueFromString( component, "NULL", idx );
+				varDocValue->StringSet( "NULL" );
+				return true;
 			}
 		}
 	}
-	return false; // @TODO: Handle ref vars changing
+	return false; // @TODO: Handle ref var assignment (Set button / picking flow)
 }
 
 std::string EditorProgram::Serializer::ObjectPointerToString( const ae::Object* obj ) const
