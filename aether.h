@@ -3021,6 +3021,7 @@ private:
 	OpStack m_undoStack;
 	OpStack m_redoStack;
 	ae::Array< UndoOp > m_currentGroup;
+	bool m_isUndoRedoing = false;
 };
 
 //! @} End DataStructures defgroup
@@ -19145,6 +19146,7 @@ Document::~Document() { m_values.DeleteAll(); }
 
 const DocumentCallback& Document::AddUndoGroupAction( const char* name, const DocumentCallback& undo, const DocumentCallback& redo )
 {
+	AE_ASSERT( !m_isUndoRedoing );
 	UndoOp& op = m_currentGroup.Append( {} );
 	op.type = UndoOpType::Action;
 	op.action.name = name;
@@ -19166,6 +19168,7 @@ bool Document::EndUndoGroup()
 
 void Document::ClearUndo()
 {
+	AE_ASSERT( !m_isUndoRedoing );
 #define AE_REMOVE_OP_GROUP_REFS( group ) \
 	for( const UndoOp& op : group ) \
 	{ \
@@ -19203,7 +19206,7 @@ bool Document::Redo()
 // Private member functions
 bool Document::m_UndoRedo( OpStack& source, OpStack& target )
 {
-	// @TODO: Make sure that no operations are performed during callbacks
+	AE_DEBUG_ASSERT( !m_isUndoRedoing ); // Re-entrant undo/redo is not allowed
 	AE_DEBUG_ASSERT( m_currentGroup.Length() == 0 ); // Can't undo/redo during an active group
 	if( source.Length() == 0 )
 	{
@@ -19213,6 +19216,7 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target )
 	source.Remove( source.Length() - 1 );
 
 	ae::Array< UndoOp >& reverseGroup = target.Append( { m_tag } );
+	m_isUndoRedoing = true;
 	for( int32_t i = ops.Length() - 1; i >= 0; i-- )
 	{
 		const UndoOp& op = ops[ i ];
@@ -19290,12 +19294,14 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target )
 		}
 		reverseGroup.Append( reverseOp );
 	}
+	m_isUndoRedoing = false;
 	m_ValidateState( target[ target.Length() - 1 ] );
 	return true;
 }
 
 void Document::m_PushOp( const UndoOp& op )
 {
+	if( m_isUndoRedoing ) { return; }
 	m_currentGroup.Append( op );
 	m_redoStack.Clear(); // Clear redo stack on new operation
 }
