@@ -3433,6 +3433,9 @@ void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity, boo
 		EditorServerObject* editorObject = GetObjectSafe( entity );
 		if( editorObject )
 		{
+			// Unlink from parent's children list before any doc removal so
+			// stale entity IDs never remain in a live object's children array.
+			editorObject->SetParent( this, nullptr );
 			ae::Array< ae::Entity > childEntities = m_tag;
 			const uint32_t childCount = editorObject->GetChildCount();
 			for( uint32_t i = 0; i < childCount; i++ )
@@ -4471,8 +4474,8 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::DocumentValue* docValu
 			ImGui::BeginDisabled( arrayMaxLength );
 			if( ImGui::Button( "Add" ) )
 			{
-				// @TODO: varDocValue
 				var->SetArrayLength( component, arrayLength + 1 );
+				varDocValue->ArrayAppend().StringSet( var->GetObjectValueAsString( component, arrayLength ).c_str() );
 				changed = true;
 			}
 			ImGui::EndDisabled();
@@ -4480,8 +4483,8 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::DocumentValue* docValu
 			ImGui::BeginDisabled( !arrayLength );
 			if( ImGui::Button( "Remove" ) )
 			{
-				// @TODO: varDocValue
 				var->SetArrayLength( component, arrayLength - 1 );
+				varDocValue->ArrayRemove( arrayLength - 1 );
 				changed = true;
 			}
 			ImGui::EndDisabled();
