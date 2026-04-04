@@ -126,12 +126,14 @@ struct SpecialMemberVar
 	const char* name;
 	bool ( *SetObjectValue )( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var );
 };
+#define AE_SET_OBJECT_VALUE( _value ) []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, _value ); }
 const SpecialMemberVar kSpecialMemberVars[] = {
-	{ ae::BasicType::Matrix4, JSON_TRANSFORM_NAME, []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform ); } },
-	{ ae::BasicType::Vec3, JSON_POSITION_NAME, []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetTranslation() ); } },
-	{ ae::BasicType::Quaternion, JSON_ROTATION_NAME, []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetRotation() ); } },
-	{ ae::BasicType::Vec3, JSON_SCALE_NAME, []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, transform.GetScale() ); } },
+	{ ae::BasicType::Matrix4, JSON_TRANSFORM_NAME, AE_SET_OBJECT_VALUE( transform ) },
+	{ ae::BasicType::Vec3, JSON_POSITION_NAME, AE_SET_OBJECT_VALUE( transform.GetTranslation() ) },
+	{ ae::BasicType::Quaternion, JSON_ROTATION_NAME, AE_SET_OBJECT_VALUE( transform.GetRotation() ) },
+	{ ae::BasicType::Vec3, JSON_SCALE_NAME, AE_SET_OBJECT_VALUE( transform.GetScale() ) },
 };
+#undef AE_SET_OBJECT_VALUE
 const SpecialMemberVar* GetSpecialMemberVar( const ae::ClassVar* var )
 {
 	for( const auto& specialVar : kSpecialMemberVars )
@@ -150,7 +152,7 @@ const SpecialMemberVar* GetSpecialMemberVar( const ae::ClassVar* var )
 void GetComponentTypeRequirements( const ae::ClassType* type, ae::Array< const ae::ClassType* >* prereqs );
 void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component, ae::DocumentValue* compDoc = nullptr );
 void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry, ae::DocumentValue* docObjects = nullptr );
-void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
+void ComponentToJson( const ae::ClassType* type, const ae::DocumentValue* compDoc, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
 bool ValidateLevel( const rapidjson::Value& jsonLevel );
 template< typename T > const T* TryGetClassOrVarAttribute( const ae::ClassType* type );
 ae::Array< const ae::ClassVar*, 8 > GetTypeVarsByName( const ae::ClassType* type, const char* name );
@@ -282,7 +284,7 @@ public:
 	uint32_t GetChildCount() const;
 	ae::Entity GetChildEntity( uint32_t index ) const;
 	
-	void HandleVarChange( class EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var );
+	void HandleVarChange( class EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var, const ae::DocumentValue* componentDoc );
 
 	ae::OBB GetOBB( class EditorProgram* program ) const;
 	ae::AABB GetAABB( class EditorProgram* program ) const;
@@ -382,7 +384,7 @@ public:
 	ae::AABB GetSelectedAABB( class EditorProgram* program ) const;
 
 	void HandleTransformChange( class EditorProgram* program, ae::Entity entity, const ae::Matrix4& transform );
-	void BroadcastVarChange( const ae::ClassVar* var, const ae::Component* component );
+	void BroadcastVarChange( const ae::ClassVar* var, ae::Entity entity, ae::TypeId typeId, const ae::DocumentValue* componentDoc );
 
 	void ActiveRefocus( EditorProgram* program );
 
@@ -1562,11 +1564,13 @@ ae::Entity EditorServerObject::GetChildEntity( uint32_t index ) const
 	return m_object->ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER )->ArrayGet( index ).NumberGet< ae::Entity >();
 }
 
-void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var )
+void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var, const ae::DocumentValue* componentDoc )
 {
+	AE_ASSERT( component );
+	AE_ASSERT( componentDoc );
 	renderDisabled = program->editor.GetRenderDisabled( component->GetEntity() );
-	
-	program->editor.BroadcastVarChange( var, component );
+
+	program->editor.BroadcastVarChange( var, component->GetEntity(), ae::GetObjectTypeId( component ), componentDoc );
 
 	const EditorComponent* comp = GetComponentByType2( type );
 	AE_ASSERT( comp );
@@ -1868,11 +1872,12 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		{
 			const ae::ClassType* type = sceneComponent->type;
 			ae::Component* component = &m_registry.GetComponent( entityId, type );
+			const ae::DocumentValue* componentDoc = object->GetComponentByType( type );
 			const uint32_t varCount = type->GetVarCount( true );
 			for( uint32_t j = 0; j < varCount; j++ )
 			{
 				const ae::ClassVar* var = type->GetVarByIndex( j, true );
-				object->HandleVarChange( program, component, type, var );
+				object->HandleVarChange( program, component, type, var, componentDoc );
 			}
 		}
 		// @TODO: Explicitly handle setting transform vars?
@@ -3099,7 +3104,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 									if( m_ShowVar( program, componentDocValue, component, var ) )
 									{
 										// Wrap variable change in undo group for undo/redo support
-										selectedObject->HandleVarChange( program, component, type, var );
+										selectedObject->HandleVarChange( program, component, type, var, componentDocValue );
 										m_doc.EndUndoGroup();
 									}
 								}
@@ -3411,7 +3416,6 @@ void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity, boo
 	if( entity && m_objects.TryGet( entity ) )
 	{
 		// Collect and destroy descendants first (before any document removal)
-		// Collect and destroy descendants first (before any document removal)
 		EditorServerObject* editorObject = GetObjectSafe( entity );
 		if( editorObject )
 		{
@@ -3697,10 +3701,14 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 	{
 		const ae::ClassType* componentType = ae::GetClassTypeByIndex( i );
 		if( !componentType->attributes.Has< ae::EditorTypeAttribute >() ) { continue; }
-		if( ae::Component* component = m_registry.TryGetComponent( entity, componentType ) )
+		ae::Component* component = m_registry.TryGetComponent( entity, componentType );
+		ae::DocumentValue* componentDoc = editorObject->GetComponentByType( componentType );
+		const EditorComponent* editorComponent = editorObject->GetComponentByType2( componentType );
+		if( component || componentDoc || editorComponent )
 		{
-			event.component = editorObject->GetComponentByType2( componentType );
-			event.componentDoc = editorObject->GetComponentByType( componentType );
+			AE_ASSERT( component && componentDoc && editorComponent );
+			event.component = editorComponent;
+			event.componentDoc = componentDoc;
 			SendPluginEvent( program->plugins, event );
 
 			for( const auto& specialVar : kSpecialMemberVars )
@@ -3710,8 +3718,13 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 				{
 					if( specialVar.SetObjectValue( transform, component, var ) )
 					{
-						editorObject->HandleVarChange( program, component, componentType, var );
-						// Note: Undo group for transform changes is managed by the caller (e.g., ImGuizmo manipulation)
+						// @TODO: This does not handle member variable that are shadowed by derived classes
+						if( ae::DocumentValue* varDoc = componentDoc->ObjectTryGet( var->GetName() ) )
+						{
+							varDoc->StringSet( var->GetObjectValueAsString( component ).c_str() );
+							editorObject->HandleVarChange( program, component, componentType, var, componentDoc );
+							// Note: Undo group for transform changes is managed by the caller (e.g., ImGuizmo manipulation)
+						}
 					}
 				}
 			}
@@ -3719,19 +3732,24 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 	}
 }
 
-void EditorServer::BroadcastVarChange( const ae::ClassVar* var, const ae::Component* component )
+void EditorServer::BroadcastVarChange( const ae::ClassVar* var, ae::Entity entity, ae::TypeId typeId, const ae::DocumentValue* componentDoc )
 {
-	if( var->IsArray() )
+	// @TODO: Broadcast array element changes
+	if( !componentDoc || var->IsArray() )
 	{
-		// @TODO: Broadcast array element changes
+		return;
+	}
+	const ae::DocumentValue* varDoc = componentDoc->ObjectTryGet( var->GetName() );
+	if( !varDoc )
+	{
 		return;
 	}
 	ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
 	wStream.SerializeEnum( EditorNetMsg::Modification );
-	wStream.SerializeUInt32( component->GetEntity() );
-	wStream.SerializeObject( ae::GetObjectTypeId( component ) );
+	wStream.SerializeUInt32( entity );
+	wStream.SerializeObject( typeId );
 	wStream.SerializeString( var->GetName() );
-	wStream.SerializeString( var->GetObjectValueAsString( component ).c_str() );
+	wStream.SerializeString( varDoc->StringGet() );
 	if( wStream.IsValid() )
 	{
 		for( EditorConnection* conn : m_connections )
@@ -3974,12 +3992,13 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 	{
 		const ae::ClassType* type = ae::GetClassTypeByIndex( i );
 		if( !type->attributes.Has< ae::EditorTypeAttribute >() ) { continue; }
-		if( const ae::Component* component = m_registry.TryGetComponent( entity, type ) )
+		const ae::DocumentValue* compDoc = levelObject->GetComponentByType( type );
+		if( compDoc )
 		{
 			const ae::Component* defaultComponent = m_GetDefault( type );
 
 			rapidjson::Value jsonComponent( rapidjson::kObjectType );
-			ae::ComponentToJson( component, defaultComponent, allocator, &jsonComponent );
+			ae::ComponentToJson( type, compDoc, defaultComponent, allocator, &jsonComponent );
 			jsonComponents.AddMember( rapidjson::StringRef( type->GetName() ), jsonComponent, allocator );
 		}
 	}
@@ -4100,11 +4119,12 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 		{
 			const ae::ClassType* type = sceneComponent->type;
 			ae::Component* component = &m_registry.GetComponent( entityId, type );
+			const ae::DocumentValue* componentDoc = object->GetComponentByType( type );
 			const uint32_t varCount = type->GetVarCount( true );
 			for( uint32_t j = 0; j < varCount; j++ )
 			{
 				const ae::ClassVar* var = type->GetVarByIndex( j, true );
-				object->HandleVarChange( program, component, type, var );
+				object->HandleVarChange( program, component, type, var, componentDoc );
 			}
 		}
 		// @TODO: Explicitly handle setting transform vars?
@@ -4114,6 +4134,10 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 void EditorServer::m_DeleteSelected( EditorProgram* program )
 {
 	uint32_t length;
+	// Keep deleting entities from the back of the selection list until it's
+	// empty. This ensures that if a parent and child are both selected, the
+	// child is deleted first, preventing potential issues with trying to find a
+	// parent that has already been deleted.
 	while( ( length = m_GetSelectionLength() ) )
 	{
 		DestroyObject( program, m_GetSelectedEntity( length - 1 ) );
@@ -4422,7 +4446,6 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::DocumentValue* docValu
 	if( var->IsArray() )
 	{
 		const uint32_t arrayLength = varDocValue->ArrayLength();
-		AE_ASSERT( arrayLength == var->GetArrayLength( component ) ); // @TODO: Remove
 		ImGui::Text( "%s", var->GetName() );
 		ImVec2 size( ImGui::GetContentRegionAvail().x, 8 * ImGui::GetTextLineHeightWithSpacing() );
 		ImGui::BeginChild( "ChildL", size, true, 0 );
@@ -4435,7 +4458,7 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::DocumentValue* docValu
 		ImGui::EndChild();
 		if( !var->IsArrayFixedLength() )
 		{
-			bool arrayMaxLength = ( var->GetArrayLength( component ) >= var->GetArrayMaxLength() );
+			const bool arrayMaxLength = ( arrayLength >= var->GetArrayMaxLength() );
 			ImGui::BeginDisabled( arrayMaxLength );
 			if( ImGui::Button( "Add" ) )
 			{
@@ -4475,7 +4498,6 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* va
 			if( result != currentStr )
 			{
 				varDocValue->StringSet( result.c_str() );
-				var->SetObjectValueFromString( component, result.c_str(), idx );
 				return true;
 			}
 			return false;
@@ -4486,7 +4508,6 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* va
 			if( ImGui::Checkbox( varName.c_str(), &b ) )
 			{
 				varDocValue->StringSet( ae::ToString( b ).c_str() );
-				var->SetObjectValue( component, b, idx ); // @TODO: Remove
 				return true;
 			}
 			return false;
@@ -4497,7 +4518,6 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* va
 			if( ImGui::InputFloat( varName.c_str(), &f ) )
 			{
 				varDocValue->StringSet( ae::ToString( f ).c_str() );
-				var->SetObjectValue( component, f, idx );
 				return true;
 			}
 			return false;
@@ -4510,7 +4530,6 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* va
 			if( ImGui::InputTextMultiline( varName.c_str(), buf, sizeof(buf), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4 ), 0 ) )
 			{
 				varDocValue->StringSet( buf );
-				var->SetObjectValueFromString( component, buf, idx );
 				return true;
 			}
 			return false;
@@ -4897,10 +4916,9 @@ void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const r
 	}
 }
 
-void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent )
+void ComponentToJson( const ae::ClassType* type, const ae::DocumentValue* compDoc, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent )
 {
 	AE_ASSERT( jsonComponent->IsObject() );
-	const ae::ClassType* type = ae::GetClassTypeFromObject( component );
 	const uint32_t varCount = type->GetVarCount( true );
 	for( uint32_t i = 0; i < varCount; i++ )
 	{
@@ -4910,39 +4928,33 @@ void ComponentToJson( const Component* component, const Component* defaultCompon
 			continue;
 		}
 		const auto varName = rapidjson::StringRef( var->GetName() );
-		if( var->IsArray() )
+		const ae::DocumentValue* varDoc = compDoc->ObjectTryGet( var->GetName() );
+		if( !varDoc )
 		{
-			if( const int32_t arrayLen = var->GetArrayLength( component ) )
-			{
-				rapidjson::Value jsonArray( rapidjson::kArrayType );
-				jsonArray.Reserve( arrayLen, allocator );
-				for( uint32_t j = 0; j < arrayLen; j++ )
-				{
-					rapidjson::Value jsonValue( rapidjson::kStringType );
-					jsonValue.SetString( var->GetObjectValueAsString( component, j ).c_str(), allocator );
-					jsonArray.PushBack( jsonValue, allocator );
-				}
-				jsonComponent->AddMember( varName, jsonArray, allocator );
-			}
+			continue;
 		}
-		else
+		else if( !var->IsArray() )
 		{
-			const auto value = var->GetObjectValueAsString( component );
+			const char* value = varDoc->StringGet();
 			rapidjson::Value jsonValue( rapidjson::kStringType );
-			if( defaultComponent )
+			if( defaultComponent && ( var->GetObjectValueAsString( defaultComponent ) == value ) )
 			{
-				const auto defaultValue = var->GetObjectValueAsString( defaultComponent );
-				if( value != defaultValue )
-				{
-					jsonValue.SetString( value.c_str(), allocator );
-					jsonComponent->AddMember( varName, jsonValue, allocator );
-				}
+				continue;
 			}
-			else
+			jsonValue.SetString( value, allocator );
+			jsonComponent->AddMember( varName, jsonValue, allocator );
+		}
+		else if( varDoc->ArrayLength() )
+		{
+			rapidjson::Value jsonArray( rapidjson::kArrayType );
+			jsonArray.Reserve( varDoc->ArrayLength(), allocator );
+			for( uint32_t j = 0; j < varDoc->ArrayLength(); j++ )
 			{
-				jsonValue.SetString( value.c_str(), allocator );
-				jsonComponent->AddMember( varName, jsonValue, allocator );
+				rapidjson::Value jsonValue( rapidjson::kStringType );
+				jsonValue.SetString( varDoc->ArrayGet( j ).StringGet(), allocator );
+				jsonArray.PushBack( jsonValue, allocator );
 			}
+			jsonComponent->AddMember( varName, jsonArray, allocator );
 		}
 	}
 }
