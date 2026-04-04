@@ -424,8 +424,8 @@ private:
 	ae::Array< ae::Entity > m_GetTreeFromEntities( const ae::Entity* entities, uint32_t count ) const;
 	// UI helpers
 	bool m_ShowVar( class EditorProgram* program, ae::DocumentValue* docValue, ae::Object* component, const ae::ClassVar* var );
-	bool m_ShowVarValue( class EditorProgram* program, ae::DocumentValue* varDocValue, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
-	bool m_ShowRefVar( class EditorProgram* program, ae::DocumentValue* varDocValue, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
+	bool m_ShowVarValue( class EditorProgram* program, ae::DocumentValue* varDocValue, const ae::ClassVar* var, int32_t idx = -1 );
+	bool m_ShowRefVar( class EditorProgram* program, ae::DocumentValue* varDocValue, const ae::ClassVar* var, int32_t idx = -1 );
 	ae::Entity m_PickObject( class EditorProgram* program, ae::Vec3* hitOut, ae::Vec3* normalOut );
 	ae::Color m_GetColor( ae::Entity entity, bool objectLineColor ) const;
 	void m_LoadLevel( class EditorProgram* program );
@@ -484,7 +484,7 @@ private:
 	struct SelectRef
 	{
 		bool enabled = false;
-		ae::Object* component = nullptr;
+		ae::DocumentValue* varDocValue = nullptr;
 		const ae::ClassVar* componentVar = nullptr;
 		int32_t varIdx = -1;
 		
@@ -2410,21 +2410,19 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 			if( m_selectRef.enabled )
 			{
 				uint32_t matchCount = 0;
-				const ae::Object* lastMatch = nullptr;
+				const ae::ClassType* lastMatchType = nullptr;
 				
 				const ae::ClassType* refType = m_selectRef.componentVar->GetSubType();
+				const EditorServerObject* hoverObj = GetObjectSafe( hoverEntity );
 				const uint32_t componentTypeCount = ae::GetClassTypeCount();
 				for( uint32_t i = 0; i < componentTypeCount; i++ )
 				{
 					const ae::ClassType* hoverType = ae::GetClassTypeByIndex( i );
 					if( !hoverType->attributes.Has< ae::EditorTypeAttribute >() ) { continue; }
-					if( hoverType->IsType( refType ) )
+					if( hoverType->IsType( refType ) && hoverObj && hoverObj->GetComponentByType( hoverType ) )
 					{
-						if( const ae::Component* hoverComponent = m_registry.TryGetComponent( hoverEntity, hoverType ) )
-						{
-							matchCount++;
-							lastMatch = hoverComponent;
-						}
+						matchCount++;
+						lastMatchType = hoverType;
 					}
 				}
 				
@@ -2434,7 +2432,8 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				}
 				else if( matchCount == 1 )
 				{
-					m_selectRef.componentVar->SetObjectValue( m_selectRef.component, lastMatch, m_selectRef.varIdx );
+					const ae::Str64 refVal = ae::Str64::Format( "# #", hoverEntity, lastMatchType->GetName() );
+					m_selectRef.varDocValue->StringSet( refVal.c_str() );
 					m_selectRef = SelectRef();
 				}
 				else
@@ -2582,7 +2581,6 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 		const ae::ClassType* refType = m_selectRef.componentVar->GetSubType();
 		ImGui::Text( "Select %s", refType->GetName() );
 		ImGui::Separator();
-		const EditorServerObject* pendingObj = GetObjectAssert( m_selectRef.pending );
 		const uint32_t typeCount = ae::GetClassTypeCount();
 		for( uint32_t i = 0; i < typeCount; i++ )
 		{
@@ -2591,16 +2589,9 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				pendingType->IsType( refType ) &&
 				ImGui::Selectable( pendingType->GetName(), false ) )
 			{
-				const uint32_t objectCount = m_objects.Length();
-				for( uint32_t j = 0; j < objectCount; j++ )
-				{
-					ae::Component* pendingComponent = m_registry.TryGetComponent( m_objects.GetKey( j ), pendingType );
-					if( pendingComponent )
-					{
-						m_selectRef.componentVar->SetObjectValue( m_selectRef.component, pendingComponent, m_selectRef.varIdx );
-						m_selectRef = SelectRef();
-					}
-				}
+				const ae::Str64 refVal = ae::Str64::Format( "# #", m_selectRef.pending, pendingType->GetName() );
+				m_selectRef.varDocValue->StringSet( refVal.c_str() );
+				m_selectRef = SelectRef();
 			}
 		}
 		ImGui::EndPopup();
@@ -4464,7 +4455,7 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::DocumentValue* docValu
 		for( int i = 0; i < arrayLength; i++ )
 		{
 			ImGui::PushID( i );
-			changed |= m_ShowVarValue( program, &varDocValue->ArrayGet( i ), component, var, i );
+			changed |= m_ShowVarValue( program, &varDocValue->ArrayGet( i ), var, i );
 			ImGui::PopID();
 		}
 		ImGui::EndChild();
@@ -4492,13 +4483,13 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::DocumentValue* docValu
 	}
 	else
 	{
-		changed |= m_ShowVarValue( program, varDocValue, component, var );
+		changed |= m_ShowVarValue( program, varDocValue, var );
 	}
 	ImGui::PopID();
 	return changed;
 }
 
-bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* varDocValue, ae::Object* component, const ae::ClassVar* var, int32_t idx )
+bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* varDocValue, const ae::ClassVar* var, int32_t idx )
 {
 	const ae::Str64 varName = ( idx < 0 ) ? var->GetName() : ae::Str64::Format( "#", idx );
 	switch( var->GetType() )
@@ -4548,7 +4539,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* va
 		}
 		case ae::BasicType::Pointer:
 		{
-			return m_ShowRefVar( program, varDocValue, component, var, idx );
+			return m_ShowRefVar( program, varDocValue, var, idx );
 		}
 		// @TODO: case ae::BasicType::CustomRef
 		default:
@@ -4558,7 +4549,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* va
 	return false;
 }
 
-bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::DocumentValue* varDocValue, ae::Object* component, const ae::ClassVar* var, int32_t idx )
+bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::DocumentValue* varDocValue, const ae::ClassVar* var, int32_t idx )
 {
 	const char* val = varDocValue->StringGet();
 
@@ -4569,7 +4560,7 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::DocumentValue* varD
 	const ae::ClassType* refType = var->GetSubType();
 	AE_ASSERT( refType );
 	if( m_selectRef.enabled
-		&& m_selectRef.component == component
+		&& m_selectRef.varDocValue == varDocValue
 		&& m_selectRef.componentVar == var
 		&& m_selectRef.varIdx == idx )
 	{
@@ -4587,7 +4578,7 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::DocumentValue* varD
 			if( ImGui::Button( "Set" ) )
 			{
 				m_selectRef.enabled = true;
-				m_selectRef.component = component;
+				m_selectRef.varDocValue = varDocValue;
 				m_selectRef.componentVar = var;
 				m_selectRef.varIdx = idx;
 			}
@@ -4613,7 +4604,7 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::DocumentValue* varD
 			}
 		}
 	}
-	return false; // @TODO: Handle ref var assignment (Set button / picking flow)
+	return false;
 }
 
 std::string EditorProgram::Serializer::ObjectPointerToString( const ae::Object* obj ) const
