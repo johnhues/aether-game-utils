@@ -3601,16 +3601,36 @@ void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* 
 {
 	if( obj && comp )
 	{
+		const Entity entity = obj->GetEntity();
 		const ae::ClassType* type = ae::GetClassTypeByName( comp->typeName );
-		EditorEvent event;
-		event.type = EditorEventType::ComponentDestroy;
-		event.entity = obj->GetEntity();
-		event.transform = obj->GetTransform();
-		event.component = comp;
-		event.componentDoc = obj->GetComponentByType( type );
-		SendPluginEvent( program->plugins, event );
-		obj->RemoveComponent( comp );
-		m_componentPool.Delete( const_cast< EditorComponent* >( comp ) );
+
+		const ae::DocumentCallback action = [ this, program, entity, type ]()
+		{
+			EditorServerObject* obj = GetObjectAssert( entity );
+			EditorEvent event;
+			event.type = EditorEventType::ComponentDestroy;
+			event.entity = obj->GetEntity();
+			event.transform = obj->GetTransform();
+			event.component = obj->GetComponentByType2( type );
+			event.componentDoc = obj->GetComponentByType( type );
+			SendPluginEvent( program->plugins, event );
+			obj->RemoveComponent( event.component );
+			m_componentPool.Delete( const_cast< EditorComponent* >( event.component ) );
+		};
+		const ae::DocumentCallback undoAction = [ this, program, entity, type ]()
+		{
+			EditorServerObject* obj = GetObjectAssert( entity );
+			AddComponent( program, obj, type );
+		};
+		action();
+		ae::DocumentValue* entityDoc = m_docObjects->ObjectTryGet( ae::ToString( obj->GetEntity() ).c_str() );
+		AE_ASSERT( entityDoc );
+		entityDoc->GetDocument().AddUndoGroupAction( "Create Object", undoAction, action );
+
+		// Remove component entry from doc (must happen after EditorEvent so componentDoc is still valid)
+		ae::DocumentValue* componentsDoc = entityDoc->ObjectTryGet( DOCUMENT_ENTITY_COMPONENTS_MEMBER );
+		AE_ASSERT( componentsDoc );
+		componentsDoc->ObjectRemove( type->GetName() );
 	}
 }
 
