@@ -445,6 +445,7 @@ private:
 	ae::Entity m_PickObject( class EditorProgram* program, ae::Vec3* hitOut, ae::Vec3* normalOut );
 	ae::Color m_GetColor( ae::Entity entity, bool objectLineColor ) const;
 	void m_LoadLevel( class EditorProgram* program );
+	void m_LoadScene( class EditorProgram* program, const JsonScene& scene, const rapidjson::Document& document, bool selectRoots );
 	
 	template< typename T > uint32_t m_PushDialog( const T& dialog );
 	template< typename T > T* m_GetDialog( uint32_t id );
@@ -1389,7 +1390,9 @@ void Editor::QueueRead( const char* levelPath )
 	AE_INFO( "Queuing level load '#'", m_pendingLevel->GetURL() );
 }
 
-// @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
+// @TODO: Combine with EditorServer::m_LoadLevel() / m_PasteFromClipboard() (which share
+// m_LoadScene()). This client-side function still uses JsonToRegistry and lives on
+// a different class — blocked until the client load path is doc-native.
 void Editor::m_Read()
 {
 	if( !m_pendingLevel || m_pendingLevel->GetStatus() == ae::File::Status::Pending )
@@ -1784,7 +1787,6 @@ void EditorServer::Initialize( EditorProgram* program )
 	m_InitDefaults();
 }
 
-// @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
 static void BroadcastDocVarChanges( EditorProgram* program, EditorServerObject* object, ae::Entity entity, ae::TypeId componentTypeId, const EditorServerComponent* comp, const ae::ClassType* type, const ae::DocumentValue* doc )
 {
 	const uint32_t varCount = type->GetVarCount( true );
@@ -1863,8 +1865,17 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 	// @TODO: Make sure that the existing level has no modifications before unloading
 	Unload( program );
 
+	m_LoadScene( program, scene, document, false );
+
+	AE_INFO( "Loaded level '#'", m_pendingLevel->GetURL() );
+	m_SetLevelPath( program, m_pendingLevel->GetURL() );
+	m_doc.ClearUndo();
+}
+
+void EditorServer::m_LoadScene( EditorProgram* program, const JsonScene& scene, const rapidjson::Document& document, bool selectRoots )
+{
 	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
-	
+
 	for( const JsonEntity& sceneEntity : scene.entities )
 	{
 		EditorServerObject* object = CreateObject( program, sceneEntity.id, sceneEntity.transform, sceneEntity.name.c_str() );
@@ -1876,10 +1887,15 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		{
 			AddComponent( program, object, component->type );
 		}
+		if( selectRoots && !sceneEntity.parent )
+		{
+			m_AddToSelection( object->GetEntity() );
+		}
 	}
+
 	// Serialize all components (second phase to handle references)
 	JsonToDoc( entityMap, document[ JSON_SCENE_OBJECTS_NAME ], m_docObjects );
-	// Refresh editor objects
+
 	for( const JsonEntity& sceneEntity : scene.entities )
 	{
 		const ae::Entity entityId = entityMap.Get( sceneEntity.id, sceneEntity.id );
@@ -1899,10 +1915,6 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		}
 		// @TODO: Explicitly handle setting transform vars?
 	}
-
-	AE_INFO( "Loaded level '#'", m_pendingLevel->GetURL() );
-	m_SetLevelPath( program, m_pendingLevel->GetURL() );
-	m_doc.ClearUndo();
 }
 
 template< typename T >
@@ -2939,7 +2951,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 
 		ImGuizmo::Enable( program->camera.GetMode() == ae::DebugCamera::Mode::None && !m_boxSelectStart );
 		ImGuizmo::SetOrthographic( false );
-		ImGuizmo::AllowAxisFlip( false );
+		ImGuizmo::AllowAxisFlip( true );
 		ImGuizmo::BeginFrame();
 		ImGuizmo::SetRect( renderRect.GetMin().x, renderRect.GetMin().y, renderRect.GetSize().x, renderRect.GetSize().y );
 		
@@ -4038,7 +4050,6 @@ void EditorServer::m_CopySelected() const
 	ae::SetClipboardText( buffer.GetString() );
 }
 
-// @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
 void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 {
 	const auto clipboardText = ae::GetClipboardText();
@@ -4070,53 +4081,8 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 
 	// State for loading
 	m_ClearSelection();
-	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
-
-	// Create all components
-	for( const JsonEntity& sceneEntity : scene.entities )
-	{
-		const char* name = ""; // @TODO: sceneEntity.name.c_str() handle duplicate names
-		EditorServerObject* editorObject = CreateObject( program, sceneEntity.id, sceneEntity.transform, name );
-		if( editorObject->GetEntity() != sceneEntity.id )
-		{
-			entityMap.Set( sceneEntity.id, editorObject->GetEntity() );
-		}
-		for( const JsonComponent* sceneComponent : sceneEntity.components )
-		{
-			AddComponent( program, editorObject, sceneComponent->type );
-		}
-
-		// Select pasted 'root' entities only, translating them separately from
-		// their parents would be unexpected behavior.
-		if( !sceneEntity.parent )
-		{
-			m_AddToSelection( editorObject->GetEntity() );
-		}
-	}
-
-	// Serialize all components (second phase to handle references)
-	JsonToDoc( entityMap, document[ JSON_SCENE_OBJECTS_NAME ], m_docObjects );
-	for( const JsonEntity& sceneEntity : scene.entities )
-	{
-		const ae::Entity entityId = entityMap.Get( sceneEntity.id, sceneEntity.id );
-		EditorServerObject* object = GetObjectAssert( entityId );
-
-		if( sceneEntity.parentId )
-		{
-			const ae::Entity parent = entityMap.Get( sceneEntity.parentId, sceneEntity.parentId );
-			EditorServerObject* parentObject = GetObjectAssert( parent );
-			object->SetParent( this, parentObject );
-		}
-
-		for( const JsonComponent* sceneComponent : sceneEntity.components )
-		{
-			const ae::ClassType* type = sceneComponent->type;
-			const EditorServerComponent* comp = object->GetComponentByType2( type );
-			const ae::DocumentValue* componentDoc = object->GetComponentByType( type );
-			BroadcastDocVarChanges( program, object, entityId, type->GetId(), comp, type, componentDoc );
-		}
-		// @TODO: Explicitly handle setting transform vars?
-	}
+	// @TODO: handle duplicate entity names on paste
+	m_LoadScene( program, scene, document, true );
 }
 
 void EditorServer::m_DeleteSelected( EditorProgram* program )

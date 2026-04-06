@@ -226,6 +226,9 @@ struct EditorParams
 	//! paths. This field will be ignored if a level is specified on the command
 	//! line with '--level'.
 	ae::Str256 levelPath;
+
+	// @TODO: Add "Require unique entity names" setting
+	// @TODO: Add "Require unique component type instance per entity" setting
 };
 
 //------------------------------------------------------------------------------
