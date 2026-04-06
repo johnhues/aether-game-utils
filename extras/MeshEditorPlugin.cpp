@@ -22,7 +22,7 @@ namespace ae {
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-std::pair< std::string, float > GetMeshResource( const ae::EditorComponent& comp, const ae::DocumentValue* componentDoc )
+std::pair< std::string, float > GetMeshResource( const ae::EditorComponent& comp )
 {
 	const ae::ClassType* currentType = ae::GetClassTypeByName( comp.typeName );
 	while( currentType )
@@ -37,11 +37,11 @@ std::pair< std::string, float > GetMeshResource( const ae::EditorComponent& comp
 			const ae::ClassVar* var = currentType->GetVarByIndex( i, false );
 			const MeshAttrib* varAttribute = var->attributes.TryGet< MeshAttrib >();
 			const ae::BasicType* basicType = var->GetOuterVarType().AsVarType< ae::BasicType >();
-			if( varAttribute && basicType && componentDoc )
+			if( varAttribute && basicType )
 			{
 				if( basicType->GetType() == ae::BasicType::String )
 				{
-					const ae::DocumentValue* varDoc = componentDoc->ObjectTryGet( var->GetName() );
+					const ae::DocumentValue* varDoc = comp.GetDocumentValue()->ObjectTryGet( var->GetName() );
 					return { varDoc ? varDoc->StringGet() : "", varAttribute->transparent ? 0.7f : 1.0f };
 				}
 				else
@@ -110,7 +110,7 @@ void MeshEditorPlugin::OnEvent( const ae::EditorEvent& event )
 		case ae::EditorEventType::ComponentEdit:
 		{
 			AE_ASSERT( event.component );
-			m_UpdateInstance( *event.component, event.componentDoc, event.transform );
+			m_UpdateInstance( *event.component, event.transform );
 			break;
 		}
 		case ae::EditorEventType::ComponentDestroy:
@@ -131,9 +131,9 @@ void MeshEditorPlugin::OnEvent( const ae::EditorEvent& event )
 	}
 }
 
-void MeshEditorPlugin::m_UpdateInstance( const ae::EditorComponent& comp, const ae::DocumentValue* componentDoc, const ae::Matrix4& transform )
+void MeshEditorPlugin::m_UpdateInstance( const ae::EditorComponent& comp, const ae::Matrix4& transform )
 {
-	const auto[ resourceId, opacity ] = GetMeshResource( comp, componentDoc );
+	const auto[ resourceId, opacity ] = GetMeshResource( comp );
 	ae::EditorMeshInstance* oldInstance = m_components.Get( &comp, nullptr );
 	ae::EditorMeshInstance* newInstance = nullptr;
 	if( !resourceId.empty() )

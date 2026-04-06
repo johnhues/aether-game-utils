@@ -276,6 +276,16 @@ public:
 	ae::CollisionMesh<> collision;
 };
 
+class EditorServerComponent : public EditorComponent
+{
+public:
+	EditorServerComponent( ae::Entity entity, const char* typeName, ae::DocumentValue* object ) { this->entity = entity; this->typeName = typeName; this->m_object = object; }
+	ae::DocumentValue* GetDocumentValue() override { return m_object; }
+	const ae::DocumentValue* GetDocumentValue() const override { return m_object; }
+private:
+	ae::DocumentValue* m_object = nullptr;
+};
+
 //------------------------------------------------------------------------------
 // EditorServerObject
 //------------------------------------------------------------------------------
@@ -296,22 +306,20 @@ public:
 	uint32_t GetChildCount() const;
 	ae::Entity GetChildEntity( uint32_t index ) const;
 	
-	void HandleVarChange( class EditorProgram* program, ae::Entity entity, ae::TypeId typeId, const EditorComponent* comp, const ae::ClassVar* var, const ae::DocumentValue* doc );
+	void HandleVarChange( class EditorProgram* program, ae::Entity entity, ae::TypeId typeId, const EditorServerComponent* comp, const ae::ClassVar* var, const ae::DocumentValue* doc );
 
 	ae::OBB GetOBB( class EditorProgram* program ) const;
 	ae::AABB GetAABB( class EditorProgram* program ) const;
 
-	void AddComponent( const EditorComponent* component );
-	void RemoveComponent( const EditorComponent* component );
-	const EditorComponent* GetComponentByIndex2( int32_t index ) const { return m_components[ index ]; }
-	const EditorComponent* GetComponentByType2( const ae::ClassType* type ) const;
+	void AddComponent( const EditorServerComponent* component );
+	void RemoveComponent( const EditorServerComponent* component );
+	const EditorServerComponent* GetComponentByIndex2( int32_t index ) const { return m_components[ index ]; }
+	const EditorServerComponent* GetComponentByType2( const ae::ClassType* type ) const;
 
 	// @TODO: These should be private, and EditorServerObject function should
 	// manage the DocumentValue internally instead of exposing it like this.
 	ae::DocumentValue& GetDocumentValue() { return *m_object; }
 	const ae::DocumentValue& GetDocumentValue() const { return *m_object; }
-	ae::DocumentValue* GetComponentByType( const char* typeName );
-	const ae::DocumentValue* GetComponentByType( const char* typeName ) const;
 	ae::DocumentValue* GetComponentByType( const ae::ClassType* type );
 	const ae::DocumentValue* GetComponentByType( const ae::ClassType* type ) const;
 	uint32_t GetComponentCount() const;
@@ -325,7 +333,7 @@ public:
 	
 private:
 	ae::DocumentValue* m_object = nullptr;
-	ae::Array< const EditorComponent* > m_components;
+	ae::Array< const EditorServerComponent* > m_components;
 };
 
 //------------------------------------------------------------------------------
@@ -378,7 +386,7 @@ public:
 	void DestroyObject( class EditorProgram* program, ae::Entity entity, bool undo = true );
 	
 	void AddComponent( class EditorProgram* program, EditorServerObject* obj, const ae::ClassType* type );
-	void RemoveComponent( class EditorProgram* program, EditorServerObject* obj, const EditorComponent* comp );
+	void RemoveComponent( class EditorProgram* program, EditorServerObject* obj, const EditorServerComponent* comp );
 	
 	uint32_t GetObjectCount() const { return m_objects.Length(); }
 	const EditorServerObject* GetObjectAssert( ae::Entity entity ) const; // Returns the component or fatally errors if it doesn't exist
@@ -466,7 +474,7 @@ private:
 	// Object state
 	Entity m_lastEntity = kNullEntity;
 	ae::Map< ae::Entity, EditorServerObject* > m_objects;
-	ae::ObjectPool< EditorComponent, 32, true > m_componentPool;
+	ae::ObjectPool< EditorServerComponent, 32, true > m_componentPool;
 	ae::Map< ae::TypeId, ae::Component* > m_defaults;
 	ae::Document m_doc;
 	ae::DocumentValue* m_docSelection = nullptr;
@@ -1571,7 +1579,7 @@ ae::Entity EditorServerObject::GetChildEntity( uint32_t index ) const
 	return m_object->ObjectTryGet( DOCUMENT_ENTITY_CHILDREN_MEMBER )->ArrayGet( index ).NumberGet< ae::Entity >();
 }
 
-void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Entity entity, ae::TypeId typeId, const EditorComponent* comp, const ae::ClassVar* var, const ae::DocumentValue* doc )
+void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Entity entity, ae::TypeId typeId, const EditorServerComponent* comp, const ae::ClassVar* var, const ae::DocumentValue* doc )
 {
 	AE_ASSERT( entity );
 	AE_ASSERT( comp );
@@ -1585,7 +1593,6 @@ void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Entity ent
 	event.entity = entity;
 	event.transform = GetTransform();
 	event.component = comp;
-	event.componentDoc = doc;
 	event.var = var;
 	SendPluginEvent( program->plugins, event );
 }
@@ -1621,14 +1628,14 @@ ae::AABB EditorServerObject::GetAABB( EditorProgram* program ) const
 	return GetOBB( program ).GetAABB();
 }
 
-void EditorServerObject::AddComponent( const EditorComponent* component )
+void EditorServerObject::AddComponent( const EditorServerComponent* component )
 {
 	AE_DEBUG_ASSERT( component );
 	AE_DEBUG_ASSERT_MSG( ( m_components.Find( component ) < 0 ), "Attempted adding duplicate component '#'", component->typeName );
 	m_components.Append( component );
 }
 
-void EditorServerObject::RemoveComponent( const EditorComponent* component )
+void EditorServerObject::RemoveComponent( const EditorServerComponent* component )
 {
 	AE_DEBUG_ASSERT( component );
 	const int32_t index = m_components.Find( component );
@@ -1636,9 +1643,9 @@ void EditorServerObject::RemoveComponent( const EditorComponent* component )
 	m_components.Remove( index );
 }
 
-const EditorComponent* EditorServerObject::GetComponentByType2( const ae::ClassType* type ) const
+const EditorServerComponent* EditorServerObject::GetComponentByType2( const ae::ClassType* type ) const
 {
-	for( const EditorComponent* component : m_components )
+	for( const EditorServerComponent* component : m_components )
 	{
 		if( strcmp( component->typeName, type->GetName() ) == 0 )
 		{
@@ -1648,16 +1655,6 @@ const EditorComponent* EditorServerObject::GetComponentByType2( const ae::ClassT
 	return nullptr;
 }
 
-ae::DocumentValue* EditorServerObject::GetComponentByType( const char* typeName )
-{
-	return AE_CALL_CONST_MEMBER_FUNCTION( GetComponentByType( typeName ) );
-}
-
-const ae::DocumentValue* EditorServerObject::GetComponentByType( const char* typeName ) const
-{
-	return GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_COMPONENTS_MEMBER )->ObjectTryGet( typeName );
-}
-
 ae::DocumentValue* EditorServerObject::GetComponentByType( const ae::ClassType* type )
 {
 	return AE_CALL_CONST_MEMBER_FUNCTION( GetComponentByType( type ) );
@@ -1665,7 +1662,7 @@ ae::DocumentValue* EditorServerObject::GetComponentByType( const ae::ClassType* 
 
 const ae::DocumentValue* EditorServerObject::GetComponentByType( const ae::ClassType* type ) const
 {
-	return type ? GetComponentByType( type->GetName() ) : nullptr;
+	return GetDocumentValue().ObjectTryGet( DOCUMENT_ENTITY_COMPONENTS_MEMBER )->ObjectTryGet( type->GetName() );
 }
 
 uint32_t EditorServerObject::GetComponentCount() const
@@ -1788,7 +1785,7 @@ void EditorServer::Initialize( EditorProgram* program )
 }
 
 // @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
-static void BroadcastDocVarChanges( EditorProgram* program, EditorServerObject* object, ae::Entity entity, ae::TypeId componentTypeId, const EditorComponent* comp, const ae::ClassType* type, const ae::DocumentValue* doc )
+static void BroadcastDocVarChanges( EditorProgram* program, EditorServerObject* object, ae::Entity entity, ae::TypeId componentTypeId, const EditorServerComponent* comp, const ae::ClassType* type, const ae::DocumentValue* doc )
 {
 	const uint32_t varCount = type->GetVarCount( true );
 	for( uint32_t i = 0; i < varCount; i++ )
@@ -1896,7 +1893,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		for( const JsonComponent* sceneComponent : sceneEntity.components )
 		{
 			const ae::ClassType* type = sceneComponent->type;
-			const EditorComponent* comp = object->GetComponentByType2( type );
+			const EditorServerComponent* comp = object->GetComponentByType2( type );
 			const ae::DocumentValue* componentDoc = object->GetComponentByType( type );
 			BroadcastDocVarChanges( program, object, entityId, type->GetId(), comp, type, componentDoc );
 		}
@@ -3090,7 +3087,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				ImGui::EndDisabled();
 			}
 			
-			const EditorComponent* deleteComp = nullptr;
+			const EditorServerComponent* deleteComp = nullptr;
 			ae::DocumentValue* componentsDocValue = selectedDocObject->ObjectTryGet( DOCUMENT_ENTITY_COMPONENTS_MEMBER );
 			const uint32_t componentCount = componentsDocValue->ObjectLength();
 			for( uint32_t i = 0; i < componentCount; i++ )
@@ -3098,7 +3095,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				ae::DocumentValue* componentDocValue = &componentsDocValue->ObjectGetValue( i );
 				const char* typeName = componentDocValue->ObjectTryGet( DOCUMENT_ENTITY_COMPONENT_TYPE_MEMBER )->StringGet();
 				const ae::ClassType* componentType = ae::GetClassTypeByName( typeName );
-				const EditorComponent* comp = selectedObject->GetComponentByType2( componentType );
+				const EditorServerComponent* comp = selectedObject->GetComponentByType2( componentType );
 				{
 					ImGui::Separator();
 					if( ImGui::TreeNodeEx( componentType->GetName(), ImGuiTreeNodeFlags_DefaultOpen ) )
@@ -3448,12 +3445,12 @@ void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity, boo
 		// Send ComponentDestroy events while editorObject is still valid
 		if( editorObject )
 		{
-			ae::Array< const EditorComponent* > compsToRemove = m_tag;
+			ae::Array< const EditorServerComponent* > compsToRemove = m_tag;
 			for( uint32_t i = 0; i < (uint32_t)editorObject->GetComponentCount(); i++ )
 			{
 				compsToRemove.Append( editorObject->GetComponentByIndex2( i ) );
 			}
-			for( const EditorComponent* comp : compsToRemove )
+			for( const EditorServerComponent* comp : compsToRemove )
 			{
 				RemoveComponent( program, editorObject, comp );
 			}
@@ -3543,21 +3540,18 @@ void EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj
 		}
 	}
 
-	{
-		ae::DocumentValue* objDocValue = m_docObjects->ObjectTryGet( ae::ToString( obj->GetEntity() ).c_str() );
-		AE_ASSERT( objDocValue );
-		ae::DocumentValue* compDoc = &objDocValue->ObjectSet( DOCUMENT_ENTITY_COMPONENTS_MEMBER ).ObjectSet( type->GetName() );
-		PopulateDocFromVarData( type, ae::ConstDataPointer( *type, m_GetDefault( type ) ), compDoc );
-	}
+	ae::DocumentValue* objDocValue = m_docObjects->ObjectTryGet( ae::ToString( obj->GetEntity() ).c_str() );
+	AE_ASSERT( objDocValue );
+	ae::DocumentValue* compDoc = &objDocValue->ObjectSet( DOCUMENT_ENTITY_COMPONENTS_MEMBER ).ObjectSet( type->GetName() );
+	PopulateDocFromVarData( type, ae::ConstDataPointer( *type, m_GetDefault( type ) ), compDoc );
 
-	EditorComponent* comp = m_componentPool.New( EditorComponent{ obj->GetEntity(), type->GetName() } );
+	EditorServerComponent* comp = m_componentPool.New( obj->GetEntity(), type->GetName(), compDoc );
 	obj->AddComponent( comp );
 	EditorEvent event;
 	event.type = EditorEventType::ComponentCreate;
 	event.entity = obj->GetEntity();
 	event.transform = obj->GetTransform();
 	event.component = comp;
-	event.componentDoc = obj->GetComponentByType( type );
 	SendPluginEvent( program->plugins, event );
 }
 
@@ -3597,7 +3591,7 @@ void EditorServer::m_ClearDefaults()
 	m_defaults.Clear();
 }
 
-void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* obj, const EditorComponent* comp )
+void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* obj, const EditorServerComponent* comp )
 {
 	if( obj && comp )
 	{
@@ -3607,15 +3601,15 @@ void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* 
 		const ae::DocumentCallback action = [ this, program, entity, type ]()
 		{
 			EditorServerObject* obj = GetObjectAssert( entity );
+			const EditorServerComponent* editorComponent = obj->GetComponentByType2( type );
 			EditorEvent event;
 			event.type = EditorEventType::ComponentDestroy;
 			event.entity = obj->GetEntity();
 			event.transform = obj->GetTransform();
-			event.component = obj->GetComponentByType2( type );
-			event.componentDoc = obj->GetComponentByType( type );
+			event.component = editorComponent;
 			SendPluginEvent( program->plugins, event );
-			obj->RemoveComponent( event.component );
-			m_componentPool.Delete( const_cast< EditorComponent* >( event.component ) );
+			obj->RemoveComponent( editorComponent );
+			m_componentPool.Delete( const_cast< EditorServerComponent* >( editorComponent ) );
 		};
 		const ae::DocumentCallback undoAction = [ this, program, entity, type ]()
 		{
@@ -3710,11 +3704,10 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 		const ae::ClassType* componentType = ae::GetClassTypeByIndex( i );
 		if( !componentType->attributes.Has< ae::EditorTypeAttribute >() ) { continue; }
 		ae::DocumentValue* componentDoc = editorObject->GetComponentByType( componentType );
-		const EditorComponent* editorComponent = editorObject->GetComponentByType2( componentType );
+		const EditorServerComponent* editorComponent = editorObject->GetComponentByType2( componentType );
 		if( componentDoc && editorComponent )
 		{
 			event.component = editorComponent;
-			event.componentDoc = componentDoc;
 			SendPluginEvent( program->plugins, event );
 
 			for( const auto& specialVar : kSpecialMemberVars )
@@ -4118,7 +4111,7 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 		for( const JsonComponent* sceneComponent : sceneEntity.components )
 		{
 			const ae::ClassType* type = sceneComponent->type;
-			const EditorComponent* comp = object->GetComponentByType2( type );
+			const EditorServerComponent* comp = object->GetComponentByType2( type );
 			const ae::DocumentValue* componentDoc = object->GetComponentByType( type );
 			BroadcastDocVarChanges( program, object, entityId, type->GetId(), comp, type, componentDoc );
 		}
@@ -5105,7 +5098,8 @@ JsonScene::JsonScene( const ae::Tag& tag, rapidjson::Value& scene, bool allowMis
 	{
 		const rapidjson::Value& jsonEntity = jsonEntities[ i ];
 		const char* transformString = ( jsonEntity.HasMember( JSON_TRANSFORM_NAME ) ? jsonEntity[ JSON_TRANSFORM_NAME ].GetString() : "" );
-		JsonEntity* entity = entities.New( JsonEntity{ .id = static_cast< ae::Entity >( jsonEntity[ JSON_ENTITY_ID_NAME ].GetUint() ),
+		JsonEntity* entity = entities.New( JsonEntity{
+			.id = static_cast< ae::Entity >( jsonEntity[ JSON_ENTITY_ID_NAME ].GetUint() ),
 			.name = ( jsonEntity.HasMember( JSON_ENTITY_NAME_NAME ) ? jsonEntity[ JSON_ENTITY_NAME_NAME ].GetString() : "" ),
 			.transform = ae::FromString( transformString, ae::Matrix4::Identity() ),
 			.parentId = ( jsonEntity.HasMember( JSON_PARENT_ID_NAME ) ? jsonEntity[ JSON_PARENT_ID_NAME ].GetUint() : ae::kNullEntity ),
