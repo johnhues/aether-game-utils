@@ -161,8 +161,8 @@ std::string SpecialMemberVar::ToString( const ae::Matrix4& transform ) const
 // Helpers
 //------------------------------------------------------------------------------
 void GetComponentTypeRequirements( const ae::ClassType* type, ae::Array< const ae::ClassType* >* prereqs );
-void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component, ae::DocumentValue* compDoc = nullptr );
-void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry, ae::DocumentValue* docObjects = nullptr );
+void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component );
+void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry );
 void JsonToDoc( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::DocumentValue* docObjects );
 void ComponentToJson( const ae::ClassType* type, const ae::DocumentValue* compDoc, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
 bool ValidateLevel( const rapidjson::Value& jsonLevel );
@@ -4753,7 +4753,7 @@ void GetComponentTypeRequirements( const ae::ClassType* type, ae::Array< const a
 	fn( fn, type );
 }
 
-void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component, ae::DocumentValue* compDoc )
+void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component )
 {
 	const ae::ClassType* type = ae::GetClassTypeFromObject( component );
 	const uint32_t varCount = type->GetVarCount( true );
@@ -4770,39 +4770,26 @@ void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& json
 			continue;
 		}
 		const auto& jsonVar = jsonComponent[ var->GetName() ];
-		ae::DocumentValue* varDoc = compDoc ? compDoc->ObjectTryGet( var->GetName() ) : nullptr;
 		if( var->IsArray() && jsonVar.IsArray() )
 		{
 			const auto& jsonVarArray = jsonVar.GetArray();
 			const uint32_t arrayLen = var->SetArrayLength( component, jsonVarArray.Size() );
 			AE_ASSERT( arrayLen <= jsonVarArray.Size() );
-			if( varDoc )
-			{
-				varDoc->ArrayClear();
-			}
 			for( uint32_t j = 0; j < arrayLen; j++ )
 			{
 				const auto& jsonElement = jsonVarArray[ j ];
 				var->SetObjectValueFromString( component, jsonElement.GetString(), j );
-				if( varDoc )
-				{
-					varDoc->ArrayAppend().StringSet( jsonElement.GetString() );
-				}
 			}
 		}
 		// @TODO: Handle patching references
 		else if( !jsonVar.IsObject() && !jsonVar.IsArray() )
 		{
 			var->SetObjectValueFromString( component, jsonVar.GetString() );
-			if( varDoc )
-			{
-				varDoc->StringSet( jsonVar.GetString() );
-			}
 		}
 	}
 }
 
-void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry, ae::DocumentValue* docObjects )
+void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry )
 {
 	// Serialize all components (second phase to handle references)
 	for( const auto& jsonObject : jsonObjects.GetArray() )
@@ -4822,17 +4809,7 @@ void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const r
 				continue;
 			}
 			ae::Component* component = &registry->GetComponent( entity, type );
-			ae::DocumentValue* compDoc = nullptr;
-			if( docObjects )
-			{
-				const ae::Str32 entityKey = ae::ToString( entity ).c_str();
-				ae::DocumentValue* entityDoc = docObjects->ObjectTryGet( entityKey.c_str() );
-				ae::DocumentValue* components = entityDoc
-					? entityDoc->ObjectTryGet( DOCUMENT_ENTITY_COMPONENTS_MEMBER )
-					: nullptr;
-				compDoc = components ? components->ObjectTryGet( type->GetName() ) : nullptr;
-			}
-			ae::JsonToComponent( transform, componentIter.value, component, compDoc );
+			ae::JsonToComponent( transform, componentIter.value, component );
 		}
 	}
 }
