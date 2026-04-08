@@ -6441,12 +6441,6 @@ constexpr TypeId kInvalidTypeId;
 #ifndef AE_MAX_META_ENUM_VALUES_CONFIG
 	#define AE_MAX_META_ENUM_VALUES_CONFIG 64
 #endif
-#ifndef AE_MAX_META_PROPS_CONFIG
-	#define AE_MAX_META_PROPS_CONFIG 8
-#endif
-#ifndef AE_MAX_META_PROP_LIST_LENGTH_CONFIG
-	#define AE_MAX_META_PROP_LIST_LENGTH_CONFIG 8
-#endif
 #ifndef AE_MAX_META_ATTRIBUTES_CONFIG
 	#define AE_MAX_META_ATTRIBUTES_CONFIG 8
 #endif
@@ -6466,16 +6460,6 @@ const uint32_t kMaxMetaEnumTypes = AE_MAX_META_ENUM_TYPES_CONFIG;
 //! value can be overridden by defining AE_MAX_META_ENUM_VALUES_CONFIG. See
 //! AE_CONFIG_FILE for more details.
 const uint32_t kMaxMetaEnumValues = AE_MAX_META_ENUM_VALUES_CONFIG;
-//! The maximum number of properties that can be registered with the
-//! AE_REGISTER_*_PROPERTY() functions per class, var, enum, etc. This value
-//! can be overridden by defining AE_MAX_META_PROPS_CONFIG. See AE_CONFIG_FILE
-//! for more details.
-const uint32_t kMaxMetaProps = AE_MAX_META_PROPS_CONFIG;
-//! The maximum number of values that can be registered per property with the
-//! AE_REGISTER_*_PROPERTY_VALUE() functions. This value can be
-//! overridden by defining AE_MAX_META_PROP_LIST_LENGTH_CONFIG. See
-//! AE_CONFIG_FILE for more details.
-const uint32_t kMaxMetaPropListLength = AE_MAX_META_PROP_LIST_LENGTH_CONFIG;
 //! The maximum number of attributes that can be registered with
 //! AE_REGISTER_CLASS_ATTRIBUTE(), AE_REGISTER_CLASS_VAR_ATTRIBUTE(), and
 //! AE_REGISTER_ENUM_ATTRIBUTE() per class, var, or enum. This value can
@@ -6716,13 +6700,6 @@ public:
 		Matrix4,
 		Color,
 		UUID,
-#if AE_DEPRECATED
-		Class, // @TODO: Remove
-		Enum, // @TODO: Remove
-		Pointer, // @TODO: Remove
-		CustomRef, // @TODO: Remove
-		None, // @TODO: Remove
-#endif // AE_DEPRECATED
 	};
 
 	virtual ae::BasicType::Type GetType() const = 0;
@@ -6873,9 +6850,6 @@ public:
 
 	// Internal
 	ae::TypeId GetBaseVarTypeId() const override;
-#if AE_DEPRECATED
-	virtual ae::BasicType::Type GetBasicType() const { return ae::BasicType::Pointer; } // @HACK: Remove
-#endif // AE_DEPRECATED
 };
 
 //------------------------------------------------------------------------------
@@ -7042,55 +7016,6 @@ public:
 	_TypePointer m_varType;
 	ae::TypeName m_name;
 	uint32_t m_offset = 0;
-#if AE_DEPRECATED
-	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
-	void m_AddProp( const char* prop, const char* value );
-	class Serializer
-	{
-	public:
-		virtual ~Serializer();
-		virtual std::string ObjectPointerToString( const ae::Object* obj ) const = 0;
-		virtual bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const = 0;
-	};
-	static void SetSerializer( const ae::ClassVar::Serializer* serializer );
-	std::string GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
-	bool SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx = -1 ) const;
-	template< typename T > bool GetObjectValue( const ae::Object* obj, T* valueOut, int32_t arrayIdx = -1 ) const;
-	template< typename T > bool SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx = -1 ) const;
-	template< typename T > T* GetPointer( ae::Object* obj, int32_t arrayIdx = -1 ) const;
-	template< typename T > const T* GetPointer( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
-	bool HasProperty( const char* prop ) const;
-	int32_t GetPropertyIndex( const char* prop ) const;
-	int32_t GetPropertyCount() const;
-	const char* GetPropertyName( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( const char* propName ) const;
-	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
-	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
-	ae::BasicType::Type GetType() const;
-	const class ae::EnumType* GetEnumType() const;
-	const char* GetTypeName() const;
-	const ae::ClassType* GetSubType() const;
-	bool IsArray() const;
-	bool IsArrayFixedLength() const;
-	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const;
-	uint32_t GetArrayLength( const ae::Object* obj ) const;
-	uint32_t GetArrayMaxLength() const;
-	template< typename T >
-	const T* m_HACK_FindInnerVarType() const
-	{
-		static_assert( std::is_base_of_v< ae::Type, T >, "" );
-		const ae::Type* iter = m_varType.Get();
-		while( iter )
-		{
-			if( const T* innerType = iter->AsVarType< T >() ) { return innerType; }
-			else if( const ae::PointerType* pointerVarType = iter->AsVarType< ae::PointerType >() ) { iter = &pointerVarType->GetInnerVarType(); }
-			else if( const ae::ArrayType* arrayVarType = iter->AsVarType< ae::ArrayType >() ) { iter = &arrayVarType->GetInnerVarType(); }
-			else { iter = nullptr; }
-		}
-		return nullptr;
-	}
-#endif // AE_DEPRECATED
 };
 
 //------------------------------------------------------------------------------
@@ -7182,9 +7107,6 @@ private:
 	ae::TypeId m_id = ae::kInvalidTypeId;
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
-#if AE_DEPRECATED
-	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
-#endif // AE_DEPRECATED
 	ae::Array< const ae::ClassVar*, kMaxMetaVars > m_vars;
 	ae::TypeName m_parent;
 	bool m_isAbstract = false;
@@ -7196,19 +7118,6 @@ public:
 	template< typename T > typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type Init( const char* name );
 	void m_AddVar( const ae::ClassVar* var );
 	ae::TypeId GetBaseVarTypeId() const override;
-#if AE_DEPRECATED
-	void m_AddProp( const char* prop, const char* value );
-	const ae::ClassType* GetClassType() const { return this; }
-	bool HasProperty( const char* property ) const;
-	const ae::ClassType* GetTypeWithProperty( const char* property ) const;
-	int32_t GetPropertyIndex( const char* prop ) const;
-	int32_t GetPropertyCount() const;
-	const char* GetPropertyName( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( const char* propName ) const;
-	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
-	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
-#endif // AE_DEPRECATED
 };
 
 //------------------------------------------------------------------------------
@@ -7372,10 +7281,6 @@ struct _Globals
 	uint32_t metaCacheSeq = 0;
 	ae::Map< ae::TypeId, const ae::EnumType*, kMaxMetaEnumTypes, ae::Hash32, ae::MapMode::Stable > enumTypes;
 	ae::Map< ae::TypeId, ae::ClassType*, kMaxMetaTypes, ae::Hash32, ae::MapMode::Stable > classTypes;
-#if AE_DEPRECATED
-	const ae::ClassVar::Serializer* varSerializer = nullptr;
-	bool varSerializerInitialized = false;
-#endif // AE_DEPRECATED
 
 	// Graphics
 	class GraphicsDevice* graphicsDevice = nullptr;
@@ -13882,33 +13787,6 @@ template< typename T > void* _PlacementNew( void* d ) { return new( d ) T(); }
 	AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__) AE_GLUE_UNDERSCORE(_ae_forceLink, __VA_ARGS__);
 
 //------------------------------------------------------------------------------
-// Deprecated meta class property registration macros
-//------------------------------------------------------------------------------
-#if AE_DEPRECATED
-
-//! Register a class property
-//! Call signature: AE_REGISTER_CLASS_PROPERTY( (Namespace0, ..., NameSpaceN, MyType), typeProperty );
-#define AE_REGISTER_NAMESPACECLASS_PROPERTY( _C, _P ) AE_REGISTER_CLASS_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P )
-#define AE_REGISTER_CLASS_PROPERTY( _C, _P ) AE_REGISTER_NAMESPACECLASS_PROPERTY( (_C), _P )
-
-//! Register a class property with an additional value. Multiple values can be
-//! specified per property.
-//! Call signature: AE_REGISTER_CLASS_PROPERTY_VALUE( (Namespace0, ..., NameSpaceN, MyType), typeProperty, typePropertyValue );
-#define AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( _C, _P, _V ) AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P, _V )
-#define AE_REGISTER_CLASS_PROPERTY_VALUE( _C, _P, _V ) AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (_C), _P, _V )
-
-//! Register a property for a specific class variable
-#define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( _C, _V, _P ) AE_REGISTER_CLASS_VAR_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P )
-#define AE_REGISTER_CLASS_VAR_PROPERTY( _C, _V, _P ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( (_C), _V, _P )
-
-//! Register a property for a specific class variable with an additional value.
-//! Multiple values can be specified per property.
-#define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P, _PV )
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (_C), _V, _P, _PV )
-
-#endif // AE_DEPRECATED
-
-//------------------------------------------------------------------------------
 // Internal meta class registration macros
 //------------------------------------------------------------------------------
 #define AE_REGISTER_CLASS_IMPL( _N, _T )\
@@ -13919,24 +13797,10 @@ template< typename T > void* _PlacementNew( void* d ) { return new( d ) T(); }
 	template<> ae::Type* ae::FindMetaRegistrationFor< ::_T >() { return ae::TypeT< ::_T >::Get(); }\
 	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, SourceFileAttribute)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute), nullptr) );
 
-#define AE_REGISTER_CLASS_PROPERTY_IMPL( _N, _T, _P ) static ae::_PropCreator< ::_T > AE_GLUE_UNDERSCORE(ae_prop_creator, _N , _P)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_P, "" )
-
-#define AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL( _N, _T, _P, _V ) static ae::_PropCreator< ::_T > AE_GLUE_UNDERSCORE(ae_prop_creator, _N, _P, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_P, #_V )
-
 #define AE_REGISTER_CLASS_VAR_IMPL( _N, _T, _V )\
 	AE_DISABLE_INVALID_OFFSET_WARNING\
 	static ae::_VarCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_V );\
 	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, SourceFileAttribute)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute), nullptr) );\
-	AE_ENABLE_INVALID_OFFSET_WARNING
-
-#define AE_REGISTER_CLASS_VAR_PROPERTY_IMPL( _N, _T, _V, _P )\
-	AE_DISABLE_INVALID_OFFSET_WARNING\
-	static ae::_VarPropCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_prop_creator, _N, _V, _P)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), #_P, "" );\
-	AE_ENABLE_INVALID_OFFSET_WARNING
-
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( _N, _T, _V, _P, _PV )\
-	AE_DISABLE_INVALID_OFFSET_WARNING\
-	static ae::_VarPropCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_prop_creator, _N, _V, _P, _PV)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), #_P, #_PV );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
 
 #define AE_REGISTER_CLASS_ATTRIBUTE_IMPL( _N, _T, _AN, _AT, _ARGS )\
@@ -14658,16 +14522,6 @@ struct _TypeCreator
 	ae::ClassType* Get() { return static_cast< ae::ClassType* >( ae::TypeT< T >::Get() ); }
 };
 
-template< typename C >
-struct _PropCreator
-{
-	// Take _TypeCreator param as a safety check that _PropCreator typeName is provided correctly
-	_PropCreator( ae::_TypeCreator< C >& typeCreator, const char* typeName, const char* propName, const char* propValue )
-	{
-		typeCreator.Get()->m_AddProp( propName, propValue );
-	}
-};
-
 template< typename C, typename V, uint32_t Offset >
 struct _VarCreator
 {
@@ -14688,16 +14542,6 @@ struct _VarCreator
 		typeCreator.Get()->m_AddVar( &m_var );
 	}
 	ae::ClassVar m_var;
-};
-
-template< typename C, typename V, uint32_t Offset >
-struct _VarPropCreator
-{
-	// Take _VarCreator param as a safety check
-	_VarPropCreator( ae::_VarCreator< C, V, Offset >& varCreator, const char* propName, const char* propValue )
-	{
-		varCreator.m_var.m_AddProp( propName, propValue );
-	}
 };
 
 //------------------------------------------------------------------------------
@@ -15405,152 +15249,6 @@ bool ae::AttributeList::Has() const
 {
 	return (bool)GetCount< T >();
 }
-
-//------------------------------------------------------------------------------
-// ae::ClassVar templated member functions
-//------------------------------------------------------------------------------
-#if AE_DEPRECATED
-
-template< typename T >
-bool ae::ClassVar::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx ) const
-{
-	if( !obj )
-	{
-		return false;
-	}
-
-	const ae::ClassType* objType = ae::GetClassTypeFromObject( obj );
-	AE_ASSERT( objType );
-	AE_ASSERT_MSG( objType->IsType( m_owner.GetClassType() ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner.GetClassType()->GetName() );
-
-	ae::DataPointer varData( this, obj );
-	if( const ae::ArrayType* arrayVarType = varData.GetVarType().AsVarType< ae::ArrayType >() )
-	{
-		if( arrayIdx < 0 )
-		{
-			return false;
-		}
-		varData = arrayVarType->GetElement( varData, arrayIdx );
-	}
-	else if( arrayIdx >= 0 )
-	{
-		return false;
-	}
-
-	if( varData )
-	{
-		const ae::Type* varType = &varData.GetVarType();
-		if( const ae::BasicType* basicVarType = varType->AsVarType< ae::BasicType >() )
-		{
-			return basicVarType->SetVarData( varData, value );
-		}
-		else if( const ae::EnumType* enumVarType = varType->AsVarType< ae::EnumType >() )
-		{
-			return enumVarType->SetVarData( varData, value );
-		}
-		else if( const ae::ClassType* classType = varType->AsVarType< ae::ClassType >() )
-		{
-			if( T* innerObject = classType->TryGet< T >( varData ) )
-			{
-				*innerObject = value;
-				return true;
-			}
-		}
-		else if constexpr( std::is_pointer_v< T > || std::is_null_pointer_v< T > )
-		{
-			const ae::PointerType* pointerVarType = varType->AsVarType< ae::PointerType >();
-			return pointerVarType ? pointerVarType->Set( varData, (ae::Object*)value ) : false;
-		}
-	}
-	return false;
-}
-
-template< typename T >
-bool ae::ClassVar::GetObjectValue( const ae::Object* object, T* valueOut, int32_t arrayIdx ) const
-{
-	if( !object )
-	{
-		return false;
-	}
-
-	ae::ConstDataPointer varData;
-	if( const ae::ArrayType* arrayType = GetOuterVarType().AsVarType< ae::ArrayType >() )
-	{
-		if( arrayIdx < 0 )
-		{
-			return false;
-		}
-		ae::ConstDataPointer array( this, object );
-		varData = arrayType->GetElement( array, arrayIdx );
-	}
-	else if( arrayIdx < 0 )
-	{
-		varData = { this, object };
-	}
-
-	if( varData )
-	{
-		const ae::Type* varType = &varData.GetVarType();
-		if( const ae::BasicType* basicType = varType->AsVarType< ae::BasicType >() )
-		{
-			return basicType->GetVarData( varData, valueOut );
-		}
-		else if( const ae::EnumType* enumType = varType->AsVarType< ae::EnumType >() )
-		{
-			return enumType->GetVarData( varData, valueOut );
-		}
-		else if( const ae::ClassType* classType = varType->AsVarType< ae::ClassType >() )
-		{
-			if( valueOut )
-			{
-				if( const T* innerObject = classType->TryGet< T >( varData ) )
-				{
-					*valueOut = *innerObject;
-					return true;
-				}
-			}
-		}
-	}
-	return false;
-}
-
-template< typename T >
-T* ae::ClassVar::GetPointer( ae::Object* obj, int32_t arrayIdx ) const
-{
-	return const_cast< T* >( GetPointer< T >( const_cast< const ae::Object* >( obj ), arrayIdx ) );
-}
-
-template< typename T >
-const T* ae::ClassVar::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
-{
-	if( !obj )
-	{
-		return nullptr;
-	}
-
-	ae::ConstDataPointer varData( this, obj );
-	if( const ae::ArrayType* arrayVarType = varData.GetVarType().AsVarType< ae::ArrayType >() )
-	{
-		if( arrayIdx < 0 )
-		{
-			return nullptr;
-		}
-		varData = arrayVarType->GetElement( varData, arrayIdx );
-	}
-	else if( arrayIdx >= 0 )
-	{
-		return nullptr;
-	}
-
-	if( varData )
-	{
-		const ae::ClassType* classVarType = varData.GetVarType().AsVarType< ae::ClassType >();
-		return classVarType ? classVarType->TryGet< T >( varData ) : nullptr;
-	}
-	return nullptr;
-}
-
-#endif // AE_DEPRECATED
 
 //------------------------------------------------------------------------------
 // ae::Cast implementation
@@ -32475,152 +32173,6 @@ const ae::Type& ae::ClassVar::GetOuterVarType() const
 	return *m_varType.Get();
 }
 
-#if AE_DEPRECATED
-ae::ClassVar::Serializer::~Serializer()
-{
-	if( _Globals::Get()->varSerializer == this )
-	{
-		_Globals::Get()->varSerializer = nullptr;
-	}
-}
-
-void ae::ClassVar::SetSerializer( const ae::ClassVar::Serializer* serializer )
-{
-	if( serializer )
-	{
-		_Globals::Get()->varSerializerInitialized = true;
-	}
-	_Globals::Get()->varSerializer = serializer;
-}
-
-std::string ae::ClassVar::GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx ) const
-{
-	if( !obj )
-	{
-		return "";
-	}
-	ae::ConstDataPointer varData( this, obj );
-	const ae::Type* varType = &GetOuterVarType();
-	if( const ae::ArrayType* arrayType = varType->AsVarType< ae::ArrayType >() )
-	{
-		if( arrayIdx < 0 )
-		{
-			return "";
-		}
-		varData = arrayType->GetElement( varData, arrayIdx );
-		varType = &arrayType->GetInnerVarType();
-	}
-	else if( arrayIdx >= 0 )
-	{
-		return "";
-	}
-
-	if( varData )
-	{
-		if( const ae::BasicType* basicVarType = varType->AsVarType< ae::BasicType >() )
-		{
-			return basicVarType->GetVarDataAsString( varData );
-		}
-		else if( const ae::EnumType* enumVarType = varType->AsVarType< ae::EnumType >() )
-		{
-			return enumVarType->GetVarDataAsString( varData );
-		}
-		else if( const ae::PointerType* pointerVarType = varType->AsVarType< ae::PointerType >() )
-		{
-			ObjectPointerToStringFn fn = []( const void* userData, const ae::Object* obj ) -> std::string
-			{
-				const ae::ClassVar::Serializer* serializer = (const ae::ClassVar::Serializer*)userData;
-				AE_ASSERT( serializer );
-				return serializer->ObjectPointerToString( obj );
-			};
-			return pointerVarType->ToString( varData, fn, _Globals::Get()->varSerializer );
-		}
-	}
-	return "";
-}
-
-bool ae::ClassVar::SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx ) const
-{
-	if( !obj )
-	{
-		return false;
-	}
-	
-	// Safety check to make sure 'this' Var belongs to 'obj' ae::ClassType
-	const ae::ClassType* objType = ae::GetClassTypeFromObject( obj );
-	AE_ASSERT( objType );
-	AE_ASSERT_MSG( objType->IsType( m_owner.GetClassType() ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner.GetClassType()->GetName(), GetName() );
-	
-	const ae::Type* varType = &GetOuterVarType();
-	ae::DataPointer varData( this, obj );
-	if( const ae::ArrayType* arrayType = varType->AsVarType< ae::ArrayType >() )
-	{
-		if( arrayIdx < 0 )
-		{
-			return false;
-		}
-		varType = &arrayType->GetInnerVarType();
-		varData = arrayType->GetElement( varData, arrayIdx );
-	}
-	else if( arrayIdx >= 0 )
-	{
-		return false;
-	}
-
-	if( varData )
-	{
-		if( const ae::BasicType* basicVarType = varType->AsVarType< ae::BasicType >() )
-		{
-			return basicVarType->SetVarDataFromString( varData, value );
-		}
-		else if( const ae::EnumType* enumVarType = varType->AsVarType< ae::EnumType >() )
-		{
-			return enumVarType->SetVarDataFromString( varData, value );
-		}
-		else if( const ae::PointerType* pointerVarType = varType->AsVarType< ae::PointerType >() )
-		{
-			StringToObjectPointerFn fn = []( const void* userData, const char* pointerVal, ae::Object** objOut ) -> bool
-			{
-				const ae::ClassVar::Serializer* serializer = (const ae::ClassVar::Serializer*)userData;
-				AE_ASSERT( serializer );
-				return serializer->StringToObjectPointer( pointerVal, objOut );
-			};
-			return pointerVarType->FromString( varData, value, fn, _Globals::Get()->varSerializer );
-		}
-	}
-	return false;
-}
-bool ae::ClassVar::HasProperty( const char* prop ) const { return GetPropertyIndex( prop ) >= 0; }
-int32_t ae::ClassVar::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
-int32_t ae::ClassVar::GetPropertyCount() const { return m_props.Length(); }
-const char* ae::ClassVar::GetPropertyName( int32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
-uint32_t ae::ClassVar::GetPropertyValueCount( int32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
-uint32_t ae::ClassVar::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
-const char* ae::ClassVar::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const
-{
-	const auto* vals = ( propIndex < m_props.Length() ) ? &m_props.GetValue( propIndex ) : nullptr;
-	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
-}
-const char* ae::ClassVar::GetPropertyValue( const char* propName, uint32_t valueIndex ) const
-{
-	const auto* vals = m_props.TryGet( propName );
-	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
-}
-void ae::ClassVar::m_AddProp( const char* prop, const char* value )
-{
-	AE_ASSERT_MSG( m_props.Length() < m_props.Size(), "Set/increase AE_MAX_META_PROP_LIST_LENGTH_CONFIG (Currently: #)", m_props.Size() );
-	auto* props = m_props.TryGet( prop );
-	if( !props )
-	{
-		props = &m_props.Set( prop, {} );
-	}
-	if( value && value[ 0 ] ) // 'm_props' will have an empty array for properties when no value is specified
-	{
-		props->Append( value );
-	}
-}
-#endif // AE_DEPRECATED
-
 ae::ClassVar::_TypePointer::_TypePointer( const ae::Type& _varType )
 {
 	if( const ae::ClassType* classType = _varType.AsVarType< ae::ClassType >() )
@@ -32714,137 +32266,6 @@ bool ae::ClassType::IsType( const ae::ClassType* otherType ) const
 	return false;
 }
 
-#if AE_DEPRECATED
-ae::BasicType::Type ae::ClassVar::GetType() const
-{
-	if( const ae::BasicType* basicType = m_HACK_FindInnerVarType< ae::BasicType >() )
-	{
-		return basicType->GetType();
-	}
-	else if( m_HACK_FindInnerVarType< ae::EnumType >() )
-	{
-		return ae::BasicType::Enum;
-	}
-	else if( const ae::PointerType* pointerType = m_HACK_FindInnerVarType< ae::PointerType >() )
-	{
-		return pointerType->GetBasicType();
-	}
-	else if( m_HACK_FindInnerVarType< ae::ClassType >() )
-	{
-		return ae::BasicType::Class;
-	}
-	return ae::BasicType::None;
-}
-
-const char* ae::ClassVar::GetTypeName() const
-{
-	switch( GetType() )
-	{
-		case ae::BasicType::UInt8: return "uint8_t";
-		case ae::BasicType::UInt16: return "uint16_t";
-		case ae::BasicType::UInt32: return "uint32_t";
-		case ae::BasicType::UInt64: return "uint64_t";
-		case ae::BasicType::Int8: return "int8_t";
-		case ae::BasicType::Int16: return "int16_t";
-		case ae::BasicType::Int32: return "int32_t";
-		case ae::BasicType::Int64: return "int64_t";
-		case ae::BasicType::Int2: return "ae::Int2";
-		case ae::BasicType::Int3: return "ae::Int3";
-		case ae::BasicType::Bool: return "bool";
-		case ae::BasicType::Float: return "float";
-		case ae::BasicType::Double: return "double";
-		case ae::BasicType::Vec2: return "ae::Vec2";
-		case ae::BasicType::Vec3: return "ae::Vec3";
-		case ae::BasicType::Vec4: return "ae::Vec4";
-		case ae::BasicType::Quaternion: return "ae::Quaternion";
-		case ae::BasicType::Color: return "ae::Color";
-		case ae::BasicType::Matrix4: return "ae::Matrix4";
-		case ae::BasicType::UUID: return "ae::UUID";
-		case ae::BasicType::String: return "String";
-		case ae::BasicType::Class:
-		{
-			const ae::ClassType* type = GetSubType();
-			AE_ASSERT( type );
-			return type->GetName();
-		}
-		case ae::BasicType::Enum:
-		{
-			const ae::EnumType* enumType = GetEnumType();
-			AE_ASSERT( enumType );
-			return enumType->GetName();
-		}
-		case ae::BasicType::Pointer:
-		case ae::BasicType::CustomRef:
-		{
-			return "ref";
-		}
-		case ae::BasicType::None:
-		{
-			return "none_type";
-		}
-	}
-	AE_FAIL();
-	return "unknown_type";
-}
-
-// @TODO: Remove
-const class ae::EnumType* ae::ClassVar::GetEnumType() const
-{
-	const ae::EnumType* enumType = m_HACK_FindInnerVarType< ae::EnumType >();
-	return enumType ? ae::GetEnumType( enumType->GetName() ) : nullptr;
-}
-
-// @TODO: Remove
-const ae::ClassType* ae::ClassVar::GetSubType() const
-{
-	const ae::ClassType* classVarType = m_HACK_FindInnerVarType< ae::ClassType >();
-	return classVarType ? ae::GetClassTypeById( classVarType->GetTypeId() ) : nullptr;
-}
-
-// @TODO: Remove
-bool ae::ClassVar::IsArray() const
-{
-	return GetOuterVarType().AsVarType< ae::ArrayType >();
-}
-
-// @TODO: Remove
-bool ae::ClassVar::IsArrayFixedLength() const
-{
-	const ae::ArrayType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayType >();
-	return arrayAdapter && arrayAdapter->IsFixedLength();
-}
-
-// @TODO: Remove
-uint32_t ae::ClassVar::SetArrayLength( ae::Object* obj, uint32_t length ) const
-{
-	AE_ASSERT( length != ae::MaxValue< uint32_t >() );
-	if( !obj )
-	{
-		return 0;
-	}
-	const ae::ArrayType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayType >();
-	return arrayAdapter ? arrayAdapter->Resize( { this, obj }, length ) : 0;
-}
-
-// @TODO: Remove
-uint32_t ae::ClassVar::GetArrayLength( const ae::Object* obj ) const
-{
-	if( !obj )
-	{
-		return 0;
-	}
-	const ae::ArrayType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayType >();
-	return arrayAdapter ? arrayAdapter->GetLength( { this, obj } ) : 0;
-}
-
-// @TODO: Remove
-uint32_t ae::ClassVar::GetArrayMaxLength() const
-{
-	const ae::ArrayType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayType >();
-	return arrayAdapter ? arrayAdapter->GetMaxLength() : 0;
-}
-#endif // AE_DEPRECATED
-
 //------------------------------------------------------------------------------
 // ae::EnumType member functions
 //------------------------------------------------------------------------------
@@ -32922,13 +32343,6 @@ std::string ae::BasicType::GetVarDataAsString( ae::ConstDataPointer _varData ) c
 		case BasicType::Matrix4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
 		case BasicType::Color: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
 		case BasicType::UUID: return ae::Str64::Format( "#", *reinterpret_cast< const ae::UUID* >( varData ) ).c_str();
-#if AE_DEPRECATED
-		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::Enum: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::Pointer: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::CustomRef: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::None: AE_FAIL(); break; // @TODO: Remove
-#endif // AE_DEPRECATED
 	}
 	return "";
 }
@@ -33131,13 +32545,6 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 			*(ae::UUID*)varData = v;
 			return true;
 		}
-#if AE_DEPRECATED
-		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::Enum: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::Pointer: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::CustomRef: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::None: AE_FAIL(); break; // @TODO: Remove
-#endif // AE_DEPRECATED
 	}
 	return false;
 }
@@ -33276,48 +32683,6 @@ ae::ConstDataPointer ae::ClassType::GetVarData( const ae::ClassVar* var, ae::Con
 	return {};
 }
 
-#if AE_DEPRECATED
-
-bool ae::ClassType::HasProperty( const char* property ) const { return GetPropertyIndex( property ) >= 0; }
-const ae::ClassType* ae::ClassType::GetTypeWithProperty( const char* property ) const
-{
-	const ae::ClassType* result = this;
-	while( result )
-	{
-		if( result->HasProperty( property ) )
-		{
-			break;
-		}
-		result = result->GetParentType();
-	}
-	return result;
-}
-int32_t ae::ClassType::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
-int32_t ae::ClassType::GetPropertyCount() const { return m_props.Length(); }
-const char* ae::ClassType::GetPropertyName( int32_t propIndex ) const
-{
-	AE_ASSERT( 0 <= propIndex && propIndex < m_props.Length() );
-	return m_props.GetKey( propIndex ).c_str();
-}
-uint32_t ae::ClassType::GetPropertyValueCount( int32_t propIndex ) const
-{
-	AE_ASSERT( 0 <= propIndex && propIndex < m_props.Length() );
-	return m_props.GetValue( propIndex ).Length();
-}
-uint32_t ae::ClassType::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
-const char* ae::ClassType::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const
-{
-	const auto* vals = ( propIndex < m_props.Length() ) ? &m_props.GetValue( propIndex ) : nullptr;
-	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
-}
-const char* ae::ClassType::GetPropertyValue( const char* propName, uint32_t valueIndex ) const
-{
-	const auto* vals = m_props.TryGet( propName );
-	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
-}
-
-#endif // AE_DEPRECATED
-
 void ae::ClassType::PatchVTable( ae::Object* obj ) const
 {
 	if( obj )
@@ -33340,21 +32705,6 @@ bool ae::ClassType::IsPolymorphic() const { return m_isPolymorphic; }
 bool ae::ClassType::IsDefaultConstructible() const { return m_isDefaultConstructible; }
 bool ae::ClassType::IsFinal() const { return m_isFinal; }
 const char* ae::ClassType::GetParentTypeName() const { return m_parent.c_str(); }
-
-#if AE_DEPRECATED
-void ae::ClassType::m_AddProp( const char* prop, const char* value )
-{
-	auto* props = m_props.TryGet( prop );
-	if( !props )
-	{
-		props = &m_props.Set( prop, {} );
-	}
-	if( value && value[ 0 ] ) // 'm_props' will have an empty array for properties when no value is specified
-	{
-		props->Append( value );
-	}
-}
-#endif // AE_DEPRECATED
 
 void ae::ClassType::m_AddVar( const ae::ClassVar* var )
 {

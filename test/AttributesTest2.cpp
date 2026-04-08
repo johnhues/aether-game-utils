@@ -39,12 +39,6 @@ TEST_CASE( "Registered class attributes", "[Attributes]" )
 	REQUIRE( type->attributes.GetCount< ae::Attribute >() == ( AE_ENABLE_SOURCE_INFO ? 6 : 5 ) );
 	REQUIRE( var->attributes.GetCount< ae::Attribute >() == ( AE_ENABLE_SOURCE_INFO ? 4 : 3 ) );
 
-#if AE_DEPRECATED
-	GameObject obj;
-	obj.id = 1;
-	REQUIRE( var->GetObjectValueAsString( &obj ) == "1" );
-#endif
-
 #if AE_ENABLE_SOURCE_INFO
 	REQUIRE( type->attributes.Has< ae::SourceFileAttribute >() );
 	REQUIRE( type->attributes.GetCount< ae::SourceFileAttribute >() == 1 );
@@ -102,12 +96,6 @@ TEST_CASE( "Registered namespace class attributes", "[Attributes]" )
 	REQUIRE( var );
 	REQUIRE( type->attributes.GetCount< ae::Attribute >() == ( AE_ENABLE_SOURCE_INFO ? 6 : 5 ) );
 	REQUIRE( var->attributes.GetCount< ae::Attribute >() == ( AE_ENABLE_SOURCE_INFO ? 4 : 3 ) );
-
-#if AE_DEPRECATED
-	xyz::Util obj;
-	obj.id = 1;
-	REQUIRE( var->GetObjectValueAsString( &obj ) == "1" );
-#endif
 
 #if AE_ENABLE_SOURCE_INFO
 	REQUIRE( type->attributes.Has< ae::SourceFileAttribute >() );
