@@ -3194,9 +3194,9 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 //------------------------------------------------------------------------------
 #ifndef AE_ASSERT_IMPL
 #	if _AE_WASM_
-#		define AE_ASSERT_IMPL( _msgStr ) __builtin_trap()
+#		define AE_ASSERT_IMPL( _msgStr ) do { ae_abort( _msgStr ); __builtin_trap(); } while(0)
 #	else
-	#define AE_ASSERT_IMPL( msgStr ) { if( !ae::IsDebuggerAttached() ) { ae::ShowMessage( msgStr ? msgStr : "Unspecified Fatal Error" ); } else { AE_BREAK(); } }
+#	define AE_ASSERT_IMPL( msgStr ) { if( !ae::IsDebuggerAttached() ) { ae::ShowMessage( msgStr ? msgStr : "Unspecified Fatal Error" ); } else { AE_BREAK(); } }
 #	endif
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
@@ -4150,8 +4150,8 @@ private:
 //------------------------------------------------------------------------------
 // @TODO: Graphics globals. Should be parameters to modules that need them.
 //------------------------------------------------------------------------------
-extern int32_t GLMajorVersion;
-extern int32_t GLMinorVersion;
+int32_t GLMajorVersion();
+int32_t GLMinorVersion();
 // Caller enables this externally.  The renderer, Shader, math aren't tied to one another
 // enough to pass this locally.  glClipControl is also not accessible in ES or GL 4.1, so
 // doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
@@ -19795,11 +19795,11 @@ void Window::m_Initialize( bool rememberPosition )
 	
 #if AE_ENABLE_OPENGL
 	NSOpenGLPixelFormatAttribute openglProfile;
-	if( ae::GLMajorVersion >= 4 )
+	if( ae::GLMajorVersion() >= 4 )
 	{
 		openglProfile = NSOpenGLProfileVersion4_1Core;
 	}
-	else if( ae::GLMajorVersion >= 3 )
+	else if( ae::GLMajorVersion() >= 3 )
 	{
 		openglProfile = NSOpenGLProfileVersion3_2Core;
 	}
@@ -23883,6 +23883,26 @@ uint32_t ListenerSocket::GetConnectionCount() const
 
 }  // ae end
 
+//------------------------------------------------------------------------------
+// OpenGL start
+//------------------------------------------------------------------------------
+#if !AE_ENABLE_OPENGL
+	int32_t _ae_GLMajorVersion() { return 0; }
+	int32_t _ae_GLMinorVersion() { return 0; }
+#elif _AE_WASM_
+	// Instead of defining values here, the WASM host must provide these function implementations
+	#define _AE_WASM_EXPORT( _NAME ) __attribute__(( import_module( "ae" ), import_name( #_NAME ) )) extern
+	_AE_WASM_EXPORT( _ae_GLMajorVersion ) int32_t _ae_GLMajorVersion();
+	_AE_WASM_EXPORT( _ae_GLMinorVersion ) int32_t _ae_GLMinorVersion();
+	#undef _AE_WASM_EXPORT
+#elif _AE_IOS_ || _AE_EMSCRIPTEN_
+	int32_t _ae_GLMajorVersion() { return 3; }
+	int32_t _ae_GLMinorVersion() { return 0; }
+#else
+	int32_t _ae_GLMajorVersion() { return 4; }
+	int32_t _ae_GLMinorVersion() { return 1; }
+#endif
+
 #if AE_ENABLE_OPENGL
 //------------------------------------------------------------------------------
 // OpenGL includes
@@ -23910,13 +23930,8 @@ uint32_t ListenerSocket::GetConnectionCount() const
 
 namespace ae
 {
-#if _AE_IOS_ || _AE_EMSCRIPTEN_ || _AE_WASM_
-	int32_t GLMajorVersion = 3;
-	int32_t GLMinorVersion = 0;
-#else
-	int32_t GLMajorVersion = 4;
-	int32_t GLMinorVersion = 1;
-#endif
+int32_t GLMajorVersion() { return _ae_GLMajorVersion(); }
+int32_t GLMinorVersion() { return _ae_GLMinorVersion(); }
 bool ReverseZ = false;
 }  // ae end
 
@@ -24339,8 +24354,27 @@ const UniformList::Value* UniformList::Get( const char* name ) const
 //------------------------------------------------------------------------------
 // ae::Shader member functions
 //------------------------------------------------------------------------------
-ae::Hash32 s_shaderHash;
-ae::Hash32 s_uniformHash;
+} // ae end
+#if _AE_WASM_
+
+#define _AE_WASM_EXPORT( _NAME ) __attribute__(( import_module( "ae" ), import_name( #_NAME ) )) extern
+_AE_WASM_EXPORT( _ae_SetShaderHash ) void _ae_SetShaderHash( uint32_t hash );
+_AE_WASM_EXPORT( _ae_SetUniformHash ) void _ae_SetUniformHash( uint32_t hash );
+_AE_WASM_EXPORT( _ae_GetShaderHash ) uint32_t _ae_GetShaderHash();
+_AE_WASM_EXPORT( _ae_GetUniformHash ) uint32_t _ae_GetUniformHash();
+#undef _AE_WASM_EXPORT
+
+#else
+
+static uint32_t s_shaderHash;
+static uint32_t s_uniformHash;
+void _ae_SetShaderHash( uint32_t hash ) { s_shaderHash = hash; }
+void _ae_SetUniformHash( uint32_t hash ) { s_uniformHash = hash; }
+uint32_t _ae_GetShaderHash() { return s_shaderHash; }
+uint32_t _ae_GetUniformHash() { return s_uniformHash; }
+
+#endif
+namespace ae {
 
 Shader::~Shader()
 {
@@ -24492,10 +24526,10 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 	shaderHash.HashType( m_depthTest );
 	shaderHash.HashType( m_culling );
 	shaderHash.HashType( m_wireframe );
-	bool shaderDirty = ( s_shaderHash != shaderHash );
+	const bool shaderDirty = ( _ae_GetShaderHash() != shaderHash.Get() );
 	if( shaderDirty )
 	{
-		s_shaderHash = shaderHash;
+		_ae_SetShaderHash( shaderHash.Get() );
 		
 		AE_CHECK_GL_ERROR();
 
@@ -24560,11 +24594,11 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 	}
 	
 	// Always update uniforms after a shader change
-	if( !shaderDirty && s_uniformHash == uniforms.GetHash() )
+	if( !shaderDirty && _ae_GetUniformHash() == uniforms.GetHash().Get() )
 	{
 		return;
 	}
-	s_uniformHash = uniforms.GetHash();
+	_ae_SetUniformHash( uniforms.GetHash().Get() );
 	
 	// Set shader uniforms
 	bool missingUniforms = false;
@@ -24659,9 +24693,9 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 	// Version
 	ae::Str32 glVersionStr = "#version ";
 #if _AE_IOS_ || _AE_EMSCRIPTEN_
-	glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
+	glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion(), ae::GLMinorVersion() );
 #else
-	glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
+	glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion(), ae::GLMinorVersion() );
 #endif
 	glVersionStr += "\n";
 	if( glVersionStr.Length() )
@@ -26242,8 +26276,8 @@ void GraphicsDevice::Initialize( class Window* window )
 	
 	int attribs[] = 
 	{
-		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion,
-		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion,
+		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion(),
+		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion(),
 		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
 		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
 		0
@@ -26268,8 +26302,8 @@ void GraphicsDevice::Initialize( class Window* window )
 	EmscriptenWebGLContextAttributes attrs;
 	emscripten_webgl_init_context_attributes( &attrs );
 	attrs.alpha = 0;
-	attrs.majorVersion = ae::GLMajorVersion;
-	attrs.minorVersion = ae::GLMinorVersion;
+	attrs.majorVersion = ae::GLMajorVersion();
+	attrs.minorVersion = ae::GLMinorVersion();
 	m_context = emscripten_webgl_create_context( "canvas", &attrs );
 	AE_ASSERT( m_context > 0 );
 	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
@@ -26566,8 +26600,8 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 	m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
 	
 	// Force refresh uniforms for new canvas
-	s_shaderHash = ae::Hash32();
-	s_uniformHash = ae::Hash32();
+	_ae_SetShaderHash( ae::Hash32().Get() );
+	_ae_SetUniformHash( ae::Hash32().Get() );
 }
 
 //------------------------------------------------------------------------------
@@ -27521,8 +27555,6 @@ void SpriteRenderer::Clear()
 #else // !AE_ENABLE_OPENGL
 namespace ae
 {
-int32_t GLMajorVersion = 0;
-int32_t GLMinorVersion = 0;
 bool ReverseZ = false;
 
 //------------------------------------------------------------------------------

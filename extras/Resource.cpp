@@ -83,7 +83,7 @@ bool ae::ResourceManager::Add( const char* typeName, ResourceId id, ae::FileSyst
 	}
 	if( m_Register( type, id, rootDir, filePath ) )
 	{
-		AE_INFO( "Queuing load '#'...", filePath );
+		AE_DEBUG( "Queuing load '#'...", filePath );
 		return true;
 	}
 	return false;
@@ -122,7 +122,7 @@ bool ae::ResourceManager::Load()
 		r->m_isLoaded = r->Load( nullptr );
 		if( r->m_isLoaded )
 		{
-			AE_INFO( "Loaded #::#", type->GetName(), r->GetId() );
+			AE_DEBUG( "Loaded #::#", type->GetName(), r->GetId() );
 		}
 		else
 		{
@@ -137,7 +137,7 @@ bool ae::ResourceManager::Load()
 		if( file->GetStatus() == ae::File::Status::Success )
 		{
 			bool allLoaded = true;
-			AE_INFO( "Loading '#'...", file->GetURL() );
+			AE_DEBUG( "Loading '#'...", file->GetURL() );
 			FileInfo* fileInfo = m_files.GetValue( fileIdx );
 			for( ae::Resource* r = fileInfo->resources.GetFirst(); r; r = r->m_node.GetNext() )
 			{
@@ -145,7 +145,7 @@ bool ae::ResourceManager::Load()
 				r->m_isLoaded = r->Load( file );
 				if( r->m_isLoaded )
 				{
-					AE_INFO( "\t#::#", type->GetName(), r->GetId() );
+					AE_DEBUG( "\t#::#", type->GetName(), r->GetId() );
 				}
 				else
 				{
@@ -155,7 +155,7 @@ bool ae::ResourceManager::Load()
 			}
 			if( allLoaded )
 			{
-				AE_INFO( "\tSuccess", file->GetURL() );
+				AE_DEBUG( "\tSuccess", file->GetURL() );
 			}
 			else
 			{

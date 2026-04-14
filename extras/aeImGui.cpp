@@ -269,9 +269,9 @@ void aeImGui::m_Initialize()
 	{
 		ae::Str32 glVersionStr = "#version ";
 #if _AE_IOS_ || _AE_EMSCRIPTEN_
-		glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
+		glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion(), ae::GLMinorVersion() );
 #else
-		glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
+		glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion(), ae::GLMinorVersion() );
 #endif
 		ImGui_ImplOpenGL3_Init( glVersionStr.c_str() );
 	}
