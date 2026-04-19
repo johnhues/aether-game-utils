@@ -92,7 +92,7 @@
 #elif defined(__linux__)
 	#undef _AE_LINUX_
 	#define _AE_LINUX_ 1
-#elif defined(__wasi__)
+#elif defined(__wasm__) || defined(__wasi__) // @TODO: WASI should be handled separately
 	#undef _AE_WASM_
 	#define _AE_WASM_ 1
 #else
@@ -407,6 +407,13 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 	#define AE_ENABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic pop")
 #endif
 #define AE_DISABLE_COPY_ASSIGNMENT( _t ) _t( const _t& ) = delete; _t& operator=( const _t& ) = delete
+#if _AE_WASM_
+#	define AE_WASM_IMPORT( _m ) extern "C" __attribute__( ( import_module( #_m ) ) )
+#	define AE_WASM_EXPORT extern "C" __attribute__( ( visibility( "default" ) ) )
+#else
+#	define AE_WASM_IMPORT( _m )
+#	define AE_WASM_EXPORT
+#endif
 
 //------------------------------------------------------------------------------
 //! \defgroup Platform
@@ -3194,6 +3201,7 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 //------------------------------------------------------------------------------
 #ifndef AE_ASSERT_IMPL
 #	if _AE_WASM_
+		AE_WASM_IMPORT( ae ) void ae_abort( const char* msg );
 #		define AE_ASSERT_IMPL( _msgStr ) do { ae_abort( _msgStr ); __builtin_trap(); } while(0)
 #	else
 #	define AE_ASSERT_IMPL( msgStr ) { if( !ae::IsDebuggerAttached() ) { ae::ShowMessage( msgStr ? msgStr : "Unspecified Fatal Error" ); } else { AE_BREAK(); } }
@@ -7000,8 +7008,8 @@ public:
 	//! it cast to T. Returns null if this type is abstract, has no registered
 	//! constructor, or T is not a base of this type.
 	template< typename T = ae::Object > T* New( void* obj ) const;
-	//! Creates a temporary instance of this type and copies the vtable from
-	//! the instance. This type must be default constructible.
+	//! Overwrites the v-table of \p obj with the v-table cached at Init() time.
+	//! This type must be non-abstract and default constructible.
 	void PatchVTable( ae::Object* obj ) const;
 	uint32_t GetSize() const;
 	uint32_t GetAlignment() const;
@@ -7065,6 +7073,7 @@ public:
 	//------------------------------------------------------------------------------
 private:
 	ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
+	void* m_vtable = nullptr;
 	ae::TypeName m_name;
 	ae::TypeId m_id = ae::kInvalidTypeId;
 	uint32_t m_size = 0;
@@ -7106,19 +7115,18 @@ template< typename T, typename C > T* Cast( C* obj );
 
 //------------------------------------------------------------------------------
 // ae::PatchVTable
-//! Overwrites the v-table of the given \p obj with the v-table of the given
-//! type. Use this over ae::ClassType::PatchVTable() when the type of \p obj
-//! is known at compile time. T Must be the bottom-most class in the given
-//! \p obj inheritance hierarchy. A temporary instance of the object will be
-//! constructed. \p ctorArgs may be provided if the type does not have a default
-//! constructor. 
+//! Overwrites the v-table of the given \p obj with the v-table of T. T must
+//! inherit from ae::Object, be registered via ae::ClassType::Init(), and be
+//! the bottom-most class in the given \p obj inheritance hierarchy.
 //------------------------------------------------------------------------------
-template< typename T, typename... Args >
-void PatchVTable( T* obj, Args... ctorArgs )
+template< typename T >
+void PatchVTable( T* obj )
 {
-	T temp = T( ctorArgs... );
-	void* vtable = *(void**)&temp;
-	memcpy( (void*)obj, &vtable, sizeof(void*) );
+	static_assert( std::is_base_of_v< ae::Object, T >, "ae::PatchVTable requires T to inherit from ae::Object" );
+	if( obj )
+	{
+		ae::GetClassType< T >()->PatchVTable( static_cast< ae::Object* >( obj ) );
+	}
 }
 
 //! @}
@@ -14877,6 +14885,17 @@ ae::ClassType::Init( const char* name )
 	{
 		m_placementNew = nullptr;
 	}
+	if constexpr( std::is_polymorphic_v< T > )
+	{
+		alignas(T) char buf[ sizeof(T) ];
+		new(buf) T();
+		m_vtable = *(void**)buf;
+		static_cast< T* >( (void*)buf )->~T();
+	}
+	else
+	{
+		m_vtable = nullptr;
+	}
 	m_name = name;
 	m_id = GetTypeIdFromName( name );
 	m_size = sizeof( T );
@@ -14892,6 +14911,7 @@ typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constr
 ae::ClassType::Init( const char* name )
 {
 	m_placementNew = nullptr;
+	m_vtable = nullptr;
 	m_name = name;
 	m_id = GetTypeIdFromName( name );
 	m_size = sizeof( T );
@@ -23891,10 +23911,8 @@ uint32_t ListenerSocket::GetConnectionCount() const
 	int32_t _ae_GLMinorVersion() { return 0; }
 #elif _AE_WASM_
 	// Instead of defining values here, the WASM host must provide these function implementations
-	#define _AE_WASM_EXPORT( _NAME ) __attribute__(( import_module( "ae" ), import_name( #_NAME ) )) extern
-	_AE_WASM_EXPORT( _ae_GLMajorVersion ) int32_t _ae_GLMajorVersion();
-	_AE_WASM_EXPORT( _ae_GLMinorVersion ) int32_t _ae_GLMinorVersion();
-	#undef _AE_WASM_EXPORT
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLMajorVersion();
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLMinorVersion();
 #elif _AE_IOS_ || _AE_EMSCRIPTEN_
 	int32_t _ae_GLMajorVersion() { return 3; }
 	int32_t _ae_GLMinorVersion() { return 0; }
@@ -24357,12 +24375,10 @@ const UniformList::Value* UniformList::Get( const char* name ) const
 } // ae end
 #if _AE_WASM_
 
-#define _AE_WASM_EXPORT( _NAME ) __attribute__(( import_module( "ae" ), import_name( #_NAME ) )) extern
-_AE_WASM_EXPORT( _ae_SetShaderHash ) void _ae_SetShaderHash( uint32_t hash );
-_AE_WASM_EXPORT( _ae_SetUniformHash ) void _ae_SetUniformHash( uint32_t hash );
-_AE_WASM_EXPORT( _ae_GetShaderHash ) uint32_t _ae_GetShaderHash();
-_AE_WASM_EXPORT( _ae_GetUniformHash ) uint32_t _ae_GetUniformHash();
-#undef _AE_WASM_EXPORT
+AE_WASM_IMPORT( ae ) void _ae_SetShaderHash( uint32_t hash );
+AE_WASM_IMPORT( ae ) void _ae_SetUniformHash( uint32_t hash );
+AE_WASM_IMPORT( ae ) uint32_t _ae_GetShaderHash();
+AE_WASM_IMPORT( ae ) uint32_t _ae_GetUniformHash();
 
 #else
 
@@ -32949,14 +32965,9 @@ void ae::ClassType::PatchVTable( ae::Object* obj ) const
 {
 	if( obj )
 	{
-		// @TODO: Get this without instantiating? At least cache it...
 		AE_ASSERT( obj->GetTypeId() == GetId() );
-		ae::Object* temp = (ae::Object*)ae::Allocate( AE_ALLOC_TAG_FIXME, GetSize(), GetAlignment() );
-		New( temp );
-		void* vtable = *(void**)temp;
-		temp->~Object();
-		ae::Free( temp );
-		memcpy( (void*)obj, &vtable, sizeof(void*) );
+		AE_ASSERT_MSG( m_vtable, "Type '#' is abstract or not default constructible", m_name.c_str() );
+		memcpy( (void*)obj, &m_vtable, sizeof(void*) );
 	}
 }
 uint32_t ae::ClassType::GetSize() const { return m_size; }
