@@ -25,46 +25,16 @@
 //------------------------------------------------------------------------------
 #include "ae/Editor.h"
 #include "ae/Entity.h"
+// @TODO: Remove ImGui dependencies
+#include "ae/aeImGui.h"
+#include "ImGuizmo.h"
 // @TODO: Remove rapidjson dependency
+#include "imgui.h"
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/error/error.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
-
-//------------------------------------------------------------------------------
-// Registration
-//------------------------------------------------------------------------------
-AE_REGISTER_NAMESPACECLASS( (ae, EditorTypeAttribute) );
-AE_REGISTER_NAMESPACECLASS( (ae, EditorRequiredAttribute) );
-AE_REGISTER_NAMESPACECLASS( (ae, EditorVisibilityAttribute) );
-AE_REGISTER_NAMESPACECLASS( (ae, EditorDisplayNameAttribute) );
-
-//------------------------------------------------------------------------------
-// ae::EditorMesh member functions
-//------------------------------------------------------------------------------
-ae::EditorMesh::EditorMesh( const ae::Tag& tag ) :
-	verts( tag ),
-	indices( tag )
-{}
-
-void ae::EditorMesh::Load( const ae::OBJLoader& file )
-{
-	verts.Clear();
-	indices.Clear();
-	verts.Reserve( file.vertices.Length() );
-	indices.Reserve( file.indices.Length() );
-	for( const auto& vert : file.vertices )
-	{
-		verts.Append( vert.position.GetXYZ() );
-	}
-	for( auto index : file.indices )
-	{
-		indices.Append( index );
-	}
-}
-
-#if !_AE_WASM_
 
 #if _AE_WINDOWS_
 	#pragma warning( disable : 4018 ) // signed/unsigned mismatch
@@ -72,10 +42,10 @@ void ae::EditorMesh::Load( const ae::OBJLoader& file )
 	#pragma warning( disable : 4267 ) // conversion from 'size_t' to 'uint32_t'
 #endif
 
-// @TODO: Remove ImGui dependencies
-#include "ae/aeImGui.h"
-#include "ImGuizmo.h"
-#include "imgui.h"
+AE_REGISTER_NAMESPACECLASS( (ae, EditorTypeAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorRequiredAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorVisibilityAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorDisplayNameAttribute) );
 
 namespace ae {
 
@@ -1014,6 +984,30 @@ bool EditorProgram::MakeWritable( const char* path ) const
 	SendPluginEvent( plugins, event );
 	
 	return fileSystem.IsWritable( absolutePath.c_str() );
+}
+
+//------------------------------------------------------------------------------
+// ae::EditorMesh member functions
+//------------------------------------------------------------------------------
+ae::EditorMesh::EditorMesh( const ae::Tag& tag ) :
+	verts( tag ),
+	indices( tag )
+{}
+
+void ae::EditorMesh::Load( const ae::OBJLoader& file )
+{
+	verts.Clear();
+	indices.Clear();
+	verts.Reserve( file.vertices.Length() );
+	indices.Reserve( file.indices.Length() );
+	for( const auto& vert : file.vertices )
+	{
+		verts.Append( vert.position.GetXYZ() );
+	}
+	for( auto index : file.indices )
+	{
+		indices.Append( index );
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -4511,4 +4505,3 @@ void Editor::m_Fork()
 }
 
 } // End ae namespace
-#endif // !_AE_WASM_

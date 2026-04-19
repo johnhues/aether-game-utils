@@ -189,7 +189,7 @@ uint32_t ae::ResourceManager::GetCount() const
 void ae::ResourceManager::HotLoad()
 {
 	ae::ResourceManager temp = m_tag;
-	// memcpy( this, &temp, sizeof(void*) );
+	memcpy( this, &temp, sizeof(void*) );
 	for( const auto& resource : m_resources )
 	{
 		const ae::ClassType* type = ae::GetClassTypeFromObject( resource.value );

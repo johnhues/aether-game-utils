@@ -308,3 +308,17 @@ _AE_GL_IMPORT( void,   glTextureBarrierNV,           () );
 #define GL_BGRA                                     0x80E1
 
 #undef _AE_GL_IMPORT
+
+//------------------------------------------------------------------------------
+// ae.* imports
+//------------------------------------------------------------------------------
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+__attribute__(( import_module( "ae" ), import_name( "abort" ) ))
+extern void ae_abort( const char* msg );
+
+#ifdef __cplusplus
+}
+#endif
