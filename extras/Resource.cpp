@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/Resource.h"
+#include <type_traits>
 
 //------------------------------------------------------------------------------
 // Registration
@@ -188,8 +189,8 @@ uint32_t ae::ResourceManager::GetCount() const
 
 void ae::ResourceManager::HotLoad()
 {
-	ae::ResourceManager temp = m_tag;
-	memcpy( this, &temp, sizeof(void*) );
+	AE_STATIC_ASSERT_MSG( std::is_final_v< ae::RemoveTypeQualifiers< decltype(this) > >, "Can't patch the v-table of an unknown type" );
+	ae::PatchVTable( this, m_tag );
 	for( const auto& resource : m_resources )
 	{
 		const ae::ClassType* type = ae::GetClassTypeFromObject( resource.value );
