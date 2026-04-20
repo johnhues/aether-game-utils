@@ -7134,6 +7134,8 @@ template< typename T, typename C > T* Cast( C* obj );
 template< typename T, typename... Args >
 void PatchVTable( T* obj, Args... ctorArgs )
 {
+	// @TODO: Could add a conditional safety check here for types with '_metaTypeId'
+	// @TODO: Allocate with ae::ScratchBuffer in case the object doesn't fit on the stack
 	T temp = T( ctorArgs... );
 	void* vtable = *(void**)&temp;
 	memcpy( (void*)obj, &vtable, sizeof(void*) );

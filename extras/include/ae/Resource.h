@@ -63,7 +63,7 @@ private:
 //------------------------------------------------------------------------------
 // ae::ResourceManager class
 //------------------------------------------------------------------------------
-class ResourceManager
+class ResourceManager final
 {
 public:
 	ResourceManager( const ae::Tag& tag );
