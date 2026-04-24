@@ -3512,7 +3512,7 @@ enum class Key : uint8_t
 	Down = 81,
 	Up = 82,
 
-	NumLock = 84,
+	NumLock = 83,
 	NumPadDivide = 84,
 	NumPadMultiply = 85,
 	NumPadMinus = 86,
