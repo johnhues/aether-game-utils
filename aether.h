@@ -7342,6 +7342,7 @@ struct _Globals
 	_DefaultAllocator defaultAllocator;
 
 	// Scratch
+	// @TODO: This must be per thread!
 	_ScratchBuffer scratchBuffer = ae::Scratch< uint8_t >::kMaxScratchSize;
 
 	// Reflection
