@@ -3,14 +3,11 @@ cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 message("") # Empty line to separate aether logs from others
 message("aether-game-utils")
 message("")
+include(CMakeDependentOption)
+string(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}" AE_IS_ROOT_PROJECT)
 
 # Configuration variables intended for external use
-# AE_LEAN_AND_MEAN mode is disabled when building aether on its own
-if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
-	option(AE_LEAN_AND_MEAN "Disables building tests and examples" OFF)
-else()
-	option(AE_LEAN_AND_MEAN "Disables building tests and examples" ON)
-endif()
+cmake_dependent_option(AE_LEAN_AND_MEAN "Disables building tests and examples. Defaults to ON when included as a subproject" ON "NOT AE_IS_ROOT_PROJECT" OFF)
 option(AE_EXTRAS "Enables experimental utilities" OFF)
 option(AE_LOADERS_OFBX "Enables aether FBX loader and ofbx dependency" OFF)
 option(AE_LOADERS_STB "Enables aether PNG loader and stb dependency" OFF)
@@ -46,20 +43,27 @@ endif()
 
 # aether-game-utils project
 project(aether-game-utils LANGUAGES CXX C VERSION 1.0.0)
-
 set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(AE_NAMESPACE aether-game-utils)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT ${AE_LEAN_AND_MEAN})
+	set(CMAKE_CXX_STANDARD 17)
+	set(CMAKE_CXX_STANDARD_REQUIRED ON)
+	Include("${AE_ROOT_DIR}/AddBundle.cmake")
+
 	if(WIN32)
 		add_definitions(-D_UNICODE -DUNICODE) # use unicode
 		add_definitions(-D_CRT_SECURE_NO_WARNINGS) # disable standard library warnings on windows
 	endif()
-	# Disable RTTI (not used in aether)
-	add_compile_options(-fno-rtti)
+	add_compile_options(-fno-rtti) # Disable RTTI (not used in aether)
+
+	message("Compiler Information:")
+	message("  CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
+	message("  CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
+	message("  CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
+	message("  CMAKE_C_COMPILER: ${CMAKE_C_COMPILER}")
+	message("  CMAKE_C_COMPILER_ID: ${CMAKE_C_COMPILER_ID}")
+	message("  CMAKE_C_COMPILER_VERSION: ${CMAKE_C_COMPILER_VERSION}")
 endif()
-Include("${AE_ROOT_DIR}/AddBundle.cmake")
 
 # OpenGL dependency
 if (IOS_TOOLCHAIN_HAS_RUN)
@@ -87,16 +91,6 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 	else()
 		message(SEND_ERROR "Could not find OpenAL")
 	endif()
-endif()
-
-if(NOT ${AE_LEAN_AND_MEAN})
-	message("Compiler Information:")
-	message("  CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
-	message("  CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
-	message("  CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
-	message("  CMAKE_C_COMPILER: ${CMAKE_C_COMPILER}")
-	message("  CMAKE_C_COMPILER_ID: ${CMAKE_C_COMPILER_ID}")
-	message("  CMAKE_C_COMPILER_VERSION: ${CMAKE_C_COMPILER_VERSION}")
 endif()
 
 message("")

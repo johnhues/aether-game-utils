@@ -386,7 +386,7 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 	[&]()\
 	{\
 		using _const_this_t = const ae::RemoveTypeQualifiers< decltype(*this) >*;\
-		using _return_t = decltype(_mem_fn_call);\
+		using _return_t = decltype(this->_mem_fn_call);\
 		if constexpr( std::is_reference_v< _return_t > || std::is_pointer_v< _return_t > )\
 		{\
 			return const_cast< _return_t >( const_cast< _const_this_t >( this )->_mem_fn_call );\
@@ -586,11 +586,21 @@ inline float Atan2( float y, float x );
 inline float Sqrt( float x );
 
 inline uint32_t Mod( uint32_t i, uint32_t n );
+//! A mathematical modulo operation. Identical to C++ remainder operator '%' for
+//! positive values, but returns a "clock arithmetic" result for negative values.
+//! Eg. `ae::Mod( -3, 12 ) == 9`. Always returns a non-negative result in [0, n),
+//! regardless of the sign of \p i.
 inline int Mod( int32_t i, int32_t n );
+//! A mathematical modulo operation. Identical to C++ remainder operator '%' for
+//! positive values, but returns a "clock arithmetic" result for negative values.
+//! Eg. `ae::Mod( -2.5, 12 ) == 9.5`. Always returns a non-negative result in
+//! [0, n), regardless of the sign of \p f.
 inline float Mod( float f, float n );
 
 inline int32_t Ceil( float f );
 inline int32_t Floor( float f );
+//! A true mathematical floor division toward negative infinity. Unlike C++
+//! operator/ (which truncates toward zero), `Floor( -7, 2 ) == -4` not -3.
 inline int32_t Floor( int32_t value, int32_t divisor );
 inline int32_t Round( float f );
 
@@ -615,12 +625,22 @@ inline float Clip01( float x );
 // Interpolation
 //------------------------------------------------------------------------------
 template< typename T0, typename T1 > T0 Lerp( T0 start, T0 end, T1 t );
+//! Returns the shortest signed angular difference from \p start to \p end,
+//! in the range (-PI, PI]. Note parameter order: \p end comes first.
+//! Example: `AngleDifference(PI*1.5f, 0.0f) == -PI*0.5f` (takes short path).
 inline float AngleDifference( float end, float start );
 inline float LerpAngle( float start, float end, float t );
 inline float Delerp( float start, float end, float value );
 inline float Delerp01( float start, float end, float value );
+//! Frame-rate independent exponential lerp. Returns \p start unchanged when
+//! \p snappiness or \p dt is zero. Higher \p snappiness = faster convergence
+//! (double-exponential: `exp2(-exp2(snappiness) * dt)`).
 template< typename T > T DtLerp( T start, float snappiness, float dt, T end );
+//! Frame-rate independent exponential slerp. Same \p snappiness semantics as
+//! DtLerp. Delegates to \p start.DtSlerp().
 template< typename T > T DtSlerp( T start, float snappiness, float dt, T end );
+//! Frame-rate independent angular lerp with wrapping. Same \p snappiness
+//! semantics as DtLerp.
 inline float DtLerpAngle( float start, float snappiness, float dt, float end );
 // @TODO: Cleanup duplicate interpolation functions
 template< typename T > T CosineInterpolate( T start, T end, float t );
@@ -728,10 +748,15 @@ struct VecT
 	float Length() const;
 	float LengthSquared() const;
 	
+	//! Normalizes the vector in-place. Returns the previous length.
 	float Normalize();
+	//! Normalizes the vector in-place. Returns the previous length, or zero if
+	//! it was below \p epsilon (in which case the vector is left unchanged).
 	float SafeNormalize( float epsilon = 0.000001f );
 	T NormalizeCopy() const;
 	T SafeNormalizeCopy( float epsilon = 0.000001f ) const;
+	//! Clamps the vector length to \p length in-place. Returns the resulting
+	//! (possibly clamped) length. If already shorter than \p length, no change.
 	float Trim( float length );
 	T TrimCopy( float length ) const;
 
@@ -753,13 +778,19 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 	Vec2( float x, float y );
 	explicit Vec2( const float* xy );
 	explicit Vec2( struct Int2 i2 );
+	//! Returns a unit vector at the given angle in radians. Angle 0 maps to
+	//! +X; positive angles rotate CCW toward +Y (standard math convention).
 	static Vec2 FromAngle( float angle );
 
 	struct Int2 NearestCopy() const;
 	struct Int2 FloorCopy() const;
 	struct Int2 CeilCopy() const;
 	
+	//! Rotates CCW by \p rotation radians in the XY plane. Positive angle
+	//! rotates +X toward +Y (standard right-hand/math convention).
 	Vec2 RotateCopy( float rotation ) const;
+	//! Returns the angle of this vector in radians via atan2(y,x).
+	//! Angle 0 == +X axis; positive = CCW toward +Y.
 	float GetAngle() const;
 	Vec2 DtSlerp( const Vec2& end, float snappiness, float dt, float epsilon = 0.0001f ) const;
 	Vec2 Slerp( const Vec2& end, float t, float epsilon = 0.0001f ) const;
@@ -805,9 +836,14 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	struct Int3 FloorCopy() const;
 	struct Int3 CeilCopy() const;
 	
-	void AddRotationXY( float rotation ); // @TODO: Support Y up
+	//! Rotates the XY components CCW by \p rotation radians around the Z axis
+	//! (Z-up assumed). Positive angle rotates +X toward +Y. @TODO: Support Y up
+	void AddRotationXY( float rotation );
 	Vec3 AddRotationXYCopy( float rotation ) const;
 	float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
+	//! Rotates this vector around \p axis by \p angle radians using the
+	//! right-hand rule (Rodrigues' formula). Positive angle = CCW when viewed
+	//! from the tip of \p axis toward the origin.
 	Vec3 RotateCopy( Vec3 axis, float angle ) const;
 	
 	Vec3 Lerp( const Vec3& end, float t ) const;
@@ -821,6 +857,8 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	Vec3 ZeroAxisCopy( Vec3 axis ) const; // Zero component along arbitrary axis (ie vec dot axis == 0)
 	Vec3 ZeroDirectionCopy( Vec3 direction ) const; // Zero component along positive half of axis (ie vec dot dir > 0)
 
+	//! Transforms \p p by \p projection and performs a perspective divide (divides
+	//! xyz by w). Use Matrix4::TransformPoint3x4 for affine transforms.
 	static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p );
 
 	//! Define conversion functions etc for ae::Vec3. See AE_CONFIG_FILE for more info.
@@ -911,7 +949,13 @@ public:
 	static ae::Matrix4 Scaling( const ae::Vec3& s );
 	static ae::Matrix4 Scaling( float sx, float sy, float sz );
 	static ae::Matrix4 LocalToWorld( ae::Vec3 position, ae::Quaternion rotation, ae::Vec3 scale );
+	//! Builds a right-handed view matrix. \p forward is the camera's look direction
+	//! in world space; it maps to -Z in view space. Internally the \p forward row
+	//! stores the negated value.
 	static ae::Matrix4 WorldToView( ae::Vec3 position, ae::Vec3 forward, ae::Vec3 up );
+	//! Builds a perspective projection matrix. \p fov is the vertical field-of-view
+	//! in radians. Output clips-space conventions depend on the global `ae::ReverseZ`
+	//! setting (default: standard depth range).
 	static ae::Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
 	// Set transformation properties
@@ -930,11 +974,22 @@ public:
 	// Get transformation properties
 	ae::Vec3 GetTranslation() const;
 	ae::Quaternion GetRotation() const;
+	//! Returns the scale encoded in this matrix. Assumes TRS decomposable.
+	//! When the determinant is negative (odd number of negative scale axes),
+	//! the z component, as it's ambiguous which axis was negated originally.
 	ae::Vec3 GetScale() const;
 	ae::Matrix4 GetTranspose() const;
 	ae::Matrix4 GetInverse() const; // @TODO: Handle non-invertible matrices in API
+	//! Returns the inverse transpose of this matrix. This is useful to preserve
+	//! the direction (but not length) of transformed normals when the matrix
+	//! has non-uniform scale. Assumes TRS decomposable.
 	ae::Matrix4 GetNormalMatrix() const;
+	//! Returns a matrix where the each column of the upper 3x3 rotation portion
+	//! of this matrix has been normalized to remove any scale. Assumes TRS
+	//! decomposable.
 	ae::Matrix4 GetScaleRemoved() const;
+	//! Returns the determinant of the full 4x4 matrix.
+	float Determinant() const;
 	ae::Vec3 GetAxis( uint32_t column ) const;
 	ae::Vec4 GetColumn( uint32_t column ) const;
 	ae::Vec4 GetRow( uint32_t row ) const;
@@ -996,6 +1051,10 @@ public:
 
 	Quaternion( const float i, const float j, const float k, const float r ) : i(i), j(j), k(k), r(r) {}
 	explicit Quaternion( Vec3 v ) : i(v.x), j(v.y), k(v.z), r(0.0f) {}
+	//! Constructs a quaternion from a look direction. \p forward and \p up should
+	//! be orthogonal; if not, one is adjusted. When \p prioritizeUp is true \p forward
+	//! is corrected to be perpendicular to \p up; when false \p up is corrected.
+	//! Convention: right-handed (`forward.Cross(up)` = right).
 	Quaternion( Vec3 forward, Vec3 up, bool prioritizeUp = true );
 	Quaternion( Vec3 axis, float angle );
 	static Quaternion Identity() { return Quaternion( 0.0f, 0.0f, 0.0f, 1.0f ); }
@@ -1006,13 +1065,26 @@ public:
 	bool operator!=( const Quaternion& q ) const;
 	Quaternion& operator*= ( const Quaternion& q );
 	Quaternion operator* ( const Quaternion& q ) const;
+	//! Returns the antipodal quaternion (negates all four components i,j,k,r).
+	//! This is NOT the conjugate or inverse; both q and -q represent the same
+	//! rotation but may interpolate differently.
 	Quaternion operator- () const;
 	float Dot( const Quaternion& q ) const;
 	Quaternion operator* ( float s ) const;
+	//! Physics angular velocity integration: applies half-step `v*s` (where \p v
+	//! is angular velocity in rad/s and \p s is half dt). Leaves quat un-normalized.
 	void AddScaledVector( const Vec3& v, float s );
+	//! Rotates this quaternion by the rotation encoded in \p v: `|v|` is the
+	//! angle in radians, `v/|v|` is the axis. No-op if \p v is zero.
 	void RotateByVector( const Vec3& v );
+	//! Sets the Z-rotation so that the local X axis points toward the XY direction
+	//! of \p v. The Z component of \p v is ignored (Z-up assumed).
 	void SetDirectionXY( const Vec3& v );
+	//! Returns the XY direction the local X axis points after this quaternion's
+	//! Z-rotation. Returned vector always has z == 0.
 	Vec3 GetDirectionXY() const;
+	//! Zeroes the i and j components (XY rotation) without renormalizing.
+	//! The quaternion will be invalid until manually renormalized.
 	void ZeroXY();
 	void GetAxisAngle( Vec3* axis, float* angle ) const;
 	void AddRotationXY( float rotation );
@@ -1134,8 +1206,8 @@ public:
 	Triangle( Vec3 (&v)[ 3 ] );
 	explicit Triangle( const Vec3* p012 );
 
-	bool IntersectRay( Vec3 source, Vec3 ray, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
-	bool SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
+	bool Raycast( Vec3 source, Vec3 ray, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* distanceOut = nullptr ) const;
+	bool SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* distanceOut = nullptr ) const;
 	Vec3 ClosestPoint( Vec3 p ) const;
 	Vec3 CounterClockwiseNormal() const;
 	Vec3 ClockwiseNormal() const;
@@ -1154,7 +1226,7 @@ public:
 	explicit Sphere( const class OBB& obb );
 	void Expand( ae::Vec3 p );
 
-	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
+	bool Raycast( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* distanceOut = nullptr ) const;
 	bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* hitOut = nullptr ) const;
 	ae::Vec3 GetNearestPointOnSurface( ae::Vec3 p, float* signedDistOut = nullptr ) const;
 
@@ -1180,7 +1252,7 @@ public:
 	ae::Vec3 GetClosestPointToOrigin() const;
 
 	bool IntersectLine( ae::Vec3 p, ae::Vec3 d, ae::Vec3* hitOut = nullptr, float* tOut = nullptr ) const; // @TODO: Handle ray hitting normal reverse
-	bool IntersectRay( ae::Vec3 source, ae::Vec3 ray, ae::Vec3* hitOut = nullptr, float* tOut = nullptr ) const; // @TODO: Handle ray hitting normal reverse
+	bool Raycast( ae::Vec3 source, ae::Vec3 ray, ae::Vec3* hitOut = nullptr, float* distanceOut = nullptr ) const;
 	ae::Vec3 GetClosestPoint( ae::Vec3 pos, float* distanceOut = nullptr ) const;
 	float GetSignedDistance( ae::Vec3 pos ) const;
 
@@ -1241,6 +1313,9 @@ public:
 	void SetCenter( ae::Vec2 point ) { m_point = point; }
 	void SetRadius( float radius ) { m_radius = radius; }
 
+	//! Returns true if the two circles overlap. If \p out is non-null it receives
+	//! the midpoint of the overlap zone (midpoint between the two intersection points
+	//! projected onto the line between centers), NOT a contact normal or deepest point.
 	bool Intersect( const Circle& other, ae::Vec2* out ) const;
 	ae::Vec2 GetRandomPoint( uint64_t* seed = &_randomSeed ) const;
 
@@ -1318,9 +1393,9 @@ public:
 	//! will be set to the first intersection point on the surface (or to \p source
 	//! if the ray starts within the aabb). \p normOut will be set to the normal of
 	//! the face of the contact point, or to the normal of the nearest face to
-	//! \p source if it is inside the aabb. \p tOut will be set to a value so that
-	//! \p source + \p ray * \p tOut = \p hitOut.
-	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
+	//! \p source if it is inside the aabb. \p distanceOut will be set to the
+	//! world-space distance from \p source to \p hitOut along \p ray.
+	bool Raycast( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* distanceOut = nullptr ) const;
 
 private:
 	Vec3 m_min = Vec3( INFINITY );
@@ -1362,9 +1437,9 @@ public:
 	//! will be set to the first intersection point on the surface (or to \p source
 	//! if the ray starts within the obb). \p normOut will be set to the normal of
 	//! the face of the contact point, or to the normal of the nearest face to
-	//! \p source if it is inside the obb. \p tOut will be set to a value so that
-	//! \p source + \p ray * \p tOut = \p hitOut.
-	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
+	//! \p source if it is inside the obb. \p distanceOut will be set to the
+	//! world-space distance from \p source to \p hitOut along \p ray.
+	bool Raycast( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* distanceOut = nullptr ) const;
 	//! Returns an AABB that tightly fits this obb.
 	AABB GetAABB() const;
 	
@@ -2640,22 +2715,30 @@ template< uint32_t Size, uint32_t Alignment >
 struct Any
 {
 	Any() = default;
-	template< typename T > explicit Any( const T& value );
+	template< typename T > Any( const T& value );
 	template< typename T > void operator=( const T& value );
-	//! Returns the stored value if \p T matches the stored type, otherwise
-	//! returns \p defaultValue.
+
+	//! Returns the stored value only when \p T matches the stored type exactly,
+	//! with the exception that if a 'T*' is stored, retrieval as 'const T*' is
+	//! allowed for pointer types. Returns \p defaultValue otherwise.
 	template< typename T > T Get( const T& defaultValue = {} ) const;
-	//! Returns a pointer to the stored value if \p T matches the stored type,
-	//! otherwise nullptr.
+	//! Returns a pointer to the stored value only when \p T matches the stored
+	//! type exactly, with the exception that if a 'T*' is stored, retrieval as
+	//! 'const T*' is allowed for pointer types. Returns nullptr otherwise.
 	template< typename T > T* TryGet();
-	//! Returns a const pointer to the stored value if \p T matches the stored
-	//! type, otherwise nullptr.
+	//! Returns a pointer to the stored value only when \p T matches the stored
+	//! type exactly, with the exception that if a 'T*' is stored, retrieval as
+	//! 'const T*' is allowed for pointer types. Returns nullptr otherwise.
 	template< typename T > const T* TryGet() const;
-	uint32_t GetType() const { return m_typeId; }
+	//! Returns the type id of the stored value, or 0 if empty. The type id is
+	//! generated by ae::GetTypeIdWithQualifiers< T >().
+	uint32_t GetTypeId() const;
+	//! Returns true if any value is stored.
+	operator bool() const;
 
 private:
 	uint32_t m_typeId = 0; // ae::TypeId
-	alignas( Alignment ) std::byte m_data[ Size ];
+	alignas( Alignment ) std::byte m_data[ Size ] = {};
 };
 
 //------------------------------------------------------------------------------
@@ -5130,7 +5213,7 @@ struct CollisionMeshRaycastParams
 //------------------------------------------------------------------------------
 // ae::Raycast free functions
 //------------------------------------------------------------------------------
-//! These wrap the shapes' IntersectRay() methods using the RaycastParams /
+//! These wrap the shapes' Raycast() methods using the RaycastParams /
 //! RaycastResult pattern, matching CollisionMesh::Raycast. Passing the result
 //! of a previous call as \p prevResult chains multiple shape raycasts together.
 //------------------------------------------------------------------------------
@@ -5242,34 +5325,45 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::AStarNode example interface
-// ae::AStar is a generic A* algorithm implementation. It requires a type T
-// which requires the following interface:
+//------------------------------------------------------------------------------
+//! ae::AStar() is a generic A* algorithm implementation. It requires a type T
+//! which has an interface with the three functions below: GetNext(),
+//! GetNextCount(), and GetHeuristic(). Note that the template N in AStarNode is
+//! not part of the required interface and is only for convenience. N can be set
+//! to 0 for dynamic 'next' node limits, 4 for a 2d grid with cartesian
+//! connections, 8 for a 2d grid with diagonal connections, or 26 for a full 3d
+//! 'voxel' grid, etc. If the topology of your graph is very well defined you
+//! would probably want to copy and replace this struct to calculate the next
+//! nodes on the fly instead of storing them in an array.
 //------------------------------------------------------------------------------
 template< uint32_t N = 0 >
 struct AStarNode
 {
-	AStarNode() : pos( 0.0f ) {}
-	AStarNode( const ae::Tag& tag ) : next( tag ), pos( 0.0f ) {}
+	using AStarNodeT = AStarNode< N >;
+	AStarNode() = default;
+	AStarNode( const ae::Tag& tag ) : next( tag ) {}
+	ae::Array< const AStarNodeT*, N > next;
+	ae::Vec3 pos = ae::Vec3( 0.0f );
 
+	//--------------------------------------------------------------------------
 	// ae::AStar type T must implement these following functions:
+	//--------------------------------------------------------------------------
 	//! Returns the next node in the path. \p index is the index of the next
 	//! node in the path. Edges between paths can be uni-directional or
 	//! bi-directional.
-	const ae::AStarNode< N >* GetNext( uint32_t index ) const { return next[ index ]; }
+	const AStarNodeT* GetNext( uint32_t index ) const { return next[ index ]; }
 	//! Returns the number of nodes directly visitable from this node.
 	uint32_t GetNextCount() const { return next.Length(); }
 	//! Returns the heuristic distance between this node and \p other. For
 	//! ae::AStar to return a least cost path, this function must be 'admissible'.
 	//! This means this function should never overestimate the cost of
 	//! traveling between this node and \p other.
-	float GetHeuristic( const ae::AStarNode< N >* other ) const { return ( pos - other->pos ).Length(); }
-
-	ae::Array< const ae::AStarNode< N >*, N > next;
-	ae::Vec3 pos = ae::Vec3( 0.0f );
+	float GetHeuristic( const AStarNodeT* other ) const { return ( pos - other->pos ).Length(); }
 };
 
 //------------------------------------------------------------------------------
 // ae::AStar algorithm
+//------------------------------------------------------------------------------
 //! \brief A generic A* algorithm implementation. Requires a type T which
 //! implements the functions: GetNext(), GetNextCount(), and GetHeuristic().
 //! See ae::AStarNode for exact function signatures. \p startNode is the node
@@ -5686,9 +5780,7 @@ public:
 	template< typename T > void SetUserData( T* userData );
 	template< typename T > T* GetUserData();
 
-	void* m_userData = nullptr;
-	uint32_t m_userDataTypeId = 0; // ae::TypeId
-	uint32_t m_userDataConstTypeId = 0; // ae::TypeId
+	ae::Any< sizeof(void*), alignof(void*) > m_userData;
 
 protected:
 	enum class Mode
@@ -6268,8 +6360,9 @@ private:
 // External enum definer and registerer
 //------------------------------------------------------------------------------
 //! Define a new enum (must register with AE_REGISTER_ENUM_CLASS)
-#define AE_DEFINE_ENUM_CLASS( E, T, ... ) AE_DEFINE_ENUM_CLASS_IMPL( E, T, ##__VA_ARGS__ )
-
+#define AE_DEFINE_ENUM_CLASS( E, T, ... ) AE_DEFINE_ENUM_CLASS_IMPL( E, T, false, ##__VA_ARGS__ )
+//! Define a new bit field enum (must register with AE_REGISTER_ENUM_CLASS)
+#define AE_DEFINE_BIT_FIELD_ENUM_CLASS( E, T, ... ) AE_DEFINE_BIT_FIELD_ENUM_CLASS_IMPL( E, T, ##__VA_ARGS__ )
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
 #define AE_REGISTER_ENUM_CLASS( E ) AE_REGISTER_ENUM_CLASS_IMPL( E )
 
@@ -6278,13 +6371,14 @@ private:
 //------------------------------------------------------------------------------
 //! Register an already defined c-style enum type
 #define AE_REGISTER_ENUM( E ) AE_REGISTER_ENUM_IMPL( E )
-
+//! Register an already defined c-style bit field enum type
+#define AE_REGISTER_BIT_FIELD_ENUM( E ) AE_REGISTER_BIT_FIELD_ENUM_IMPL( E )
 //! Register an already defined c-style enum type where each value has a prefix
 #define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) AE_REGISTER_ENUM_PREFIX_IMPL( E, PREFIX )
-
+//! Register an already defined c-style bit field enum type where each value has a prefix
+#define AE_REGISTER_BIT_FIELD_ENUM_PREFIX( E, PREFIX ) AE_REGISTER_BIT_FIELD_ENUM_PREFIX_IMPL( E, PREFIX )
 //! Register c-style enum value
 #define AE_REGISTER_ENUM_VALUE( E, V ) ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #V, V );
-
 //! Register c-style enum value with a manually specified name
 #define AE_REGISTER_ENUM_VALUE_NAME( E, V, N ) ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #N, V );
 
@@ -6293,7 +6387,8 @@ private:
 //------------------------------------------------------------------------------
 //! Register an already defined enum class type
 #define AE_REGISTER_ENUM_CLASS2( E ) AE_REGISTER_ENUM_CLASS2_IMPL( E )
-
+//! Register an already defined bit field enum class type
+#define AE_REGISTER_BIT_FIELD_ENUM_CLASS2( E ) AE_REGISTER_BIT_FIELD_ENUM_CLASS2_IMPL( E )
 //! Register enum class value
 #define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##V( #V, E::V ); }
 
@@ -6644,7 +6739,7 @@ public:
 	template< typename T > bool SetVarData( ae::DataPointer varData, const T& value ) const;
 	
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< BasicType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6660,6 +6755,7 @@ public:
 	const char* GetPrefix() const { return m_prefix.c_str(); }
 	uint32_t TypeSize() const { return m_size; }
 	bool TypeIsSigned() const { return m_isSigned; }
+	bool TypeIsBitField() const { return m_isBitField; }
 
 	//--------------------------------------------------------------------------
 	// Enum values
@@ -6725,14 +6821,15 @@ private:
 	ae::TypeName m_prefix;
 	uint32_t m_size;
 	bool m_isSigned;
+	bool m_isBitField;
 	ae::Map< uint64_t, std::string, kMaxMetaEnumValues > m_enumValueToName;
 	ae::Map< std::string, uint64_t, kMaxMetaEnumValues > m_enumNameToValue;
 protected:
-	EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned );
+	EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned, bool isBitField );
 public:
 	const ae::EnumType* GetEnumType() const { return this; } // @TODO: Remove
 	template< typename T > void m_AppendValue( const char* name, T value );
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< EnumType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6765,7 +6862,7 @@ public:
 	virtual std::string ToString( ae::ConstDataPointer pointer, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< PointerType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 #if AE_DEPRECATED
 	virtual ae::BasicType::Type GetBasicType() const { return ae::BasicType::Pointer; } // @HACK: Remove
 #endif // AE_DEPRECATED
@@ -6798,7 +6895,7 @@ public:
 	virtual void Clear( ae::DataPointer optional ) const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< OptionalType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6838,7 +6935,7 @@ public:
 	virtual uint32_t IsFixedLength() const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< ArrayType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6879,7 +6976,7 @@ public:
 	virtual uint32_t GetMaxLength() const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< MapType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -7087,7 +7184,7 @@ public:
 	template< typename T > typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type Init( const char* name );
 	template< typename T > typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type Init( const char* name );
 	void m_AddVar( const ae::ClassVar* var );
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< ClassType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 #if AE_DEPRECATED
 	void m_AddProp( const char* prop, const char* value );
 	const ae::ClassType* GetClassType() const { return this; }
@@ -7263,6 +7360,7 @@ struct _Globals
 	_DefaultAllocator defaultAllocator;
 
 	// Scratch
+	// @TODO: This must be per thread!
 	_ScratchBuffer scratchBuffer = ae::Scratch< uint8_t >::kMaxScratchSize;
 
 	// Reflection
@@ -10013,75 +10111,6 @@ inline void Serialize( ae::BinaryWriter* stream, const ae::TypeId* id )
 }
 
 //------------------------------------------------------------------------------
-// ae::GetHash32 inline helpers
-//------------------------------------------------------------------------------
-// Use the non-fixed size integer types for GetHash32. int8_t cannot be passed
-// as char without an explicit cast, where the reverse does not need a cast.
-// long/unsigned long are normalized to int64_t/uint64_t first for
-// platform-independent results (long is 32-bit on Windows, 64-bit on
-// macOS/Linux).
-template<> inline uint32_t GetHash32( const bool& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const signed char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const short& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned short& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const int& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned int& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const long& value ) { const int64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
-template<> inline uint32_t GetHash32( const unsigned long& value ) { const uint64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
-template<> inline uint32_t GetHash32( const long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const unsigned long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const float& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const double& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec2& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec3& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Matrix4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
-template<> inline uint32_t GetHash32( char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
-template< uint32_t N > inline uint32_t GetHash32( const char (&value)[ N ] ) { return ae::Hash32().HashString( value ).Get(); }
-template<> inline uint32_t GetHash32( const std::string& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Hash32& value ) { return value.Get(); }
-template<> inline uint32_t GetHash32( const ae::TypeId& value ) { return (uint32_t)value; }
-template< typename T > inline uint32_t GetHash32( T* const& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
-
-//------------------------------------------------------------------------------
-// ae::GetHash64 inline helpers
-//------------------------------------------------------------------------------
-// Use the non-fixed size integer types for GetHash64. int8_t cannot be passed
-// as char without an explicit cast, where the reverse does not need a cast.
-// long/unsigned long are casted wide to uint64_t. This is always safe
-// regardless of long's native size (32-bit on Windows, 64-bit on macOS/Linux).
-template<> inline uint64_t GetHash64( const bool& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const signed char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const short& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned short& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const int& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned int& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const long long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned long long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const float& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint64_t GetHash64( const double& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec2& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec3& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Matrix4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
-template<> inline uint64_t GetHash64( char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
-template< uint32_t N > inline uint64_t GetHash64( const char (&value)[ N ] ) { return ae::Hash64().HashString( value ).Get(); }
-template<> inline uint64_t GetHash64( const std::string& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Hash64& value ) { return value.Get(); }
-template<> inline uint64_t GetHash64( const ae::TypeId& value ) { return (uint64_t)(uint32_t)value; }
-template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
-
-//------------------------------------------------------------------------------
 // ae::GetHash
 //------------------------------------------------------------------------------
 template< class C >
@@ -10201,6 +10230,75 @@ constexpr U Hash< U >::Get() const
 {
 	return m_hash;
 }
+
+//------------------------------------------------------------------------------
+// ae::GetHash32 inline helpers
+//------------------------------------------------------------------------------
+// Note that this has to be after the ae::Hash member function definitions since
+// some compilers are stricter about the order of constexpr functions. The
+// non-explicitly sized integer types must be used for these GetHash32 and
+// GetHash64 functions, because int8_t cannot be passed as char reference
+// without an explicit cast, where the reverse does not need a cast.
+// long/unsigned long are normalized to int64_t/uint64_t first for
+// platform-independent results (long is 32-bit on Windows, 64-bit on
+// macOS/Linux).
+template<> inline uint32_t GetHash32( const bool& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const signed char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const short& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned short& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const int& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned int& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const long& value ) { const int64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
+template<> inline uint32_t GetHash32( const unsigned long& value ) { const uint64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
+template<> inline uint32_t GetHash32( const long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const unsigned long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const float& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const double& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec2& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec3& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Matrix4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
+template<> inline uint32_t GetHash32( char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
+template< uint32_t N > inline uint32_t GetHash32( const char (&value)[ N ] ) { return ae::Hash32().HashString( value ).Get(); }
+template<> inline uint32_t GetHash32( const std::string& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Hash32& value ) { return value.Get(); }
+template<> inline uint32_t GetHash32( const ae::TypeId& value ) { return (uint32_t)value; }
+template< typename T > inline uint32_t GetHash32( T* const& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+//------------------------------------------------------------------------------
+// ae::GetHash64 inline helpers
+//------------------------------------------------------------------------------
+// See ae::GetHash32 comments above.
+//------------------------------------------------------------------------------
+template<> inline uint64_t GetHash64( const bool& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const signed char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const short& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned short& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const int& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned int& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const long long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned long long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const float& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint64_t GetHash64( const double& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec2& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec3& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Matrix4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
+template<> inline uint64_t GetHash64( char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
+template< uint32_t N > inline uint64_t GetHash64( const char (&value)[ N ] ) { return ae::Hash64().HashString( value ).Get(); }
+template<> inline uint64_t GetHash64( const std::string& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Hash64& value ) { return value.Get(); }
+template<> inline uint64_t GetHash64( const ae::TypeId& value ) { return (uint64_t)(uint32_t)value; }
+template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
 // ae::Optional templated member functions
@@ -12474,6 +12572,9 @@ Any< Size, Alignment >::Any( const T& value )
 // on a template parameter.
 template< typename... > inline constexpr bool _False = false;
 
+template< typename T > struct _RemovePointerConst { using Type = T; };
+template< typename U > struct _RemovePointerConst< const U* > { using Type = U*; };
+
 template< uint32_t Size, uint32_t Alignment >
 template< typename T >
 void Any< Size, Alignment >::operator=( const T& value )
@@ -12502,7 +12603,7 @@ void Any< Size, Alignment >::operator=( const T& value )
 	}
 	else
 	{
-		m_typeId = ae::GetTypeIdWithQualifiers< T >();
+		m_typeId = std::is_const_v< T > ? ae::kInvalidTypeId : ae::GetTypeIdWithQualifiers< T >(); // Don't allow removal of const with TryGet()
 		new ( &m_data ) T( value );
 	}
 }
@@ -12519,22 +12620,40 @@ template< uint32_t Size, uint32_t Alignment >
 template< typename T >
 T* Any< Size, Alignment >::TryGet()
 {
-	if( m_typeId == ae::GetTypeIdWithQualifiers< T >() )
-	{
-		return reinterpret_cast< T* >( &m_data );
-	}
-	return nullptr;
+	return AE_CALL_CONST_MEMBER_FUNCTION( template TryGet< T >() );
 }
 
 template< uint32_t Size, uint32_t Alignment >
 template< typename T >
 const T* Any< Size, Alignment >::TryGet() const
 {
-	if( m_typeId == ae::GetTypeIdWithQualifiers< T >() )
+	const ae::TypeId returnTypeId = ae::GetTypeIdWithQualifiers< T >();
+	if( m_typeId == returnTypeId )
 	{
 		return reinterpret_cast< const T* >( &m_data );
 	}
+	// Allow retrieving as 'const U*' when 'U*' was stored
+	using NonConstPtrType = typename ae::_RemovePointerConst< T >::Type;
+	if constexpr( !std::is_same_v< T, NonConstPtrType > )
+	{
+		if( m_typeId == ae::GetTypeIdWithQualifiers< NonConstPtrType >() )
+		{
+			return reinterpret_cast< const T* >( &m_data );
+		}
+	}
 	return nullptr;
+}
+
+template< uint32_t Size, uint32_t Alignment >
+uint32_t Any< Size, Alignment >::GetTypeId() const
+{
+	return m_typeId;
+}
+
+template< uint32_t Size, uint32_t Alignment >
+Any< Size, Alignment >::operator bool() const
+{
+	return m_typeId != 0;
 }
 
 //------------------------------------------------------------------------------
@@ -13122,7 +13241,7 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 
 	auto bvhFn = [&]( auto&& bvhFn, const ae::BVH< BVHTri, B >* bvh, const BVHNode* current ) -> void
 	{
-		if( !current->aabb.IntersectRay( source, ray ) )
+		if( !current->aabb.Raycast( source, ray ) )
 		{
 			return;
 		}
@@ -13140,7 +13259,7 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 				ae::Vec3 a = m_positions[ idx0 ];
 				ae::Vec3 b = m_positions[ leaf->data[ i ].idx[ 1 ] ];
 				ae::Vec3 c = m_positions[ leaf->data[ i ].idx[ 2 ] ];
-				if( Triangle( a, b, c ).IntersectRay( source, ray, ccw, cw, &p, &n, nullptr ) )
+				if( Triangle( a, b, c ).Raycast( source, ray, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit hit;
 					hit.position = ae::Vec3( meshParams.transform * ae::Vec4( p, 1.0f ) ); // Undo local space transforms
@@ -13526,23 +13645,12 @@ const T* VertexArray::GetIndices() const
 template< typename T >
 void BinaryStream::SetUserData( T* userData )
 {
-	m_userData = const_cast< void* >( reinterpret_cast< const void* >( userData ) );
-	m_userDataTypeId = std::is_const_v< T > ? ae::kInvalidTypeId : ae::GetTypeIdWithQualifiers< T >(); // Don't allow removal of const with GetUserData()
-	m_userDataConstTypeId = ae::GetTypeIdWithQualifiers< const T >();
+	m_userData = userData;
 }
 template< typename T >
 T* BinaryStream::GetUserData()
 {
-	const ae::TypeId returnTypeId = ae::GetTypeIdWithQualifiers< T >();
-	if( m_userDataTypeId == returnTypeId )
-	{
-		return reinterpret_cast< T* >( m_userData );
-	}
-	else if( m_userDataConstTypeId == returnTypeId )
-	{
-		return reinterpret_cast< T* >( m_userData );
-	}
-	return nullptr;
+	return m_userData.Get< T* >();
 }
 
 template< typename E >
@@ -13805,14 +13913,24 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
 //------------------------------------------------------------------------------
-#define AE_DEFINE_ENUM_CLASS_IMPL( E, T, ... )\
+#define _AE_DEFINE_BIT_FIELD_OPS( E )\
+	typedef std::underlying_type_t< E > _ae_##E;\
+	inline E operator|( E a, E b ) { return E( (_ae_##E)a | (_ae_##E)b ); }\
+	inline E operator&( E a, E b ) { return E( (_ae_##E)a & (_ae_##E)b ); }\
+	inline E operator^( E a, E b ) { return E( (_ae_##E)a ^ (_ae_##E)b ); }\
+	inline E& operator|=( E& a, E b ) { a = ( a | b ); return a; }\
+	inline E& operator&=( E& a, E b ) { a = ( a & b ); return a; }\
+	inline E& operator^=( E& a, E b ) { a = ( a ^ b ); return a; }\
+	inline E operator~( E a ) { return (E)~(_ae_##E)a; } /* @TODO: Is this necessary? */
+
+#define AE_DEFINE_ENUM_CLASS_IMPL( E, T, B, ... )\
 	enum class E : T {\
 		__VA_ARGS__\
 	};\
 	template<> const ae::EnumType* ae::GetEnumType< E >();\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< T > ) {}\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< T >, B ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
@@ -13821,6 +13939,10 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	namespace ae { template<> inline std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
 	namespace ae { template<> inline bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }\
 	namespace ae { template<> inline uint32_t GetHash32( const E& e ) { return ae::GetHash32( static_cast< T >( e ) ); } }
+
+#define AE_DEFINE_BIT_FIELD_ENUM_CLASS_IMPL( E, T, ... )\
+	AE_DEFINE_ENUM_CLASS_IMPL( E, T, true, ##__VA_ARGS__ )\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
 
 #define AE_REGISTER_ENUM_CLASS_IMPL( E )\
 	ae::_RegisterEnum< E > ae_enum_creator_##E( #E, _EnumValues##E().values );\
@@ -13841,7 +13963,7 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	}\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, false ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
@@ -13858,12 +13980,46 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	}\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, false ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+
+#define AE_REGISTER_BIT_FIELD_ENUM_IMPL( E )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, true ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	namespace ae { template<> std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
+	namespace ae { template<> bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
+
+#define AE_REGISTER_BIT_FIELD_ENUM_PREFIX_IMPL( E, PREFIX )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, true ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
 
 //------------------------------------------------------------------------------
 // External enum class registerer
@@ -13876,13 +14032,29 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	}\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, false ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }
 	// @NOTE: Nested namespace declaration requires C++17
+
+#define AE_REGISTER_BIT_FIELD_ENUM_CLASS2_IMPL( E )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, true ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
@@ -14012,6 +14184,7 @@ public:
 		strMap.erase( std::remove( strMap.begin(), strMap.end(), '\n' ), strMap.end() );
 
 		T currentValue = 0;
+		std::vector< std::pair< std::string, uint64_t > > registeredValues;
 		std::vector< std::string > enumTokens( m_SplitString( strMap, ',' ) );
 		for( auto iter = enumTokens.begin(); iter != enumTokens.end(); ++iter )
 		{
@@ -14022,18 +14195,14 @@ public:
 			}
 			else
 			{
-				std::vector<std::string> enumNameValue( m_SplitString( *iter, '=' ) );
-				enumName = enumNameValue[ 0 ];
-				if( std::is_unsigned< T >::value )
-				{
-					currentValue = static_cast< T >( std::stoull( enumNameValue[ 1 ], 0, 0 ) );
-				}
-				else
-				{
-					currentValue = static_cast< T >( std::stoll( enumNameValue[ 1 ], 0, 0 ) );
-				}
+				// Split on the first '=' only — value expressions may not contain '='
+				std::size_t eqPos = iter->find( '=' );
+				enumName = iter->substr( 0, eqPos );
+				const std::string valueExpr = iter->substr( eqPos + 1 );
+				currentValue = static_cast< T >( m_ParseValueExpression( valueExpr, registeredValues, typeName ) );
 			}
-				
+			AE_ASSERT_MSG( !enumName.empty(), "Enum '#' has an empty member name", typeName );
+			registeredValues.push_back( { enumName, static_cast< uint64_t >( currentValue ) } );
 			enumType->m_AppendValue( enumName.c_str(), currentValue );
 			currentValue++;
 		}
@@ -14048,6 +14217,95 @@ public:
 	}
 		
 private:
+	using RegisteredValues = std::vector< std::pair< std::string, uint64_t > >;
+
+	// Try to parse a string as an integer literal (decimal, 0x hex, 0 octal, or negative).
+	// Returns false without modifying *out if the string is not a valid literal.
+	static bool m_TryParseIntLiteral( const std::string& s, uint64_t* out )
+	{
+		if( s.empty() ) { return false; }
+		const char* p = s.c_str();
+		char* end = nullptr;
+		if( p[ 0 ] == '-' )
+		{
+			const int64_t v = std::strtoll( p, &end, 0 );
+			if( !end || end != p + s.size() || end == p ) { return false; }
+			*out = static_cast< uint64_t >( v );
+		}
+		else
+		{
+			const uint64_t v = std::strtoull( p, &end, 0 );
+			if( !end || end != p + s.size() || end == p ) { return false; }
+			*out = v;
+		}
+		return true;
+	}
+
+	// Evaluate a single token: an integer literal, a '<<' shift (both sides integer literals),
+	// or a previously-registered member name. Fatal assert on any parse failure.
+	static uint64_t m_ParseToken(
+		const std::string& token,
+		const RegisteredValues& registered,
+		const char* typeName,
+		const std::string& fullExpr )
+	{
+		// Check for left-shift operator
+		const std::size_t shiftPos = token.find( "<<" );
+		if( shiftPos != std::string::npos )
+		{
+			const std::string lhsStr = token.substr( 0, shiftPos );
+			const std::string rhsStr = token.substr( shiftPos + 2 );
+			uint64_t lhs = 0, rhs = 0;
+			AE_ASSERT_MSG( m_TryParseIntLiteral( lhsStr, &lhs ),
+				"Enum '#' value expression '#': left side of '<<' must be an integer literal (got '#')",
+				typeName, fullExpr.c_str(), lhsStr.c_str() );
+			AE_ASSERT_MSG( m_TryParseIntLiteral( rhsStr, &rhs ),
+				"Enum '#' value expression '#': right side of '<<' must be an integer literal (got '#')",
+				typeName, fullExpr.c_str(), rhsStr.c_str() );
+			return lhs << rhs;
+		}
+
+		// Try integer literal
+		uint64_t intVal = 0;
+		if( m_TryParseIntLiteral( token, &intVal ) ) { return intVal; }
+
+		// Try previously registered member name (linear search — registration-time only)
+		for( const auto& kv : registered )
+		{
+			if( kv.first == token ) { return kv.second; }
+		}
+
+		AE_FAIL_MSG(
+			"Enum '#' value expression '#': '#' is not an integer literal and is not a previously defined member name. "
+			"Supported syntax: integer literals (e.g. 4, 0x4), bit shifts (e.g. 1<<2), "
+			"and '|'-separated combinations of the above (e.g. Player|Camera, 1<<0|1<<1).",
+			typeName, fullExpr.c_str(), token.c_str() );
+		return 0;
+	}
+
+	// Evaluate a value expression as a '|'-separated combination of tokens.
+	static uint64_t m_ParseValueExpression(
+		const std::string& expr,
+		const RegisteredValues& registered,
+		const char* typeName )
+	{
+		AE_ASSERT_MSG( !expr.empty(), "Enum '#' has a member with an empty value expression", typeName );
+		uint64_t result = 0;
+		std::size_t start = 0;
+		while( true )
+		{
+			const std::size_t end = expr.find( '|', start );
+			const std::string token = expr.substr( start, end == std::string::npos ? std::string::npos : end - start );
+			AE_ASSERT_MSG( !token.empty(),
+				"Enum '#' value expression '#': empty token (stray '|'?)",
+				typeName, expr.c_str() );
+			result |= m_ParseToken( token, registered, typeName, expr );
+			if( end == std::string::npos ) { break; }
+			start = end + 1;
+		}
+		return result;
+	}
+
 	static std::vector< std::string > m_SplitString( std::string str, char separator )
 	{
 		std::vector< std::string > result;
@@ -14561,7 +14819,26 @@ std::string ae::EnumType::GetNameByValue( T value ) const
 {
 	if constexpr( std::is_integral_v< T > || std::is_enum_v< T > )
 	{
-		return m_enumValueToName.Get( static_cast< uint64_t >( value ), "" );
+		const uint64_t storedValue = static_cast< uint64_t >( value );
+		if( m_isBitField )
+		{
+			if( storedValue == 0 )
+			{
+				return m_enumValueToName.Get( 0, "0" );
+			}
+			std::string result;
+			for( int32_t i = 0; i < m_enumValueToName.Length(); i++ )
+			{
+				const uint64_t entryValue = m_enumValueToName.GetKey( i );
+				if( entryValue != 0 && ( entryValue & storedValue ) == entryValue )
+				{
+					if( !result.empty() ) { result += ' '; }
+					result += m_enumValueToName.GetValue( i );
+				}
+			}
+			return result;
+		}
+		return m_enumValueToName.Get( storedValue, "" );
 	}
 	return "";
 }
@@ -14576,6 +14853,88 @@ bool ae::EnumType::GetValueFromString( const char* str, T* valueOut ) const
 	else if( !str || !valueOut )
 	{
 		return false;
+	}
+	if( m_isBitField )
+	{
+		// Check for a single integer value first (applies to both flags and regular enums)
+		// by falling through only when the string contains spaces or is a pure name token.
+		// Split by spaces and OR the token values together.
+		const char* p = str;
+		// Skip leading spaces
+		while( *p == ' ' ) { p++; }
+		if( *p == '\0' ) { return false; }
+		// Check if it looks like a numeric string (no spaces, starts with digit or '-')
+		bool hasSpace = ( strchr( str, ' ' ) != nullptr );
+		if( !hasSpace )
+		{
+			// Single token: try name lookup first, then integer parse
+			uint64_t storedValue = 0;
+			if( m_enumNameToValue.TryGet( str, &storedValue ) )
+			{
+				*valueOut = static_cast< T >( storedValue );
+				return true;
+			}
+			// Try numeric parse with bounds check
+			if( TypeIsSigned() )
+			{
+				int64_t value = 0;
+				if( !ae::TryFromString( str, &value ) ) { return false; }
+				switch( TypeSize() )
+				{
+					case 1: if( value < (int64_t)INT8_MIN || value > (int64_t)INT8_MAX ) { return false; } break;
+					case 2: if( value < (int64_t)INT16_MIN || value > (int64_t)INT16_MAX ) { return false; } break;
+					case 4: if( value < (int64_t)INT32_MIN || value > (int64_t)INT32_MAX ) { return false; } break;
+					case 8: break;
+					default: AE_DEBUG_FAIL(); return false;
+				}
+				*valueOut = static_cast< T >( value );
+				return true;
+			}
+			else
+			{
+				if( str[ 0 ] == '-' ) { return false; }
+				uint64_t value = 0;
+				if( !ae::TryFromString( str, &value ) ) { return false; }
+				switch( TypeSize() )
+				{
+					case 1: if( value > (uint64_t)UINT8_MAX ) { return false; } break;
+					case 2: if( value > (uint64_t)UINT16_MAX ) { return false; } break;
+					case 4: if( value > (uint64_t)UINT32_MAX ) { return false; } break;
+					case 8: break;
+					default: AE_DEBUG_FAIL(); return false;
+				}
+				*valueOut = static_cast< T >( value );
+				return true;
+			}
+		}
+		// Multiple space-separated tokens: OR the named values together
+		uint64_t combined = 0;
+		std::string token;
+		const char* cur = str;
+		while( true )
+		{
+			if( *cur == ' ' || *cur == '\0' )
+			{
+				if( !token.empty() )
+				{
+					uint64_t tokenValue = 0;
+					if( !m_enumNameToValue.TryGet( token.c_str(), &tokenValue ) )
+					{
+						return false; // Unknown flag name
+					}
+					combined |= tokenValue;
+					token.clear();
+				}
+				if( *cur == '\0' ) { break; }
+			}
+			else
+			{
+				token += *cur;
+			}
+			cur++;
+		}
+		*valueOut = static_cast< T >( combined );
+		return true;
 	}
 	uint64_t storedValue = 0;
 	if( m_enumNameToValue.TryGet( str, &storedValue ) )
@@ -15854,18 +16213,19 @@ Matrix4& Matrix4::SetTranslation( const Vec3& translation )
 	return *this;
 }
 
-Matrix4& Matrix4::SetRotation( const Quaternion& q2 )
+Matrix4& Matrix4::SetRotation( const Quaternion& _q )
 {
-	Quaternion q = q2.GetInverse();
-	data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
-	data[4] = 2*q.i*q.j + 2*q.k*q.r;
-	data[8] = 2*q.i*q.k - 2*q.j*q.r;
-	data[1] = 2*q.i*q.j - 2*q.k*q.r;
-	data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
-	data[9] = 2*q.j*q.k + 2*q.i*q.r;
-	data[2] = 2*q.i*q.k + 2*q.j*q.r;
-	data[6] = 2*q.j*q.k - 2*q.i*q.r;
-	data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+	const ae::Vec3 s = GetScale();
+	const ae::Quaternion q = _q.GetInverse();
+	data[ 0 ] = s.x * ( 1 - ( 2 * q.j * q.j + 2 * q.k * q.k ) );
+	data[ 1 ] = s.x * ( 2 * q.i * q.j - 2 * q.k * q.r );
+	data[ 2 ] = s.x * ( 2 * q.i * q.k + 2 * q.j * q.r );
+	data[ 4 ] = s.y * ( 2 * q.i * q.j + 2 * q.k * q.r );
+	data[ 5 ] = s.y * ( 1 - ( 2 * q.i * q.i + 2 * q.k * q.k ) );
+	data[ 6 ] = s.y * ( 2 * q.j * q.k - 2 * q.i * q.r );
+	data[ 8 ] = s.z * ( 2 * q.i * q.k - 2 * q.j * q.r );
+	data[ 9 ] = s.z * ( 2 * q.j * q.k + 2 * q.i * q.r );
+	data[ 10 ] = s.z * ( 1 - ( 2 * q.i * q.i + 2 * q.j * q.j ) );
 	return *this;
 }
 
@@ -16013,11 +16373,34 @@ Quaternion Matrix4::GetRotation() const
 
 Vec3 Matrix4::GetScale() const
 {
-	return Vec3(
+	Vec3 scale(
 		Vec3( &data[ 0 ] ).Length(),
 		Vec3( &data[ 4 ] ).Length(),
 		Vec3( &data[ 8 ] ).Length()
 	);
+	if( Determinant() < 0.0f ) { scale.z = -scale.z; }
+	return scale;
+}
+
+float Matrix4::Determinant() const
+{
+	const float c0 =
+		  data[ 5 ] * ( data[ 10 ] * data[ 15 ] - data[ 11 ] * data[ 14 ] )
+		- data[ 9 ] * ( data[  6 ] * data[ 15 ] - data[  7 ] * data[ 14 ] )
+		+ data[ 13] * ( data[  6 ] * data[ 11 ] - data[  7 ] * data[ 10 ] );
+	const float c1 =
+		- data[ 4 ] * ( data[ 10 ] * data[ 15 ] - data[ 11 ] * data[ 14 ] )
+		+ data[ 8 ] * ( data[  6 ] * data[ 15 ] - data[  7 ] * data[ 14 ] )
+		- data[ 12] * ( data[  6 ] * data[ 11 ] - data[  7 ] * data[ 10 ] );
+	const float c2 =
+		  data[ 4 ] * ( data[  9 ] * data[ 15 ] - data[ 11 ] * data[ 13 ] )
+		- data[ 8 ] * ( data[  5 ] * data[ 15 ] - data[  7 ] * data[ 13 ] )
+		+ data[ 12] * ( data[  5 ] * data[ 11 ] - data[  7 ] * data[  9 ] );
+	const float c3 =
+		- data[ 4 ] * ( data[  9 ] * data[ 14 ] - data[ 10 ] * data[ 13 ] )
+		+ data[ 8 ] * ( data[  5 ] * data[ 14 ] - data[  6 ] * data[ 13 ] )
+		- data[ 12] * ( data[  5 ] * data[ 10 ] - data[  6 ] * data[  9 ] );
+	return data[ 0 ] * c0 + data[ 1 ] * c1 + data[ 2 ] * c2 + data[ 3 ] * c3;
 }
 
 Matrix4 Matrix4::GetTranspose() const
@@ -16619,13 +17002,11 @@ void Sphere::Expand( ae::Vec3 p0 )
 	}
 }
 
-bool Sphere::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut, float* tOut ) const
+bool Sphere::Raycast( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut, float* distanceOut ) const
 {
-	const Vec3 direction = ray.SafeNormalizeCopy();
-	const float rayLength = ray.Length();
-
 	const Vec3 m = source - center;
-	const float b = m.Dot( direction );
+	const float a = ray.Dot( ray );
+	const float b = m.Dot( ray );
 	const float c = m.Dot( m ) - radius * radius;
 	// Exit if r's origin outside s (c > 0) and r pointing away from s (b > 0)
 	if( c > 0.0f && b > 0.0f )
@@ -16634,30 +17015,29 @@ bool Sphere::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut,
 	}
 
 	// A negative discriminant corresponds to ray missing sphere
-	const float discr = b * b - c;
+	const float discr = b * b - a * c;
 	if( discr < 0.0f )
 	{
 		return false;
 	}
 
 	// Ray now found to intersect sphere, compute smallest t value of intersection
-	float t = -b - sqrtf( discr );
+	float t = ( -b - sqrtf( discr ) ) / a;
 	if( t < 0.0f )
 	{
 		t = 0.0f; // If t is negative, ray started inside sphere so clamp t to zero
 	}
-	
 	// Check if hit is within ray length
-	if( t > rayLength )
+	else if( t > 1.0f )
 	{
 		return false;
 	}
-	
-	if( tOut )
+
+	if( distanceOut )
 	{
-		*tOut = t;
+		*distanceOut = ray.Length() * t;
 	}
-	const ae::Vec3 hit = source + direction * t;
+	const ae::Vec3 hit = source + ray * t;
 	if( hitOut )
 	{
 		*hitOut = hit;
@@ -16776,7 +17156,7 @@ bool Plane::IntersectLine( ae::Vec3 p, ae::Vec3 d, Vec3* hitOut, float* tOut ) c
 	return true;
 }
 
-bool Plane::IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* tOut ) const
+bool Plane::Raycast( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* distanceOut ) const
 {
 	const ae::Vec4 plane = GetSignedDistance( source ) >= 0.0f ? m_plane : -m_plane; // Plane normal towards ray source
 	const ae::Vec3 n = plane.GetXYZ();
@@ -16797,9 +17177,9 @@ bool Plane::IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* tO
 	{
 		*hitOut = source + ray * t;
 	}
-	if( tOut )
+	if( distanceOut )
 	{
-		*tOut = t;
+		*distanceOut = ray.Length() * t;
 	}
 	return true;
 }
@@ -17159,14 +17539,14 @@ bool AABB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* 
 	return true;
 }
 
-bool AABB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* tOut ) const
+bool AABB::Raycast( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* distanceOut ) const
 {
 	float t;
 	if( IntersectLine( source, ray, &t, nullptr, normOut, nullptr ) && t <= 1.0f )
 	{
 		if( t >= 0.0f )
 		{
-			if( tOut ) { *tOut = t; }
+			if( distanceOut ) { *distanceOut = ray.Length() * t; }
 			if( hitOut ) { *hitOut = source + ray * t; }
 			return true;
 		}
@@ -17176,7 +17556,7 @@ bool AABB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut,
 			ae::Vec3 closest = GetClosestPointOnSurface( source, &inside );
 			if( inside )
 			{
-				if( tOut ) { *tOut = 0.0f; }
+				if( distanceOut ) { *distanceOut = 0.0f; }
 				if( hitOut ) { *hitOut = source; }
 				if( normOut ) { *normOut = ( closest - source ).SafeNormalizeCopy(); }
 				return true;
@@ -17302,14 +17682,14 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* n
 	return true;
 }
 
-bool OBB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* tOut ) const
+bool OBB::Raycast( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* distanceOut ) const
 {
 	float t;
 	if( IntersectLine( source, ray, &t, nullptr, normOut, nullptr ) && t <= 1.0f )
 	{
 		if( t >= 0.0f )
 		{
-			if( tOut ) { *tOut = t; }
+			if( distanceOut ) { *distanceOut = ray.Length() * t; }
 			if( hitOut ) { *hitOut = source + ray * t; }
 			return true;
 		}
@@ -17319,7 +17699,7 @@ bool OBB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, 
 			ae::Vec3 closest = GetClosestPointOnSurface( source, &inside );
 			if( inside )
 			{
-				if( tOut ) { *tOut = 0.0f; }
+				if( distanceOut ) { *distanceOut = 0.0f; }
 				if( hitOut ) { *hitOut = source; }
 				if( normOut ) { *normOut = ( closest - source ).SafeNormalizeCopy(); }
 				return true;
@@ -17404,7 +17784,7 @@ AABB OBB::GetAABB() const
 //------------------------------------------------------------------------------
 // ae::Triangle member functions @TODO: move
 //------------------------------------------------------------------------------
-bool Triangle::IntersectRay( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut ) const
+bool Triangle::Raycast( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* distanceOut ) const
 {
 	// Möller–Trumbore ray-triangle intersection
 	const ae::Vec3 edge1 = vertices[ 1 ] - vertices[ 0 ];
@@ -17459,14 +17839,14 @@ bool Triangle::IntersectRay( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Ve
 		// Ensure normal orientation is consistent with det sign
 		*nOut = ( ray.Dot( normal ) > 0.0f ) ? -normal : normal;
 	}
-	if( tOut )
+	if( distanceOut )
 	{
-		*tOut = t;
+		*distanceOut = ray.Length() * t;
 	}
 	return true;
 }
 
-bool Triangle::SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut, Vec3* normalOut, float* tOut ) const
+bool Triangle::SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut, Vec3* normalOut, float* distanceOut ) const
 {
 	if( !ccw && !cw )
 	{
@@ -17676,9 +18056,9 @@ bool Triangle::SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool c
 	{
 		*normalOut = bestNormal;
 	}
-	if( tOut )
+	if( distanceOut )
 	{
-		*tOut = bestT;
+		*distanceOut = ray.Length() * bestT;
 	}
 	return true;
 }
@@ -18487,7 +18867,7 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 		case DocumentValueType::Number:
 		case DocumentValueType::Bool:
 		case DocumentValueType::Opaque:
-			if( m_value.GetType() )
+			if( m_value.GetTypeId() )
 			{
 				UndoOp op;
 				op.type = UndoOpType::OpaqueSet;
@@ -18520,7 +18900,7 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 	}
 	// Data should already be cleared by the switch above
 	AE_ASSERT( m_string.empty() );
-	AE_ASSERT( !m_value.GetType() );
+	AE_ASSERT( !m_value.GetTypeId() );
 	AE_ASSERT( m_array.Length() == 0 );
 	AE_ASSERT( m_map.Length() == 0 );
 	return *this;
@@ -18607,7 +18987,7 @@ void DocumentValue::BoolSet( bool value )
 bool DocumentValue::BoolGet() const
 {
 	AE_ASSERT( IsBool() );
-	AE_DEBUG_ASSERT( m_value.GetType() == ae::GetTypeIdWithoutQualifiers< bool >() );
+	AE_DEBUG_ASSERT( m_value.GetTypeId() == ae::GetTypeIdWithoutQualifiers< bool >() );
 	return m_value.Get< bool >( false );
 }
 
@@ -18893,7 +19273,7 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target )
 				// Data should always be empty when the type changes since
 				// Initialize() removes all elements first
 				AE_DEBUG_ASSERT( op.target->m_string.empty() );
-				AE_DEBUG_ASSERT( !op.target->m_value.GetType() );
+				AE_DEBUG_ASSERT( !op.target->m_value.GetTypeId() );
 				AE_DEBUG_ASSERT( op.target->m_array.Length() == 0 );
 				AE_DEBUG_ASSERT( op.target->m_map.Length() == 0 );
 				break;
@@ -18983,7 +19363,7 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 		{
 			// Validate type consistency with data contents
 			AE_DEBUG_ASSERT( target->m_string.length() == 0 || target->m_type == DocumentValueType::String );
-			AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
+			AE_DEBUG_ASSERT( !target->m_value.GetTypeId() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
 			AE_DEBUG_ASSERT( target->m_array.Length() == 0 || target->m_type == DocumentValueType::Array );
 			AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Object );
 			AE_DEBUG_ASSERT( target->m_refCount >= 0 );
@@ -28693,12 +29073,11 @@ float Spline::Segment::GetMinDistance( ae::Vec3 p, ae::Vec3* pOut, float* tOut )
 //------------------------------------------------------------------------------
 bool RaycastResult::EarlyOut( const RaycastParams& params, ae::Sphere sphere ) const
 {
-	float t = 0.0f;
-	if( !sphere.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
+	float distance = 0.0f;
+	if( !sphere.Raycast( params.source, params.ray, nullptr, nullptr, &distance ) )
 	{
 		return true; // Early out if ray doesn't touch sphere
 	}
-	const float distance = params.ray.Length() * t;
 	if( ( params.maxHits == hits.Length() ) && hits.Length() && hits.Last().distance < distance )
 	{
 		return true; // Early out if sphere is farther away than previous hits
@@ -28708,12 +29087,11 @@ bool RaycastResult::EarlyOut( const RaycastParams& params, ae::Sphere sphere ) c
 
 bool RaycastResult::EarlyOut( const RaycastParams& params, ae::OBB obb ) const
 {
-	float t = 0.0f;
-	if( !obb.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
+	float distance = 0.0f;
+	if( !obb.Raycast( params.source, params.ray, nullptr, nullptr, &distance ) )
 	{
 		return true; // Early out if ray doesn't touch obb
 	}
-	const float distance = params.ray.Length() * t;
 	if( ( params.maxHits == hits.Length() ) && hits.Length() && hits.Last().distance < distance )
 	{
 		return true; // Early out if obb is farther away than previous hits
@@ -28765,7 +29143,7 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 RaycastResult Raycast( const Triangle& tri, const RaycastParams& params, const TriangleRaycastParams& triParams, RaycastResult result )
 {
 	ae::Vec3 p, n;
-	if( tri.IntersectRay( params.source, params.ray, triParams.hitCounterclockwise, triParams.hitClockwise, &p, &n, nullptr ) )
+	if( tri.Raycast( params.source, params.ray, triParams.hitCounterclockwise, triParams.hitClockwise, &p, &n, nullptr ) )
 	{
 		RaycastResult::Hit hit;
 		hit.position = p;
@@ -28780,7 +29158,7 @@ RaycastResult Raycast( const Triangle& tri, const RaycastParams& params, const T
 RaycastResult Raycast( const Sphere& sphere, const RaycastParams& params, RaycastResult result )
 {
 	ae::Vec3 p, n;
-	if( sphere.IntersectRay( params.source, params.ray, &p, &n, nullptr ) )
+	if( sphere.Raycast( params.source, params.ray, &p, &n, nullptr ) )
 	{
 		RaycastResult::Hit hit;
 		hit.position = p;
@@ -28795,7 +29173,7 @@ RaycastResult Raycast( const Sphere& sphere, const RaycastParams& params, Raycas
 RaycastResult Raycast( const Plane& plane, const RaycastParams& params, RaycastResult result )
 {
 	ae::Vec3 p;
-	if( plane.IntersectRay( params.source, params.ray, &p, nullptr ) )
+	if( plane.Raycast( params.source, params.ray, &p, nullptr ) )
 	{
 		RaycastResult::Hit hit;
 		hit.position = p;
@@ -28810,7 +29188,7 @@ RaycastResult Raycast( const Plane& plane, const RaycastParams& params, RaycastR
 RaycastResult Raycast( const AABB& aabb, const RaycastParams& params, RaycastResult result )
 {
 	ae::Vec3 p, n;
-	if( aabb.IntersectRay( params.source, params.ray, &p, &n, nullptr ) )
+	if( aabb.Raycast( params.source, params.ray, &p, &n, nullptr ) )
 	{
 		RaycastResult::Hit hit;
 		hit.position = p;
@@ -28825,7 +29203,7 @@ RaycastResult Raycast( const AABB& aabb, const RaycastParams& params, RaycastRes
 RaycastResult Raycast( const OBB& obb, const RaycastParams& params, RaycastResult result )
 {
 	ae::Vec3 p, n;
-	if( obb.IntersectRay( params.source, params.ray, &p, &n, nullptr ) )
+	if( obb.Raycast( params.source, params.ray, &p, &n, nullptr ) )
 	{
 		RaycastResult::Hit hit;
 		hit.position = p;
@@ -32801,11 +33179,12 @@ ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 //------------------------------------------------------------------------------
 // ae::EnumType member functions
 //------------------------------------------------------------------------------
-ae::EnumType::EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned ) :
+ae::EnumType::EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned, bool isBitField ) :
 	m_name( name ),
 	m_prefix( prefix ),
 	m_size( size ),
-	m_isSigned( isSigned )
+	m_isSigned( isSigned ),
+	m_isBitField( isBitField )
 {}
 
 std::string ae::EnumType::GetNameByIndex( int32_t index ) const
@@ -33094,6 +33473,8 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 	return false;
 }
 
+ae::TypeId ae::BasicType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< BasicType >(); }
+
 //------------------------------------------------------------------------------
 // ae::EnumType member functions
 //------------------------------------------------------------------------------
@@ -33128,7 +33509,7 @@ std::string ae::EnumType::GetVarDataAsString( ae::ConstDataPointer _varData ) co
 			default: AE_FAIL();
 		}
 	}
-	return m_enumValueToName.Get( storedValue, "" );
+	return m_isBitField ? GetNameByValue( storedValue ) : m_enumValueToName.Get( storedValue, "" );
 }
 
 bool ae::EnumType::SetVarDataFromString( ae::DataPointer _varData, const char* value ) const
@@ -33163,6 +33544,8 @@ bool ae::EnumType::SetVarDataFromString( ae::DataPointer _varData, const char* v
 	return false;
 }
 
+ae::TypeId ae::EnumType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< EnumType >(); }
+
 //------------------------------------------------------------------------------
 // ae::PointerType
 //------------------------------------------------------------------------------
@@ -33174,6 +33557,23 @@ ae::DataPointer ae::PointerType::Dereference( ae::ConstDataPointer varData ) con
 	}
 	return {};
 }
+
+ae::TypeId ae::PointerType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< PointerType >(); }
+
+//------------------------------------------------------------------------------
+// ae::OptionalType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::OptionalType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< OptionalType >(); }
+
+//------------------------------------------------------------------------------
+// ae::ArrayType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::ArrayType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< ArrayType >(); }
+
+//------------------------------------------------------------------------------
+// ae::MapType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::MapType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< MapType >(); }
 
 //------------------------------------------------------------------------------
 // ae::ClassType member functions
@@ -33297,6 +33697,8 @@ void ae::ClassType::m_AddVar( const ae::ClassVar* var )
 		return a->GetOffset() < b->GetOffset();
 	} );
 }
+
+ae::TypeId ae::ClassType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< ClassType >(); }
 
 //------------------------------------------------------------------------------
 // ae::AttributeList member functions

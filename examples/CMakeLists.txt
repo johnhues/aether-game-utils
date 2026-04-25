@@ -49,7 +49,7 @@ endif()
 set(AE_EXAMPLE_DEVELOPMENT_TEAM "" CACHE STRING "Apple Development Team ID for aether examples")
 set(AE_EXAMPLE_SOURCES Common.h)
 if(EMSCRIPTEN)
-	add_compile_definitions(DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data")
+	add_compile_definitions(DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data")
 endif()
 if(EMSCRIPTEN)
 	set(AE_EXAMPLE_RESOURCES "index.html;index.webmanifest;data/WebIcon.png")
@@ -279,7 +279,7 @@ if(AE_LOADERS_OFBX)
 	)
 endif()
 
-if(AE_DEPRECATED) # @TODO: Fix deprecated ClassType/ClassVar usage
+if(AE_DEPRECATED)
 	# Small Engine
 	ae_add_bundle("Small Engine"
 		TARGET_NAME "18_SmallEngine"

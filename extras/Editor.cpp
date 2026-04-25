@@ -3982,15 +3982,17 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 	const ae::Vec3 mouseRay = program->GetMouseRay();
 	const ae::Vec3 mouseRaySrc = program->camera.GetPosition();
 
-	// @TODO: Frustum culling
-
 	ae::RaycastParams raycastParams;
 	raycastParams.source = mouseRaySrc;
 	raycastParams.ray = mouseRay * kEditorViewDistance;
+	if( program->input.Get( ae::Key::M ) )
+	{
+		raycastParams.maxHits = -1;
+	}
 	ae::CollisionMeshRaycastParams meshParams;
 	meshParams.hitClockwise = false;
 	meshParams.hitCounterclockwise = true;
-	// meshParams.debug = &program->debugLines; // Debug only
+	meshParams.debug = ( program->input.Get( ae::Key::N ) || program->input.Get( ae::Key::M ) ) ? &program->debugLines : nullptr; // Debug only
 	ae::RaycastResult result;
 	for( auto& [ _, plugin ] : program->plugins )
 	{
@@ -4020,8 +4022,9 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 		{
 			float hitT = INFINITY;
 			ae::Vec3 hitPos( 0.0f );
+			ae::Vec3 normal( 0.0f );
 			const ae::Sphere sphere( editorObj->GetTransform().GetTranslation(), 0.5f );
-			if( sphere.IntersectRay( mouseRaySrc, mouseRay, &hitPos, nullptr, &hitT ) )
+			if( sphere.Raycast( raycastParams.source, raycastParams.ray, &hitPos, &normal, &hitT ) )
 			{
 				raycastParams.userData = editorObj;
 				result = ae::Raycast( sphere, raycastParams, result );
@@ -4030,6 +4033,17 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 	}
 	if( result.hits.Length() )
 	{
+		if( meshParams.debug )
+		{
+			std::string str;
+			for( uint32_t i = 0; i < result.hits.Length(); i++ )
+			{
+				const EditorServerObject* editorObj = result.hits[ i ].userData.Get< const EditorServerObject* >();
+				str += ae::Str256::Format( "Hit # at #, object: #\n", i, result.hits[ i ].distance, editorObj ? editorObj->entity : 0 ).c_str();
+			}
+			ImGui::SetTooltip( "%s", str.c_str() );
+		}
+
 		*hitOut = result.hits[ 0 ].position;
 		*normalOut = result.hits[ 0 ].normal;
 		const EditorServerObject* editorObj = result.hits[ 0 ].userData.Get< const EditorServerObject* >();
