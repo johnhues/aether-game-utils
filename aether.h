@@ -5335,9 +5335,9 @@ struct AStarNode
 	//--------------------------------------------------------------------------
 	// ae::AStar type T must implement these following functions:
 	//--------------------------------------------------------------------------
-	//! Returns the next node in the path. \p index is the index of the next
-	//! node in the path. Edges between paths can be uni-directional or
-	//! bi-directional.
+	//! Returns one of the next traversable nodes in the path. Argument \p index
+	//! should be no more than ae::AStarNode::GetNextCount() - 1. Note that
+	//! edges between paths can be uni or bi-directional.
 	const AStarNodeT* GetNext( uint32_t index ) const { return next[ index ]; }
 	//! Returns the number of nodes directly visitable from this node.
 	uint32_t GetNextCount() const { return next.Length(); }
