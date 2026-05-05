@@ -171,9 +171,9 @@
 //------------------------------------------------------------------------------
 // AE_MAX_SCRATCH_BYTES_CONFIG define
 //------------------------------------------------------------------------------
-//! The cumulative maximum bytes of all currently allocated ae::ScratchBuffers.
-//! Note that ae::ScratchBuffer memory is always released in the reverse order
-//! that it was allocated, so this limit should accommodate the worst case.
+//! The maximum bytes available to each thread's ae::Scratch stack. Scratch
+//! memory is always released in reverse allocation order, so this limit should
+//! accommodate the worst-case stack usage of a single thread.
 //------------------------------------------------------------------------------
 #ifndef AE_MAX_SCRATCH_BYTES_CONFIG
 	#define AE_MAX_SCRATCH_BYTES_CONFIG ( 4 * 1024 *1024 )
@@ -280,6 +280,7 @@
 #include <iostream>
 #include <optional>
 #include <ostream>
+#include <random>
 #include <sstream>
 #include <mutex>
 #include <thread> // @TODO: Remove. For Globals::allocatorThread.
@@ -534,7 +535,7 @@ public:
 	T& GetSafe( int32_t index );
 	const T& GetSafe( int32_t index ) const;
 
-	//! The max cumulative size of the internal scratch stack
+	//! The max size of each thread's internal scratch stack
 	static const uint32_t kMaxScratchSize = AE_MAX_SCRATCH_BYTES_CONFIG;
 
 private:
@@ -7341,10 +7342,6 @@ struct _Globals
 	std::thread::id allocatorThread;
 	_DefaultAllocator defaultAllocator;
 
-	// Scratch
-	// @TODO: This must be per thread!
-	_ScratchBuffer scratchBuffer = ae::Scratch< uint8_t >::kMaxScratchSize;
-
 	// Reflection
 	uint32_t metaCacheSeq = 0;
 	ae::Map< ae::TypeId, const ae::EnumType*, kMaxMetaEnumTypes, ae::Hash32, ae::MapMode::Stable > enumTypes;
@@ -7363,8 +7360,11 @@ struct _Globals
 //------------------------------------------------------------------------------
 struct _ThreadLocals
 {
+	_ThreadLocals();
 	static _ThreadLocals* Get();
 
+	_ScratchBuffer scratchBuffer;
+	std::mt19937_64 uuidRandom;
 	ae::Array< ae::Str64, 8 > logTagStack;
 };
 
@@ -7791,15 +7791,15 @@ template< typename T >
 Scratch< T >::Scratch( uint32_t count )
 {
 	AE_STATIC_ASSERT( alignof(T) <= _ScratchBuffer::kScratchAlignment );
-	ae::_ScratchBuffer* globalScratch = &ae::_Globals::Get()->scratchBuffer;
-	const uint32_t bytes = globalScratch->GetScratchBytes( count * sizeof(T) );
+	ae::_ScratchBuffer* scratchBuffer = &ae::_ThreadLocals::Get()->scratchBuffer;
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( count * sizeof(T) );
 	
 	m_size = count;
-	m_data = (T*)( globalScratch->data + globalScratch->offset );
+	m_data = (T*)( scratchBuffer->data + scratchBuffer->offset );
 	AE_DEBUG_ASSERT( ( (intptr_t)m_data % ae::_ScratchBuffer::kScratchAlignment ) == 0 );
-	m_prevOffsetCheck = globalScratch->offset;
-	globalScratch->offset += bytes;
-	AE_ASSERT_MSG( globalScratch->offset <= globalScratch->size, "Global scratch buffer size exceeded: # bytes / (# bytes). The global max can be set with AE_MAX_SCRATCH_BYTES_CONFIG.", globalScratch->offset, globalScratch->size );
+	m_prevOffsetCheck = scratchBuffer->offset;
+	scratchBuffer->offset += bytes;
+	AE_ASSERT_MSG( scratchBuffer->offset <= scratchBuffer->size, "Scratch buffer size exceeded: # bytes / (# bytes). The per-thread max can be set with AE_MAX_SCRATCH_BYTES_CONFIG.", scratchBuffer->offset, scratchBuffer->size );
 	
 #if _AE_DEBUG_
 	memset( m_data, 0xCD, m_size * sizeof(T) );
@@ -7820,7 +7820,7 @@ Scratch< T >::Scratch( uint32_t count )
 template< typename T >
 Scratch< T >::~Scratch()
 {
-	ae::_ScratchBuffer* scratchBuffer = &ae::_Globals::Get()->scratchBuffer;
+	ae::_ScratchBuffer* scratchBuffer = &ae::_ThreadLocals::Get()->scratchBuffer;
 	
 	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_size * sizeof(T) );
 #if _AE_DEBUG_
@@ -15626,7 +15626,6 @@ ae::_Globals::~_Globals()
 {
 	AE_ASSERT( !enumTypes.Length() );
 	AE_ASSERT( !classTypes.Length() );
-	AE_ASSERT( !scratchBuffer.offset );
 }
 
 //------------------------------------------------------------------------------
@@ -15665,6 +15664,26 @@ ae::_Globals* ae::_Globals::Get()
 //------------------------------------------------------------------------------
 // Internal ae::_ThreadLocals functions
 //------------------------------------------------------------------------------
+ae::_ThreadLocals::_ThreadLocals() :
+	scratchBuffer( ae::Scratch< uint8_t >::kMaxScratchSize )
+{
+	std::random_device randomDevice;
+	const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+	const uint64_t threadSeed = std::hash< std::thread::id >{}( std::this_thread::get_id() );
+	std::seed_seq seed
+	{
+		randomDevice(),
+		randomDevice(),
+		randomDevice(),
+		randomDevice(),
+		static_cast< uint32_t >( timeSeed ),
+		static_cast< uint32_t >( timeSeed >> 32 ),
+		static_cast< uint32_t >( threadSeed ),
+		static_cast< uint32_t >( threadSeed >> 32 ),
+	};
+	uuidRandom.seed( seed );
+}
+
 ae::_ThreadLocals* ae::_ThreadLocals::Get()
 {
 	static thread_local ae::_ThreadLocals s_threadLocals;
@@ -18521,14 +18540,12 @@ ae::UUID ae::UUID::Generate()
 	// 12 bits: rand_a (sub-millisecond precision/randomness)
 	// 2 bits: variant (10)
 	// 62 bits: rand_b
-	std::random_device rd;
-	std::mt19937_64 gen( rd() );
-	std::uniform_int_distribution< uint64_t > dis;
+	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
 	const auto now = std::chrono::system_clock::now();
 	const uint64_t ms = std::chrono::duration_cast< std::chrono::milliseconds >( now.time_since_epoch() ).count();
 	const uint64_t ms48 = ( ms & 0x0000FFFFFFFFFFFFULL );
-	const uint16_t ra = static_cast< uint16_t >( dis( gen ) & 0x0FFFULL ); // 12-bit rand_a
-	const uint64_t rb = ( dis( gen ) & 0x3FFFFFFFFFFFFFFFULL ); // 62-bit rand_b
+	const uint16_t ra = static_cast< uint16_t >( threadLocals->uuidRandom() & 0x0FFFULL ); // 12-bit rand_a
+	const uint64_t rb = ( threadLocals->uuidRandom() & 0x3FFFFFFFFFFFFFFFULL ); // 62-bit rand_b
 	// High 64 bits: [timestamp_ms(48)] [version(4)] [rand_a(12)] — big-endian byte order
 	r.data[ 0 ] = static_cast< uint8_t >( ( ms48 >> 40 ) & 0xFF );
 	r.data[ 1 ] = static_cast< uint8_t >( ( ms48 >> 32 ) & 0xFF );
@@ -30407,7 +30424,7 @@ uint32_t Audio::GetSfxLoopChannelCount() const
 void Audio::Log()
 {
 #if AE_USE_OPENAL
-	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
+ 	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		ALint state = 0;
 		const Channel* channel = &m_sfxChannels[ i ];
