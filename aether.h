@@ -8969,50 +8969,50 @@ inline void Int3::SetXZ( Int2 xz ) { x = xz.x; z = xz.y; }
 //------------------------------------------------------------------------------
 // clang-format off
 // Grayscale
-inline Color Color::White() { static Color c = Color::SRGB8( 255, 255, 255 ); return c; }
-inline Color Color::Gray() { static Color c = Color::SRGB8( 127, 127, 127 ); return c; }
-inline Color Color::Black() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
+inline Color Color::White() { static const Color c = Color::SRGB8( 255, 255, 255 ); return c; }
+inline Color Color::Gray() { static const Color c = Color::SRGB8( 127, 127, 127 ); return c; }
+inline Color Color::Black() { static const Color c = Color::SRGB8( 0, 0, 0 ); return c; }
 // Rainbow
-inline Color Color::Red() { static Color c = Color::SRGB8( 255, 0, 0 ); return c; }
-inline Color Color::Orange() { static Color c = Color::SRGB8( 255, 127, 0 ); return c; }
-inline Color Color::Yellow() { static Color c = Color::SRGB8( 255, 255, 0 ); return c; }
-inline Color Color::Green() { static Color c = Color::SRGB8( 0, 255, 0 ); return c; }
-inline Color Color::Blue() { static Color c = Color::SRGB8( 0, 0, 255 ); return c; }
-inline Color Color::Indigo() { static Color c = Color::SRGB8( 75, 0, 130 ); return c; }
-inline Color Color::Violet() { static Color c = Color::SRGB8( 148, 0, 211 ); return c; }
+inline Color Color::Red() { static const Color c = Color::SRGB8( 255, 0, 0 ); return c; }
+inline Color Color::Orange() { static const Color c = Color::SRGB8( 255, 127, 0 ); return c; }
+inline Color Color::Yellow() { static const Color c = Color::SRGB8( 255, 255, 0 ); return c; }
+inline Color Color::Green() { static const Color c = Color::SRGB8( 0, 255, 0 ); return c; }
+inline Color Color::Blue() { static const Color c = Color::SRGB8( 0, 0, 255 ); return c; }
+inline Color Color::Indigo() { static const Color c = Color::SRGB8( 75, 0, 130 ); return c; }
+inline Color Color::Violet() { static const Color c = Color::SRGB8( 148, 0, 211 ); return c; }
 // Other
-inline Color Color::Cyan() { static Color c = Color( 0.0f, 1.0f, 1.0f ); return c; }
-inline Color Color::Magenta() { static Color c = Color( 1.0f, 0.0f, 1.0f ); return c; }
+inline Color Color::Cyan() { static const Color c = Color( 0.0f, 1.0f, 1.0f ); return c; }
+inline Color Color::Magenta() { static const Color c = Color( 1.0f, 0.0f, 1.0f ); return c; }
 // aether
-inline Color Color::AetherDarkRed() { static Color c = Color::SRGB8( 175, 65, 90 ); return c; }
-inline Color Color::AetherRed() { static Color c = Color::SRGB8( 240, 75, 90 ); return c; }
-inline Color Color::AetherOrange() { static Color c = Color::SRGB8( 255, 150, 60 ); return c; }
-inline Color Color::AetherYellow() { static Color c = Color::SRGB8( 250, 205, 100 ); return c; }
-inline Color Color::AetherGreen() { static Color c = Color::SRGB8( 180, 240, 80 ); return c; }
-inline Color Color::AetherTeal() { static Color c = Color::SRGB8( 90, 195, 185 ); return c; }
-inline Color Color::AetherBlue() { static Color c = Color::SRGB8( 70, 120, 225 ); return c; }
-inline Color Color::AetherPurple() { static Color c = Color::SRGB8( 120, 90, 195 ); return c; }
-inline Color Color::AetherWhite() { static Color c = Color::SRGB8( 235, 230, 215 ); return c; }
-inline Color Color::AetherGray() { static Color c = Color::SRGB8( 145, 135, 130 ); return c; }
-inline Color Color::AetherDarkGray() { static Color c = Color::SRGB8( 105, 105, 100 ); return c; }
-inline Color Color::AetherBlack() { static Color c = Color::SRGB8( 45, 45, 45 ); return c; }
+inline Color Color::AetherDarkRed() { static const Color c = Color::SRGB8( 175, 65, 90 ); return c; }
+inline Color Color::AetherRed() { static const Color c = Color::SRGB8( 240, 75, 90 ); return c; }
+inline Color Color::AetherOrange() { static const Color c = Color::SRGB8( 255, 150, 60 ); return c; }
+inline Color Color::AetherYellow() { static const Color c = Color::SRGB8( 250, 205, 100 ); return c; }
+inline Color Color::AetherGreen() { static const Color c = Color::SRGB8( 180, 240, 80 ); return c; }
+inline Color Color::AetherTeal() { static const Color c = Color::SRGB8( 90, 195, 185 ); return c; }
+inline Color Color::AetherBlue() { static const Color c = Color::SRGB8( 70, 120, 225 ); return c; }
+inline Color Color::AetherPurple() { static const Color c = Color::SRGB8( 120, 90, 195 ); return c; }
+inline Color Color::AetherWhite() { static const Color c = Color::SRGB8( 235, 230, 215 ); return c; }
+inline Color Color::AetherGray() { static const Color c = Color::SRGB8( 145, 135, 130 ); return c; }
+inline Color Color::AetherDarkGray() { static const Color c = Color::SRGB8( 105, 105, 100 ); return c; }
+inline Color Color::AetherBlack() { static const Color c = Color::SRGB8( 45, 45, 45 ); return c; }
 // Pico
-inline Color Color::PicoBlack() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
-inline Color Color::PicoDarkBlue() { static Color c = Color::SRGB8( 29, 43, 83 ); return c; }
-inline Color Color::PicoDarkPurple() { static Color c = Color::SRGB8( 126, 37, 83 ); return c; }
-inline Color Color::PicoDarkGreen() { static Color c = Color::SRGB8( 0, 135, 81 ); return c; }
-inline Color Color::PicoBrown() { static Color c = Color::SRGB8( 171, 82, 54 ); return c; }
-inline Color Color::PicoDarkGray() { static Color c = Color::SRGB8( 95, 87, 79 ); return c; }
-inline Color Color::PicoLightGray() { static Color c = Color::SRGB8( 194, 195, 199 ); return c; }
-inline Color Color::PicoWhite() { static Color c = Color::SRGB8( 255, 241, 232 ); return c; }
-inline Color Color::PicoRed() { static Color c = Color::SRGB8( 255, 0, 77 ); return c; }
-inline Color Color::PicoOrange() { static Color c = Color::SRGB8( 255, 163, 0 ); return c; }
-inline Color Color::PicoYellow() { static Color c = Color::SRGB8( 255, 236, 39 ); return c; }
-inline Color Color::PicoGreen() { static Color c = Color::SRGB8( 0, 228, 54 ); return c; }
-inline Color Color::PicoBlue() { static Color c = Color::SRGB8( 41, 173, 255 ); return c; }
-inline Color Color::PicoIndigo() { static Color c = Color::SRGB8( 131, 118, 156 ); return c; }
-inline Color Color::PicoPink() { static Color c = Color::SRGB8( 255, 119, 168 ); return c; }
-inline Color Color::PicoPeach() { static Color c = Color::SRGB8( 255, 204, 170 ); return c; }
+inline Color Color::PicoBlack() { static const Color c = Color::SRGB8( 0, 0, 0 ); return c; }
+inline Color Color::PicoDarkBlue() { static const Color c = Color::SRGB8( 29, 43, 83 ); return c; }
+inline Color Color::PicoDarkPurple() { static const Color c = Color::SRGB8( 126, 37, 83 ); return c; }
+inline Color Color::PicoDarkGreen() { static const Color c = Color::SRGB8( 0, 135, 81 ); return c; }
+inline Color Color::PicoBrown() { static const Color c = Color::SRGB8( 171, 82, 54 ); return c; }
+inline Color Color::PicoDarkGray() { static const Color c = Color::SRGB8( 95, 87, 79 ); return c; }
+inline Color Color::PicoLightGray() { static const Color c = Color::SRGB8( 194, 195, 199 ); return c; }
+inline Color Color::PicoWhite() { static const Color c = Color::SRGB8( 255, 241, 232 ); return c; }
+inline Color Color::PicoRed() { static const Color c = Color::SRGB8( 255, 0, 77 ); return c; }
+inline Color Color::PicoOrange() { static const Color c = Color::SRGB8( 255, 163, 0 ); return c; }
+inline Color Color::PicoYellow() { static const Color c = Color::SRGB8( 255, 236, 39 ); return c; }
+inline Color Color::PicoGreen() { static const Color c = Color::SRGB8( 0, 228, 54 ); return c; }
+inline Color Color::PicoBlue() { static const Color c = Color::SRGB8( 41, 173, 255 ); return c; }
+inline Color Color::PicoIndigo() { static const Color c = Color::SRGB8( 131, 118, 156 ); return c; }
+inline Color Color::PicoPink() { static const Color c = Color::SRGB8( 255, 119, 168 ); return c; }
+inline Color Color::PicoPeach() { static const Color c = Color::SRGB8( 255, 204, 170 ); return c; }
 // clang-format on
 
 //------------------------------------------------------------------------------
@@ -15753,12 +15753,13 @@ EM_JS( float, _ae_performance_now, (),
 double GetTime()
 {
 #if _AE_WINDOWS_
-	static LARGE_INTEGER counterFrequency = { 0 };
-	if( !counterFrequency.QuadPart )
+	static const LARGE_INTEGER counterFrequency = []()
 	{
-		bool success = QueryPerformanceFrequency( &counterFrequency ) != 0;
+		LARGE_INTEGER result = { 0 };
+		bool success = QueryPerformanceFrequency( &result ) != 0;
 		AE_ASSERT( success );
-	}
+		return result;
+	}();
 
 	LARGE_INTEGER performanceCount = { 0 };
 	bool success = QueryPerformanceCounter( &performanceCount ) != 0;
@@ -18211,7 +18212,7 @@ void _LogImpl( ae::LogSeverity severity, const char* filePath, uint32_t line, co
 {
 	std::stringstream os;
 	_LogFormat( os, severity, filePath, line, tags, tagCount, message );
-	static bool s_logStdOut = !ae::IsDebuggerAttached();
+	static const bool s_logStdOut = !ae::IsDebuggerAttached();
 	if( s_logStdOut )
 	{
 		printf( os.str().c_str() ); // std out
@@ -20538,89 +20539,86 @@ void _aeEmscriptenTryNewFrame( Input* input )
 
 EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
-	static ae::Key s_keyMap[ 255 ];
-	static bool s_first = true;
-	// First time this function is called only
-	if( s_first )
+	static const std::array< ae::Key, 255 > s_keyMap = []()
 	{
-		s_first = false;
-		memset( s_keyMap, 0, sizeof( s_keyMap ) );
-		s_keyMap[ 8 ] = ae::Key::Backspace;
-		s_keyMap[ 9 ] = ae::Key::Tab;
-		s_keyMap[ 13 ] = ae::Key::Enter;
-		s_keyMap[ 16 ] = ae::Key::LeftShift;
-		s_keyMap[ 17 ] = ae::Key::LeftControl;
-		s_keyMap[ 18 ] = ae::Key::LeftAlt;
-		s_keyMap[ 19 ] = ae::Key::Pause;
-		s_keyMap[ 20 ] = ae::Key::CapsLock;
-		s_keyMap[ 27 ] = ae::Key::Escape;
-		s_keyMap[ 32 ] = ae::Key::Space;
-		s_keyMap[ 33 ] = ae::Key::PageUp;
-		s_keyMap[ 34 ] = ae::Key::PageDown;
-		s_keyMap[ 35 ] = ae::Key::End;
-		s_keyMap[ 36 ] = ae::Key::Home;
-		s_keyMap[ 37 ] = ae::Key::Left;
-		s_keyMap[ 38 ] = ae::Key::Up;
-		s_keyMap[ 39 ] = ae::Key::Right;
-		s_keyMap[ 40 ] = ae::Key::Down;
-		s_keyMap[ 45 ] = ae::Key::Insert;
-		s_keyMap[ 46 ] = ae::Key::Delete;
-		s_keyMap[ 48 ] = ae::Key::Num0;
-		s_keyMap[ 49 ] = ae::Key::Num1;
-		s_keyMap[ 50 ] = ae::Key::Num2;
-		s_keyMap[ 51 ] = ae::Key::Num3;
-		s_keyMap[ 52 ] = ae::Key::Num4;
-		s_keyMap[ 53 ] = ae::Key::Num5;
-		s_keyMap[ 54 ] = ae::Key::Num6;
-		s_keyMap[ 55 ] = ae::Key::Num7;
-		s_keyMap[ 56 ] = ae::Key::Num8;
-		s_keyMap[ 57 ] = ae::Key::Num9;
+		std::array< ae::Key, 255 > keyMap{};
+		keyMap[ 8 ] = ae::Key::Backspace;
+		keyMap[ 9 ] = ae::Key::Tab;
+		keyMap[ 13 ] = ae::Key::Enter;
+		keyMap[ 16 ] = ae::Key::LeftShift;
+		keyMap[ 17 ] = ae::Key::LeftControl;
+		keyMap[ 18 ] = ae::Key::LeftAlt;
+		keyMap[ 19 ] = ae::Key::Pause;
+		keyMap[ 20 ] = ae::Key::CapsLock;
+		keyMap[ 27 ] = ae::Key::Escape;
+		keyMap[ 32 ] = ae::Key::Space;
+		keyMap[ 33 ] = ae::Key::PageUp;
+		keyMap[ 34 ] = ae::Key::PageDown;
+		keyMap[ 35 ] = ae::Key::End;
+		keyMap[ 36 ] = ae::Key::Home;
+		keyMap[ 37 ] = ae::Key::Left;
+		keyMap[ 38 ] = ae::Key::Up;
+		keyMap[ 39 ] = ae::Key::Right;
+		keyMap[ 40 ] = ae::Key::Down;
+		keyMap[ 45 ] = ae::Key::Insert;
+		keyMap[ 46 ] = ae::Key::Delete;
+		keyMap[ 48 ] = ae::Key::Num0;
+		keyMap[ 49 ] = ae::Key::Num1;
+		keyMap[ 50 ] = ae::Key::Num2;
+		keyMap[ 51 ] = ae::Key::Num3;
+		keyMap[ 52 ] = ae::Key::Num4;
+		keyMap[ 53 ] = ae::Key::Num5;
+		keyMap[ 54 ] = ae::Key::Num6;
+		keyMap[ 55 ] = ae::Key::Num7;
+		keyMap[ 56 ] = ae::Key::Num8;
+		keyMap[ 57 ] = ae::Key::Num9;
 		for( uint32_t i = 0; i < 26; i++ )
 		{
-			s_keyMap[ 65 + i ] = (ae::Key)((int)ae::Key::A + i);
+			keyMap[ 65 + i ] = (ae::Key)((int)ae::Key::A + i);
 		}
-		s_keyMap[ 91 ] = ae::Key::LeftSuper;
-		s_keyMap[ 92 ] = ae::Key::RightSuper;
-		s_keyMap[ 96 ] = ae::Key::NumPad0;
-		s_keyMap[ 97 ] = ae::Key::NumPad1;
-		s_keyMap[ 98 ] = ae::Key::NumPad2;
-		s_keyMap[ 99 ] = ae::Key::NumPad3;
-		s_keyMap[ 100 ] = ae::Key::NumPad4;
-		s_keyMap[ 101 ] = ae::Key::NumPad5;
-		s_keyMap[ 102 ] = ae::Key::NumPad6;
-		s_keyMap[ 103 ] = ae::Key::NumPad7;
-		s_keyMap[ 104 ] = ae::Key::NumPad8;
-		s_keyMap[ 105 ] = ae::Key::NumPad9;
-		s_keyMap[ 106 ] = ae::Key::NumPadMultiply;
-		s_keyMap[ 107 ] = ae::Key::NumPadPlus;
-		s_keyMap[ 109 ] = ae::Key::NumPadMinus;
-		s_keyMap[ 110 ] = ae::Key::NumPadPeriod;
-		s_keyMap[ 111 ] = ae::Key::NumPadDivide;
+		keyMap[ 91 ] = ae::Key::LeftSuper;
+		keyMap[ 92 ] = ae::Key::RightSuper;
+		keyMap[ 96 ] = ae::Key::NumPad0;
+		keyMap[ 97 ] = ae::Key::NumPad1;
+		keyMap[ 98 ] = ae::Key::NumPad2;
+		keyMap[ 99 ] = ae::Key::NumPad3;
+		keyMap[ 100 ] = ae::Key::NumPad4;
+		keyMap[ 101 ] = ae::Key::NumPad5;
+		keyMap[ 102 ] = ae::Key::NumPad6;
+		keyMap[ 103 ] = ae::Key::NumPad7;
+		keyMap[ 104 ] = ae::Key::NumPad8;
+		keyMap[ 105 ] = ae::Key::NumPad9;
+		keyMap[ 106 ] = ae::Key::NumPadMultiply;
+		keyMap[ 107 ] = ae::Key::NumPadPlus;
+		keyMap[ 109 ] = ae::Key::NumPadMinus;
+		keyMap[ 110 ] = ae::Key::NumPadPeriod;
+		keyMap[ 111 ] = ae::Key::NumPadDivide;
 		for( uint32_t i = 0; i < 12; i++ )
 		{
-			s_keyMap[ 112 + i ] = (ae::Key)((int)ae::Key::F1 + i);
+			keyMap[ 112 + i ] = (ae::Key)((int)ae::Key::F1 + i);
 		}
-		s_keyMap[ 144 ] = ae::Key::NumLock;
-		s_keyMap[ 145 ] = ae::Key::ScrollLock;
-		s_keyMap[ 186 ] = ae::Key::Semicolon;
-		s_keyMap[ 187 ] = ae::Key::Equals;
-		s_keyMap[ 188 ] = ae::Key::Comma;
-		s_keyMap[ 189 ] = ae::Key::Minus;
-		s_keyMap[ 190 ] = ae::Key::Period;
-		s_keyMap[ 191 ] = ae::Key::Slash;
-		s_keyMap[ 192 ] = ae::Key::Tilde;
-		s_keyMap[ 219 ] = ae::Key::LeftBracket;
-		s_keyMap[ 220 ] = ae::Key::Backslash;
-		s_keyMap[ 221 ] = ae::Key::RightBracket;
-		s_keyMap[ 222 ] = ae::Key::Apostrophe;
-	}
+		keyMap[ 144 ] = ae::Key::NumLock;
+		keyMap[ 145 ] = ae::Key::ScrollLock;
+		keyMap[ 186 ] = ae::Key::Semicolon;
+		keyMap[ 187 ] = ae::Key::Equals;
+		keyMap[ 188 ] = ae::Key::Comma;
+		keyMap[ 189 ] = ae::Key::Minus;
+		keyMap[ 190 ] = ae::Key::Period;
+		keyMap[ 191 ] = ae::Key::Slash;
+		keyMap[ 192 ] = ae::Key::Tilde;
+		keyMap[ 219 ] = ae::Key::LeftBracket;
+		keyMap[ 220 ] = ae::Key::Backslash;
+		keyMap[ 221 ] = ae::Key::RightBracket;
+		keyMap[ 222 ] = ae::Key::Apostrophe;
+		return keyMap;
+	}();
 
 	// Start key handling
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
 	_aeEmscriptenTryNewFrame( input );
 
-	if( keyEvent->which < countof(s_keyMap) && (int)s_keyMap[ keyEvent->which ] )
+	if( keyEvent->which < s_keyMap.size() && (int)s_keyMap[ keyEvent->which ] )
 	{
 		bool pressed = ( EMSCRIPTEN_EVENT_KEYUP != eventType );
 		input->m_keys[ (int)s_keyMap[ keyEvent->which ] ] = pressed;
