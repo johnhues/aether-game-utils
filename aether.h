@@ -173,6 +173,27 @@
 #endif
 
 //------------------------------------------------------------------------------
+// AE_OPENGL_CUSTOM_HEADER define
+//------------------------------------------------------------------------------
+//! Define as the path to a custom OpenGL header if you want to use a specific
+//! header other than the default platform headers. Note that if you need to
+//! '#define GL_GLEXT_PROTOTYPES 1' etc. for your custom header, an option is
+//! adding it to your AE_CONFIG_FILE.
+#ifndef AE_OPENGL_CUSTOM_HEADER
+	#define AE_OPENGL_CUSTOM_HEADER 0 // <GL/glcorearb.h>
+#endif
+
+//------------------------------------------------------------------------------
+// AE_GL_IMPORT define
+//------------------------------------------------------------------------------
+//! Optional wasm OpenGL import attribute fragment. Define before including
+//! aether.h to apply an additional attribute to each wasm GL declaration, e.g.
+//! '#define AE_GL_IMPORT import_module( "env" )'. This is intended for leaf-node
+//! hosts that own the cart ABI. When undefined, aether only applies
+//! `import_name( #name )`.
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
 // AE_MAX_SCRATCH_BYTES_CONFIG define
 //------------------------------------------------------------------------------
 //! The maximum bytes available to each thread's ae::Scratch stack. Scratch
@@ -267,7 +288,6 @@
 #include <array>
 #include <cassert>
 #include <cerrno> // strtoll/strtoull error checking
-
 #include <chrono>
 #include <cinttypes>
 #include <climits>
@@ -282,11 +302,11 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <ostream>
 #include <random>
 #include <sstream>
-#include <mutex>
 #include <thread> // @TODO: Remove. For Globals::allocatorThread.
 #include <type_traits>
 #include <typeinfo>
@@ -15541,10 +15561,13 @@ T* ae::Cast( C* obj )
 		#pragma comment (lib, "Winmm.lib")
 		#pragma comment (lib, "Ws2_32.lib")
 		#pragma comment (lib, "XInput.lib")
-		#pragma comment (lib, "OpenGL32.lib")
-	#endif
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 0
+		#if AE_ENABLE_OPENGL
+			#pragma comment (lib, "opengl32.lib")
+			#pragma comment (lib, "glu32.lib")
+		#endif
+	#endif // _AE_MSVC_
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 0
 	#endif
 	#ifdef RGB
 		#undef RGB
@@ -15573,25 +15596,22 @@ T* ae::Cast( C* obj )
 		#endif
 		#include <GameController/GameController.h>
 	#endif
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 1
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 1
 	#endif
 #elif _AE_LINUX_
 	#include <unistd.h>
 	#include <pwd.h>
 	#include <limits.h>
 	#include <sys/stat.h>
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 0
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 0
 	#endif
 #elif _AE_EMSCRIPTEN_
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 1
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 1
 	#endif
 #endif
-#include <inttypes.h>
-#include <thread>
-#include <random>
 // Socket
 #if _AE_WINDOWS_
 	// Be caeful with include case-sensitivity here for MinGW/cross-compiling
@@ -15626,7 +15646,7 @@ T* ae::Cast( C* obj )
 	#define _ae_sock_poll poll
 	#define _ae_ioctl ioctl
 #endif
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	#if _AE_APPLE_
 		#include <OpenAL/al.h>
 		#include <OpenAL/alc.h>
@@ -24291,506 +24311,343 @@ uint32_t ListenerSocket::GetConnectionCount() const
 //------------------------------------------------------------------------------
 // OpenGL start
 //------------------------------------------------------------------------------
+// clang-format off
 #if !AE_ENABLE_OPENGL
 	int32_t _ae_GLMajorVersion() { return 0; }
+	int32_t _ae_GLMinorVersion() { return 0; }
+#elif _AE_IOS_ || _AE_EMSCRIPTEN_
+	int32_t _ae_GLMajorVersion() { return 3; }
 	int32_t _ae_GLMinorVersion() { return 0; }
 #elif _AE_WASM_
 	// Instead of defining values here, the WASM host must provide these function implementations
 	AE_WASM_IMPORT( ae ) int32_t _ae_GLMajorVersion();
 	AE_WASM_IMPORT( ae ) int32_t _ae_GLMinorVersion();
-#elif _AE_IOS_ || _AE_EMSCRIPTEN_
-	int32_t _ae_GLMajorVersion() { return 3; }
-	int32_t _ae_GLMinorVersion() { return 0; }
 #else
 	int32_t _ae_GLMajorVersion() { return 4; }
 	int32_t _ae_GLMinorVersion() { return 1; }
 #endif
 
+//------------------------------------------------------------------------------
+// OpenGL includes / declarations
+//------------------------------------------------------------------------------
 #if AE_ENABLE_OPENGL
-//------------------------------------------------------------------------------
-// OpenGL includes
-//------------------------------------------------------------------------------
-#if _AE_WINDOWS_
-	#pragma comment (lib, "opengl32.lib")
-	#pragma comment (lib, "glu32.lib")
-	#include <GL/gl.h>
-	#include <GL/glu.h>
-#elif _AE_EMSCRIPTEN_
-	#include <GLES3/gl3.h>
-#elif _AE_LINUX_
-	#define GL_GLEXT_PROTOTYPES 1
-	#include <GL/glcorearb.h>
-#elif _AE_IOS_
-	#include <OpenGLES/ES3/gl.h>
-#elif _AE_WASM_
-	// The subset of OpenGL required for aether.h is entirely defined in-line
-#else
-	#include <OpenGL/glext.h>
-	#include <OpenGL/gl3.h>
-	#include <OpenGL/gl3ext.h>
-#endif
+#	ifndef AE_GL_DEBUG_MODE
+#		define AE_GL_DEBUG_MODE 0
+#	endif
 
-namespace ae
-{
-int32_t GLMajorVersion() { return _ae_GLMajorVersion(); }
-int32_t GLMinorVersion() { return _ae_GLMinorVersion(); }
-bool ReverseZ = false;
-}  // ae end
+#	if AE_OPENGL_CUSTOM_HEADER
+#		include AE_OPENGL_CUSTOM_HEADER
+#	elif _AE_WINDOWS_
+#		include <GL/gl.h>
+#		include <GL/glu.h>
+#	elif _AE_EMSCRIPTEN_
+#		include <GLES3/gl3.h>
+#	elif _AE_LINUX_
+#		define GL_GLEXT_PROTOTYPES 1
+#		include <GL/glcorearb.h>
+#	elif _AE_IOS_
+#		include <OpenGLES/ES3/gl.h>
+#	elif _AE_APPLE_
+#		include <OpenGL/glext.h>
+#		include <OpenGL/gl3.h>
+#		include <OpenGL/gl3ext.h>
+#	else
+		// Define minimal GL types and constants for platforms without headers
+		typedef uint32_t GLenum;
+		typedef uint32_t GLbitfield;
+		typedef uint32_t GLuint;
+		typedef int32_t  GLint;
+		typedef int32_t  GLsizei;
+		typedef float    GLfloat;
+		typedef double   GLdouble;
+		typedef uint8_t  GLboolean;
+		typedef char GLchar;
+		typedef uint8_t GLubyte;
+		typedef void GLvoid;
+		typedef intptr_t GLsizeiptr;
+		typedef intptr_t GLintptr;
 
-#ifndef AE_GL_DEBUG_MODE
-	#define AE_GL_DEBUG_MODE 0
-#endif
+#		define GL_TRUE  1
+#		define GL_FALSE 0
 
-#if _AE_WINDOWS_ // @TODO: These two MSVC and WASM OpenGL sections can be combined
-// OpenGL function pointers
-typedef char GLchar;
-typedef intptr_t GLsizeiptr;
-typedef intptr_t GLintptr;
+#		define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+#		define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+#		define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+#		define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+#		define WGL_CONTEXT_FLAGS_ARB 0x2094
+#		define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
 
-#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
-#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
-#define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
-#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
-#define WGL_CONTEXT_FLAGS_ARB 0x2094
-#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
+		// GL primitives
+#		define GL_POINTS                           0x0000
+#		define GL_LINES                            0x0001
+#		define GL_LINE_STRIP                       0x0003
+#		define GL_TRIANGLES                        0x0004
+#		define GL_TRIANGLE_STRIP                   0x0005
 
-// GL_VERSION_1_2
-#define GL_TEXTURE_3D                     0x806F
-#define GL_BGR                            0x80E0
-#define GL_BGRA                           0x80E1
-#define GL_CLAMP_TO_EDGE                  0x812F
-// GL_VERSION_1_3
-#define GL_TEXTURE0                       0x84C0
-// GL_VERSION_1_4
-#define GL_DEPTH_COMPONENT16              0x81A5
-// GL_VERSION_1_5
-#define GL_ARRAY_BUFFER                   0x8892
-#define GL_ELEMENT_ARRAY_BUFFER           0x8893
-#define GL_STATIC_DRAW                    0x88E4
-#define GL_DYNAMIC_DRAW                   0x88E8
-// GL_VERSION_2_0
-#define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
-#define GL_FRAGMENT_SHADER                0x8B30
-#define GL_VERTEX_SHADER                  0x8B31
-#define GL_FLOAT_VEC2                     0x8B50
-#define GL_FLOAT_VEC3                     0x8B51
-#define GL_FLOAT_VEC4                     0x8B52
-#define GL_FLOAT_MAT4                     0x8B5C
-#define GL_SAMPLER_2D                     0x8B5E
-#define GL_SAMPLER_3D                     0x8B5F
-#define GL_COMPILE_STATUS                 0x8B81
-#define GL_LINK_STATUS                    0x8B82
-#define GL_INFO_LOG_LENGTH                0x8B84
-#define GL_ACTIVE_UNIFORMS                0x8B86
-#define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
-#define GL_ACTIVE_ATTRIBUTES              0x8B89
-#define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
-// GL_VERSION_2_1
-#define GL_SRGB8                          0x8C41
-#define GL_SRGB8_ALPHA8                   0x8C43
-// GL_VERSION_3_0
-#define GL_RGBA32F                        0x8814
-#define GL_RGB32F                         0x8815
-#define GL_RGBA16F                        0x881A
-#define GL_RGB16F                         0x881B
-#define GL_DEPTH_COMPONENT32F             0x8CAC
-#define GL_FRAMEBUFFER_UNDEFINED          0x8219
-#define GL_FRAMEBUFFER_BINDING            0x8CA6
-#define GL_READ_FRAMEBUFFER               0x8CA8
-#define GL_DRAW_FRAMEBUFFER               0x8CA9
-#define GL_FRAMEBUFFER_COMPLETE           0x8CD5
-#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
-#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
-#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
-#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
-#define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
-#define GL_COLOR_ATTACHMENT0              0x8CE0
-#define GL_DEPTH_ATTACHMENT               0x8D00
-#define GL_FRAMEBUFFER                    0x8D40
-#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
-#define GL_FRAMEBUFFER_SRGB               0x8DB9
-#define GL_HALF_FLOAT                     0x140B
-#define GL_R8                             0x8229
-#define GL_R16F                           0x822D
-#define GL_R32F                           0x822E
-#define GL_R16UI                          0x8234
-// GL_VERSION_3_2
-#define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
-// GL_VERSION_4_3
-typedef void ( *GLDEBUGPROC )(GLenum source,GLenum type,GLuint id,GLenum severity,GLsizei length,const GLchar *message,const void *userParam);
-#define GL_DEBUG_SEVERITY_HIGH            0x9146
-#define GL_DEBUG_SEVERITY_MEDIUM          0x9147
-#define GL_DEBUG_SEVERITY_LOW             0x9148
-// WGL extensions
-HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList ) = nullptr;
-bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
-int ( *wglGetSwapIntervalEXT ) () = nullptr;
-// OpenGL Shader Functions
-GLuint ( *glCreateProgram ) () = nullptr;
-void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
-void ( *glLinkProgram ) ( GLuint program ) = nullptr;
-void ( *glGetProgramiv ) ( GLuint program, GLenum pname, GLint *params ) = nullptr;
-void ( *glGetProgramInfoLog ) ( GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
-void ( *glGetActiveAttrib ) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name ) = nullptr;
-GLint (*glGetAttribLocation) ( GLuint program, const GLchar *name ) = nullptr;
-void (*glGetActiveUniform) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name );
-GLint (*glGetUniformLocation) ( GLuint program, const GLchar *name ) = nullptr;
-void (*glDeleteShader) ( GLuint shader ) = nullptr;
-void ( *glDeleteProgram) ( GLuint program ) = nullptr;
-void ( *glUseProgram) ( GLuint program ) = nullptr;
-void ( *glBlendFuncSeparate ) ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) = nullptr;
-GLuint( *glCreateShader) ( GLenum type ) = nullptr;
-void (*glShaderSource) ( GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length ) = nullptr;
-void (*glCompileShader)( GLuint shader ) = nullptr;
-void ( *glGetShaderiv)( GLuint shader, GLenum pname, GLint *params );
-void ( *glGetShaderInfoLog)( GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
-void ( *glActiveTexture) ( GLenum texture ) = nullptr;
-void ( *glUniform1i ) ( GLint location, GLint v0 ) = nullptr;
-void ( *glUniform1fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform2fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform3fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform4fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniformMatrix4fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
-// OpenGL Texture Functions
-void ( *glGenerateMipmap ) ( GLenum target ) = nullptr;
-void ( *glBindFramebuffer ) ( GLenum target, GLuint framebuffer ) = nullptr;
-void ( *glFramebufferTexture2D ) ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) = nullptr;
-void ( *glGenFramebuffers ) ( GLsizei n, GLuint *framebuffers ) = nullptr;
-void ( *glDeleteFramebuffers ) ( GLsizei n, const GLuint *framebuffers ) = nullptr;
-GLenum ( *glCheckFramebufferStatus ) ( GLenum target ) = nullptr;
-void ( *glDrawBuffers ) ( GLsizei n, const GLenum *bufs ) = nullptr;
-void ( *glTextureBarrierNV ) () = nullptr;
-// OpenGL Vertex Functions
-void ( *glGenVertexArrays ) (GLsizei n, GLuint *arrays ) = nullptr;
-void ( *glBindVertexArray ) ( GLuint array ) = nullptr;
-void ( *glDeleteVertexArrays ) ( GLsizei n, const GLuint *arrays ) = nullptr;
-void ( *glDeleteBuffers ) ( GLsizei n, const GLuint *buffers ) = nullptr;
-void ( *glBindBuffer ) ( GLenum target, GLuint buffer ) = nullptr;
-void ( *glGenBuffers ) ( GLsizei n, GLuint *buffers ) = nullptr;
-void ( *glBufferData ) ( GLenum target, GLsizeiptr size, const void *data, GLenum usage ) = nullptr;
-void ( *glBufferSubData ) ( GLenum target, GLintptr offset, GLsizeiptr size, const void *data ) = nullptr;
-void ( *glEnableVertexAttribArray ) ( GLuint index ) = nullptr;
-void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer ) = nullptr;
-void ( *glVertexAttribDivisor )( GLuint index, GLuint divisor ) = nullptr;
-void ( *glDrawElementsInstanced )( GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount ) = nullptr;
-void ( *glDrawArraysInstanced )( GLenum mode, GLint first, GLsizei count, GLsizei instancecount ) = nullptr;
-// Debug functions
-void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void* userParam ) = nullptr;
+		// GL data types
+#		define GL_BYTE                             0x1400
+#		define GL_UNSIGNED_BYTE                    0x1401
+#		define GL_SHORT                            0x1402
+#		define GL_UNSIGNED_SHORT                   0x1403
+#		define GL_INT                              0x1404
+#		define GL_UNSIGNED_INT                     0x1405
+#		define GL_FLOAT                            0x1406
 
-#elif _AE_WASM_ // @TODO: These two MSVC and WASM OpenGL sections can be combined
+		// GL depth functions
+#		define GL_LESS                             0x0201
+#		define GL_EQUAL                            0x0202
+#		define GL_LEQUAL                           0x0203
+#		define GL_GREATER                          0x0204
+#		define GL_GEQUAL                           0x0206
+#		define GL_ALWAYS                           0x0207
 
-//------------------------------------------------------------------------------
-// GL types
-//------------------------------------------------------------------------------
-typedef uint32_t GLenum;
-typedef uint32_t GLbitfield;
-typedef uint32_t GLuint;
-typedef int32_t  GLint;
-typedef int32_t  GLsizei;
-typedef int64_t  GLsizeiptr;
-typedef int64_t  GLintptr;
-typedef float    GLfloat;
-typedef double   GLdouble;
-typedef uint8_t  GLboolean;
-typedef char     GLchar;
-typedef uint8_t  GLubyte;
-typedef void     GLvoid;
+		// GL blend factors
+#		define GL_ZERO                             0x0000
+#		define GL_ONE                              0x0001
+#		define GL_SRC_ALPHA                        0x0302
+#		define GL_ONE_MINUS_SRC_ALPHA              0x0303
+#		define GL_DST_ALPHA                        0x0304
+#		define GL_ONE_MINUS_DST_ALPHA              0x0305
 
-typedef void (*GLDEBUGPROC)( GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam );
+		// GL state / caps
+#		define GL_CULL_FACE                        0x0B44
+#		define GL_DEPTH_TEST                       0x0B71
+#		define GL_BLEND                            0x0BE2
+#		define GL_SCISSOR_TEST                     0x0C11
+#		define GL_UNPACK_ALIGNMENT                 0x0CF5
+#		define GL_MAX_TEXTURE_SIZE                 0x0D33
+#		define GL_VIEWPORT                         0x0BA2
 
-#define GL_TRUE  1
-#define GL_FALSE 0
+		// GL winding / face
+#		define GL_CW                               0x0900
+#		define GL_CCW                              0x0901
+#		define GL_FRONT                            0x0404
+#		define GL_BACK                             0x0405
+#		define GL_FRONT_AND_BACK                   0x0408
+#		define GL_LINE                             0x1B01
+#		define GL_FILL                             0x1B02
 
-//------------------------------------------------------------------------------
-// GL constants — primitives
-//------------------------------------------------------------------------------
-#define GL_POINTS                                   0x0000
-#define GL_LINES                                    0x0001
-#define GL_LINE_STRIP                               0x0003
-#define GL_TRIANGLES                                0x0004
-#define GL_TRIANGLE_STRIP                           0x0005
+		// GL clear bits
+#		define GL_DEPTH_BUFFER_BIT                 0x00000100
+#		define GL_STENCIL_BUFFER_BIT               0x00000400
+#		define GL_COLOR_BUFFER_BIT                 0x00004000
 
-//------------------------------------------------------------------------------
-// GL constants — data types
-//------------------------------------------------------------------------------
-#define GL_BYTE                                     0x1400
-#define GL_UNSIGNED_BYTE                            0x1401
-#define GL_SHORT                                    0x1402
-#define GL_UNSIGNED_SHORT                           0x1403
-#define GL_INT                                      0x1404
-#define GL_UNSIGNED_INT                             0x1405
-#define GL_FLOAT                                    0x1406
-#define GL_HALF_FLOAT                               0x140B
+		// GL textures
+#		define GL_TEXTURE_2D                       0x0DE1
+#		define GL_TEXTURE_CUBE_MAP                 0x8513
+#		define GL_TEXTURE_CUBE_MAP_POSITIVE_X      0x8515
+#		define GL_TEXTURE_MIN_FILTER               0x2801
+#		define GL_TEXTURE_MAG_FILTER               0x2800
+#		define GL_TEXTURE_WRAP_S                   0x2802
+#		define GL_TEXTURE_WRAP_T                   0x2803
+#		define GL_NEAREST                          0x2600
+#		define GL_LINEAR                           0x2601
+#		define GL_NEAREST_MIPMAP_NEAREST           0x2700
+#		define GL_LINEAR_MIPMAP_LINEAR             0x2703
+#		define GL_REPEAT                           0x2901
 
-//------------------------------------------------------------------------------
-// GL constants — depth functions
-//------------------------------------------------------------------------------
-#define GL_LESS                                     0x0201
-#define GL_EQUAL                                    0x0202
-#define GL_LEQUAL                                   0x0203
-#define GL_GREATER                                  0x0204
-#define GL_GEQUAL                                   0x0206
-#define GL_ALWAYS                                   0x0207
+		// GL formats
+#		define GL_RED                              0x1903
+#		define GL_RG                               0x8227
+#		define GL_RGB                              0x1907
+#		define GL_RGBA                             0x1908
+#		define GL_RG8                              0x822B
+#		define GL_RG16F                            0x822F
+#		define GL_RG32F                            0x8230
+#		define GL_RGB8                             0x8051
+#		define GL_RGBA8                            0x8058
+#		define GL_DEPTH_COMPONENT                  0x1902
 
-//------------------------------------------------------------------------------
-// GL constants — blend factors
-//------------------------------------------------------------------------------
-#define GL_ZERO                                     0x0000
-#define GL_ONE                                      0x0001
-#define GL_SRC_ALPHA                                0x0302
-#define GL_ONE_MINUS_SRC_ALPHA                      0x0303
-#define GL_DST_ALPHA                                0x0304
-#define GL_ONE_MINUS_DST_ALPHA                      0x0305
+		// GL buffers / usage
+#		define GL_STREAM_DRAW                      0x88E0
 
-//------------------------------------------------------------------------------
-// GL constants — state / caps
-//------------------------------------------------------------------------------
-#define GL_CULL_FACE                                0x0B44
-#define GL_DEPTH_TEST                               0x0B71
-#define GL_BLEND                                    0x0BE2
-#define GL_SCISSOR_TEST                             0x0C11
-#define GL_UNPACK_ALIGNMENT                         0x0CF5
-#define GL_MAX_TEXTURE_SIZE                         0x0D33
-#define GL_VIEWPORT                                 0x0BA2
+		// GL_VERSION_1_2
+#		define GL_TEXTURE_3D                     0x806F
+#		define GL_BGR                            0x80E0
+#		define GL_BGRA                           0x80E1
+#		define GL_CLAMP_TO_EDGE                  0x812F
+		// GL_VERSION_1_3
+#		define GL_TEXTURE0                       0x84C0
+		// GL_VERSION_1_4
+#		define GL_DEPTH_COMPONENT16              0x81A5
+		// GL_VERSION_1_5
+#		define GL_ARRAY_BUFFER                   0x8892
+#		define GL_ELEMENT_ARRAY_BUFFER           0x8893
+#		define GL_STATIC_DRAW                    0x88E4
+#		define GL_DYNAMIC_DRAW                   0x88E8
+		// GL_VERSION_2_0
+#		define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
+#		define GL_FRAGMENT_SHADER                0x8B30
+#		define GL_VERTEX_SHADER                  0x8B31
+#		define GL_FLOAT_VEC2                     0x8B50
+#		define GL_FLOAT_VEC3                     0x8B51
+#		define GL_FLOAT_VEC4                     0x8B52
+#		define GL_FLOAT_MAT4                     0x8B5C
+#		define GL_SAMPLER_2D                     0x8B5E
+#		define GL_SAMPLER_3D                     0x8B5F
+#		define GL_COMPILE_STATUS                 0x8B81
+#		define GL_LINK_STATUS                    0x8B82
+#		define GL_INFO_LOG_LENGTH                0x8B84
+#		define GL_ACTIVE_UNIFORMS                0x8B86
+#		define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
+#		define GL_ACTIVE_ATTRIBUTES              0x8B89
+#		define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
+		// GL_VERSION_2_1
+#		define GL_SRGB8                          0x8C41
+#		define GL_SRGB8_ALPHA8                   0x8C43
+		// GL_VERSION_3_0
+#		define GL_RGBA32F                        0x8814
+#		define GL_RGB32F                         0x8815
+#		define GL_RGBA16F                        0x881A
+#		define GL_RGB16F                         0x881B
+#		define GL_DEPTH_COMPONENT32F             0x8CAC
+#		define GL_FRAMEBUFFER_UNDEFINED          0x8219
+#		define GL_FRAMEBUFFER_BINDING            0x8CA6
+#		define GL_READ_FRAMEBUFFER               0x8CA8
+#		define GL_DRAW_FRAMEBUFFER               0x8CA9
+#		define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#		define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
+#		define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+#		define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
+#		define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
+#		define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
+#		define GL_COLOR_ATTACHMENT0              0x8CE0
+#		define GL_DEPTH_ATTACHMENT               0x8D00
+#		define GL_FRAMEBUFFER                    0x8D40
+#		define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
+#		define GL_FRAMEBUFFER_SRGB               0x8DB9
+#		define GL_HALF_FLOAT                     0x140B
+#		define GL_R8                             0x8229
+#		define GL_R16F                           0x822D
+#		define GL_R32F                           0x822E
+#		define GL_R16UI                          0x8234
+		// GL_VERSION_3_2
+#		define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
+		// GL_VERSION_4_3
+		typedef void ( *GLDEBUGPROC )( GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam );
+#		define GL_DEBUG_SEVERITY_HIGH            0x9146
+#		define GL_DEBUG_SEVERITY_MEDIUM          0x9147
+#		define GL_DEBUG_SEVERITY_LOW             0x9148
+#	endif
 
-//------------------------------------------------------------------------------
-// GL constants — winding / face
-//------------------------------------------------------------------------------
-#define GL_CW                                       0x0900
-#define GL_CCW                                      0x0901
-#define GL_FRONT                                    0x0404
-#define GL_BACK                                     0x0405
-#define GL_FRONT_AND_BACK                           0x0408
-#define GL_LINE                                     0x1B01
-#define GL_FILL                                     0x1B02
+#	define _AE_EACH_GL_FUNC \
+		_AE_GL_FUNC( void,   glClear,                   ( GLbitfield mask ) ) \
+		_AE_GL_FUNC( void,   glClearColor,              ( GLfloat r, GLfloat g, GLfloat b, GLfloat a ) ) \
+		_AE_GL_FUNC( void,   glClearDepthf,             ( GLfloat depth ) ) \
+		_AE_GL_FUNC( void,   glViewport,                ( GLint x, GLint y, GLsizei width, GLsizei height ) ) \
+		_AE_GL_FUNC( void,   glEnable,                  ( GLenum cap ) ) \
+		_AE_GL_FUNC( void,   glDisable,                 ( GLenum cap ) ) \
+		_AE_GL_FUNC( void,   glDepthMask,               ( GLboolean flag ) ) \
+		_AE_GL_FUNC( void,   glDepthFunc,               ( GLenum func ) ) \
+		_AE_GL_FUNC( void,   glBlendFunc,               ( GLenum sfactor, GLenum dfactor ) ) \
+		_AE_GL_FUNC( void,   glFrontFace,               ( GLenum mode ) ) \
+		_AE_GL_FUNC( void,   glGetIntegerv,             ( GLenum pname, GLint* data ) ) \
+		_AE_GL_FUNC( void,   glPixelStorei,             ( GLenum pname, GLint param ) ) \
+		_AE_GL_FUNC( GLenum, glGetError,                () ) \
+		_AE_GL_FUNC( void,   glBindTexture,             ( GLenum target, GLuint texture ) ) \
+		_AE_GL_FUNC( void,   glGenTextures,             ( GLsizei n, GLuint* textures ) ) \
+		_AE_GL_FUNC( void,   glDeleteTextures,          ( GLsizei n, const GLuint* textures ) ) \
+		_AE_GL_FUNC( void,   glTexParameteri,           ( GLenum target, GLenum pname, GLint param ) ) \
+		_AE_GL_FUNC( void,   glDrawArrays,              ( GLenum mode, GLint first, GLsizei count ) ) \
+		_AE_GL_FUNC( void,   glDrawElements,            ( GLenum mode, GLsizei count, GLenum type, const void* indices ) ) \
+		_AE_GL_FUNC( GLuint, glCreateProgram,           () ) \
+		_AE_GL_FUNC( void,   glAttachShader,            ( GLuint program, GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glLinkProgram,             ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glGetProgramiv,            ( GLuint program, GLenum pname, GLint* params ) ) \
+		_AE_GL_FUNC( void,   glGetProgramInfoLog,       ( GLuint program, GLsizei bufSize, GLsizei* length, GLchar* infoLog ) ) \
+		_AE_GL_FUNC( void,   glGetActiveAttrib,         ( GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name ) ) \
+		_AE_GL_FUNC( GLint,  glGetAttribLocation,       ( GLuint program, const GLchar* name ) ) \
+		_AE_GL_FUNC( void,   glGetActiveUniform,        ( GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name ) ) \
+		_AE_GL_FUNC( GLint,  glGetUniformLocation,      ( GLuint program, const GLchar* name ) ) \
+		_AE_GL_FUNC( void,   glDeleteShader,            ( GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glDeleteProgram,           ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glUseProgram,              ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glBlendFuncSeparate,       ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) ) \
+		_AE_GL_FUNC( GLuint, glCreateShader,            ( GLenum type ) ) \
+		_AE_GL_FUNC( void,   glShaderSource,            ( GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length ) ) \
+		_AE_GL_FUNC( void,   glCompileShader,           ( GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glGetShaderiv,             ( GLuint shader, GLenum pname, GLint* params ) ) \
+		_AE_GL_FUNC( void,   glGetShaderInfoLog,        ( GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* infoLog ) ) \
+		_AE_GL_FUNC( void,   glActiveTexture,           ( GLenum texture ) ) \
+		_AE_GL_FUNC( void,   glUniform1i,               ( GLint location, GLint v0 ) ) \
+		_AE_GL_FUNC( void,   glUniform1fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform2fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform3fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform4fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniformMatrix4fv,        ( GLint location, GLsizei count, GLboolean transpose, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glGenerateMipmap,          ( GLenum target ) ) \
+		_AE_GL_FUNC( void,   glBindFramebuffer,         ( GLenum target, GLuint framebuffer ) ) \
+		_AE_GL_FUNC( void,   glFramebufferTexture2D,    ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) ) \
+		_AE_GL_FUNC( void,   glGenFramebuffers,         ( GLsizei n, GLuint* framebuffers ) ) \
+		_AE_GL_FUNC( void,   glDeleteFramebuffers,      ( GLsizei n, const GLuint* framebuffers ) ) \
+		_AE_GL_FUNC( GLenum, glCheckFramebufferStatus,  ( GLenum target ) ) \
+		_AE_GL_FUNC( void,   glDrawBuffers,             ( GLsizei n, const GLenum* bufs ) ) \
+		_AE_GL_FUNC( void,   glTextureBarrierNV,        () ) \
+		_AE_GL_FUNC( void,   glGenVertexArrays,         ( GLsizei n, GLuint* arrays ) ) \
+		_AE_GL_FUNC( void,   glBindVertexArray,         ( GLuint array ) ) \
+		_AE_GL_FUNC( void,   glDeleteVertexArrays,      ( GLsizei n, const GLuint* arrays ) ) \
+		_AE_GL_FUNC( void,   glDeleteBuffers,           ( GLsizei n, const GLuint* buffers ) ) \
+		_AE_GL_FUNC( void,   glBindBuffer,              ( GLenum target, GLuint buffer ) ) \
+		_AE_GL_FUNC( void,   glGenBuffers,              ( GLsizei n, GLuint* buffers ) ) \
+		_AE_GL_FUNC( void,   glBufferData,              ( GLenum target, GLsizeiptr size, const void* data, GLenum usage ) ) \
+		_AE_GL_FUNC( void,   glBufferSubData,           ( GLenum target, GLintptr offset, GLsizeiptr size, const void* data ) ) \
+		_AE_GL_FUNC( void,   glEnableVertexAttribArray, ( GLuint index ) ) \
+		_AE_GL_FUNC( void,   glVertexAttribPointer,     ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer ) ) \
+		_AE_GL_FUNC( void,   glVertexAttribDivisor,     ( GLuint index, GLuint divisor ) ) \
+		_AE_GL_FUNC( void,   glDrawElementsInstanced,   ( GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount ) ) \
+		_AE_GL_FUNC( void,   glDrawArraysInstanced,     ( GLenum mode, GLint first, GLsizei count, GLsizei instancecount ) ) \
+		_AE_GL_FUNC( void,   glTexImage2D,              ( GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels ) ) \
+		_AE_GL_FUNC( void,   glTexSubImage2D,           ( GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels ) ) \
+		_AE_GL_FUNC( void,   glTexStorage2D,            ( GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height ) ) \
+		_AE_GL_FUNC( void,   glDebugMessageCallback,    ( GLDEBUGPROC callback, const void* userParam ) )
 
-//------------------------------------------------------------------------------
-// GL constants — clear bits
-//------------------------------------------------------------------------------
-#define GL_DEPTH_BUFFER_BIT                         0x00000100
-#define GL_STENCIL_BUFFER_BIT                       0x00000400
-#define GL_COLOR_BUFFER_BIT                         0x00004000
+#	if _AE_WINDOWS_
 
-//------------------------------------------------------------------------------
-// GL constants — textures
-//------------------------------------------------------------------------------
-#define GL_TEXTURE_2D                               0x0DE1
-#define GL_TEXTURE_3D                               0x806F
-#define GL_TEXTURE_CUBE_MAP                         0x8513
-#define GL_TEXTURE_CUBE_MAP_POSITIVE_X              0x8515
-#define GL_TEXTURE0                                 0x84C0
+		// WGL extensions
+		HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList ) = nullptr;
+		bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
+		int ( *wglGetSwapIntervalEXT ) () = nullptr;
+#		define _AE_GL_FUNC( ret, name, params ) ret ( *name ) params = nullptr;
+		_AE_EACH_GL_FUNC
+#		undef _AE_GL_FUNC
 
-#define GL_TEXTURE_MIN_FILTER                       0x2801
-#define GL_TEXTURE_MAG_FILTER                       0x2800
-#define GL_TEXTURE_WRAP_S                           0x2802
-#define GL_TEXTURE_WRAP_T                           0x2803
+#	elif _AE_WASM_
 
-#define GL_NEAREST                                  0x2600
-#define GL_LINEAR                                   0x2601
-#define GL_NEAREST_MIPMAP_NEAREST                   0x2700
-#define GL_LINEAR_MIPMAP_LINEAR                     0x2703
-#define GL_CLAMP_TO_EDGE                            0x812F
-#define GL_REPEAT                                   0x2901
+#		ifdef AE_GL_IMPORT
+#			define _AE_GL_IMPORT_ATTRIBUTE __attribute__(( AE_GL_IMPORT ))
+#		else
+#			define _AE_GL_IMPORT_ATTRIBUTE
+#		endif
+#		define _AE_GL_FUNC( ret, name, params ) _AE_GL_IMPORT_ATTRIBUTE __attribute__(( import_name( #name ) )) extern ret name params;
+		_AE_EACH_GL_FUNC
+#		undef _AE_GL_FUNC
+#		undef _AE_GL_IMPORT_ATTRIBUTE
 
-#define GL_TEXTURE_STORAGE_HINT_APPLE               0x85BC
+#	else
+		// Native macOS/Linux: system GL headers provide all declarations.
+#	endif
 
-//------------------------------------------------------------------------------
-// GL constants — texture internal formats
-//------------------------------------------------------------------------------
-#define GL_RED                                      0x1903
-#define GL_RG                                       0x8227
-#define GL_RGB                                      0x1907
-#define GL_RGBA                                     0x1908
-#define GL_R8                                       0x8229
-#define GL_RG8                                      0x822B
-#define GL_R16F                                     0x822D
-#define GL_R32F                                     0x822E
-#define GL_R16UI                                    0x8234
-#define GL_RG16F                                    0x822F
-#define GL_RG32F                                    0x8230
-#define GL_RGB8                                     0x8051
-#define GL_RGBA8                                    0x8058
-#define GL_SRGB8                                    0x8C41
-#define GL_SRGB8_ALPHA8                             0x8C43
-#define GL_RGBA16F                                  0x881A
-#define GL_RGB16F                                   0x881B
-#define GL_RGBA32F                                  0x8814
-#define GL_RGB32F                                   0x8815
-#define GL_DEPTH_COMPONENT16                        0x81A5
-#define GL_DEPTH_COMPONENT32F                       0x8CAC
-#define GL_DEPTH_COMPONENT                          0x1902
-#define GL_BGR                                      0x80E0
-#define GL_BGRA                                     0x80E1
+#	undef _AE_EACH_GL_FUNC
+#endif // AE_ENABLE_OPENGL
 
-//------------------------------------------------------------------------------
-// GL constants — buffers / usage
-//------------------------------------------------------------------------------
-#define GL_ARRAY_BUFFER                             0x8892
-#define GL_ELEMENT_ARRAY_BUFFER                     0x8893
-#define GL_STREAM_DRAW                              0x88E0
-#define GL_STATIC_DRAW                              0x88E4
-#define GL_DYNAMIC_DRAW                             0x88E8
+#if AE_ENABLE_OPENGL
 
-//------------------------------------------------------------------------------
-// GL constants — framebuffer
-//------------------------------------------------------------------------------
-#define GL_FRAMEBUFFER_BINDING                      0x8CA6
-#define GL_READ_FRAMEBUFFER                         0x8CA8
-#define GL_DRAW_FRAMEBUFFER                         0x8CA9
-#define GL_FRAMEBUFFER_COMPLETE                     0x8CD5
-#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT        0x8CD6
-#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
-#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER       0x8CDB
-#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER       0x8CDC
-#define GL_FRAMEBUFFER_UNSUPPORTED                  0x8CDD
-#define GL_FRAMEBUFFER_UNDEFINED                    0x8219
-#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE       0x8D56
-#define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS     0x8DA8
-#define GL_FRAMEBUFFER_SRGB                         0x8DB9
-#define GL_COLOR_ATTACHMENT0                        0x8CE0
-#define GL_DEPTH_ATTACHMENT                         0x8D00
-#define GL_FRAMEBUFFER                              0x8D40
+#	if _AE_EMSCRIPTEN_ || _AE_IOS_ || _AE_WASM_
+#		define glClearDepth glClearDepthf
+#	endif
 
-//------------------------------------------------------------------------------
-// GL constants — shaders / programs
-//------------------------------------------------------------------------------
-#define GL_FRAGMENT_SHADER                          0x8B30
-#define GL_VERTEX_SHADER                            0x8B31
-#define GL_COMPILE_STATUS                           0x8B81
-#define GL_LINK_STATUS                              0x8B82
-#define GL_INFO_LOG_LENGTH                          0x8B84
-#define GL_ACTIVE_UNIFORMS                          0x8B86
-#define GL_ACTIVE_UNIFORM_MAX_LENGTH                0x8B87
-#define GL_ACTIVE_ATTRIBUTES                        0x8B89
-#define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH              0x8B8A
-#define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS         0x8B4D
-
-//------------------------------------------------------------------------------
-// GL constants — uniform types
-//------------------------------------------------------------------------------
-#define GL_FLOAT_VEC2                               0x8B50
-#define GL_FLOAT_VEC3                               0x8B51
-#define GL_FLOAT_VEC4                               0x8B52
-#define GL_INT_VEC2                                 0x8B53
-#define GL_INT_VEC3                                 0x8B54
-#define GL_INT_VEC4                                 0x8B55
-#define GL_FLOAT_MAT4                               0x8B5C
-#define GL_SAMPLER_2D                               0x8B5E
-#define GL_SAMPLER_3D                               0x8B5F
-#define GL_VERTEX_PROGRAM_POINT_SIZE                0x8642
-
-//------------------------------------------------------------------------------
-// GL constants — debug
-//------------------------------------------------------------------------------
-#define GL_DEBUG_OUTPUT                             0x92E0
-#define GL_DEBUG_OUTPUT_SYNCHRONOUS                 0x8242
-#define GL_DEBUG_TYPE_ERROR                         0x824C
-#define GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR           0x824D
-#define GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR            0x824E
-#define GL_DEBUG_TYPE_PORTABILITY                   0x824F
-#define GL_DEBUG_TYPE_PERFORMANCE                   0x8250
-#define GL_DEBUG_TYPE_OTHER                         0x8251
-#define GL_DEBUG_SEVERITY_HIGH                      0x9146
-#define GL_DEBUG_SEVERITY_MEDIUM                    0x9147
-#define GL_DEBUG_SEVERITY_LOW                       0x9148
-
-//------------------------------------------------------------------------------
-// GL constants — misc
-//------------------------------------------------------------------------------
-#define GL_NO_ERROR                                 0
-
-//------------------------------------------------------------------------------
-// GL function declarations — WASM imports from "gl" module
-//------------------------------------------------------------------------------
-#define _AE_GL_IMPORT( ret, name, params ) __attribute__((import_module("gl"), import_name(#name))) extern ret name params
-_AE_GL_IMPORT( void,   glClear,                      ( GLbitfield mask ) );
-_AE_GL_IMPORT( void,   glClearColor,                 ( GLfloat r, GLfloat g, GLfloat b, GLfloat a ) );
-_AE_GL_IMPORT( void,   glClearDepthf,                ( GLfloat depth ) );
-_AE_GL_IMPORT( void,   glViewport,                   ( GLint x, GLint y, GLsizei width, GLsizei height ) );
-_AE_GL_IMPORT( void,   glEnable,                     ( GLenum cap ) );
-_AE_GL_IMPORT( void,   glDisable,                    ( GLenum cap ) );
-_AE_GL_IMPORT( void,   glDepthMask,                  ( GLboolean flag ) );
-_AE_GL_IMPORT( void,   glDepthFunc,                  ( GLenum func ) );
-_AE_GL_IMPORT( void,   glBlendFunc,                  ( GLenum sfactor, GLenum dfactor ) );
-_AE_GL_IMPORT( void,   glFrontFace,                  ( GLenum mode ) );
-_AE_GL_IMPORT( void,   glGetIntegerv,                ( GLenum pname, GLint* data ) );
-_AE_GL_IMPORT( void,   glPixelStorei,                ( GLenum pname, GLint param ) );
-_AE_GL_IMPORT( GLenum, glGetError,                   () );
-_AE_GL_IMPORT( void,   glBindTexture,                ( GLenum target, GLuint texture ) );
-_AE_GL_IMPORT( void,   glGenTextures,                ( GLsizei n, GLuint* textures ) );
-_AE_GL_IMPORT( void,   glDeleteTextures,             ( GLsizei n, const GLuint* textures ) );
-_AE_GL_IMPORT( void,   glTexParameteri,              ( GLenum target, GLenum pname, GLint param ) );
-_AE_GL_IMPORT( void,   glDrawArrays,                 ( GLenum mode, GLint first, GLsizei count ) );
-_AE_GL_IMPORT( void,   glDrawElements,               ( GLenum mode, GLsizei count, GLenum type, const void* indices ) );
-_AE_GL_IMPORT( GLuint, glCreateProgram,              () );
-_AE_GL_IMPORT( void,   glAttachShader,               ( GLuint program, GLuint shader ) );
-_AE_GL_IMPORT( void,   glLinkProgram,                ( GLuint program ) );
-_AE_GL_IMPORT( void,   glGetProgramiv,               ( GLuint program, GLenum pname, GLint* params ) );
-_AE_GL_IMPORT( void,   glGetProgramInfoLog,          ( GLuint program, GLsizei bufSize, GLsizei* length, GLchar* infoLog ) );
-_AE_GL_IMPORT( void,   glGetActiveAttrib,            ( GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name ) );
-_AE_GL_IMPORT( GLint,  glGetAttribLocation,          ( GLuint program, const GLchar* name ) );
-_AE_GL_IMPORT( void,   glGetActiveUniform,           ( GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name ) );
-_AE_GL_IMPORT( GLint,  glGetUniformLocation,         ( GLuint program, const GLchar* name ) );
-_AE_GL_IMPORT( void,   glDeleteShader,               ( GLuint shader ) );
-_AE_GL_IMPORT( void,   glDeleteProgram,              ( GLuint program ) );
-_AE_GL_IMPORT( void,   glUseProgram,                 ( GLuint program ) );
-_AE_GL_IMPORT( void,   glBlendFuncSeparate,          ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) );
-_AE_GL_IMPORT( GLuint, glCreateShader,               ( GLenum type ) );
-_AE_GL_IMPORT( void,   glShaderSource,               ( GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length ) );
-_AE_GL_IMPORT( void,   glCompileShader,              ( GLuint shader ) );
-_AE_GL_IMPORT( void,   glGetShaderiv,                ( GLuint shader, GLenum pname, GLint* params ) );
-_AE_GL_IMPORT( void,   glGetShaderInfoLog,           ( GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* infoLog ) );
-_AE_GL_IMPORT( void,   glActiveTexture,              ( GLenum texture ) );
-_AE_GL_IMPORT( void,   glUniform1i,                  ( GLint location, GLint v0 ) );
-_AE_GL_IMPORT( void,   glUniform1fv,                 ( GLint location, GLsizei count, const GLfloat* value ) );
-_AE_GL_IMPORT( void,   glUniform2fv,                 ( GLint location, GLsizei count, const GLfloat* value ) );
-_AE_GL_IMPORT( void,   glUniform3fv,                 ( GLint location, GLsizei count, const GLfloat* value ) );
-_AE_GL_IMPORT( void,   glUniform4fv,                 ( GLint location, GLsizei count, const GLfloat* value ) );
-_AE_GL_IMPORT( void,   glUniformMatrix4fv,           ( GLint location, GLsizei count, GLboolean transpose, const GLfloat* value ) );
-_AE_GL_IMPORT( void,   glGenerateMipmap,             ( GLenum target ) );
-_AE_GL_IMPORT( void,   glBindFramebuffer,            ( GLenum target, GLuint framebuffer ) );
-_AE_GL_IMPORT( void,   glFramebufferTexture2D,       ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) );
-_AE_GL_IMPORT( void,   glGenFramebuffers,            ( GLsizei n, GLuint* framebuffers ) );
-_AE_GL_IMPORT( void,   glDeleteFramebuffers,         ( GLsizei n, const GLuint* framebuffers ) );
-_AE_GL_IMPORT( GLenum, glCheckFramebufferStatus,     ( GLenum target ) );
-_AE_GL_IMPORT( void,   glDrawBuffers,                ( GLsizei n, const GLenum* bufs ) );
-_AE_GL_IMPORT( void,   glGenVertexArrays,            ( GLsizei n, GLuint* arrays ) );
-_AE_GL_IMPORT( void,   glBindVertexArray,            ( GLuint array ) );
-_AE_GL_IMPORT( void,   glDeleteVertexArrays,         ( GLsizei n, const GLuint* arrays ) );
-_AE_GL_IMPORT( void,   glDeleteBuffers,              ( GLsizei n, const GLuint* buffers ) );
-_AE_GL_IMPORT( void,   glBindBuffer,                 ( GLenum target, GLuint buffer ) );
-_AE_GL_IMPORT( void,   glGenBuffers,                 ( GLsizei n, GLuint* buffers ) );
-_AE_GL_IMPORT( void,   glBufferData,                 ( GLenum target, GLsizeiptr size, const void* data, GLenum usage ) );
-_AE_GL_IMPORT( void,   glBufferSubData,              ( GLenum target, GLintptr offset, GLsizeiptr size, const void* data ) );
-_AE_GL_IMPORT( void,   glEnableVertexAttribArray,    ( GLuint index ) );
-_AE_GL_IMPORT( void,   glVertexAttribPointer,        ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer ) );
-_AE_GL_IMPORT( void,   glVertexAttribDivisor,        ( GLuint index, GLuint divisor ) );
-_AE_GL_IMPORT( void,   glDrawElementsInstanced,      ( GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount ) );
-_AE_GL_IMPORT( void,   glDrawArraysInstanced,        ( GLenum mode, GLint first, GLsizei count, GLsizei instancecount ) );
-_AE_GL_IMPORT( void,   glTexImage2D,                 ( GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels ) );
-_AE_GL_IMPORT( void,   glTexSubImage2D,              ( GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels ) );
-_AE_GL_IMPORT( void,   glTexStorage2D,               ( GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height ) );
-#ifndef GL_NV_texture_barrier
-_AE_GL_IMPORT( void,   glTextureBarrierNV,           () );
-#endif
-#undef _AE_GL_IMPORT
-
-#endif
-
-#if _AE_EMSCRIPTEN_ || _AE_IOS_ || _AE_WASM_
-#define glClearDepth glClearDepthf
-#endif
-
-// Helpers
-// clang-format off
-#if _AE_DEBUG_
-	#define AE_CHECK_GL_ERROR() do { if( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while( 0 )
-#else
-	#define AE_CHECK_GL_ERROR() do {} while( 0 )
-#endif
+#	if _AE_DEBUG_
+		#define AE_CHECK_GL_ERROR() do { if( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while( 0 )
+	#else
+		#define AE_CHECK_GL_ERROR() do {} while( 0 )
+#	endif
 // clang-format on
 
 namespace ae {
+
+int32_t GLMajorVersion() { return _ae_GLMajorVersion(); }
+int32_t GLMinorVersion() { return _ae_GLMinorVersion(); }
+bool ReverseZ = false;
 
 int32_t _GLGetTypeCount( uint32_t glType )
 {
@@ -30326,7 +30183,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 //------------------------------------------------------------------------------
 void _CheckALError()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	const char* errStr = "UNKNOWN_ERROR";
 	switch( alGetError() )
 	{
@@ -30345,7 +30202,7 @@ void _CheckALError()
 
 void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* bufferOut, float* lengthOut )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	struct ChunkHeader
 	{
 		char chunkId[ 4 ];
@@ -30482,7 +30339,7 @@ Audio::Channel::Channel()
 //------------------------------------------------------------------------------
 void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels, uint32_t maxAudioDatas )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	ALCdevice* device = alcOpenDevice( nullptr );
 	AE_ASSERT( device );
 	ALCcontext* ctx = alcCreateContext( device, nullptr );
@@ -30544,7 +30401,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 
 void Audio::Terminate()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_musicChannels.Length(); i++ )
 	{
 		Channel* channel = &m_musicChannels[ i ];
@@ -30582,7 +30439,7 @@ void Audio::Terminate()
 
 void Audio::SetVolume( float volume )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	volume = ae::Clip01( volume );
 	alListenerf( AL_GAIN, volume );
 #endif
@@ -30590,7 +30447,7 @@ void Audio::SetVolume( float volume )
 
 void Audio::SetMusicVolume( float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel >= m_musicChannels.Length() )
 	{
 		return;
@@ -30603,7 +30460,7 @@ void Audio::SetMusicVolume( float volume, uint32_t channel )
 
 void Audio::SetSfxLoopVolume( float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel >= m_sfxLoopChannels.Length() )
 	{
 		return;
@@ -30616,7 +30473,7 @@ void Audio::SetSfxLoopVolume( float volume, uint32_t channel )
 
 void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	AE_ASSERT( audioFile );
 	if( channel >= m_musicChannels.Length() )
 	{
@@ -30648,7 +30505,7 @@ void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channe
 
 void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	ALint state;
 	AE_ASSERT( audioFile );
 
@@ -30706,7 +30563,7 @@ void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority 
 
 void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	AE_ASSERT( audioFile );
 	if( channel >= m_sfxLoopChannels.Length() )
 	{
@@ -30740,7 +30597,7 @@ void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t chan
 
 void Audio::StopMusic( uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel < m_musicChannels.Length() )
 	{
 		alSourceStop( m_musicChannels[ channel ].source );
@@ -30751,7 +30608,7 @@ void Audio::StopMusic( uint32_t channel )
 
 void Audio::StopSfxLoop( uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel < m_sfxLoopChannels.Length() )
 	{
 		alSourceStop( m_sfxLoopChannels[ channel ].source );
@@ -30762,7 +30619,7 @@ void Audio::StopSfxLoop( uint32_t channel )
 
 void Audio::StopAllSfx()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxChannels[ i ].source );
@@ -30773,7 +30630,7 @@ void Audio::StopAllSfx()
 
 void Audio::StopAllSfxLoops()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_sfxLoopChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxLoopChannels[ i ].source );
@@ -30800,8 +30657,8 @@ uint32_t Audio::GetSfxLoopChannelCount() const
 // @TODO: Should return a string with current state of audio channels
 void Audio::Log()
 {
-#if AE_USE_OPENAL
- 	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
+#if AE_ENABLE_OPENAL
+	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		ALint state = 0;
 		const Channel* channel = &m_sfxChannels[ i ];
