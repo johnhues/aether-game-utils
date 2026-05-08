@@ -51,9 +51,11 @@
 #endif
 
 // Include imgui
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnontrivial-memcall" // @TODO: Update imgui to fix this warning
 #include "imgui.h"
 #include "imgui_internal.h" // For advanced imgui features like docking
-#include "imgui_impl_opengl3.h"
+#pragma GCC diagnostic pop
 
 // Pop warning disables for imgui includes
 #if _AE_EMSCRIPTEN_
