@@ -18173,8 +18173,8 @@ const char* LogLevelNames[] =
 {
 	"FATAL",
 	"ERROR",
-	"WARN ",
-	"INFO ",
+	"WARN",
+	"INFO",
 	"DEBUG",
 	"TRACE",
 };
@@ -18237,7 +18237,7 @@ void _LogFormat( std::ostream& os, ae::LogSeverity severity, const char* filePat
 	{
 		os << LogLevelColors[ (uint32_t)severity ];
 	}
-	os << LogLevelNames[ (uint32_t)severity ];
+	os << " [" << LogLevelNames[ (uint32_t)severity ] << "]";
 #if AE_ENABLE_SOURCE_INFO
 	if( _ae_logColors )
 	{
