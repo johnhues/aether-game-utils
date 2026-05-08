@@ -17,6 +17,7 @@ if(NOT imgui_FOUND)
 		GIT_PROGRESS TRUE
 	)
 	FetchContent_MakeAvailable(imgui)
+	target_compile_options(imgui PRIVATE -Wno-nontrivial-memcall) # @TODO: Update imgui to fix this warning
 endif()
 
 # imguizmo
@@ -28,6 +29,7 @@ if(NOT imguizmo_FOUND)
 		GIT_PROGRESS TRUE
 	)
 	FetchContent_MakeAvailable(imguizmo)
+	target_compile_options(imguizmo PRIVATE -Wno-nontrivial-memcall) # @TODO: Update imgui to fix this warning
 endif()
 
 # rapidjson
