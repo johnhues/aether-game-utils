@@ -3489,6 +3489,21 @@ public:
 	int32_t GetHeight() const;
 	//! Window content scale factor
 	float GetScaleFactor() const { return m_scaleFactor; }
+	//! Low-level presentation primitive. Most rendering code should use
+	//! GraphicsDevice::Activate() instead.
+	void MakeCurrent();
+	//! Low-level presentation primitive for custom final compositing. Most
+	//! rendering code should use GraphicsDevice::Present() instead.
+	void BindBackbuffer();
+	//! Low-level platform swap/flush. GraphicsDevice::Present() calls this after
+	//! compositing its canvas to the window backbuffer.
+	void Present();
+	//! Drawable pixel size for low-level presentation code. This differs from
+	//! GetWidth() on scaled displays.
+	uint32_t GetDrawWidth() const;
+	//! Drawable pixel size for low-level presentation code. This differs from
+	//! GetHeight() on scaled displays.
+	uint32_t GetDrawHeight() const;
 
 	//! Enable window events logging to console
 	void SetLoggingEnabled( bool enable ) { m_debugLog = enable; }
@@ -3514,11 +3529,19 @@ public:
 	void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
 	void m_UpdateFullScreen( bool fullScreen ) { m_fullScreen = fullScreen; }
 	void m_UpdateFocused( bool focused );
+	void m_UpdateBackbuffer();
 	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
 	ae::Int2 m_nativeToAe( ae::Int2 pos, ae::Int2 size );
 	bool m_fixCanvasStyle = false;
 	void* window = nullptr;
 	class GraphicsDevice* graphicsDevice = nullptr;
+#if _AE_EMSCRIPTEN_
+	EMSCRIPTEN_WEBGL_CONTEXT_HANDLE m_context = 0;
+#else
+	void* m_context = nullptr;
+#endif
+	uint32_t m_defaultFramebuffer = 0;
+	class RenderTarget* m_backbuffer = nullptr;
 	class Input* input = nullptr;
 };
 
@@ -4739,11 +4762,14 @@ public:
 	static Matrix4 GetQuadToNDCTransform( Rect ndc, float z );
 
 private:
+	friend class Window;
+	void m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer );
 	uint32_t m_fbo = 0;
 	Array< Texture2D*, 4 > m_targets;
 	Texture2D m_depth;
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
+	bool m_externalFramebuffer = false;
 };
 
 //------------------------------------------------------------------------------
@@ -19911,6 +19937,8 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 namespace ae {
 #endif
 
+uint32_t _ae_GetCurrentFramebuffer();
+
 //------------------------------------------------------------------------------
 // ae::Screen functions
 //------------------------------------------------------------------------------
@@ -20172,6 +20200,33 @@ void Window::m_Initialize( bool rememberPosition )
 		AE_FAIL_MSG( "Could not set window pixel format. Error: #", GetLastError() );
 	}
 
+#if AE_ENABLE_OPENGL
+	HGLRC dummyCtx = wglCreateContext( hdc );
+	AE_ASSERT_MSG( dummyCtx, "Failed to create dummy OpenGL Rendering Context" );
+	wglMakeCurrent( hdc, dummyCtx );
+
+	int attribs[] =
+	{
+		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion(),
+		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion(),
+		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+		0
+	};
+	wglCreateContextAttribsARB = (decltype( wglCreateContextAttribsARB ))wglGetProcAddress( "wglCreateContextAttribsARB" );
+	AE_ASSERT_MSG( wglCreateContextAttribsARB, "Failed to load wglCreateContextAttribsARB" );
+	HGLRC ctx = wglCreateContextAttribsARB( hdc, 0, attribs );
+	AE_ASSERT_MSG( ctx, "Failed to create extended OpenGL Rendering Context" );
+
+	wglMakeCurrent( nullptr, nullptr );
+	wglDeleteContext( dummyCtx );
+	if( !wglMakeCurrent( hdc, ctx ) )
+	{
+		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+	}
+	m_context = ctx;
+#endif
+
 	// Finish window setup
 	ShowWindow( hwnd, SW_SHOW );
 	SetForegroundWindow( hwnd ); // Slightly Higher Priority
@@ -20220,6 +20275,7 @@ void Window::m_Initialize( bool rememberPosition )
 		[nsWindow setFrame:frame display:YES];
 		frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
 	}
+	const NSRect viewFrame = NSMakeRect( 0.0, 0.0, frame.size.width, frame.size.height );
 	
 #if AE_ENABLE_OPENGL
 	NSOpenGLPixelFormatAttribute openglProfile;
@@ -20252,16 +20308,17 @@ void Window::m_Initialize( bool rememberPosition )
 	NSOpenGLPixelFormat* nsPixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:nsPixelAttribs];
 	AE_ASSERT_MSG( nsPixelFormat, "Could not determine a valid pixel format" );
 	
-	NSOpenGLView* glView = [[NSOpenGLView alloc] initWithFrame:frame pixelFormat:nsPixelFormat];
+	NSOpenGLView* glView = [[NSOpenGLView alloc] initWithFrame:viewFrame pixelFormat:nsPixelFormat];
 	AE_ASSERT_MSG( glView, "Could not create view with specified pixel format" );
 	[glView setWantsBestResolutionOpenGLSurface:true]; // @TODO: Retina. Does this do anything?
 	[glView.openGLContext makeCurrentContext];
+	m_context = glView.openGLContext;
 	
 	[nsPixelFormat release];
 	[nsWindow setContentView:glView];
 	[nsWindow makeFirstResponder:glView];
 #else
-	NSView* view = [[NSView alloc] initWithFrame:frame];
+	NSView* view = [[NSView alloc] initWithFrame:viewFrame];
 	[nsWindow setContentView:view];
 	[nsWindow makeFirstResponder:nsWindow];
 #endif
@@ -20287,6 +20344,17 @@ void Window::m_Initialize( bool rememberPosition )
 	// as a console app.
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #elif _AE_EMSCRIPTEN_
+#if AE_ENABLE_OPENGL
+	EmscriptenWebGLContextAttributes attrs;
+	emscripten_webgl_init_context_attributes( &attrs );
+	attrs.alpha = 0;
+	attrs.majorVersion = ae::GLMajorVersion();
+	attrs.minorVersion = ae::GLMinorVersion();
+	m_context = emscripten_webgl_create_context( "canvas", &attrs );
+	AE_ASSERT( m_context > 0 );
+	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
+	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+#endif
 	_aeEmscriptenGetCanvasInfo( &m_width, &m_height, &m_scaleFactor );
 	if( m_width == 300 && m_height == 150 )
 	{
@@ -20294,11 +20362,87 @@ void Window::m_Initialize( bool rememberPosition )
 		m_fixCanvasStyle = true;
 	}
 #endif
+#if AE_ENABLE_OPENGL
+	m_defaultFramebuffer = _ae_GetCurrentFramebuffer();
+	m_UpdateBackbuffer();
+#endif
 }
 
 void Window::Terminate()
 {
-	// @TODO
+	if( m_backbuffer )
+	{
+		ae::Delete( m_backbuffer );
+		m_backbuffer = nullptr;
+	}
+}
+
+void Window::MakeCurrent()
+{
+#if AE_ENABLE_OPENGL
+#if _AE_WINDOWS_
+	if( window && m_context )
+	{
+		HDC hdc = GetDC( (HWND)window );
+		AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+		if( !wglMakeCurrent( hdc, (HGLRC)m_context ) )
+		{
+			AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+		}
+	}
+#elif _AE_OSX_
+	if( m_context )
+	{
+		[(NSOpenGLContext*)m_context makeCurrentContext];
+	}
+#elif _AE_EMSCRIPTEN_
+	if( m_context )
+	{
+		EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
+		AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+	}
+#endif
+#endif
+	m_UpdateBackbuffer();
+}
+
+void Window::BindBackbuffer()
+{
+	MakeCurrent();
+#if AE_ENABLE_OPENGL
+	AE_ASSERT( m_backbuffer );
+	m_backbuffer->Activate();
+#endif
+}
+
+void Window::Present()
+{
+#if AE_ENABLE_OPENGL
+#if _AE_OSX_
+	if( m_context )
+	{
+		[(NSOpenGLContext*)m_context flushBuffer];
+	}
+#elif _AE_WINDOWS_
+	if( window )
+	{
+		HDC hdc = GetDC( (HWND)window );
+		AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+		SwapBuffers( hdc );
+	}
+#endif
+#endif
+}
+
+void Window::m_UpdateBackbuffer()
+{
+#if AE_ENABLE_OPENGL
+	if( !m_backbuffer )
+	{
+		m_backbuffer = ae::New< RenderTarget >( AE_ALLOC_TAG_RENDER );
+	}
+	m_backbuffer->m_Initialize( GetDrawWidth(), GetDrawHeight(), m_defaultFramebuffer );
+#endif
 }
 
 int32_t Window::GetWidth() const
@@ -20309,6 +20453,16 @@ int32_t Window::GetWidth() const
 int32_t Window::GetHeight() const
 {
 	return m_height;
+}
+
+uint32_t Window::GetDrawWidth() const
+{
+	return (uint32_t)( m_width * m_scaleFactor );
+}
+
+uint32_t Window::GetDrawHeight() const
+{
+	return (uint32_t)( m_height * m_scaleFactor );
 }
 
 void Window::SetTitle( const char* title )
@@ -24649,6 +24803,17 @@ int32_t GLMajorVersion() { return _ae_GLMajorVersion(); }
 int32_t GLMinorVersion() { return _ae_GLMinorVersion(); }
 bool ReverseZ = false;
 
+uint32_t _ae_GetCurrentFramebuffer()
+{
+#if AE_ENABLE_OPENGL
+	GLint framebuffer = 0;
+	glGetIntegerv( GL_FRAMEBUFFER_BINDING, &framebuffer );
+	return (uint32_t)framebuffer;
+#else
+	return 0;
+#endif
+}
+
 int32_t _GLGetTypeCount( uint32_t glType )
 {
 	switch( glType )
@@ -26536,6 +26701,7 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 	Terminate();
 
 	AE_ASSERT( m_fbo == 0 );
+	m_externalFramebuffer = false;
 
 	if( width * height == 0 )
 	{
@@ -26554,15 +26720,31 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 	AE_CHECK_GL_ERROR();
 }
 
+void RenderTarget::m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer )
+{
+	if( m_externalFramebuffer && m_width == width && m_height == height && m_fbo == framebuffer )
+	{
+		return;
+	}
+
+	Terminate();
+
+	m_width = width;
+	m_height = height;
+	m_fbo = framebuffer;
+	m_externalFramebuffer = true;
+}
+
 void RenderTarget::Terminate()
 {
-	if( m_fbo )
+	if( m_fbo && !m_externalFramebuffer )
 	{
 		// With WebGL it seems to matter that the framebuffer is deleted
 		// first so it's not referencing its textures.
 		glDeleteFramebuffers( 1, (uint32_t*)&m_fbo );
-		m_fbo = 0;
 	}
+	m_fbo = 0;
+	m_externalFramebuffer = false;
 	
 	for( uint32_t i = 0; i < m_targets.Length(); i++ )
 	{
@@ -26578,6 +26760,7 @@ void RenderTarget::Terminate()
 
 void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 {
+	AE_ASSERT_MSG( !m_externalFramebuffer, "Cannot add textures to an externally owned ae::RenderTarget" );
 	AE_ASSERT( m_targets.Length() < _kMaxFrameBufferAttachments );
 	if( m_width * m_height == 0 )
 	{
@@ -26605,6 +26788,7 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 
 void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 {
+	AE_ASSERT_MSG( !m_externalFramebuffer, "Cannot add depth to an externally owned ae::RenderTarget" );
 	AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
 	if( m_width * m_height == 0 )
 	{
@@ -26628,6 +26812,14 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 void RenderTarget::Activate()
 {
 	AE_ASSERT_MSG( GetWidth() && GetHeight(), "ae::RenderTarget is not initialized" );
+	if( m_externalFramebuffer )
+	{
+		glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+		glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+		glViewport( 0, 0, GetWidth(), GetHeight() );
+		AE_CHECK_GL_ERROR();
+		return;
+	}
 	AE_ASSERT_MSG( m_targets.Length() || m_depth.GetTexture(), "ae::RenderTarget is not complete. Call AddTexture() and/or AddDepth() before Activate()." );
 	AE_CHECK_GL_ERROR();
 	
@@ -26798,10 +26990,6 @@ GraphicsDevice::~GraphicsDevice()
 
 void GraphicsDevice::Initialize( class Window* window )
 {
-#if _AE_WASM_
-	// No-op: the host environment owns the GL context for WASM builds.
-	(void)window;
-#else
 	AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
 	_Globals* globals = ae::_Globals::Get();
@@ -26818,52 +27006,12 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
 #endif
 
+	window->MakeCurrent();
+	m_context = window->m_context;
+	AE_ASSERT( m_context );
+
 #if _AE_WINDOWS_
 	uint32_t glFnLoadFailed = 0;
-	// Create OpenGL context
-	HWND hWnd = (HWND)m_window->window;
-	AE_ASSERT_MSG( hWnd, "ae::Window must be initialized" );
-	HDC hdc = GetDC( hWnd );
-	AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
-
-	HGLRC dummyCtx = wglCreateContext( hdc );
-	AE_ASSERT_MSG( dummyCtx, "Failed to create dummy OpenGL Rendering Context" );
-	wglMakeCurrent( hdc, dummyCtx );
-	
-	int attribs[] = 
-	{
-		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion(),
-		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion(),
-		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
-		0
-	};
-	LOAD_OPENGL_FN( wglCreateContextAttribsARB );
-	HGLRC ctx = wglCreateContextAttribsARB( hdc, 0, attribs );
-	AE_ASSERT_MSG( ctx, "Failed to create extended OpenGL Rendering Context" );
-
-	wglMakeCurrent( nullptr, nullptr );
-	wglDeleteContext( dummyCtx );
-	wglMakeCurrent( hdc, ctx );
-	
-	AE_ASSERT_MSG( ctx, "Failed to create the OpenGL Rendering Context" );
-	if( !wglMakeCurrent( hdc, ctx ) )
-	{
-		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
-	}
-	m_context = ctx;
-#elif _AE_OSX_ 
-	m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
-#elif _AE_EMSCRIPTEN_
-	EmscriptenWebGLContextAttributes attrs;
-	emscripten_webgl_init_context_attributes( &attrs );
-	attrs.alpha = 0;
-	attrs.majorVersion = ae::GLMajorVersion();
-	attrs.minorVersion = ae::GLMinorVersion();
-	m_context = emscripten_webgl_create_context( "canvas", &attrs );
-	AE_ASSERT( m_context > 0 );
-	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
-	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
 #endif
 	
 	AE_CHECK_GL_ERROR();
@@ -26935,9 +27083,6 @@ void GraphicsDevice::Initialize( class Window* window )
 	glDebugMessageCallback( ae::OpenGLDebugCallback, nullptr );
 #endif
 
-	glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
-	AE_CHECK_GL_ERROR();
-	
 	// Initialize shared RenderTarget resources
 	struct Vertex
 	{
@@ -26966,13 +27111,13 @@ void GraphicsDevice::Initialize( class Window* window )
 	// Because of all of this it's easiest to convert to SRGB manually on non-OpenGLES platforms.
 	const char* vertexStr = R"(
 		AE_UNIFORM_HIGHP mat4 u_localToNdc;
-		AE_IN_HIGHP vec3 a_position;
 		AE_IN_HIGHP vec2 a_uv;
 		AE_OUT_HIGHP vec2 v_uv;
 		void main()
 		{
 			v_uv = a_uv;
-			gl_Position = u_localToNdc * vec4( a_position, 1.0 );
+			vec2 localPos = a_uv - vec2( 0.5 );
+			gl_Position = u_localToNdc * vec4( localPos, 0.0, 1.0 );
 		})";
 	const char* fragStr = R"(
 		uniform sampler2D u_tex;
@@ -27000,7 +27145,6 @@ void GraphicsDevice::Initialize( class Window* window )
 	Activate(); // Init primary render target
 	AE_ASSERT( GetWidth() && GetHeight() );
 	AE_ASSERT( m_context );
-#endif // !_AE_WASM_
 }
 
 void GraphicsDevice::SetVsyncEnabled( bool enabled )
@@ -27038,10 +27182,10 @@ void GraphicsDevice::Activate()
 {
 	AE_ASSERT( m_window );
 	AE_ASSERT( m_context );
+	m_window->MakeCurrent();
 
-	const float scaleFactor = m_window->GetScaleFactor();
-	const int32_t contentWidth = m_window->GetWidth() * scaleFactor;
-	const int32_t contentHeight = m_window->GetHeight() * scaleFactor;
+	const int32_t contentWidth = m_window->GetDrawWidth();
+	const int32_t contentHeight = m_window->GetDrawHeight();
 	if( contentWidth != m_canvas.GetWidth() || contentHeight != m_canvas.GetHeight() )
 	{
 #if _AE_EMSCRIPTEN_
@@ -27092,19 +27236,14 @@ void GraphicsDevice::Present()
 
 	AE_ASSERT( m_context );
 	AE_CHECK_GL_ERROR();
-
-#if _AE_EMSCRIPTEN_
-	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
-	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
-#endif
-	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-	glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() );
+	m_window->BindBackbuffer();
 
 	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
 	glClearDepth( 1.0f );
 
 	glDepthMask( GL_TRUE );
 
+	glDisable( GL_SCISSOR_TEST );
 	glDisable( GL_DEPTH_TEST );
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	AE_CHECK_GL_ERROR();
@@ -27121,17 +27260,7 @@ void GraphicsDevice::Present()
 	m_rgbToSrgb = false;
 	
 	AE_CHECK_GL_ERROR();
-
-	// Swap Buffers
-#if _AE_OSX_
-	[(NSOpenGLContext*)m_context flushBuffer];
-#elif _AE_WINDOWS_
-	AE_ASSERT( m_window );
-	HWND hWnd = (HWND)m_window->window;
-	AE_ASSERT( hWnd );
-	HDC hdc = GetDC( hWnd );
-	SwapBuffers( hdc );
-#endif
+	m_window->Present();
 }
 
 float GraphicsDevice::GetAspectRatio() const
@@ -28201,6 +28330,7 @@ void Texture2D::Terminate() {}
 //------------------------------------------------------------------------------
 RenderTarget::~RenderTarget() {}
 void RenderTarget::Initialize( uint32_t width, uint32_t height ) {}
+void RenderTarget::m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer ) {}
 void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap ) {}
 void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap ) {}
 void RenderTarget::Terminate() {}
