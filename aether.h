@@ -3306,7 +3306,7 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 // Assertion functions
 //------------------------------------------------------------------------------
 #ifndef AE_ASSERT_IMPL
-#	define AE_ASSERT_IMPL( msgStr ) { if( !ae::IsDebuggerAttached() ) { ae::ShowMessage( msgStr ? msgStr : "Unspecified Fatal Error" ); } else { AE_BREAK(); } }
+#	define AE_ASSERT_IMPL( msgStr ) do { (void)(msgStr); AE_BREAK(); } while(0)
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 #define AE_ASSERT( _x ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
@@ -18197,12 +18197,12 @@ ae::Vec3 Triangle::ClosestPoint( ae::Vec3 p ) const
 //------------------------------------------------------------------------------
 const char* LogLevelNames[] =
 {
-	"FATAL",
-	"ERROR",
-	"WARN",
-	"INFO",
-	"DEBUG",
-	"TRACE",
+	"fatal",
+	"error",
+	"warn",
+	"info",
+	"debug",
+	"trace",
 };
 
 //------------------------------------------------------------------------------
@@ -18263,7 +18263,8 @@ void _LogFormat( std::ostream& os, ae::LogSeverity severity, const char* filePat
 	{
 		os << LogLevelColors[ (uint32_t)severity ];
 	}
-	os << " [" << LogLevelNames[ (uint32_t)severity ] << "]";
+	const char* levelName = LogLevelNames[ (uint32_t)severity ];
+	os << " [" << levelName << ( strlen( levelName ) < 5 ? "] " : " " );
 #if AE_ENABLE_SOURCE_INFO
 	if( _ae_logColors )
 	{
