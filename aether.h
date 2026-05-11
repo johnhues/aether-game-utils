@@ -18118,12 +18118,12 @@ ae::Vec3 Triangle::ClosestPoint( ae::Vec3 p ) const
 //------------------------------------------------------------------------------
 const char* LogLevelNames[] =
 {
-	"FATAL",
-	"ERROR",
-	"WARN",
-	"INFO",
-	"DEBUG",
-	"TRACE",
+	"fatal",
+	"error",
+	"warn",
+	"info",
+	"debug",
+	"trace",
 };
 
 //------------------------------------------------------------------------------
@@ -18184,7 +18184,8 @@ void _LogFormat( std::ostream& os, ae::LogSeverity severity, const char* filePat
 	{
 		os << LogLevelColors[ (uint32_t)severity ];
 	}
-	os << " [" << LogLevelNames[ (uint32_t)severity ] << "]";
+	const char* levelName = LogLevelNames[ (uint32_t)severity ];
+	os << " [" << levelName << ( strlen( levelName ) < 5 ? "] " : " " );
 #if AE_ENABLE_SOURCE_INFO
 	if( _ae_logColors )
 	{
