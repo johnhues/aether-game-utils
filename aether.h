@@ -3977,8 +3977,8 @@ public:
 		Data, //!< A given existing directory
 		User, //!< A directory for storing preferences and savedata
 		Cache, //!< A directory for storing expensive to generate data (computed, downloaded, etc)
-		UserShared, //!< Same as above but shared accross the 'organization name'
-		CacheShared //!< Same as above but shared accross the 'organization name'
+		UserShared, //!< Same as above but shared across the 'organization name'
+		CacheShared //!< Same as above but shared across the 'organization name'
 	};
 	
 	//! If \p dataDir is absolute no processing on the path will be done. Passing
@@ -4029,6 +4029,7 @@ public:
 	bool GetRootDir( Root root, Str256* outDir ) const;
 	uint32_t GetSize( Root root, const char* filePath ) const;
 	uint32_t Read( Root root, const char* filePath, void* buffer, uint32_t bufferSize ) const;
+	//! Returns the number of bytes written
 	uint32_t Write( Root root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const;
 	bool CreateFolder( Root root, const char* folderPath ) const;
 	void ShowFolder( Root root, const char* folderPath ) const;
@@ -4039,6 +4040,7 @@ public:
 	// Static member functions intended to be used when not creating a instance
 	static uint32_t GetSize( const char* filePath );
 	static uint32_t Read( const char* filePath, void* buffer, uint32_t bufferSize );
+	//! Returns the number of bytes written
 	static uint32_t Write( const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs );
 	static bool CreateFolder( const char* folderPath );
 	static void ShowFolder( const char* folderPath );
@@ -4055,24 +4057,30 @@ public:
 	//! Returns the entire file extension in the case of multiple dots. If
 	//! \p includeDot is true the returned string will include the first dot,
 	//! which can be useful for creating a substring of the file name.
-	static const char* GetFileExtFromPath( const char* filePath, bool includeDot = false );
+	static const char* GetFileExtensionFromPath( const char* filePath, bool includeDot = false );
 	//! Returns a range within \p filePath to the first section of a path. Eg.
 	//! "/User/Documents/file.txt" will allow the extraction of the directory
 	//! "User" by returning a pointer to both "User/Documents/file.txt" and
-	//! /Documents/file.txt". No exceptions are made for file names (ie. files
+	//! "/Documents/file.txt". No exceptions are made for file names (ie. files
 	//! with a '.' in the name). The path can be separated by forward or
 	//! backward slashes.
 	static std::pair< const char*, const char* > TraversePath( const char* filePath );
 	static Str256 GetDirectoryFromPath( const char* filePath );
 	static void AppendToPath( Str256* path, const char* str );
-	//! Replaces the extension of the given path with \p ext. If the given path
-	//! does not have an extension then \p ext will be appended to the path.
-	//! \p ext must be only alphanumeric characters.
+	//! Replaces the extension of the given \p path with \p ext, or appends
+	//! \p ext if \p path has no extension. Returns true if \p path was updated.
+	//! Returns false and leaves \p path unchanged if \p path is null, empty, a
+	//! directory path, or if \p ext is null, empty, or contains characters other
+	//! than letters and numbers.
 	static bool SetExtension( Str256* path, const char* ext );
-	// @todo delete
-	//! Returns true if the given path is a directory. This function does not
-	//! access the underlying filesystem to see if the directory exists.
-	static bool IsDirectory( const char* path );
+	//! Returns true if the given \p filePath has the complete \p extension.
+	//! The extension can include any number of dots, and may include multiple
+	//! dot-separated segments. A leading dot in \p extension is ignored before
+	//! matching. For example ".TAR.GZ" or "tAr.gZ" are valid extensions, and
+	//! are considered equivalent to "tar.gz" when \p caseSensitive is false.
+	//! Empty segments are allowed, but "tar..gz" and "tar.gz" are not
+	//! considered equivalent.
+	static bool HasExtension( const char* filePath, const char* extension, bool caseSensitive = false );
 	//! Returns true if the given path is a file and the current user has write permissions. This function accesses the
 	//! underlying filesystem to see if the file exists and is not a directory.
 	static bool IsWritable( const char* path );
@@ -4100,6 +4108,11 @@ private:
 	ae::Str256 m_cacheDir;
 	ae::Str256 m_userSharedDir;
 	ae::Str256 m_cacheSharedDir;
+public:
+	//! Returns true if the given path is a directory. This
+	//! function does not access the underlying filesystem to see if the
+	//! directory exists.
+	static bool IsDirectory( const char* path ); // @todo delete
 };
 
 //------------------------------------------------------------------------------
@@ -23154,7 +23167,7 @@ const char* FileSystem::GetFileNameFromPath( const char* filePath )
 	}
 }
 
-const char* FileSystem::GetFileExtFromPath( const char* filePath, bool includeDot )
+const char* FileSystem::GetFileExtensionFromPath( const char* filePath, bool includeDot )
 {
 	// Find first dot after last separator
 	const char* fileName = GetFileNameFromPath( filePath );
@@ -23169,6 +23182,60 @@ const char* FileSystem::GetFileExtFromPath( const char* filePath, bool includeDo
 		uint32_t len = (uint32_t)strlen( fileName );
 		return fileName + len;
 	}
+}
+
+static char _ToLowerASCII( char c )
+{
+	if( c >= 'A' && c <= 'Z' )
+	{
+		return c + ( 'a' - 'A' );
+	}
+	return c;
+}
+
+static bool _StringsEqualASCII( const char* a, const char* b )
+{
+	while( a[ 0 ] && b[ 0 ] )
+	{
+		if( _ToLowerASCII( a[ 0 ] ) != _ToLowerASCII( b[ 0 ] ) )
+		{
+			return false;
+		}
+		a++;
+		b++;
+	}
+	return a[ 0 ] == b[ 0 ]; // Null / string length equivalency check
+}
+
+bool FileSystem::HasExtension( const char* filePath, const char* extension, bool caseSensitive )
+{
+	if( !filePath || !filePath[ 0 ] || !extension || !extension[ 0 ] )
+	{
+		return false;
+	}
+	if( IsDirectory( filePath ) )
+	{
+		return false;
+	}
+	if( extension[ 0 ] == '.' )
+	{
+		extension++;
+	}
+	if( !extension[ 0 ] )
+	{
+		return false;
+	}
+
+	const char* fileExt = GetFileExtensionFromPath( filePath, false );
+	if( !fileExt[ 0 ] )
+	{
+		return false;
+	}
+	if( caseSensitive )
+	{
+		return strcmp( fileExt, extension ) == 0;
+	}
+	return _StringsEqualASCII( fileExt, extension );
 }
 
 std::pair< const char*, const char* > FileSystem::TraversePath( const char* filePath )

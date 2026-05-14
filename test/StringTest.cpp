@@ -47,7 +47,7 @@ TEST_CASE( "string construction should set length correctly", "[aeString]" )
 
 	const char* strPath = "/var/log/system.log.1.gz";
 	const char* fileName = ae::FileSystem::GetFileNameFromPath( strPath );
-	const char* fileExt = ae::FileSystem::GetFileExtFromPath( strPath, true );
+	const char* fileExt = ae::FileSystem::GetFileExtensionFromPath( strPath, true );
 	REQUIRE( strcmp( fileName, "system.log.1.gz" ) == 0 );
 	REQUIRE( strcmp( fileExt, ".log.1.gz" ) == 0 );
 	REQUIRE( ae::Str16( fileName, fileExt ).Length() == strlen("system") );
