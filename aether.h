@@ -3489,9 +3489,9 @@ public:
 	int32_t GetHeight() const;
 	//! Window content scale factor
 	float GetScaleFactor() const { return m_scaleFactor; }
-	//! Low-level presentation primitive. Most rendering code should use
+	//! Low-level context/surface activation. Most rendering code should use
 	//! GraphicsDevice::Activate() instead.
-	void MakeCurrent();
+	void ActivateContext();
 	//! Low-level presentation primitive for custom final compositing. Most
 	//! rendering code should use GraphicsDevice::Present() instead.
 	void BindBackbuffer();
@@ -20391,7 +20391,7 @@ void Window::Terminate()
 	}
 }
 
-void Window::MakeCurrent()
+void Window::ActivateContext()
 {
 #if AE_ENABLE_OPENGL
 #if _AE_WINDOWS_
@@ -20417,13 +20417,13 @@ void Window::MakeCurrent()
 	}
 #endif
 #endif
-	m_UpdateBackbuffer();
 }
 
 void Window::BindBackbuffer()
 {
-	MakeCurrent();
+	ActivateContext();
 #if AE_ENABLE_OPENGL
+	m_UpdateBackbuffer();
 	AE_ASSERT( m_backbuffer );
 	m_backbuffer->Activate();
 #endif
@@ -27074,7 +27074,7 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
 #endif
 
-	window->MakeCurrent();
+	window->ActivateContext();
 	m_context = window->m_context;
 	AE_ASSERT( m_context );
 
@@ -27250,7 +27250,7 @@ void GraphicsDevice::Activate()
 {
 	AE_ASSERT( m_window );
 	AE_ASSERT( m_context );
-	m_window->MakeCurrent();
+	m_window->ActivateContext();
 
 	const int32_t contentWidth = m_window->GetDrawWidth();
 	const int32_t contentHeight = m_window->GetDrawHeight();
