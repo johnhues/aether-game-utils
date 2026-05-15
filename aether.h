@@ -26605,7 +26605,8 @@ void GraphicsDevice::Initialize( class Window* window )
 	EmscriptenWebGLContextAttributes attrs;
 	emscripten_webgl_init_context_attributes( &attrs );
 	attrs.alpha = 0;
-	attrs.majorVersion = ae::GLMajorVersion;
+	// webGL 2 maps to OpenGL 3
+	attrs.majorVersion = 2;
 	attrs.minorVersion = ae::GLMinorVersion;
 	m_context = emscripten_webgl_create_context( "canvas", &attrs );
 	AE_ASSERT( m_context > 0 );
