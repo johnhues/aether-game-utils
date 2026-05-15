@@ -20169,6 +20169,7 @@ void Window::m_Initialize( bool rememberPosition )
 		backing:NSBackingStoreBuffered
 		defer:YES
 	];
+	[nsWindow setRestorable:NO];
 	nsWindow.delegate = windowDelegate;
 	[nsWindow setColorSpace:[NSColorSpace sRGBColorSpace]];
 	this->window = nsWindow;
