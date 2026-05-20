@@ -184,16 +184,6 @@
 #endif
 
 //------------------------------------------------------------------------------
-// AE_GL_IMPORT define
-//------------------------------------------------------------------------------
-//! Optional wasm OpenGL import attribute fragment. Define before including
-//! aether.h to apply an additional attribute to each wasm GL declaration, e.g.
-//! '#define AE_GL_IMPORT import_module( "env" )'. This is intended for leaf-node
-//! hosts that own the cart ABI. When undefined, aether only applies
-//! `import_name( #name )`.
-//------------------------------------------------------------------------------
-
-//------------------------------------------------------------------------------
 // AE_MAX_SCRATCH_BYTES_CONFIG define
 //------------------------------------------------------------------------------
 //! The maximum bytes available to each thread's ae::Scratch stack. Scratch
@@ -4297,6 +4287,7 @@ private:
 //------------------------------------------------------------------------------
 int32_t GLMajorVersion();
 int32_t GLMinorVersion();
+const char* GLProfile(); // es, core, compatibility
 // Caller enables this externally.  The renderer, Shader, math aren't tied to one another
 // enough to pass this locally.  glClipControl is also not accessible in ES or GL 4.1, so
 // doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
@@ -15629,6 +15620,15 @@ T* ae::Cast( C* obj )
 	#else
 		#if _AE_IOS_
 		#import <Foundation/Foundation.h>
+		#import <UIKit/UIKit.h>
+		#import <QuartzCore/QuartzCore.h>
+		#import <OpenGLES/EAGL.h>
+		#import <OpenGLES/ES3/gl.h>
+		// @TODO:
+		// <OpenGLES/ES3/glext.h> is NOT imported here on purpose. It defines
+		// GL_BGR / GL_BGRA which clash with `const auto GL_BGR = GL_RGB;` later
+		// in this header. The Window::m_Initialize iOS branch only needs symbols
+		// from <OpenGLES/ES3/gl.h>.
 		#else
 		#include <Cocoa/Cocoa.h>
 		#include <Carbon/Carbon.h>
@@ -20047,11 +20047,13 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 	m_height = height;
 	m_fullScreen = false;
 
+#if !_AE_IOS_
 	// Center window on primary screen
 	const ae::Array< ae::Screen, 16 > screens = ae::GetScreens();
 	AE_ASSERT( screens.Length() > 0 );
 	m_pos = ( screens[ 0 ].size - ae::Int2( width, height ) ) / 2;
 	m_pos += screens[ 0 ].position;
+#endif
 
 	m_Initialize( rememberPosition );
 
@@ -20116,6 +20118,14 @@ ae::Int2 Window::m_nativeToAe( ae::Int2 pos, ae::Int2 size )
 	return ae::Int2( 0 );
 #endif
 }
+
+// iOS-only: color renderbuffer attached to the host CAEAGLLayer drawable. Used
+// by Window::Present to call [eaglContext presentRenderbuffer:]. The host
+// exposes the CAEAGLLayer pointer.
+#if _AE_IOS_ && AE_ENABLE_OPENGL
+extern "C" void* g_eaglLayer;
+static GLuint g_ae_iOSColorRenderbuffer = 0;
+#endif
 
 void Window::m_Initialize( bool rememberPosition )
 {
@@ -20375,6 +20385,68 @@ void Window::m_Initialize( bool rememberPosition )
 		AE_WARN( "Canvas size was not configured. Defaulting to WxH 100\%." );
 		m_fixCanvasStyle = true;
 	}
+#elif _AE_IOS_
+#if AE_ENABLE_OPENGL
+	// Create the EAGL context, attach a renderbuffer to the host-provided
+	// CAEAGLLayer drawable, wrap it in a default FBO, and stash the renderbuffer
+	// id at module scope so Present() can target it. The host
+	// exposes the layer via the extern symbol g_eaglLayer.
+	EAGLContext* eaglContext = [ [ EAGLContext alloc ] initWithAPI:kEAGLRenderingAPIOpenGLES3 ];
+	AE_ASSERT_MSG( eaglContext, "Failed to create EAGLContext (OpenGL ES 3)" );
+	const BOOL madeCurrent = [ EAGLContext setCurrentContext:eaglContext ];
+	AE_ASSERT_MSG( madeCurrent, "Failed to make EAGLContext current" );
+	m_context = (__bridge_retained void*)eaglContext;
+
+	// Spin briefly while the AppDelegate sets up the view
+	for( int i = 0; i < 100 && !g_eaglLayer; i++ )
+	{
+		[ NSThread sleepForTimeInterval:0.01 ];
+	}
+	AE_ASSERT_MSG( g_eaglLayer, "iOS host did not provide CAEAGLLayer" );
+	CAEAGLLayer* eaglLayer = (__bridge CAEAGLLayer*)g_eaglLayer;
+
+	GLuint colorRb = 0;
+	glGenRenderbuffers( 1, &colorRb );
+	glBindRenderbuffer( GL_RENDERBUFFER, colorRb );
+	const BOOL storageOk = [ eaglContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:eaglLayer ];
+	AE_ASSERT_MSG( storageOk, "renderbufferStorage:fromDrawable: failed" );
+
+	GLint drawableWidth = 0;
+	GLint drawableHeight = 0;
+	glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &drawableWidth );
+	glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &drawableHeight );
+
+	GLuint depthRb = 0;
+	glGenRenderbuffers( 1, &depthRb );
+	glBindRenderbuffer( GL_RENDERBUFFER, depthRb );
+	glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, drawableWidth, drawableHeight );
+
+	GLuint fbo = 0;
+	glGenFramebuffers( 1, &fbo );
+	glBindFramebuffer( GL_FRAMEBUFFER, fbo );
+	glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, colorRb );
+	glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRb );
+	const GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	AE_ASSERT_MSG( fboStatus == GL_FRAMEBUFFER_COMPLETE, "Default FBO incomplete: 0x#x", (uint32_t)fboStatus );
+	glBindRenderbuffer( GL_RENDERBUFFER, colorRb );
+
+	g_ae_iOSColorRenderbuffer = colorRb;
+	m_defaultFramebuffer = fbo;
+
+	glViewport( 0, 0, drawableWidth, drawableHeight );
+
+	m_scaleFactor = (float)eaglLayer.contentsScale;
+	m_width = (int32_t)( drawableWidth / m_scaleFactor );
+	m_height = (int32_t)( drawableHeight / m_scaleFactor );
+#else
+	{
+		UIScreen* const screen = [ UIScreen mainScreen ];
+		const CGRect bounds = screen.bounds;
+		m_width = (int32_t)bounds.size.width;
+		m_height = (int32_t)bounds.size.height;
+		m_scaleFactor = (float)screen.scale;
+	}
+#endif
 #endif
 #if AE_ENABLE_OPENGL
 	m_defaultFramebuffer = _ae_GetCurrentFramebuffer();
@@ -20409,6 +20481,11 @@ void Window::ActivateContext()
 	{
 		[(NSOpenGLContext*)m_context makeCurrentContext];
 	}
+#elif _AE_IOS_
+	if( m_context )
+	{
+		[ EAGLContext setCurrentContext:(__bridge EAGLContext*)m_context ];
+	}
 #elif _AE_EMSCRIPTEN_
 	if( m_context )
 	{
@@ -20436,6 +20513,12 @@ void Window::Present()
 	if( m_context )
 	{
 		[(NSOpenGLContext*)m_context flushBuffer];
+	}
+#elif _AE_IOS_
+	if( m_context && g_ae_iOSColorRenderbuffer )
+	{
+		glBindRenderbuffer( GL_RENDERBUFFER, g_ae_iOSColorRenderbuffer );
+		[(__bridge EAGLContext*)m_context presentRenderbuffer:GL_RENDERBUFFER];
 	}
 #elif _AE_WINDOWS_
 	if( window )
@@ -24534,19 +24617,32 @@ uint32_t ListenerSocket::GetConnectionCount() const
 // OpenGL start
 //------------------------------------------------------------------------------
 // clang-format off
+// _ae_GLProfileEnum returns an int enum (0=none, 1=core, 2=es, 3=compatibility)
+// rather than a string so the value crosses the WASM<->host ABI cleanly. The
+// public ae::GLProfile() below maps it back to a string on the local side.
+enum _ae_GLProfileEnum
+{
+	_AE_GLProfile_None = 0,
+	_AE_GLProfile_Core = 1,
+	_AE_GLProfile_ES = 2
+};
 #if !AE_ENABLE_OPENGL
 	int32_t _ae_GLMajorVersion() { return 0; }
 	int32_t _ae_GLMinorVersion() { return 0; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_None; }
 #elif _AE_IOS_ || _AE_EMSCRIPTEN_
 	int32_t _ae_GLMajorVersion() { return 3; }
 	int32_t _ae_GLMinorVersion() { return 0; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_ES; }
 #elif _AE_WASM_
 	// Instead of defining values here, the WASM host must provide these function implementations
 	AE_WASM_IMPORT( ae ) int32_t _ae_GLMajorVersion();
 	AE_WASM_IMPORT( ae ) int32_t _ae_GLMinorVersion();
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLProfileEnum();
 #else
 	int32_t _ae_GLMajorVersion() { return 4; }
 	int32_t _ae_GLMinorVersion() { return 1; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_Core; }
 #endif
 
 //------------------------------------------------------------------------------
@@ -24869,6 +24965,15 @@ namespace ae {
 
 int32_t GLMajorVersion() { return _ae_GLMajorVersion(); }
 int32_t GLMinorVersion() { return _ae_GLMinorVersion(); }
+const char* GLProfile()
+{
+	switch( _ae_GLProfileEnum() )
+	{
+		case _AE_GLProfile_Core: return "core";
+		case _AE_GLProfile_ES: return "es";
+		default: return "";
+	}
+}
 bool ReverseZ = false;
 
 uint32_t _ae_GetCurrentFramebuffer()
@@ -25180,10 +25285,7 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 	m_vertexShader = m_LoadShader( vertexStr, Type::Vertex, defines, defineCount );
 	m_fragmentShader = m_LoadShader( fragStr, Type::Fragment, defines, defineCount );
 
-	if( !m_vertexShader || !m_fragmentShader )
-	{
-		AE_FAIL();
-	}
+	AE_ASSERT_MSG( m_vertexShader && m_fragmentShader, "Shader compilation failed: v:# f:#", vertexStr, fragStr );
 
 	glAttachShader( m_program, m_vertexShader );
 	glAttachShader( m_program, m_fragmentShader );
@@ -25481,23 +25583,17 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
 	// Version
 	ae::Str32 glVersionStr = "#version ";
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion(), ae::GLMinorVersion() );
-#else
-	glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion(), ae::GLMinorVersion() );
-#endif
-	glVersionStr += "\n";
+	glVersionStr += ae::Str16::Format( "##0 #\n", ae::GLMajorVersion(), ae::GLMinorVersion(), ae::GLProfile() );
 	if( glVersionStr.Length() )
 	{
 		shaderSource.Append( glVersionStr.c_str() );
 	}
 
-	// Precision
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	shaderSource.Append( "precision highp float;\n" );
-#else
-	// No default precision specified
-#endif
+	// GLES requires explicit precision qualifiers in fragment shaders
+	if( _ae_GLProfileEnum() == _AE_GLProfile_ES )
+	{
+		shaderSource.Append( "precision highp float;\n" );
+	}
 
 	// Input/output
 //	#if _AE_EMSCRIPTEN_
@@ -27070,7 +27166,7 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT( !window->graphicsDevice );
 	window->graphicsDevice = this;
 
-#if !_AE_EMSCRIPTEN_
+#if !_AE_EMSCRIPTEN_ && !_AE_IOS_
 	AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
 #endif
 

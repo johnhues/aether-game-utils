@@ -1,0 +1,210 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"extensions": {
+		"recommendations": [
+			"llvm-vs-code-extensions.lldb-dap",
+			"ms-vscode.cmake-tools",
+			"ms-vscode.cpptools"
+		]
+	},
+	"settings": {
+		"clangd.arguments": [
+			// @TODO: Should have a consistent path for all build types, maybe symlinked
+			"--compile-commands-dir=${workspaceFolder}/build_vscode",
+		],
+		"cmake.buildDirectory": "${workspaceFolder}/build_vscode",
+		"cmake.copyCompileCommands": "${workspaceFolder}/build_vscode/compile_commands.json",
+		"cmake.configureArgs": [
+			"-DAE_LEAN_AND_MEAN=OFF",
+			"-DAE_WERROR=ON",
+			"-DAE_LOADERS_OFBX=ON",
+			"-DAE_DEPRECATED=ON",
+			// "-DCMAKE_CXX_COMPILER=g++",
+			// "-DCMAKE_C_COMPILER=gcc"
+		],
+		"cmake.environment": {
+			"LD_DEBUG": "help"
+		},
+		"C_Cpp.intelliSenseEngine": "disabled",
+		"explorer.excludeGitIgnore": true,
+		"files.associations": {
+			"**/aether.h": "objective-cpp"
+		}
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "Emscripten: Start Web Server",
+				"type": "shell",
+				"command": "python3 -m http.server 58000 --directory build_em",
+				"isBackground": true,
+				"problemMatcher": {
+					"pattern": {
+						"regexp": ".",
+						"file": 1,
+						"location": 2,
+						"message": 3
+					},
+					"background": {
+						"activeOnStart": true,
+						"beginsPattern": ".",
+						"endsPattern": "Serving HTTP on .* port ([0-9]+)"
+					}
+				},
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				"label": "Emscripten: Configure",
+				"type": "shell",
+				"command": "emcmake cmake -S . -B build_em -G \"Ninja Multi-Config\" -DCMAKE_BUILD_TYPE=${command:cmake.buildType}",
+				"problemMatcher": ["$gcc"],
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				"label": "Emscripten: Build All",
+				"type": "shell",
+				"command": "cd build_em && ninja -f build-${command:cmake.buildType}.ninja all",
+				"dependsOn": "Emscripten: Configure",
+				"problemMatcher": ["$gcc"],
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				"label": "Emscripten: Build Examples",
+				"type": "shell",
+				"command": "cd build_em && ninja -f build-${command:cmake.buildType}.ninja examples/all",
+				"dependsOn": "Emscripten: Configure",
+				"problemMatcher": ["$gcc"],
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				"label": "Emscripten: Build Test",
+				"type": "shell",
+				"command": "cd build_em && ninja -f build-${command:cmake.buildType}.ninja test",
+				"dependsOn": "Emscripten: Configure",
+				"problemMatcher": ["$gcc"],
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				"label": "Emscripten: Clean",
+				"type": "shell",
+				"command": "cmake --build build_em --target clean",
+				"problemMatcher": ["$gcc"],
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				"label": "Triangle macOS: Build",
+				"type": "shell",
+				"command": "cmake",
+				"args": [
+					"--build",
+					"${workspaceFolder}/build_vscode",
+					"--config",
+					"${command:cmake.buildType}",
+					"--target",
+					"06_triangle"
+				],
+				"options": { "cwd": "${workspaceFolder}" },
+				"problemMatcher": [ "$gcc" ],
+				"group": {
+					"kind": "build",
+					"isDefault": true
+				},
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				"label": "Triangle iOS: Configure",
+				"type": "shell",
+				"command": "cmake",
+				"args": [
+					"-B", "${workspaceFolder}/build_ios",
+					"-G", "Xcode",
+					"-DCMAKE_TOOLCHAIN_FILE=${workspaceFolder}/scripts/ios.toolchain.cmake",
+					"-DPLATFORM=OS64",
+					"-DDEPLOYMENT_TARGET=15.0",
+					"-DENABLE_BITCODE=OFF",
+					"-DENABLE_ARC=ON",
+					"-DAE_EXAMPLE_DEVELOPMENT_TEAM="
+				],
+				"options": { "cwd": "${workspaceFolder}" },
+				"problemMatcher": [],
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				"label": "Triangle iOS: Build",
+				"type": "shell",
+				"command": "cmake",
+				"args": [
+					"--build", "${workspaceFolder}/build_ios",
+					"--config", "Debug",
+					"--target", "06_triangle",
+					"--",
+					"-allowProvisioningUpdates",
+					"-destination", "generic/platform=iOS"
+				],
+				"dependsOn": "Triangle iOS: Configure",
+				"options": { "cwd": "${workspaceFolder}" },
+				"problemMatcher": [ "$gcc" ],
+				"group": "build",
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				// Installs the signed .app on the connected device without
+				// launching it. Used as preLaunchTask before the lldb-dap
+				// attach config so the device has the freshly built bits.
+				"label": "Triangle iOS: Install",
+				"type": "shell",
+				"command": "${workspaceFolder}/scripts/ios-install.sh",
+				"args": [
+					"${workspaceFolder}/build_ios/examples/Debug-iphoneos/Triangle.app",
+					"io.aether.triangle"
+				],
+				"dependsOn": "Triangle iOS: Build",
+				"options": { "cwd": "${workspaceFolder}" },
+				"problemMatcher": [],
+				"presentation": { "reveal": "always" }
+			}
+		]
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Emscripten: Run Test",
+				"type": "node",
+				"request": "launch",
+				"program": "${workspaceFolder}/build_em/test/${command:cmake.buildType}/test.js",
+				"cwd": "${workspaceFolder}/build_em",
+				"preLaunchTask": "Emscripten: Build Test"
+			},
+			{
+				// VS Code extension required: llvm-vs-code-extensions.lldb-dap
+				// Uses Apple's lldb-dap from Xcode, which has the `device`
+				// command for modern iOS.
+				//
+				// Steps to use:
+				//   1. Run this launch config in VS Code (F5 or Run menu).
+				//   2. The "Triangle iOS: Install" preLaunchTask installs.
+				//   3. lldb-dap prints "Waiting for Triangle to launch".
+				//   4. Tap Triangle on the iPhone home screen.
+				//   5. Breakpoints in 06_Triangle.mm fire.
+				"name": "Triangle iOS: Debug on iPhone",
+				"type": "lldb-dap",
+				"request": "attach",
+				"debugAdapterExecutable": "/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-dap",
+				"program": "${workspaceFolder}/build_ios/examples/Debug-iphoneos/Triangle.app/Triangle",
+				"initCommands": [
+					"device select abcd1234"
+				],
+				"attachCommands": [
+					"device process attach --name Triangle"
+				],
+				"preLaunchTask": "Triangle iOS: Install"
+			}
+		]
+	}
+}

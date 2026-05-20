@@ -1,6 +1,6 @@
 #!/bin/bash
 set -xeuo pipefail
-cd "$(cd "$(dirname "$0")" && pwd)"
+cd "$(cd "$(dirname "$0")" && pwd)/.." # Up from scripts/ to repo root
 docker info # Verify Docker is running
 
 # Note that AE_LEAN_AND_MEAN is not enabled here for local iteration speed. The

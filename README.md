@@ -16,7 +16,7 @@
 * Providing utilities that naturally conform to game development best practices
 * Not overstepping or emposing a particular game engine architecture
 
-Modules and utilities include:
+# Documentation
 * [Allocation](docs/Allocation.md)
 * [C++ reflection](docs/Meta.md)
 * [Data structures](docs/DataStructures.md)
@@ -255,13 +255,9 @@ emrun index.html
 All utilities are currently supported on Linux except for windowing and graphics. Full windowing and graphics support is planned.
 
 # Games using aether game utils
-[Bella Lunaux: The Case of the Diamond Panther Tiara](https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html)
+[Bella Lunaux: The Case of the Diamond Panther Tiara](https://johnhues.itch.io/bella-lunaux-tiara)
 
-<a href="https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
-
-[Play in Browser](https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html)
-
-[See on Itch.io](https://johnhues.itch.io/bella-lunaux-tiara)
+<a href="https://johnhues.itch.io/bella-lunaux-tiara"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
 
 # Dependencies
 * [Catch2](https://github.com/catchorg/Catch2) (Test framework)

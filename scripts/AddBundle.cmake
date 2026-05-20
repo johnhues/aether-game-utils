@@ -173,7 +173,6 @@ function(ae_add_bundle BUNDLE_NAME)
 			XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleDisplayName "${AEAB_BUNDLE_NAME}"
 			XCODE_ATTRIBUTE_INFOPLIST_KEY_LSApplicationCategoryType "public.app-category.games"
 			# XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleIconFile "${AEAB_ICON_FILE}"
-			XCODE_ATTRIBUTE_INFOPLIST_KEY_NSPrincipalClass "NSApplication"
 			# XCODE_ATTRIBUTE_INFOPLIST_KEY_NSHumanReadable @TODO
 
 			XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${AEAB_APPLE_DEVELOPMENT_TEAM}"
@@ -182,7 +181,6 @@ function(ae_add_bundle BUNDLE_NAME)
 			XCODE_ATTRIBUTE_INSTALL_PATH "${AEAB_APPLE_INSTALL_PATH}" # See Professional CMake 24.7. Creating And Exporting Archives
 			XCODE_ATTRIBUTE_SKIP_INSTALL "${AEAB_APPLE_SKIP_INSTALL}" # See Professional CMake 24.7. Creating And Exporting Archives
 
-			XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
 			XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH NO
 
 			# All builds
@@ -191,11 +189,36 @@ function(ae_add_bundle BUNDLE_NAME)
 			MACOSX_BUNDLE_ICON_FILE "${AEAB_ICON_FILE}" # CFBundleIconFile (*.icns file path)
 
 			OUTPUT_NAME "${AEAB_BUNDLE_NAME}"
-
-			MACOSX_RPATH TRUE
-			BUILD_RPATH @executable_path/../Frameworks
-			INSTALL_RPATH @executable_path/../Frameworks
 		)
+
+		if(IOS)
+			set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
+				XCODE_ATTRIBUTE_INFOPLIST_KEY_NSPrincipalClass "UIApplication"
+				XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME NO
+				XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+				XCODE_ATTRIBUTE_CODE_SIGN_STYLE "Automatic"
+				XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "YES"
+				XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "YES"
+				XCODE_ATTRIBUTE_INFOPLIST_KEY_UILaunchScreen_Generation YES
+				XCODE_ATTRIBUTE_INFOPLIST_KEY_UISupportedInterfaceOrientations
+					"UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
+				XCODE_ATTRIBUTE_INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad
+					"UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
+				XCODE_ATTRIBUTE_INFOPLIST_KEY_ITSAppUsesNonExemptEncryption NO
+			)
+			target_link_libraries(${AEAB_TARGET_NAME} PRIVATE
+				"-framework UIKit" "-framework Foundation" "-framework QuartzCore"
+				"-framework GameController" "-framework AudioToolbox" "-framework AVFoundation"
+			)
+		else()
+			set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
+				XCODE_ATTRIBUTE_INFOPLIST_KEY_NSPrincipalClass "NSApplication"
+				XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
+				MACOSX_RPATH TRUE
+				BUILD_RPATH @executable_path/../Frameworks
+				INSTALL_RPATH @executable_path/../Frameworks
+			)
+		endif()
 
 		if(AEAB_PACKAGE_LIBS)
 			set_target_properties(${AEAB_TARGET_NAME} PROPERTIES XCODE_EMBED_FRAMEWORKS "${AEAB_PACKAGE_LIBS}") # 24.10. Embedding Frameworks, Plugins And Extensions
