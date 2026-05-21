@@ -3417,9 +3417,10 @@ ae::Array< ae::Screen, 16 > GetScreens();
 
 //------------------------------------------------------------------------------
 // ae::Window class
+// @TODO: WindowUnits enum: virtual dpi (OS desktop), Content (actual pixels)
 //! Window size is specified in virtual DPI units. Actual window content width and height are subject to the
 //! displays scale factor. Passing a width and height of 1280x720 on a display with a scale factor of 2 will result
-//! in a virtual window size of 1280x720 and a backbuffer size of 2560x1440. The windows scale factor can be
+//! in a virtual window size of 1280x720 and a back buffer size of 2560x1440. The windows scale factor can be
 //! checked with ae::Window::GetScaleFactor().
 //------------------------------------------------------------------------------
 class Window
@@ -3449,11 +3450,18 @@ public:
 	bool GetMaximized() const { return m_maximized; }
 	//! True if the user is currently working with this window
 	bool GetFocused() const { return m_focused; }
+	//! Top left window position in virtual DPI units @TODO: Content or window width in dpi units?
 	Int2 GetPosition() const { return m_pos; }
-	//! Virtual window width (unscaled by display scale factor)
+	//! Virtual DPI window width @TODO: Content or window width in dpi units?
 	int32_t GetWidth() const;
-	//! Virtual window height (unscaled by display scale factor)
+	//! Virtual DPI window height @TODO: Content or window height in dpi units?
 	int32_t GetHeight() const;
+	//! Get the safe area of the window: the area not obscured by notches,
+	//! rounded corners, or other display cutouts. Coordinates are in
+	//! virtual DPI window space. Note that the windows content area (graphics
+	//! surface) will be larger than any non-trivial safe area, so this is only
+	//! relevant for visual layout purposes on devices.
+	ae::Rect GetSafeArea() const;
 	//! Window content scale factor
 	float GetScaleFactor() const { return m_scaleFactor; }
 
@@ -20273,6 +20281,11 @@ int32_t Window::GetHeight() const
 	return m_height;
 }
 
+ae::Rect Window::GetSafeArea() const
+{
+	return Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( m_width, m_height ) );
+}
+
 void Window::SetTitle( const char* title )
 {
 	if( m_windowTitle != title )
@@ -26792,8 +26805,8 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_CHECK_GL_ERROR();
 
 	// @NOTE: GL_FRAMEBUFFER_SRGB is not completely reliable on every platform (web, wide color
-	// display targets, etc), mostly because of limited control over the backbuffer format.
-	// On web its not possible to specify the backbuffer format, but browsers typically expect SRGB anyway.
+	// display targets, etc), mostly because of limited control over the back buffer format.
+	// On web its not possible to specify the back buffer format, but browsers typically expect SRGB anyway.
 	// On OpenGLES GL_FRAMEBUFFER_SRGB is always enabled.
 	// Because of all of this it's easiest to convert to SRGB manually on non-OpenGLES platforms.
 	const char* vertexStr = R"(
@@ -26888,7 +26901,7 @@ void GraphicsDevice::Activate()
 		{
 			// @NOTE: The window size is the 'real' size of the canvas dom, which
 			// is determined by the web page. This function sets the emscripten
-			// managed backbuffer size.
+			// managed back buffer size.
 			if( m_window->GetLoggingEnabled() ) { AE_INFO( "resize #x#", contentWidth, contentHeight ); }
 			emscripten_set_canvas_element_size( "canvas", contentWidth, contentHeight );
 			m_HandleResize( contentWidth, contentHeight );
@@ -26940,12 +26953,12 @@ void GraphicsDevice::Present()
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	AE_CHECK_GL_ERROR();
 	
-	// @NOTE: Conversion to srgb is only needed for the backbuffer. The rest of the pipeline should be implemented as linear.
+	// @NOTE: Conversion to srgb is only needed for the back buffer. The rest of the pipeline should be implemented as linear.
 #if _AE_IOS_
 	// SRGB conversion is automatic on ios/OpenGLES because GL_FRAMEBUFFER_SRGB is always on
 	m_rgbToSrgb = false;
 #else
-	// Currently all platforms expect the backbuffer contents to be in sRGB space
+	// Currently all platforms expect the back buffer contents to be in sRGB space
 	m_rgbToSrgb = true;
 #endif
 	m_canvas.Render2D( 0, ae::Rect::FromCenterAndSize( ae::Vec2( 0.0f ), ae::Vec2( 2.0f ) ), 0.5f );
