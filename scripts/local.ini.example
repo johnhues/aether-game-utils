@@ -1,0 +1,10 @@
+# Copy to scripts/local.ini and fill in your values.
+# Both scripts/ios-run.sh and scripts/ios_build.py read this file;
+# VS Code F5 and CLI invocations share the same source of truth.
+
+[ios]
+# UDID of your iPhone (run `xcrun devicectl list devices`)
+device = 00000000-0000-0000-0000-000000000000
+
+# Apple Developer Team ID (Xcode > Settings > Accounts > Manage Certificates)
+team = ABCDEFGHIJ

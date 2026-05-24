@@ -1,0 +1,100 @@
+{
+	"version": 3,
+	"cmakeMinimumRequired": {
+		"major": 3,
+		"minor": 21,
+		"patch": 0
+	},
+	"configurePresets": [
+		{
+			"name": "macos",
+			"displayName": "MacOS",
+			"description": "Native desktop build for macOS. Compile commands exported for clangd.",
+			"generator": "Ninja Multi-Config",
+			"binaryDir": "${sourceDir}/build_vscode",
+			"cacheVariables": {
+				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+				"AE_LEAN_AND_MEAN": "OFF",
+				"AE_WERROR": "ON",
+				"AE_LOADERS_OFBX": "ON",
+				"AE_DEPRECATED": "ON"
+			},
+			"condition": {
+				"type": "equals",
+				"lhs": "${hostSystemName}",
+				"rhs": "Darwin"
+			}
+		},
+		{
+			"name": "ios",
+			"displayName": "iOS",
+			"description": "iOS device build using ios-cmake toolchain. Per-developer values (team ID, device UDID) live in scripts/local.ini (gitignored, copy from scripts/local.ini.example). scripts/ios_build.py injects DEVELOPMENT_TEAM at build time; Xcode handles provisioning via -allowProvisioningUpdates.",
+			"generator": "Xcode",
+			"binaryDir": "${sourceDir}/build_ios",
+			"toolchainFile": "${sourceDir}/scripts/ios.toolchain.cmake",
+			"cacheVariables": {
+				"DISABLED__PLATFORM": "OS64",
+				"DISABLED__DEPLOYMENT_TARGET": "15.0",
+				"DISABLED__ENABLE_BITCODE": "OFF",
+				"DISABLED__ENABLE_ARC": "ON",
+				"AE_LEAN_AND_MEAN": "OFF",
+				"AE_LOADERS_OFBX": "ON"
+			},
+			"condition": {
+				"type": "equals",
+				"lhs": "${hostSystemName}",
+				"rhs": "Darwin"
+			}
+		},
+		{
+			"name": "emscripten",
+			"displayName": "Emscripten",
+			"description": "Web build via Emscripten. Requires EMSDK env var in the shell (typically sourced from emsdk_env.sh in your .zprofile/.zshrc).",
+			"generator": "Ninja Multi-Config",
+			"binaryDir": "${sourceDir}/build_em",
+			"toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+			"cacheVariables": {
+				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+				"AE_LEAN_AND_MEAN": "OFF"
+			}
+		}
+	],
+	"buildPresets": [
+		{
+			"name": "macos-debug",
+			"displayName": "Debug",
+			"configurePreset": "macos",
+			"configuration": "Debug"
+		},
+		{
+			"name": "ios-debug",
+			"displayName": "Debug",
+			"configurePreset": "ios",
+			"configuration": "Debug"
+		},
+		{
+			"name": "emscripten-debug",
+			"displayName": "Debug",
+			"configurePreset": "emscripten",
+			"configuration": "Debug"
+		},
+		{
+			"name": "macos-relwithdebinfo",
+			"displayName": "RelWithDebInfo",
+			"configurePreset": "macos",
+			"configuration": "RelWithDebInfo"
+		},
+		{
+			"name": "ios-relwithdebinfo",
+			"displayName": "RelWithDebInfo",
+			"configurePreset": "ios",
+			"configuration": "RelWithDebInfo"
+		},
+		{
+			"name": "emscripten-relwithdebinfo",
+			"displayName": "RelWithDebInfo",
+			"configurePreset": "emscripten",
+			"configuration": "RelWithDebInfo"
+		}
+	]
+}

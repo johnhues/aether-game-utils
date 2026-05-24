@@ -3492,9 +3492,9 @@ public:
 	void ActivateContext();
 	//! Low-level presentation primitive for custom final compositing. Most
 	//! rendering code should use GraphicsDevice::Present() instead.
-	void BindBackbuffer();
+	void BindBackBuffer();
 	//! Low-level platform swap/flush. GraphicsDevice::Present() calls this after
-	//! compositing its canvas to the window backbuffer.
+	//! compositing its canvas to the window back buffer.
 	void Present();
 	//! Drawable pixel size for low-level presentation code. This differs from
 	//! GetWidth() on scaled displays.
@@ -3527,7 +3527,7 @@ public:
 	void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
 	void m_UpdateFullScreen( bool fullScreen ) { m_fullScreen = fullScreen; }
 	void m_UpdateFocused( bool focused );
-	void m_UpdateBackbuffer();
+	void m_UpdateBackBuffer();
 	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
 	ae::Int2 m_nativeToAe( ae::Int2 pos, ae::Int2 size );
 	bool m_fixCanvasStyle = false;
@@ -3539,7 +3539,7 @@ public:
 	void* m_context = nullptr;
 #endif
 	uint32_t m_defaultFramebuffer = 0;
-	class RenderTarget* m_backbuffer = nullptr;
+	class RenderTarget* m_backBuffer = nullptr;
 	class Input* input = nullptr;
 };
 
@@ -20459,16 +20459,16 @@ void Window::m_Initialize( bool rememberPosition )
 #endif
 #if AE_ENABLE_OPENGL
 	m_defaultFramebuffer = _ae_GetCurrentFramebuffer();
-	m_UpdateBackbuffer();
+	m_UpdateBackBuffer();
 #endif
 }
 
 void Window::Terminate()
 {
-	if( m_backbuffer )
+	if( m_backBuffer )
 	{
-		ae::Delete( m_backbuffer );
-		m_backbuffer = nullptr;
+		ae::Delete( m_backBuffer );
+		m_backBuffer = nullptr;
 	}
 }
 
@@ -20505,13 +20505,13 @@ void Window::ActivateContext()
 #endif
 }
 
-void Window::BindBackbuffer()
+void Window::BindBackBuffer()
 {
 	ActivateContext();
 #if AE_ENABLE_OPENGL
-	m_UpdateBackbuffer();
-	AE_ASSERT( m_backbuffer );
-	m_backbuffer->Activate();
+	m_UpdateBackBuffer();
+	AE_ASSERT( m_backBuffer );
+	m_backBuffer->Activate();
 #endif
 }
 
@@ -20540,14 +20540,14 @@ void Window::Present()
 #endif
 }
 
-void Window::m_UpdateBackbuffer()
+void Window::m_UpdateBackBuffer()
 {
 #if AE_ENABLE_OPENGL
-	if( !m_backbuffer )
+	if( !m_backBuffer )
 	{
-		m_backbuffer = ae::New< RenderTarget >( AE_ALLOC_TAG_RENDER );
+		m_backBuffer = ae::New< RenderTarget >( AE_ALLOC_TAG_RENDER );
 	}
-	m_backbuffer->m_Initialize( GetDrawWidth(), GetDrawHeight(), m_defaultFramebuffer );
+	m_backBuffer->m_Initialize( GetDrawWidth(), GetDrawHeight(), m_defaultFramebuffer );
 #endif
 }
 
@@ -20573,7 +20573,13 @@ uint32_t Window::GetDrawHeight() const
 
 ae::Rect Window::GetSafeArea() const
 {
-	return Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( m_width, m_height ) );
+#if _AE_EMSCRIPTEN_
+	EM_ASM( {
+		console.log( window.innerWidth, window.innerHeight );
+		console.log( window.visualViewport );
+	} );
+#endif
+	return ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( m_width, m_height ) );
 }
 
 void Window::SetTitle( const char* title )
@@ -27414,7 +27420,7 @@ void GraphicsDevice::Present()
 
 	AE_ASSERT( m_context );
 	AE_CHECK_GL_ERROR();
-	m_window->BindBackbuffer();
+	m_window->BindBackBuffer();
 
 	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
 	glClearDepth( 1.0f );

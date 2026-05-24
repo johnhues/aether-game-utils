@@ -7,7 +7,7 @@ message("")
 message("aether-game-utils examples")
 message("")
 
-if(AE_DESKTOP)
+if(AE_DESKTOP) # AE_DESKTOP START
 
 # imgui
 add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue where std string.h is included inside another namespace causing a conflict
@@ -49,10 +49,10 @@ if(NOT rapidjson_FOUND)
 	target_include_directories(rapidjson INTERFACE "${rapidjson_SOURCE_DIR}/include")
 endif()
 
-endif() # AE_DESKTOP
+endif() # AE_DESKTOP END
 
 # Config
-set(AE_EXAMPLE_DEVELOPMENT_TEAM "" CACHE STRING "Apple Development Team ID for aether examples")
+set(AE_APPLE_DEVELOPMENT_TEAM "" CACHE STRING "Apple Development Team ID for aether examples")
 set(AE_EXAMPLE_SOURCES Common.h)
 if(EMSCRIPTEN)
 	add_compile_definitions(DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data")
@@ -69,7 +69,7 @@ message("")
 ae_add_bundle("Example"
 	TARGET_NAME "01_example"
 	BUNDLE_ID "io.aether.example"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "01_Example.cpp"
@@ -81,7 +81,7 @@ ae_add_bundle("Example"
 ae_add_bundle("Sprites"
 	TARGET_NAME "02_sprites"
 	BUNDLE_ID "io.aether.sprites"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "02_Sprites.cpp"
@@ -93,7 +93,7 @@ ae_add_bundle("Sprites"
 ae_add_bundle("Client"
 	TARGET_NAME "03_client"
 	BUNDLE_ID "io.aether.client"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "03_Client.cpp"
@@ -104,7 +104,7 @@ if(AE_DESKTOP)
 	ae_add_bundle("Server"
 		TARGET_NAME "03_server"
 		BUNDLE_ID "io.aether.server"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
 		ICNS_FILE "data/Icon.icns"
 		SRC_FILES "03_Server.cpp"
@@ -117,7 +117,7 @@ endif()
 ae_add_bundle("NetObject Client"
 	TARGET_NAME "04_net_object_client"
 	BUNDLE_ID "io.aether.net_object_client"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "04_NetObjectClient.cpp;04_NetObjectCommon.h"
@@ -128,7 +128,7 @@ if(AE_DESKTOP)
 	ae_add_bundle("NetObject Server"
 		TARGET_NAME "04_net_object_server"
 		BUNDLE_ID "io.aether.net_object_server"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
 		ICNS_FILE "data/Icon.icns"
 		SRC_FILES "04_NetObjectServer.cpp;04_NetObjectCommon.h"
@@ -141,7 +141,7 @@ endif()
 ae_add_bundle("Text"
 	TARGET_NAME "05_text"
 	BUNDLE_ID "io.aether.text"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "05_Text.cpp"
@@ -153,7 +153,7 @@ ae_add_bundle("Text"
 ae_add_bundle("Triangle"
 	TARGET_NAME "06_triangle"
 	BUNDLE_ID "io.aether.triangle"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "06_Triangle.mm"
@@ -165,7 +165,7 @@ ae_add_bundle("Triangle"
 ae_add_bundle("Cube"
 	TARGET_NAME "07_cube"
 	BUNDLE_ID "io.aether.cube"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "07_Cube.cpp"
@@ -177,7 +177,7 @@ ae_add_bundle("Cube"
 ae_add_bundle("Audio"
 	TARGET_NAME "08_audio"
 	BUNDLE_ID "io.aether.audio"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "08_Audio.cpp"
@@ -189,7 +189,7 @@ ae_add_bundle("Audio"
 ae_add_bundle("Platformer2D"
 	TARGET_NAME "09_platformer2d"
 	BUNDLE_ID "io.aether.platformer2d"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "09_Platformer2D.cpp"
@@ -201,7 +201,7 @@ ae_add_bundle("Platformer2D"
 ae_add_bundle("Splines"
 	TARGET_NAME "10_splines"
 	BUNDLE_ID "io.aether.splines"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "10_Splines.cpp"
@@ -211,23 +211,23 @@ ae_add_bundle("Splines"
 
 # Terrain
 if(AE_DESKTOP)
-ae_add_bundle("Terrain"
-	TARGET_NAME "11_terrain"
-	BUNDLE_ID "io.aether.terrain"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
-	MAJOR_MINOR_PATCH_VERSION "0.0.0"
-	ICNS_FILE "data/Icon.icns"
-	SRC_FILES "11_Terrain.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
-	RESOURCES "${AE_EXAMPLE_RESOURCES};data/font.tga"
-	LIBS "ae;ae_extras;imgui;imguizmo"
-)
+	ae_add_bundle("Terrain"
+		TARGET_NAME "11_terrain"
+		BUNDLE_ID "io.aether.terrain"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+		MAJOR_MINOR_PATCH_VERSION "0.0.0"
+		ICNS_FILE "data/Icon.icns"
+		SRC_FILES "11_Terrain.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
+		RESOURCES "${AE_EXAMPLE_RESOURCES};data/font.tga"
+		LIBS "ae;ae_extras;imgui;imguizmo"
+	)
 endif()
 
 # Geometry
 ae_add_bundle("Geometry"
 	TARGET_NAME "12_geometry"
 	BUNDLE_ID "io.aether.geometry"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "12_Geometry.cpp"
@@ -235,12 +235,12 @@ ae_add_bundle("Geometry"
 	LIBS "ae;ae_extras"
 )
 
+# FileDialogs
 if(AE_DESKTOP)
-	# FileDialogs
 	ae_add_bundle("File Dialogs"
 		TARGET_NAME "13_file_dialogs"
 		BUNDLE_ID "io.aether.file_dialogs"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
 		ICNS_FILE "data/Icon.icns"
 		SRC_FILES "13_FileDialogs.cpp"
@@ -253,7 +253,7 @@ endif()
 ae_add_bundle("OBJViewer"
 	TARGET_NAME "15_obj_viewer"
 	BUNDLE_ID "io.aether.obj_viewer"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "15_OBJViewer.cpp"
@@ -266,7 +266,7 @@ if(AE_LOADERS_OFBX)
 	ae_add_bundle("SkinnedMesh"
 		TARGET_NAME "16_skinned_mesh"
 		BUNDLE_ID "io.aether.skinned_mesh"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
 		ICNS_FILE "data/Icon.icns"
 		SRC_FILES "16_SkinnedMesh.cpp"
@@ -274,12 +274,12 @@ if(AE_LOADERS_OFBX)
 		LIBS "ae;ae_loaders"
 	)
 
+	# IK
 	if(AE_DESKTOP)
-		# IK
 		ae_add_bundle("IK"
 			TARGET_NAME "17_ik"
 			BUNDLE_ID "io.aether.ik"
-			APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+			APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 			MAJOR_MINOR_PATCH_VERSION "0.0.0"
 			ICNS_FILE "data/Icon.icns"
 			SRC_FILES "17_IK.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
@@ -289,12 +289,12 @@ if(AE_LOADERS_OFBX)
 	endif()
 endif()
 
+# Small Engine
 if(AE_DEPRECATED AND AE_DESKTOP)
-	# Small Engine
 	ae_add_bundle("Small Engine"
 		TARGET_NAME "18_SmallEngine"
 		BUNDLE_ID "io.aether.SmallEngine"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
 		ICNS_FILE "data/Icon.icns"
 		SRC_FILES "18_SmallEngine.h;18_SmallEngine.cpp;18_Game.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/MeshEditorPlugin.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
@@ -307,7 +307,7 @@ endif()
 ae_add_bundle("Mouse"
 	TARGET_NAME "19_mouse"
 	BUNDLE_ID "io.aether.mouse"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "19_Mouse.cpp"
@@ -319,7 +319,7 @@ ae_add_bundle("Mouse"
 ae_add_bundle("Render Target"
 	TARGET_NAME "20_render_target"
 	BUNDLE_ID "io.aether.render_target"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "20_RenderTarget.cpp"
@@ -331,7 +331,7 @@ ae_add_bundle("Render Target"
 ae_add_bundle("Instancing"
 	TARGET_NAME "21_instancing"
 	BUNDLE_ID "io.aether.instancing"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "21_Instancing.cpp"
@@ -343,7 +343,7 @@ ae_add_bundle("Instancing"
 ae_add_bundle("Read Me"
 	TARGET_NAME "22_read_me"
 	BUNDLE_ID "io.aether.read_me"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "22_ReadMe.cpp"
@@ -361,62 +361,63 @@ elseif(UNIX)
 	target_link_libraries("22_read_me" PUBLIC GL)
 endif()
 
-if(AE_DESKTOP)
-	# Frameworks
-	ae_add_shared_library(
-		NAME "23_Framework"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
-		MAJOR_MINOR_PATCH_VERSION "0.0.0"
-		SRC_FILES "23_SharedLibrary.cpp"
-		LIBS "ae"
-	)
-	ae_add_bundle("Shared Library"
-		TARGET_NAME "23_shared_library"
-		BUNDLE_ID "io.aether.shared_library"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
-		MAJOR_MINOR_PATCH_VERSION "0.0.0"
-		ICNS_FILE "data/Icon.icns"
-		SRC_FILES "23_Loader.cpp"
-		RESOURCES "${AE_EXAMPLE_RESOURCES}"
-		PACKAGE_LIBS "23_Framework"
-	)
+if(AE_DESKTOP) # AE_DESKTOP START
 
-	# Hot Load
-	add_library(HotLoadable SHARED "24_HotLoadable.cpp;24_HotLoad.h")
-	target_compile_options(HotLoadable PUBLIC "-fvisibility=hidden") # See AE_EXPORT for more info
-	set_target_properties(HotLoadable PROPERTIES PREFIX "")
-	target_link_libraries(HotLoadable PUBLIC ae_shared) # Use shared library version of aether so symbols aren't duplicated
-	ae_add_bundle("Hot Load"
-		TARGET_NAME "24_hot_load"
-		BUNDLE_ID "io.aether.hot_load"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
-		MAJOR_MINOR_PATCH_VERSION "0.0.0"
-		ICNS_FILE "data/Icon.icns"
-		SRC_FILES "24_HotLoad.cpp;24_HotLoad.h"
-		RESOURCES "${AE_EXAMPLE_RESOURCES}"
-		PACKAGE_LIBS "ae_shared" # Use shared library version of aether so symbols aren't duplicated in HotLoadable library
-	)
-	add_dependencies(24_hot_load HotLoadable) # Make sure HotLoadable is built
-	if(APPLE)
-		set_target_properties(HotLoadable PROPERTIES
-			# Output built HotLoadable library into app bundle
-			XCODE_ATTRIBUTE_SKIP_INSTALL "NO"
-			XCODE_ATTRIBUTE_INSTALL_PATH "Applications/Hot Load.app/Contents/Resources/data"
-			ARCHIVE_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
-			LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
-			RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
-		)
-	else()
-		# @TODO
-	endif()
+# Frameworks
+ae_add_shared_library(
+	NAME "23_Framework"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	SRC_FILES "23_SharedLibrary.cpp"
+	LIBS "ae"
+)
+ae_add_bundle("Shared Library"
+	TARGET_NAME "23_shared_library"
+	BUNDLE_ID "io.aether.shared_library"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "23_Loader.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES}"
+	PACKAGE_LIBS "23_Framework"
+)
 
+# Hot Load
+add_library(HotLoadable SHARED "24_HotLoadable.cpp;24_HotLoad.h")
+target_compile_options(HotLoadable PUBLIC "-fvisibility=hidden") # See AE_EXPORT for more info
+set_target_properties(HotLoadable PROPERTIES PREFIX "")
+target_link_libraries(HotLoadable PUBLIC ae_shared) # Use shared library version of aether so symbols aren't duplicated
+ae_add_bundle("Hot Load"
+	TARGET_NAME "24_hot_load"
+	BUNDLE_ID "io.aether.hot_load"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "24_HotLoad.cpp;24_HotLoad.h"
+	RESOURCES "${AE_EXAMPLE_RESOURCES}"
+	PACKAGE_LIBS "ae_shared" # Use shared library version of aether so symbols aren't duplicated in HotLoadable library
+)
+add_dependencies(24_hot_load HotLoadable) # Make sure HotLoadable is built
+if(APPLE)
+	set_target_properties(HotLoadable PROPERTIES
+		# Output built HotLoadable library into app bundle
+		XCODE_ATTRIBUTE_SKIP_INSTALL "NO"
+		XCODE_ATTRIBUTE_INSTALL_PATH "Applications/Hot Load.app/Contents/Resources/data"
+		ARCHIVE_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+		LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+		RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+	)
+else()
+	# @TODO
 endif()
+
+endif() # AE_DESKTOP END
 
 # A Star
 ae_add_bundle("A Star"
 	TARGET_NAME "25_a_star"
 	BUNDLE_ID "io.aether.a_star"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "25_AStar.cpp"
@@ -428,7 +429,7 @@ ae_add_bundle("A Star"
 ae_add_bundle("Gamepad"
 	TARGET_NAME "26_gamepad"
 	BUNDLE_ID "io.aether.gamepad"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "26_Gamepad.cpp"
@@ -440,10 +441,65 @@ ae_add_bundle("Gamepad"
 ae_add_bundle("SDF to Mesh"
 	TARGET_NAME "27_sdf_to_mesh"
 	BUNDLE_ID "io.aether.sdf_to_mesh"
-	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "27_SDFToMesh.cpp"
 	RESOURCES "${AE_EXAMPLE_RESOURCES}"
 	LIBS "ae"
 )
+
+if(EMSCRIPTEN)
+	ae_add_bundle("WebGPU Async"
+		TARGET_NAME "28_webgpu_async"
+		BUNDLE_ID "io.aether.webgpu_async"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+		MAJOR_MINOR_PATCH_VERSION "0.0.0"
+		ICNS_FILE "data/Icon.icns"
+		SRC_FILES "28_WebGPUAsync.cpp"
+		RESOURCES "${AE_EXAMPLE_RESOURCES}"
+		LIBS "ae"
+	)
+	target_compile_options("28_webgpu_async" PRIVATE "--use-port=emdawnwebgpu")
+	target_link_options("28_webgpu_async" PRIVATE "--use-port=emdawnwebgpu")
+endif()
+
+if(IOS OR EMSCRIPTEN)
+	if(IOS)
+		FetchContent_Declare(
+			wgpu_native_ios_dl
+			URL "https://github.com/gfx-rs/wgpu-native/releases/download/v29.0.0.0/wgpu-ios-aarch64-release.zip"
+			URL_HASH SHA256=aad4ea7c293dc3215e2fa16492599fc579455ae04665210816c23f84474e03f1
+		)
+		FetchContent_MakeAvailable(wgpu_native_ios_dl)
+		add_library(wgpu_native_ios STATIC IMPORTED GLOBAL)
+		set_target_properties(wgpu_native_ios PROPERTIES
+			IMPORTED_LOCATION "${wgpu_native_ios_dl_SOURCE_DIR}/lib/libwgpu_native.a"
+			INTERFACE_INCLUDE_DIRECTORIES "${wgpu_native_ios_dl_SOURCE_DIR}/include"
+		)
+		# wgpu-native (Metal backend) link surface on iOS.
+		target_link_libraries(wgpu_native_ios INTERFACE
+			"-framework Metal" "-framework MetalKit"
+			"-framework IOSurface" "-framework CoreGraphics"
+			"-framework QuartzCore" "-framework Foundation"
+		)
+	endif()
+
+	ae_add_bundle("WebGPU Triangle"
+		TARGET_NAME "29_webgpu_triangle"
+		BUNDLE_ID "io.johnhues.aether.webgputriangle"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+		MAJOR_MINOR_PATCH_VERSION "0.0.0"
+		ICNS_FILE "data/Icon.icns"
+		SRC_FILES "29_WebGPUTriangle.mm"
+		RESOURCES "${AE_EXAMPLE_RESOURCES}"
+		LIBS "ae"
+	)
+	if(IOS)
+		target_link_libraries("29_webgpu_triangle" PRIVATE wgpu_native_ios)
+	endif()
+	if(EMSCRIPTEN)
+		target_compile_options("29_webgpu_triangle" PRIVATE "--use-port=emdawnwebgpu")
+		target_link_options("29_webgpu_triangle" PRIVATE "--use-port=emdawnwebgpu")
+	endif()
+endif()

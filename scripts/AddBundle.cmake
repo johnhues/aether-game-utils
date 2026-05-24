@@ -154,7 +154,11 @@ function(ae_add_bundle BUNDLE_NAME)
 		endforeach()
 
 		if ("${CMAKE_GENERATOR}" STREQUAL "Xcode")
-			if (AEAB_APPLE_DEVELOPMENT_TEAM)
+			# iOS always needs a CODE_SIGN_IDENTITY so xcodebuild actually
+			# signs the binary, even when DEVELOPMENT_TEAM is supplied only
+			# at build time. macOS keeps the conditional so unsigned dev
+			# builds remain possible there.
+			if (AEAB_APPLE_DEVELOPMENT_TEAM OR IOS)
 				set(AEAB_APPLE_CODE_SIGN_IDENTITY "Apple Development") # See Professional CMake 24.6.1. Signing Identity And Development Team
 			endif()
 			set(AEAB_APPLE_INSTALL_PATH "$(LOCAL_APPS_DIR)") # See Professional CMake 24.7. Creating And Exporting Archives

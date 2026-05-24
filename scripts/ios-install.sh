@@ -11,7 +11,7 @@ BUNDLE_ID="${2:-}"
 
 DEV_ID="$( xcrun devicectl list devices \
     --hide-headers --columns Identifier Name --hide-default-columns \
-    --filter "State != 'unavailable' && Name BEGINSWITH 'iPhone'" 2>/dev/null \
+    --filter "State != 'unavailable'" 2>/dev/null \
     | head -1 \
     | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}' \
     | head -1 )"
