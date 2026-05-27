@@ -9,7 +9,7 @@
 # Device UUID resolution order:
 #   1. --device <UUID> flag
 #   2. $AE_IOS_DEVICE env var
-#   3. scripts/local.ini [ios] device (see scripts/local.ini.example)
+#   3. scripts/config.env IOS_DEVICE (see scripts/config.env.example)
 #   4. Auto-detect the first connected non-unavailable device
 #
 # Reads CFBundleIdentifier from the bundle's Info.plist. Installs, then launches
@@ -55,13 +55,11 @@ APP_PATH="$( "$SCRIPT_DIR/ios-resolve-exe.sh" "$APP_PATH" app )"
 EXE_NAME="$( "$SCRIPT_DIR/ios-resolve-exe.sh" "$APP_PATH" name )"
 BUNDLE_ID="$( plutil -extract CFBundleIdentifier raw -o - "$APP_PATH/Info.plist" )"
 
-INI_FILE="$SCRIPT_DIR/local.ini"
-INI_DEVICE=""
-if [[ -f "$INI_FILE" ]]; then
-    INI_DEVICE="$( awk -F '[[:space:]]*=[[:space:]]*' '
-        /^\[/ { section = $0 }
-        section == "[ios]" && /^[[:space:]]*device[[:space:]]*=/ { print $2; exit }
-    ' "$INI_FILE" )"
+CONFIG_FILE="$SCRIPT_DIR/config.env"
+IOS_DEVICE=""
+if [[ -f "$CONFIG_FILE" ]]; then
+    # shellcheck source=/dev/null
+    . "$CONFIG_FILE"
 fi
 
 if [[ -n "$DEV_ID_OVERRIDE" ]]; then
@@ -70,9 +68,9 @@ if [[ -n "$DEV_ID_OVERRIDE" ]]; then
 elif [[ -n "${AE_IOS_DEVICE:-}" ]]; then
     DEV_ID="$AE_IOS_DEVICE"
     echo "==> Using device from \$AE_IOS_DEVICE: $DEV_ID"
-elif [[ -n "$INI_DEVICE" ]]; then
-    DEV_ID="$INI_DEVICE"
-    echo "==> Using device from $INI_FILE: $DEV_ID"
+elif [[ -n "$IOS_DEVICE" ]]; then
+    DEV_ID="$IOS_DEVICE"
+    echo "==> Using device from $CONFIG_FILE: $DEV_ID"
 else
     DEV_ID="$( xcrun devicectl list devices \
         --hide-headers --columns Identifier Name --hide-default-columns \

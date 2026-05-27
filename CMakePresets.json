@@ -28,7 +28,7 @@
 		{
 			"name": "ios",
 			"displayName": "iOS",
-			"description": "iOS device build using ios-cmake toolchain. Per-developer values (team ID, device UDID) live in scripts/local.ini (gitignored, copy from scripts/local.ini.example). scripts/ios_build.py injects DEVELOPMENT_TEAM at build time; Xcode handles provisioning via -allowProvisioningUpdates.",
+			"description": "iOS device build using ios-cmake toolchain. Per-developer values (team ID, device UDID) live in scripts/config.env (gitignored, copy from scripts/config.env.example). scripts/ios_build.py injects DEVELOPMENT_TEAM at build time; Xcode handles provisioning via -allowProvisioningUpdates.",
 			"generator": "Xcode",
 			"binaryDir": "${sourceDir}/build_ios",
 			"toolchainFile": "${sourceDir}/scripts/ios.toolchain.cmake",

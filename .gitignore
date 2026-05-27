@@ -44,5 +44,5 @@ deps/dawn
 .vscode/settings.json
 .cache
 
-# Per-developer iOS overrides (device UDID, Apple team ID); see scripts/local.ini.example
-scripts/local.ini
+# Per-developer iOS overrides (device UDID, Apple team ID); see scripts/config.env.example
+scripts/config.env
