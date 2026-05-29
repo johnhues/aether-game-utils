@@ -34,6 +34,44 @@ Cpp11BracedListStyle: false
 AllowShortCaseLabelsOnASingleLine: true
 BreakTemplateDeclarations: Leave
 
+---
+Language: ObjC
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+KeepEmptyLinesAtTheStartOfBlocks: false
+UseTab: Always
+AlignAfterOpenBracket: DontAlign
+ColumnLimit: 320
+SpacesInParentheses: true
+SpacesInSquareBrackets: true
+IndentExternBlock: AfterExternBlock
+BreakBeforeBraces: Allman
+AccessModifierOffset: -4
+IndentCaseLabels: true
+NamespaceIndentation: Inner
+SpacesInLineCommentPrefix:
+  Minimum: 0
+  Maximum: -1
+SpacesInAngles: Always
+SpaceAfterTemplateKeyword: false
+SpaceBeforeParens: false
+AlignTrailingComments: false
+PointerAlignment: Left
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortFunctionsOnASingleLine: All
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+BreakConstructorInitializers: AfterColon
+AllowAllConstructorInitializersOnNextLine: true
+AlwaysBreakTemplateDeclarations: true
+AlignEscapedNewlines: DontAlign
+FixNamespaceComments: false
+Cpp11BracedListStyle: false
+AllowShortCaseLabelsOnASingleLine: true
+BreakTemplateDeclarations: Leave
+ObjCSpaceAfterProperty: true
+ObjCSpaceBeforeProtocolList: true
+
 ## DEFAULT LLVM VALUES
 # AccessModifierOffset: -2
 # AlignAfterOpenBracket: Align

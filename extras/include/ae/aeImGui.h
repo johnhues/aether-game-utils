@@ -46,6 +46,7 @@
 #endif
 #if _AE_APPLE_
 	#define GL_SILENCE_DEPRECATION
+	#define GLES_SILENCE_DEPRECATION
 #elif _AE_LINUX_
 	#define GL_GLEXT_PROTOTYPES 1
 #endif
