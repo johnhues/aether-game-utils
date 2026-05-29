@@ -28,15 +28,50 @@
 #import <QuartzCore/CADisplayLink.h>
 #import <UIKit/UIKit.h>
 
-// Copies of main()'s lambdas. The lambdas capture locals by reference; those
-// references remain valid because UIApplicationMain never returns, keeping
-// main()'s frame alive for the lifetime of the process.
-static ae::Function< void(), 64 > s_triangleInit;
-static ae::Function< bool(), 64 > s_triangleUpdate;
-static ae::Function< void(), 64 > s_triangleTerm;
-
 extern "C" void* g_eaglLayer = nullptr; // declared extern in aether.h; defined here
+#endif
 
+//------------------------------------------------------------------------------
+// ae::Application
+//------------------------------------------------------------------------------
+namespace ae {
+
+struct Application
+{
+	ae::Function< void(), 128 > Initialize;
+	ae::Function< bool(), 128 > Update;
+	ae::Function< int32_t(), 128 > Terminate;
+
+	static Application* s_app;
+
+	int32_t Run( int argc, char* argv[] )
+	{
+#if _AE_IOS_
+		s_app = this;
+		@autoreleasepool
+		{
+			return UIApplicationMain( argc, argv, nil, @"AETriangleAppDelegate" );
+		}
+#else
+		(void)argc;
+		(void)argv;
+		Initialize();
+#if _AE_EMSCRIPTEN_
+		emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
+#else
+		while( Update() )
+		{
+		}
+#endif
+		return Terminate();
+#endif
+	}
+};
+Application* Application::s_app = nullptr;
+
+} // namespace ae
+
+#if _AE_IOS_
 @interface AETriangleEAGLView : UIView
 @end
 @implementation AETriangleEAGLView
@@ -93,29 +128,22 @@ extern "C" void* g_eaglLayer = nullptr; // declared extern in aether.h; defined 
 	// aether.h spins ≤1 s waiting for this; here it is already set before
 	// Initialize() runs, so the spin exits on the first iteration.
 	g_eaglLayer = (__bridge void*)self.viewController.glView.layer;
-	s_triangleInit();
+	ae::Application::s_app->Initialize();
 	self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick: )];
 	[self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
 	return YES;
 }
 - (void)tick:(CADisplayLink*)link
 {
-	if( !s_triangleUpdate() )
+	if( !ae::Application::s_app->Update() )
 	{
 		[link invalidate];
-		s_triangleTerm();
-		exit( 0 );
+		const int32_t termResult = ae::Application::s_app->Terminate();
+		exit( termResult );
 	}
 }
 @end
 #endif // _AE_IOS_
-
-// struct Application
-// {
-// 	ae::Function< void(), 64 > Initialize;
-// 	ae::Function< bool(), 64 > Update;
-// 	ae::Function< void(), 64 > Terminate;
-// };
 
 //------------------------------------------------------------------------------
 // Triangle
@@ -149,7 +177,8 @@ int main( int argc, char* argv[] )
 	float scale = 1.0f;
 	float rotation = 0.0f;
 
-	auto Init = [ & ]()
+	ae::Application app;
+	app.Initialize = [ & ]()
 	{
 		AE_LOG( "Initialize (debug #)", (int)_AE_DEBUG_ );
 		window.Initialize( 1280, 720, false, true, true );
@@ -182,8 +211,7 @@ int main( int argc, char* argv[] )
 		vertexData.UploadVertices( 0, kTriangleVerts, countof( kTriangleVerts ) );
 		vertexData.UploadIndices( 0, kTriangleIndices, countof( kTriangleIndices ) );
 	};
-
-	auto Update = [ & ]() -> bool
+	app.Update = [ & ]() -> bool
 	{
 		input.Pump();
 		rotation += timeStep.GetDt();
@@ -250,35 +278,14 @@ int main( int argc, char* argv[] )
 
 		return !input.quit;
 	};
-
-	auto Term = [ & ]()
+	app.Terminate = [ & ]() -> int32_t
 	{
 		vertexData.Terminate();
 		shader.Terminate();
 		input.Terminate();
 		render.Terminate();
 		window.Terminate();
+		return 0;
 	};
-
-#if _AE_IOS_
-	s_triangleInit = Init;
-	s_triangleUpdate = Update;
-	s_triangleTerm = Term;
-	@autoreleasepool
-	{
-		UIApplicationMain( argc, argv, nil, @"AETriangleAppDelegate" );
-	}
-	return 0; // unreachable
-#else
-	Init();
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
-#else
-	while( Update() )
-	{
-	}
-	Term();
-#endif
-	return 0;
-#endif
+	return app.Run( argc, argv );
 }
