@@ -2751,6 +2751,8 @@ class Function< R( Args... ), MaxSize >
 public:
 	Function();
 	template< typename F > Function( F&& f );
+	template< typename T > Function( T* obj, R ( T::*mfp )( Args... ) );
+	template< typename T > Function( const T* obj, R ( T::*mfp )( Args... ) const );
 	R operator()( Args... args ) const;
 	explicit operator bool() const;
 
@@ -12670,10 +12672,40 @@ template< typename R, typename... Args, size_t MaxSize >
 template< typename F >
 Function< R( Args... ), MaxSize >::Function( F&& f )
 {
-	static_assert( sizeof( F ) <= MaxSize, "Lambda too large" );
-	static_assert( std::is_trivially_copyable< F >::value, "Lambda must be trivially copyable" );
-	memcpy( m_storage, &f, sizeof( F ) );
-	m_invoker = []( const void* ptr, Args... args ) -> R { return ( *reinterpret_cast< const F* >( ptr ) )( args... ); };
+	using FT = std::decay_t< F >;
+	static_assert( sizeof( FT ) <= MaxSize, "Callable too large" );
+	static_assert( std::is_trivially_copyable< FT >::value, "Callable must be trivially copyable" );
+	FT stored = f;
+	memcpy( m_storage, &stored, sizeof( FT ) );
+	m_invoker = []( const void* ptr, Args... args ) -> R { return ( *reinterpret_cast< const FT* >( ptr ) )( args... ); };
+}
+template< typename R, typename... Args, size_t MaxSize >
+template< typename T >
+Function< R( Args... ), MaxSize >::Function( T* obj, R ( T::*mfp )( Args... ) )
+{
+	struct Bound { T* obj; R ( T::*mfp )( Args... ); };
+	static_assert( sizeof( Bound ) <= MaxSize, "Bound member too large" );
+	const Bound b = { obj, mfp };
+	memcpy( m_storage, &b, sizeof( Bound ) );
+	m_invoker = []( const void* ptr, Args... args ) -> R
+	{
+		const Bound* p = reinterpret_cast< const Bound* >( ptr );
+		return ( p->obj->*p->mfp )( args... );
+	};
+}
+template< typename R, typename... Args, size_t MaxSize >
+template< typename T >
+Function< R( Args... ), MaxSize >::Function( const T* obj, R ( T::*mfp )( Args... ) const )
+{
+	struct Bound { const T* obj; R ( T::*mfp )( Args... ) const; };
+	static_assert( sizeof( Bound ) <= MaxSize, "Bound member too large" );
+	const Bound b = { obj, mfp };
+	memcpy( m_storage, &b, sizeof( Bound ) );
+	m_invoker = []( const void* ptr, Args... args ) -> R
+	{
+		const Bound* p = reinterpret_cast< const Bound* >( ptr );
+		return ( p->obj->*p->mfp )( args... );
+	};
 }
 template< typename R, typename... Args, size_t MaxSize >
 R Function< R( Args... ), MaxSize >::operator()( Args... args ) const
@@ -15515,6 +15547,7 @@ T* ae::Cast( C* obj )
 	#endif
 #elif _AE_APPLE_
 	#define GL_SILENCE_DEPRECATION
+	#define GLES_SILENCE_DEPRECATION
 #endif
 
 //------------------------------------------------------------------------------

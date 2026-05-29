@@ -438,16 +438,144 @@ TEST_CASE( "ae::Function vs std::function - no allocation", "[ae::Function]" )
 TEST_CASE( "ae::Function signature fixed at compile-time", "[ae::Function]" )
 {
 	// The signature is part of the type, not runtime polymorphic like std::function
-	
+
 	using IntFn = ae::Function< int() >;
 	using IntIntFn = ae::Function< int( int ) >;
-	
+
 	// These are completely different types
 	static_assert( !std::is_same_v< IntFn, IntIntFn > );
-	
+
 	IntFn fn1 = []() { return 42; };
 	IntIntFn fn2 = []( int x ) { return x * 2; };
-	
+
 	REQUIRE( fn1() == 42 );
 	REQUIRE( fn2( 21 ) == 42 );
+}
+
+//------------------------------------------------------------------------------
+// ae::Function free function support
+//------------------------------------------------------------------------------
+namespace
+{
+	int FreeAdd( int a, int b )
+	{
+		return a + b;
+	}
+
+	int FreeDouble( int v )
+	{
+		return v * 2;
+	}
+}
+
+TEST_CASE( "ae::Function from free function name", "[ae::Function]" )
+{
+	// Passing a function name decays to a function pointer.
+	ae::Function< int( int, int ) > fn = FreeAdd;
+	REQUIRE( fn );
+	REQUIRE( fn( 3, 4 ) == 7 );
+}
+
+TEST_CASE( "ae::Function from free function pointer variable", "[ae::Function]" )
+{
+	int ( *fp )( int ) = &FreeDouble;
+	ae::Function< int( int ) > fn = fp;
+	REQUIRE( fn( 21 ) == 42 );
+}
+
+TEST_CASE( "ae::Function reassigned with free function", "[ae::Function]" )
+{
+	ae::Function< int( int, int ) > fn = []( int a, int b ) { return a - b; };
+	REQUIRE( fn( 10, 3 ) == 7 );
+
+	fn = FreeAdd;
+	REQUIRE( fn( 10, 3 ) == 13 );
+}
+
+//------------------------------------------------------------------------------
+// ae::Function named-lvalue lambda assignment
+//------------------------------------------------------------------------------
+TEST_CASE( "ae::Function assigned from named lvalue lambda", "[ae::Function]" )
+{
+	// Regression: F&& deduced F as LambdaType& for lvalues, and references
+	// are never trivially copyable. decay_t fixes the check and the storage.
+	int total = 0;
+	auto Increment = [ &total ]( int v ) { return total += v; };
+
+	ae::Function< int( int ) > fn;
+	fn = Increment; // lvalue assignment, not direct-init from rvalue
+
+	REQUIRE( fn( 5 ) == 5 );
+	REQUIRE( fn( 3 ) == 8 );
+	REQUIRE( total == 8 );
+}
+
+//------------------------------------------------------------------------------
+// ae::Function member function pointer support
+//------------------------------------------------------------------------------
+namespace
+{
+	struct Accumulator
+	{
+		int total = 0;
+		int Add( int v )
+		{
+			total += v;
+			return total;
+		}
+		int Get() const
+		{
+			return total;
+		}
+	};
+}
+
+TEST_CASE( "ae::Function from non-const member function pointer", "[ae::Function]" )
+{
+	Accumulator acc;
+	ae::Function< int( int ) > fn( &acc, &Accumulator::Add );
+
+	REQUIRE( fn );
+	REQUIRE( fn( 5 ) == 5 );
+	REQUIRE( fn( 10 ) == 15 );
+	REQUIRE( acc.total == 15 );
+}
+
+TEST_CASE( "ae::Function from const member function pointer", "[ae::Function]" )
+{
+	Accumulator acc;
+	acc.total = 99;
+
+	const Accumulator* pAcc = &acc;
+	ae::Function< int() > fn( pAcc, &Accumulator::Get );
+
+	REQUIRE( fn() == 99 );
+	acc.total = 7;
+	REQUIRE( fn() == 7 ); // reads through the stored pointer, sees updates
+}
+
+TEST_CASE( "ae::Function const member function via mutable pointer", "[ae::Function]" )
+{
+	// A const member function bound to a non-const object pointer should still
+	// resolve via the const overload (T* converts to const T*).
+	Accumulator acc;
+	acc.total = 42;
+	ae::Function< int() > fn( &acc, &Accumulator::Get );
+	REQUIRE( fn() == 42 );
+}
+
+TEST_CASE( "ae::Function distinguishes objects bound to same method", "[ae::Function]" )
+{
+	Accumulator a;
+	Accumulator b;
+
+	ae::Function< int( int ) > fnA( &a, &Accumulator::Add );
+	ae::Function< int( int ) > fnB( &b, &Accumulator::Add );
+
+	fnA( 3 );
+	fnA( 4 );
+	fnB( 100 );
+
+	REQUIRE( a.total == 7 );
+	REQUIRE( b.total == 100 );
 }
