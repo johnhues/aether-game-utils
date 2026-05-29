@@ -37,6 +37,7 @@
 # Build directories
 build
 build_*
+__pycache__
 
 # System
 .DS_Store

@@ -7,8 +7,8 @@
 #      Xcode (xcode-select / DEVELOPER_DIR) wins — no hardcoded Xcode.app path.
 #   2. Read the iOS device UDID from scripts/config.env and inject
 #      `device select <UDID>` as a --pre-init-command. lldb requires an
-#      explicit device selection before `device process attach`; with the UDID
-#      checked into the workspace file removed, this wrapper closes the gap.
+#      explicit device selection before `device process attach`; doing it here
+#      keeps the workspace launch config free of per-machine UDID state.
 #-------------------------------------------------------------------------------
 set -euo pipefail
 

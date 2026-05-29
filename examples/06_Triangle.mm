@@ -25,33 +25,36 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 #if _AE_IOS_
-#import <UIKit/UIKit.h>
 #import <QuartzCore/CADisplayLink.h>
+#import <UIKit/UIKit.h>
 
 // Copies of main()'s lambdas. The lambdas capture locals by reference; those
 // references remain valid because UIApplicationMain never returns, keeping
 // main()'s frame alive for the lifetime of the process.
-static std::function< void() > s_triangleInit;
-static std::function< bool() > s_triangleUpdate;
-static std::function< void() > s_triangleTerm;
+static ae::Function< void(), 64 > s_triangleInit;
+static ae::Function< bool(), 64 > s_triangleUpdate;
+static ae::Function< void(), 64 > s_triangleTerm;
 
 extern "C" void* g_eaglLayer = nullptr; // declared extern in aether.h; defined here
 
 @interface AETriangleEAGLView : UIView
 @end
 @implementation AETriangleEAGLView
-+ (Class)layerClass { return [ CAEAGLLayer class ]; }
++ (Class)layerClass
+{
+	return [CAEAGLLayer class];
+}
 - (instancetype)initWithFrame:(CGRect)frame
 {
-	self = [ super initWithFrame:frame ];
+	self = [super initWithFrame:frame];
 	if( self )
 	{
 		CAEAGLLayer* layer = (CAEAGLLayer*)self.layer;
 		layer.opaque = YES;
-		layer.contentsScale = [ UIScreen mainScreen ].scale;
+		layer.contentsScale = [UIScreen mainScreen].scale;
 		layer.drawableProperties = @{
 			kEAGLDrawablePropertyRetainedBacking : @YES,
-			kEAGLDrawablePropertyColorFormat     : kEAGLColorFormatRGBA8,
+			kEAGLDrawablePropertyColorFormat : kEAGLColorFormatRGBA8,
 		};
 	}
 	return self;
@@ -59,50 +62,60 @@ extern "C" void* g_eaglLayer = nullptr; // declared extern in aether.h; defined 
 @end
 
 @interface AETriangleViewController : UIViewController
-@property( nonatomic, strong ) AETriangleEAGLView* glView;
+@property ( nonatomic, strong ) AETriangleEAGLView* glView;
 @end
 @implementation AETriangleViewController
 - (void)loadView
 {
-	self.glView = [ [ AETriangleEAGLView alloc ] initWithFrame:[ UIScreen mainScreen ].bounds ];
+	self.glView = [[AETriangleEAGLView alloc] initWithFrame:[UIScreen mainScreen].bounds];
 	self.view = self.glView;
 }
-- (BOOL)prefersStatusBarHidden { return YES; }
+- (BOOL)prefersStatusBarHidden
+{
+	return YES;
+}
 @end
 
 @interface AETriangleAppDelegate : UIResponder < UIApplicationDelegate >
-@property( nonatomic, strong ) UIWindow* window;
-@property( nonatomic, strong ) AETriangleViewController* viewController;
-@property( nonatomic, strong ) CADisplayLink* displayLink;
+@property ( nonatomic, strong ) UIWindow* window;
+@property ( nonatomic, strong ) AETriangleViewController* viewController;
+@property ( nonatomic, strong ) CADisplayLink* displayLink;
 @end
 @implementation AETriangleAppDelegate
 - (BOOL)application:(UIApplication*)app didFinishLaunchingWithOptions:(NSDictionary*)opts
 {
-	self.window = [ [ UIWindow alloc ] initWithFrame:[ UIScreen mainScreen ].bounds ];
-	self.viewController = [ [ AETriangleViewController alloc ] init ];
+	self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+	self.viewController = [[AETriangleViewController alloc] init];
 	self.window.rootViewController = self.viewController;
-	[ self.window makeKeyAndVisible ];
-	[ self.viewController.view layoutIfNeeded ];
+	[self.window makeKeyAndVisible];
+	[self.viewController.view layoutIfNeeded];
 	// Set the layer so window.Initialize() can attach its renderbuffer.
 	// aether.h spins ≤1 s waiting for this; here it is already set before
 	// Initialize() runs, so the spin exits on the first iteration.
 	g_eaglLayer = (__bridge void*)self.viewController.glView.layer;
 	s_triangleInit();
-	self.displayLink = [ CADisplayLink displayLinkWithTarget:self selector:@selector(tick:) ];
-	[ self.displayLink addToRunLoop:[ NSRunLoop mainRunLoop ] forMode:NSDefaultRunLoopMode ];
+	self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick: )];
+	[self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
 	return YES;
 }
 - (void)tick:(CADisplayLink*)link
 {
 	if( !s_triangleUpdate() )
 	{
-		[ link invalidate ];
+		[link invalidate];
 		s_triangleTerm();
 		exit( 0 );
 	}
 }
 @end
 #endif // _AE_IOS_
+
+// struct Application
+// {
+// 	ae::Function< void(), 64 > Initialize;
+// 	ae::Function< bool(), 64 > Update;
+// 	ae::Function< void(), 64 > Terminate;
+// };
 
 //------------------------------------------------------------------------------
 // Triangle
@@ -113,13 +126,13 @@ struct Vertex
 	ae::Vec4 color;
 };
 
-Vertex kTriangleVerts[] = {
+const Vertex kTriangleVerts[] = {
 	{ ae::Vec4( -0.5f, -0.4f, 0.0f, 1.0f ), ae::Color::PicoRed().GetLinearRGBA() },
 	{ ae::Vec4( 0.5f, -0.4f, 0.0f, 1.0f ), ae::Color::PicoGreen().GetLinearRGBA() },
 	{ ae::Vec4( 0.0f, 0.4f, 0.0f, 1.0f ), ae::Color::PicoBlue().GetLinearRGBA() },
 };
 
-uint16_t kTriangleIndices[] = { 0, 1, 2 };
+const uint16_t kTriangleIndices[] = { 0, 1, 2 };
 
 //------------------------------------------------------------------------------
 // Main
@@ -136,7 +149,7 @@ int main( int argc, char* argv[] )
 	float scale = 1.0f;
 	float rotation = 0.0f;
 
-	auto Init = [&]()
+	auto Init = [ & ]()
 	{
 		AE_LOG( "Initialize (debug #)", (int)_AE_DEBUG_ );
 		window.Initialize( 1280, 720, false, true, true );
@@ -170,7 +183,7 @@ int main( int argc, char* argv[] )
 		vertexData.UploadIndices( 0, kTriangleIndices, countof( kTriangleIndices ) );
 	};
 
-	auto Update = [&]() -> bool
+	auto Update = [ & ]() -> bool
 	{
 		input.Pump();
 		rotation += timeStep.GetDt();
@@ -185,10 +198,22 @@ int main( int argc, char* argv[] )
 		}
 
 		ae::Vec3 dir( 0.0f );
-		if( input.Get( ae::Key::Up ) ) { dir.y += 1.0f; }
-		if( input.Get( ae::Key::Down ) ) { dir.y -= 1.0f; }
-		if( input.Get( ae::Key::Left ) ) { dir.x -= 1.0f; }
-		if( input.Get( ae::Key::Right ) ) { dir.x += 1.0f; }
+		if( input.Get( ae::Key::Up ) )
+		{
+			dir.y += 1.0f;
+		}
+		if( input.Get( ae::Key::Down ) )
+		{
+			dir.y -= 1.0f;
+		}
+		if( input.Get( ae::Key::Left ) )
+		{
+			dir.x -= 1.0f;
+		}
+		if( input.Get( ae::Key::Right ) )
+		{
+			dir.x += 1.0f;
+		}
 		dir.SafeNormalize();
 		pos += dir * 0.01f;
 
@@ -226,7 +251,7 @@ int main( int argc, char* argv[] )
 		return !input.quit;
 	};
 
-	auto Term = [&]()
+	auto Term = [ & ]()
 	{
 		vertexData.Terminate();
 		shader.Terminate();
@@ -236,19 +261,24 @@ int main( int argc, char* argv[] )
 	};
 
 #if _AE_IOS_
-	s_triangleInit   = Init;
+	s_triangleInit = Init;
 	s_triangleUpdate = Update;
-	s_triangleTerm   = Term;
-	@autoreleasepool { UIApplicationMain( argc, argv, nil, @"AETriangleAppDelegate" ); }
+	s_triangleTerm = Term;
+	@autoreleasepool
+	{
+		UIApplicationMain( argc, argv, nil, @"AETriangleAppDelegate" );
+	}
 	return 0; // unreachable
 #else
 	Init();
-#	if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype(Update)*)fn )(); }, &Update, 0, 1 );
-#	else
-	while( Update() ) {}
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
+#else
+	while( Update() )
+	{
+	}
 	Term();
-#	endif
+#endif
 	return 0;
 #endif
 }

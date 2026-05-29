@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ios_build.py TARGET
+ios_build.py TARGET [CONFIG]
 
 Builds an iOS target with -allowProvisioningUpdates so Xcode auto-handles
 provisioning. Apple Developer Team comes from (in order):
@@ -16,7 +16,10 @@ bundle display name (e.g. 'Triangle'). cmake-tools'
 ${command:cmake.launchTargetName} hands us the display name; xcodebuild
 needs the CMake target name. Resolves via project.pbxproj.
 
-CLI: python3 scripts/ios_build.py Triangle
+CONFIG is the Xcode/CMake configuration (default 'Debug'); cmake-tools'
+${command:cmake.buildType} supplies it from the VS Code task.
+
+CLI: python3 scripts/ios_build.py Triangle [Debug|Release]
 """
 import json
 import os
@@ -25,13 +28,25 @@ import sys
 import ae_config
 from pathlib import Path
 
-def resolve_cmake_target( name: str, config: str = "Debug" ) -> str:
+def load_objects():
     result = subprocess.run(
         [ "plutil", "-convert", "json", "-o", "-", str( ae_config.PBXPROJ ) ],
         capture_output=True, check=True,
     )
-    objects = json.loads( result.stdout ).get( "objects", {} )
+    return json.loads( result.stdout ).get( "objects", {} )
 
+
+def project_configs( objects ):
+    names = []
+    for obj in objects.values():
+        if isinstance( obj, dict ) and obj.get( "isa" ) == "XCBuildConfiguration":
+            name = obj.get( "name" )
+            if name and name not in names:
+                names.append( name )
+    return names
+
+
+def resolve_cmake_target( objects, name, config="Debug" ):
     targets = [
         ( ident, obj ) for ident, obj in objects.items()
         if isinstance( obj, dict ) and obj.get( "isa" ) == "PBXNativeTarget"
@@ -57,10 +72,21 @@ def resolve_cmake_target( name: str, config: str = "Debug" ) -> str:
 
 
 def main():
-    if len( sys.argv ) != 2:
-        sys.exit( "Usage: ios_build.py <target-or-display-name>" )
+    if len( sys.argv ) not in ( 2, 3 ):
+        sys.exit( "Usage: ios_build.py <target-or-display-name> [config]" )
 
-    target = resolve_cmake_target( sys.argv[ 1 ] )
+    objects = load_objects()
+    specified = sys.argv[ 2 ] if len( sys.argv ) == 3 else ""
+    config = specified or "Debug"
+    if specified:
+        valid = project_configs( objects )
+        if specified not in valid:
+            sys.exit(
+                f"ERROR: '{specified}' is not a valid configuration; "
+                f"expected one of: {', '.join( valid )}"
+            )
+
+    target = resolve_cmake_target( objects, sys.argv[ 1 ], config )
     team   = ae_config.get_env_var("AE_APPLE_DEVELOPMENT_TEAM")
 
     xcode_args = [ "-allowProvisioningUpdates", "-destination", "generic/platform=iOS" ]
@@ -74,7 +100,7 @@ def main():
     rc = subprocess.run(
         [
             "cmake", "--build", str( ae_config.REPO_ROOT / "build_ios" ),
-            "--config", "Debug",
+            "--config", config,
             "--target", target,
             "--",
             *xcode_args,

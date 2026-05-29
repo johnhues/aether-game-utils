@@ -28,15 +28,15 @@
 		{
 			"name": "ios",
 			"displayName": "iOS",
-			"description": "iOS device build using ios-cmake toolchain. Per-developer values (team ID, device UDID) live in scripts/config.env (gitignored, copy from scripts/config.env.example). scripts/ios_build.py injects DEVELOPMENT_TEAM at build time; Xcode handles provisioning via -allowProvisioningUpdates.",
+			"description": "iOS device build using ios-cmake toolchain. Per-developer values (team ID, device UDID) live in scripts/config.env (gitignored, copy from scripts/config.env.example). Configure via scripts/ios_configure.py, which injects AE_APPLE_DEVELOPMENT_TEAM from config.env so it is baked into the generated Xcode project. Xcode handles provisioning via -allowProvisioningUpdates.",
 			"generator": "Xcode",
 			"binaryDir": "${sourceDir}/build_ios",
 			"toolchainFile": "${sourceDir}/scripts/ios.toolchain.cmake",
 			"cacheVariables": {
-				"DISABLED__PLATFORM": "OS64",
-				"DISABLED__DEPLOYMENT_TARGET": "15.0",
-				"DISABLED__ENABLE_BITCODE": "OFF",
-				"DISABLED__ENABLE_ARC": "ON",
+				"PLATFORM": "OS64",
+				"DEPLOYMENT_TARGET": "15.0",
+				"ENABLE_BITCODE": "OFF",
+				"ENABLE_ARC": "ON",
 				"AE_LEAN_AND_MEAN": "OFF",
 				"AE_LOADERS_OFBX": "ON"
 			},

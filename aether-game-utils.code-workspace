@@ -22,7 +22,8 @@
 		"explorer.excludeGitIgnore": true,
 		"files.associations": {
 			"**/aether.h": "objective-cpp"
-		}
+		},
+		"lldb-dap.executable-path": "/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-dap"
 	},
 	"tasks": {
 		"version": "2.0.0",
@@ -76,8 +77,8 @@
 			{
 				"label": "iOS: Configure",
 				"type": "shell",
-				"command": "cmake",
-				"args": [ "--preset", "ios" ],
+				"command": "python3",
+				"args": [ "${workspaceFolder}/scripts/ios_configure.py" ],
 				"options": { "cwd": "${workspaceFolder}" },
 				"problemMatcher": [],
 				"presentation": { "reveal": "silent" }
@@ -88,7 +89,8 @@
 				"command": "python3",
 				"args": [
 					"${workspaceFolder}/scripts/ios_build.py",
-					"${command:cmake.launchTargetName}"
+					"${command:cmake.launchTargetName}",
+					"${command:cmake.buildType}"
 				],
 				"dependsOn": "iOS: Configure",
 				"options": { "cwd": "${workspaceFolder}" },
@@ -97,13 +99,38 @@
 				"presentation": { "reveal": "silent" }
 			},
 			{
-				"label": "iOS: Run",
+				"label": "iOS: Install",
 				"type": "shell",
-				"command": "${workspaceFolder}/scripts/ios-run.sh",
+				"command": "${workspaceFolder}/scripts/ios-install.sh",
 				"args": [
-					"${workspaceFolder}/build_ios/examples/Debug-iphoneos/${command:cmake.launchTargetName}.app"
+					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
 				],
 				"dependsOn": "iOS: Build",
+				"options": { "cwd": "${workspaceFolder}" },
+				"problemMatcher": [],
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				"label": "iOS: Launch",
+				"type": "shell",
+				"command": "${workspaceFolder}/scripts/ios-launch.sh",
+				"args": [
+					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
+				],
+				"dependsOn": "iOS: Install",
+				"options": { "cwd": "${workspaceFolder}" },
+				"problemMatcher": [],
+				"presentation": { "reveal": "silent" }
+			},
+			{
+				"label": "iOS: Launch (Stopped)",
+				"type": "shell",
+				"command": "${workspaceFolder}/scripts/ios-launch.sh",
+				"args": [
+					"--start-stopped",
+					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
+				],
+				"dependsOn": "iOS: Install",
 				"options": { "cwd": "${workspaceFolder}" },
 				"problemMatcher": [],
 				"presentation": { "reveal": "silent" }
@@ -122,20 +149,34 @@
 				"preLaunchTask": "Emscripten: Build Test"
 			},
 			{
-				"name": "iOS: Debug",
+				"name": "iOS: Debug Launch",
 				"type": "lldb-dap",
 				"request": "attach",
 				"debugAdapterExecutable": "${workspaceFolder}/scripts/lldb-dap.sh",
-				"program": "${workspaceFolder}/build_ios/examples/Debug-iphoneos/${command:cmake.launchTargetName}.app/${command:cmake.launchTargetName}",
+				"program": "${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app/${command:cmake.launchTargetName}",
 				"initCommands": [
-					"settings set target.process.stop-on-sharedlibrary-events false"
+					"settings set target.preload-symbols false",
+					"process handle SIGSTOP -s true -n true"
 				],
 				"attachCommands": [
-					"device process attach",
-					"script import time; import lldb; [time.sleep(0.1) for _ in range(100) if lldb.debugger.GetSelectedTarget().GetProcess().GetState() != lldb.eStateStopped]",
-					"process continue"
+					"device process attach --name ${command:cmake.launchTargetName}"
 				],
-				"preLaunchTask": "iOS: Run"
+				"preLaunchTask": "iOS: Launch (Stopped)"
+			},
+			{
+				"name": "iOS: Debug Attach",
+				"type": "lldb-dap",
+				"request": "attach",
+				"debugAdapterExecutable": "${workspaceFolder}/scripts/lldb-dap.sh",
+				"program": "${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app/${command:cmake.launchTargetName}",
+				"initCommands": [
+					"settings set target.preload-symbols false",
+					"settings set symbols.enable-external-lookup false"
+				],
+				"attachCommands": [
+					"device process attach --name ${command:cmake.launchTargetName}"
+				],
+				"timeout": 600
 			}
 		]
 	}

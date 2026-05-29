@@ -3,10 +3,11 @@
 # ios-resolve-exe.sh — resolve cmake-tools' launchTargetPath to a real on-disk
 # path for an iOS Xcode-generator bundle, and print the requested piece.
 #
-# Usage: ios-resolve-exe.sh <path> [exe|name|app]
-#   exe   (default) absolute path to the inner executable inside the .app
-#   name  CFBundleExecutable (the process name lldb sees on device)
-#   app   absolute path to the .app bundle
+# Usage: ios-resolve-exe.sh <path> [exe|name|app|bundle-id]
+#   exe        (default) absolute path to the inner executable inside the .app
+#   name       CFBundleExecutable (the process name lldb sees on device)
+#   app        absolute path to the .app bundle
+#   bundle-id  CFBundleIdentifier (devicectl process launch identifier)
 #
 # Why this is needed:
 #   cmake-tools' ${command:cmake.launchTargetPath} on Xcode-generator iOS
@@ -26,7 +27,7 @@
 #-------------------------------------------------------------------------------
 set -euo pipefail
 
-INPUT="${1:?usage: ios-resolve-exe.sh <path> [exe|name|app]}"
+INPUT="${1:?usage: ios-resolve-exe.sh <path> [exe|name|app|bundle-id]}"
 MODE="${2:-exe}"
 
 # Strip Xcode's ${EFFECTIVE_PLATFORM_NAME} placeholder.
@@ -60,11 +61,22 @@ if [[ ! -d "$APP_PATH" ]]; then
     exit 1
 fi
 
-EXE_NAME="$( plutil -extract CFBundleExecutable raw -o - "$APP_PATH/Info.plist" )"
-
 case "$MODE" in
-    exe)  echo "$APP_PATH/$EXE_NAME" ;;
-    name) echo "$EXE_NAME" ;;
-    app)  echo "$APP_PATH" ;;
-    *)    echo "ERROR: unknown mode '$MODE' (expected: exe|name|app)" >&2; exit 1 ;;
+    exe)
+        EXE_NAME="$( plutil -extract CFBundleExecutable raw -o - "$APP_PATH/Info.plist" )"
+        echo "$APP_PATH/$EXE_NAME"
+        ;;
+    name)
+        plutil -extract CFBundleExecutable raw -o - "$APP_PATH/Info.plist"
+        ;;
+    app)
+        echo "$APP_PATH"
+        ;;
+    bundle-id)
+        plutil -extract CFBundleIdentifier raw -o - "$APP_PATH/Info.plist"
+        ;;
+    *)
+        echo "ERROR: unknown mode '$MODE' (expected: exe|name|app|bundle-id)" >&2
+        exit 1
+        ;;
 esac

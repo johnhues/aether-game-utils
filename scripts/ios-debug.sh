@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 #-------------------------------------------------------------------------------
-# ios-run.sh — install and suspend-launch a built iOS .app for lldb attach.
-# Usage: ios-run.sh [--device <UUID>] <path>
+# ios-debug.sh — attach lldb to an iOS .app held at its entry point.
+# Usage: ios-debug.sh [--device <UUID>] <path>
 #   <path> may be the .app bundle, the inner binary, or cmake-tools'
-#   launchTargetPath form (with the literal ${EFFECTIVE_PLATFORM_NAME}
-#   placeholder and the un-suffixed config dir) — see ios-resolve-exe.sh.
+#   launchTargetPath form — see ios-resolve-exe.sh.
+#
+# Assumes the app is already installed (ios-install.sh) and already launched
+# held at entry (ios-launch.sh --start-stopped). Attaches by name to the
+# suspended process and lets it run. `process handle SIGSTOP -s false -n true`
+# is set before a plain attach (no --waitfor, no --continue) so lldb
+# auto-resumes past the launch hold — this is what makes a --start-stopped
+# process actually run under the debugger instead of only on detach. Gives
+# genuine pre-`main` debugging: set breakpoints in static initializers / `main`
+# and they halt before any of their code runs.
+#
+# Sequential command-line flow:
+#   scripts/ios-install.sh <app>
+#   scripts/ios-launch.sh --start-stopped <app>
+#   scripts/ios-debug.sh <app>
 #
 # Device UUID resolution order:
 #   1. --device <UUID> flag
 #   2. $AE_IOS_DEVICE env var
 #   3. scripts/config.env IOS_DEVICE (see scripts/config.env.example)
 #   4. Auto-detect the first connected non-unavailable device
-#
-# Reads CFBundleIdentifier from the bundle's Info.plist. Installs, then launches
-# suspended so lldb can attach before main runs.
 #-------------------------------------------------------------------------------
 set -euo pipefail
 
@@ -30,7 +40,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            sed -n '2,16p' "$0"
+            sed -n '2,26p' "$0"
             exit 0
             ;;
         *)
@@ -46,14 +56,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$APP_PATH" ]]; then
-    echo "Usage: ios-run.sh [--device <UUID>] <path/to/App.app>" >&2
+    echo "Usage: ios-debug.sh [--device <UUID>] <path/to/App.app>" >&2
     exit 1
 fi
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-APP_PATH="$( "$SCRIPT_DIR/ios-resolve-exe.sh" "$APP_PATH" app )"
+EXE_PATH="$( "$SCRIPT_DIR/ios-resolve-exe.sh" "$APP_PATH" exe )"
 EXE_NAME="$( "$SCRIPT_DIR/ios-resolve-exe.sh" "$APP_PATH" name )"
-BUNDLE_ID="$( plutil -extract CFBundleIdentifier raw -o - "$APP_PATH/Info.plist" )"
 
 CONFIG_FILE="$SCRIPT_DIR/config.env"
 IOS_DEVICE=""
@@ -85,14 +94,9 @@ else
     echo "==> Auto-detected device: $DEV_ID"
 fi
 
-echo "==> Installing $APP_PATH"
-xcrun devicectl device install app --device "$DEV_ID" "$APP_PATH" | tail -5
-
-echo "==> Launching $BUNDLE_ID (suspended) — process name: $EXE_NAME"
-xcrun devicectl device process launch \
-    --device "$DEV_ID" \
-    --start-stopped \
-    --terminate-existing \
-    "$BUNDLE_ID"
-
-echo "$EXE_NAME"
+echo "==> Attaching lldb to $EXE_NAME"
+exec xcrun lldb "$EXE_PATH" \
+    -o "device select $DEV_ID" \
+    -o "settings set target.preload-symbols false" \
+    -o "process handle SIGSTOP -s false -n true" \
+    -o "device process attach --name $EXE_NAME"
