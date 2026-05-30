@@ -2,9 +2,11 @@
 """
 ios_build.py TARGET [CONFIG]
 
-Builds an iOS target with -allowProvisioningUpdates so Xcode auto-handles
-provisioning. Signing identity + team are baked into the Xcode project at
-configure time by examples/CMakeLists.txt (which defaults the team from
+Builds an iOS target via the matching 'ios-<config>' build preset in
+CMakePresets.json. The preset carries -allowProvisioningUpdates (so Xcode
+auto-handles provisioning) and -destination generic/platform=iOS as
+nativeToolOptions. Signing identity + team are baked into the Xcode project
+at configure time by examples/CMakeLists.txt (which defaults the team from
 $AE_APPLE_DEVELOPMENT_TEAM or scripts/config.env) and scripts/AddBundle.cmake,
 so this script does not pass any signing overrides.
 
@@ -14,9 +16,10 @@ ${command:cmake.launchTargetName} hands us the display name; xcodebuild
 needs the CMake target name. Resolves via project.pbxproj.
 
 CONFIG is the Xcode/CMake configuration (default 'Debug'); cmake-tools'
-${command:cmake.buildType} supplies it from the VS Code task.
+${command:cmake.buildType} supplies it from the VS Code task. Must match an
+ios build preset (currently Debug or RelWithDebInfo).
 
-CLI: python3 scripts/ios_build.py Triangle [Debug|Release]
+CLI: python3 scripts/ios_build.py Triangle [Debug|RelWithDebInfo]
 """
 import json
 import subprocess
@@ -85,15 +88,12 @@ def main():
 
     target = resolve_cmake_target( objects, target_name, config )
 
-    print( f"==> Building {target}" )
+    preset = f"ios-{config.lower()}"
+    print( f"==> Building {target} ({preset})" )
     rc = subprocess.run(
         [
-            "cmake", "--build", str( ae_config.REPO_ROOT / "build_ios" ),
-            "--config", config,
+            "cmake", "--build", "--preset", preset,
             "--target", target,
-            "--",
-            "-allowProvisioningUpdates",
-            "-destination", "generic/platform=iOS",
         ],
         cwd=str( ae_config.REPO_ROOT ),
     ).returncode

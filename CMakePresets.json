@@ -70,7 +70,11 @@
 			"name": "ios-debug",
 			"displayName": "Debug",
 			"configurePreset": "ios",
-			"configuration": "Debug"
+			"configuration": "Debug",
+			"nativeToolOptions": [
+				"-allowProvisioningUpdates",
+				"-destination", "generic/platform=iOS"
+			]
 		},
 		{
 			"name": "emscripten-debug",
@@ -88,7 +92,11 @@
 			"name": "ios-relwithdebinfo",
 			"displayName": "RelWithDebInfo",
 			"configurePreset": "ios",
-			"configuration": "RelWithDebInfo"
+			"configuration": "RelWithDebInfo",
+			"nativeToolOptions": [
+				"-allowProvisioningUpdates",
+				"-destination", "generic/platform=iOS"
+			]
 		},
 		{
 			"name": "emscripten-relwithdebinfo",
