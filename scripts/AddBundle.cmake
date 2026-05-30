@@ -159,11 +159,11 @@ function(ae_add_bundle BUNDLE_NAME)
 		endforeach()
 
 		if ("${CMAKE_GENERATOR}" STREQUAL "Xcode")
-			# iOS always needs a CODE_SIGN_IDENTITY so xcodebuild actually
-			# signs the binary, even when DEVELOPMENT_TEAM is supplied only
-			# at build time. macOS keeps the conditional so unsigned dev
-			# builds remain possible there.
-			if (AEAB_APPLE_DEVELOPMENT_TEAM OR IOS)
+			# Without a team the project is configured unsigned so any team-less
+			# xcodebuild invocation (eg. cmake-tools' F5 auto-build) succeeds;
+			# scripts/ios_build.py overrides DEVELOPMENT_TEAM + sign-enable
+			# settings at xcodebuild runtime for the on-device build.
+			if (AEAB_APPLE_DEVELOPMENT_TEAM)
 				set(AEAB_APPLE_CODE_SIGN_IDENTITY "Apple Development") # See Professional CMake 24.6.1. Signing Identity And Development Team
 			endif()
 			set(AEAB_APPLE_INSTALL_PATH "$(LOCAL_APPS_DIR)") # See Professional CMake 24.7. Creating And Exporting Archives
@@ -201,13 +201,18 @@ function(ae_add_bundle BUNDLE_NAME)
 		)
 
 		if(IOS)
+			if(AEAB_APPLE_DEVELOPMENT_TEAM)
+				set(AEAB_IOS_CODE_SIGNING "YES")
+			else()
+				set(AEAB_IOS_CODE_SIGNING "NO")
+			endif()
 			set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
 				XCODE_ATTRIBUTE_INFOPLIST_KEY_NSPrincipalClass "UIApplication"
 				XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME NO
 				XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
 				XCODE_ATTRIBUTE_CODE_SIGN_STYLE "Automatic"
-				XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "YES"
-				XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "YES"
+				XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "${AEAB_IOS_CODE_SIGNING}"
+				XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "${AEAB_IOS_CODE_SIGNING}"
 				XCODE_ATTRIBUTE_INFOPLIST_KEY_UILaunchScreen_Generation YES
 				XCODE_ATTRIBUTE_INFOPLIST_KEY_UISupportedInterfaceOrientations
 					"UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"

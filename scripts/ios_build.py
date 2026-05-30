@@ -3,13 +3,10 @@
 ios_build.py TARGET [CONFIG]
 
 Builds an iOS target with -allowProvisioningUpdates so Xcode auto-handles
-provisioning. Apple Developer Team comes from (in order):
-    1. $AE_APPLE_DEVELOPMENT_TEAM env var
-    2. scripts/config.env AE_APPLE_DEVELOPMENT_TEAM (gitignored; see config.env.example)
-    3. Whatever was baked at configure time (empty unless CMakePresets sets it)
-When a team is resolved, it is injected as a build-time
-`DEVELOPMENT_TEAM=<id>` override to xcodebuild, overriding the configure-time
-XCODE_ATTRIBUTE_DEVELOPMENT_TEAM set by scripts/AddBundle.cmake.
+provisioning. Signing identity + team are baked into the Xcode project at
+configure time by examples/CMakeLists.txt (which defaults the team from
+$AE_APPLE_DEVELOPMENT_TEAM or scripts/config.env) and scripts/AddBundle.cmake,
+so this script does not pass any signing overrides.
 
 Accepts either the CMake/Xcode target name (e.g. '06_triangle') or the
 bundle display name (e.g. 'Triangle'). cmake-tools'
@@ -22,11 +19,9 @@ ${command:cmake.buildType} supplies it from the VS Code task.
 CLI: python3 scripts/ios_build.py Triangle [Debug|Release]
 """
 import json
-import os
 import subprocess
 import sys
 import ae_config
-from pathlib import Path
 
 def load_objects():
     result = subprocess.run(
@@ -73,28 +68,22 @@ def resolve_cmake_target( objects, name, config="Debug" ):
 
 def main():
     if len( sys.argv ) not in ( 2, 3 ):
-        sys.exit( "Usage: ios_build.py <target-or-display-name> [config]" )
-
+        sys.exit( "Usage: ios_build.py <target-or-display-name> [config=Debug]" )
     objects = load_objects()
-    specified = sys.argv[ 2 ] if len( sys.argv ) == 3 else ""
-    config = specified or "Debug"
-    if specified:
+
+    target_name = sys.argv[ 1 ]
+
+    config = sys.argv[ 2 ] if len( sys.argv ) == 3 else ""
+    if config:
         valid = project_configs( objects )
-        if specified not in valid:
+        if config not in valid:
             sys.exit(
-                f"ERROR: '{specified}' is not a valid configuration; "
+                f"ERROR: '{config}' is not a valid configuration; "
                 f"expected one of: {', '.join( valid )}"
             )
+    config = config or "Debug"
 
-    target = resolve_cmake_target( objects, sys.argv[ 1 ], config )
-    team   = ae_config.get_env_var("AE_APPLE_DEVELOPMENT_TEAM")
-
-    xcode_args = [ "-allowProvisioningUpdates", "-destination", "generic/platform=iOS" ]
-    if team:
-        xcode_args.insert( 0, f"DEVELOPMENT_TEAM={team}" )
-        print( f"==> DEVELOPMENT_TEAM={team}" )
-    else:
-        print( "==> No team set (env $AE_APPLE_DEVELOPMENT_TEAM or scripts/config.env); xcodebuild may fail to sign" )
+    target = resolve_cmake_target( objects, target_name, config )
 
     print( f"==> Building {target}" )
     rc = subprocess.run(
@@ -103,7 +92,8 @@ def main():
             "--config", config,
             "--target", target,
             "--",
-            *xcode_args,
+            "-allowProvisioningUpdates",
+            "-destination", "generic/platform=iOS",
         ],
         cwd=str( ae_config.REPO_ROOT ),
     ).returncode

@@ -52,7 +52,26 @@ endif()
 endif() # AE_DESKTOP END
 
 # Config
-set(AE_APPLE_DEVELOPMENT_TEAM "" CACHE STRING "Apple Development Team ID for aether examples")
+# Default the team from $AE_APPLE_DEVELOPMENT_TEAM or scripts/config.env so
+# every configure path (cmake-tools auto-configure, `cmake --preset ios`,
+# ios_configure.py) bakes signing into the generated Xcode project without
+# anyone having to pass -DAE_APPLE_DEVELOPMENT_TEAM. -D on the command line
+# still wins because the cache entry below is not FORCE'd.
+unset(_ae_team_default)
+if(DEFINED ENV{AE_APPLE_DEVELOPMENT_TEAM})
+	set(_ae_team_default "$ENV{AE_APPLE_DEVELOPMENT_TEAM}")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/scripts/config.env")
+	file(STRINGS "${CMAKE_SOURCE_DIR}/scripts/config.env" _ae_lines
+		REGEX "^[ \t]*AE_APPLE_DEVELOPMENT_TEAM[ \t]*=")
+	if(_ae_lines)
+		list(GET _ae_lines 0 _ae_line)
+		string(REGEX REPLACE
+			"^[ \t]*AE_APPLE_DEVELOPMENT_TEAM[ \t]*=[ \t]*[\"']?([^\"'#]*)[\"']?.*$"
+			"\\1" _ae_team_default "${_ae_line}")
+		string(STRIP "${_ae_team_default}" _ae_team_default)
+	endif()
+endif()
+set(AE_APPLE_DEVELOPMENT_TEAM "${_ae_team_default}" CACHE STRING "Apple Development Team ID for aether examples")
 set(AE_EXAMPLE_SOURCES Common.h)
 if(EMSCRIPTEN)
 	add_compile_definitions(DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data")
