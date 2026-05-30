@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #-------------------------------------------------------------------------------
 # ios-launch.sh — launch an installed iOS .app on a device.
-# Usage: ios-launch.sh [--device <UUID>] [--start-stopped] <path>
+# Usage: ios-launch.sh [--device <UUID>] [--start-stopped] [--console] <path>
 #   <path> may be the .app bundle, the inner binary, or cmake-tools'
 #   launchTargetPath form — see ios-resolve-exe.sh.
 #
@@ -17,6 +17,18 @@
 # no ordering race — and `process handle SIGSTOP -s false -n true` set before a
 # plain attach (not --continue) auto-resumes past the launch hold so the app
 # runs. This is the genuine pre-`main` debugging path.
+#
+# --console: capture the device process's stdout/stderr via
+# `devicectl ... --console` and redirect it to a log file (default
+# /tmp/aether-ios-console.log, overridable via $AE_IOS_CONSOLE_LOG). devicectl
+# is detached (nohup + disown) so this script can exit cleanly once the launch
+# is confirmed; devicectl keeps running and writing to the log until the app
+# exits. A separate VS Code task (`iOS: Console`) is responsible for
+# `tail -F`ing the log into a foregrounded panel. Any prior devicectl streamer
+# for the same bundle is pkilled first so two streamers don't interleave
+# writes. This is the only path to host-visible app stdout — iOS routes app
+# stdout to launchd by default and lldb attaches *after* posix_spawn so it
+# cannot reparent FDs.
 #
 # Device UUID resolution order:
 #   1. --device <UUID> flag
@@ -86,6 +98,7 @@ PY
 DEV_ID_OVERRIDE=""
 APP_PATH=""
 START_STOPPED=0
+CONSOLE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --device)
@@ -100,8 +113,12 @@ while [[ $# -gt 0 ]]; do
             START_STOPPED=1
             shift
             ;;
+        --console)
+            CONSOLE=1
+            shift
+            ;;
         -h|--help)
-            sed -n '2,25p' "$0"
+            sed -n '2,32p' "$0"
             exit 0
             ;;
         *)
@@ -164,4 +181,44 @@ if [[ "$START_STOPPED" -eq 1 ]]; then
 else
     echo "==> Launching $BUNDLE_ID"
 fi
-xcrun devicectl device process launch "${LAUNCH_ARGS[@]}" "$BUNDLE_ID"
+
+if [[ "$CONSOLE" -eq 1 ]]; then
+    LAUNCH_ARGS+=( --console )
+    LOG_FILE="${AE_IOS_CONSOLE_LOG:-/tmp/aether-ios-console.log}"
+
+    # Kill any prior devicectl streamer for the same bundle so we don't end up
+    # with two processes interleaving writes to the same log. The app itself
+    # is handled by --terminate-existing on the new launch.
+    pkill -f "devicectl device process launch.*$BUNDLE_ID" 2>/dev/null || true
+    sleep 0.1
+
+    # Truncate the log; tail -F follows by name and recovers cleanly.
+    : > "$LOG_FILE"
+    echo "==> Streaming device stdout/stderr to $LOG_FILE"
+
+    # Detach devicectl into its own session via daemonize.sh so the VS Code
+    # task pty closing doesn't deliver SIGHUP to it. devicectl installs its
+    # own SIGHUP handler that forwards to the iOS app, so plain nohup+disown
+    # is not enough — see daemonize.sh for the full reasoning.
+    "$SCRIPT_DIR/daemonize.sh" "$LOG_FILE" \
+        xcrun devicectl device process launch "${LAUNCH_ARGS[@]}" "$BUNDLE_ID"
+
+    DEADLINE=$(( SECONDS + 30 ))
+    while (( SECONDS < DEADLINE )); do
+        if grep -q "Launched application with" "$LOG_FILE" 2>/dev/null; then
+            echo "==> ios-launch: app launched; console streaming to $LOG_FILE"
+            exit 0
+        fi
+        if grep -q "App terminated due to signal" "$LOG_FILE" 2>/dev/null \
+                || grep -qE "(error|ERROR|Failed)" "$LOG_FILE" 2>/dev/null; then
+            echo "ERROR: launch failed; see $LOG_FILE" >&2
+            tail -20 "$LOG_FILE" >&2 || true
+            exit 1
+        fi
+        sleep 0.2
+    done
+    echo "ERROR: timed out waiting for launch sentinel after 30s; see $LOG_FILE" >&2
+    exit 1
+else
+    xcrun devicectl device process launch "${LAUNCH_ARGS[@]}" "$BUNDLE_ID"
+fi

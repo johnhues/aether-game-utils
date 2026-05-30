@@ -75,13 +75,30 @@
 				"presentation": { "reveal": "silent" }
 			},
 			{
+				"label": "iOS: Console",
+				"type": "shell",
+				"command": "touch /tmp/aether-ios-console.log && echo '==> iOS: Console ready (tailing /tmp/aether-ios-console.log)' && exec tail -F /tmp/aether-ios-console.log",
+				"isBackground": true,
+				"problemMatcher": {
+					"pattern": { "regexp": ".", "file": 1, "location": 2, "message": 3 },
+					"background": {
+						"activeOnStart": true,
+						"beginsPattern": "NEVER_MATCHES_qweRtY12345",
+						"endsPattern": "iOS: Console ready"
+					}
+				},
+				"runOptions": { "instanceLimit": 1 },
+				"presentation": { "reveal": "always", "panel": "dedicated", "focus": false, "clear": false },
+				"icon": { "id": "device-mobile" }
+			},
+			{
 				"label": "iOS: Configure",
 				"type": "shell",
 				"command": "python3",
 				"args": [ "${workspaceFolder}/scripts/ios_configure.py" ],
 				"options": { "cwd": "${workspaceFolder}" },
 				"problemMatcher": [],
-				"presentation": { "reveal": "silent" }
+				"presentation": { "reveal": "silent", "panel": "dedicated", "focus": false, "clear": true  }
 			},
 			{
 				"label": "iOS: Build",
@@ -96,7 +113,7 @@
 				"options": { "cwd": "${workspaceFolder}" },
 				"problemMatcher": [ "$gcc" ],
 				"group": "build",
-				"presentation": { "reveal": "silent" }
+				"presentation": { "reveal": "silent", "panel": "dedicated", "focus": false, "clear": true  }
 			},
 			{
 				"label": "iOS: Install",
@@ -108,19 +125,20 @@
 				"dependsOn": "iOS: Build",
 				"options": { "cwd": "${workspaceFolder}" },
 				"problemMatcher": [],
-				"presentation": { "reveal": "silent" }
+				"presentation": { "reveal": "silent", "panel": "dedicated", "focus": false, "clear": true  }
 			},
 			{
 				"label": "iOS: Launch",
 				"type": "shell",
 				"command": "${workspaceFolder}/scripts/ios-launch.sh",
 				"args": [
+					"--console",
 					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
 				],
 				"dependsOn": "iOS: Install",
 				"options": { "cwd": "${workspaceFolder}" },
 				"problemMatcher": [],
-				"presentation": { "reveal": "silent" }
+				"presentation": { "reveal": "silent", "panel": "dedicated", "focus": false, "clear": true }
 			},
 			{
 				"label": "iOS: Launch (Stopped)",
@@ -128,12 +146,14 @@
 				"command": "${workspaceFolder}/scripts/ios-launch.sh",
 				"args": [
 					"--start-stopped",
+					"--console",
 					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
 				],
-				"dependsOn": "iOS: Install",
+				"dependsOn": [ "iOS: Install", "iOS: Console" ],
+				"dependsOrder": "parallel",
 				"options": { "cwd": "${workspaceFolder}" },
 				"problemMatcher": [],
-				"presentation": { "reveal": "silent" }
+				"presentation": { "reveal": "silent", "panel": "dedicated", "focus": false, "clear": true }
 			}
 		]
 	},
