@@ -49,7 +49,6 @@ if(CMAKE_GENERATOR STREQUAL Xcode)
 	add_custom_command(TARGET test
 		POST_BUILD
 		COMMAND codesign --force -s - "$<TARGET_FILE:test>"
-		DEPENDS test
 		VERBATIM
 	)
 elseif(EMSCRIPTEN)

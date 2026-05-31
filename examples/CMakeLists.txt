@@ -52,31 +52,46 @@ endif()
 endif() # AE_DESKTOP END
 
 # Config
-# Default the team from $AE_APPLE_DEVELOPMENT_TEAM or scripts/config.env so
-# every configure path (cmake-tools auto-configure, `cmake --preset ios`,
-# ios_configure.py) bakes signing into the generated Xcode project without
-# anyone having to pass -DAE_APPLE_DEVELOPMENT_TEAM. -D on the command line
-# still wins because the cache entry below is not FORCE'd.
-unset(_ae_team_default)
-if(DEFINED ENV{AE_APPLE_DEVELOPMENT_TEAM})
-	set(_ae_team_default "$ENV{AE_APPLE_DEVELOPMENT_TEAM}")
-elseif(EXISTS "${CMAKE_SOURCE_DIR}/scripts/config.env")
-	file(STRINGS "${CMAKE_SOURCE_DIR}/scripts/config.env" _ae_lines
-		REGEX "^[ \t]*AE_APPLE_DEVELOPMENT_TEAM[ \t]*=")
-	if(_ae_lines)
-		list(GET _ae_lines 0 _ae_line)
-		string(REGEX REPLACE
-			"^[ \t]*AE_APPLE_DEVELOPMENT_TEAM[ \t]*=[ \t]*[\"']?([^\"'#]*)[\"']?.*$"
-			"\\1" _ae_team_default "${_ae_line}")
-		string(STRIP "${_ae_team_default}" _ae_team_default)
+if(APPLE)
+	if(AE_APPLE_DEVELOPMENT_TEAM)
+		set(_ae_team_default "${AE_APPLE_DEVELOPMENT_TEAM}")
+	else()
+		# Default the team from $AE_APPLE_DEVELOPMENT_TEAM or scripts/config.env so
+		# every configure path (cmake-tools auto-configure, `cmake --preset ios`,
+		# ios_configure.py) bakes signing into the generated Xcode project
+		unset(_ae_team_default)
+		if(DEFINED ENV{AE_APPLE_DEVELOPMENT_TEAM})
+			set(_ae_team_default "$ENV{AE_APPLE_DEVELOPMENT_TEAM}")
+			message("Using AE_APPLE_DEVELOPMENT_TEAM from environment: ${_ae_team_default}")
+		elseif(EXISTS "${CMAKE_SOURCE_DIR}/scripts/config.env")
+			file(STRINGS "${CMAKE_SOURCE_DIR}/scripts/config.env" _ae_lines
+				REGEX "^[ \t]*AE_APPLE_DEVELOPMENT_TEAM[ \t]*=")
+			if(_ae_lines)
+				list(GET _ae_lines 0 _ae_line)
+				string(REGEX REPLACE
+					"^[ \t]*AE_APPLE_DEVELOPMENT_TEAM[ \t]*=[ \t]*[\"']?([^\"'#]*)[\"']?.*$"
+					"\\1" _ae_team_default "${_ae_line}")
+				string(STRIP "${_ae_team_default}" _ae_team_default)
+				message("Using AE_APPLE_DEVELOPMENT_TEAM from scripts/config.env: ${_ae_team_default}")
+			endif()
+		endif()
+		if(AE_APPLE_DEVELOPMENT_TEAM)
+			message("Previously cached AE_APPLE_DEVELOPMENT_TEAM: ${AE_APPLE_DEVELOPMENT_TEAM}")
+		endif()
+	endif()
+	set(AE_APPLE_DEVELOPMENT_TEAM "${_ae_team_default}" CACHE STRING "Apple Development Team ID for aether examples" FORCE)
+	if(AE_APPLE_DEVELOPMENT_TEAM)
+		message("Cached AE_APPLE_DEVELOPMENT_TEAM: ${AE_APPLE_DEVELOPMENT_TEAM}")
+	elseif(MACOS)
+		message(WARNING "No AE_APPLE_DEVELOPMENT_TEAM. Examples will fail to run on if distributed. Set AE_APPLE_DEVELOPMENT_TEAM in the environment or in scripts/config.env to fix this.")
+	elseif(IOS)
+		message(WARNING "No AE_APPLE_DEVELOPMENT_TEAM. Apps will fail to install on device without a team. Set AE_APPLE_DEVELOPMENT_TEAM in the environment or in scripts/config.env to fix this.")
 	endif()
 endif()
-set(AE_APPLE_DEVELOPMENT_TEAM "${_ae_team_default}" CACHE STRING "Apple Development Team ID for aether examples")
+
 set(AE_EXAMPLE_SOURCES Common.h)
 if(EMSCRIPTEN)
 	add_compile_definitions(DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data")
-endif()
-if(EMSCRIPTEN)
 	set(AE_EXAMPLE_RESOURCES "index.html;index.webmanifest;data/WebIcon.png")
 elseif(APPLE)
 	set(AE_EXAMPLE_RESOURCES "data/Icon.icns")

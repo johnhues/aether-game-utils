@@ -21,64 +21,22 @@ ios build preset (currently Debug or RelWithDebInfo).
 
 CLI: python3 scripts/ios_build.py Triangle [Debug|RelWithDebInfo]
 """
-import json
 import subprocess
 import sys
 import ae_config
-
-def load_objects():
-    result = subprocess.run(
-        [ "plutil", "-convert", "json", "-o", "-", str( ae_config.PBXPROJ ) ],
-        capture_output=True, check=True,
-    )
-    return json.loads( result.stdout ).get( "objects", {} )
-
-
-def project_configs( objects ):
-    names = []
-    for obj in objects.values():
-        if isinstance( obj, dict ) and obj.get( "isa" ) == "XCBuildConfiguration":
-            name = obj.get( "name" )
-            if name and name not in names:
-                names.append( name )
-    return names
-
-
-def resolve_cmake_target( objects, name, config="Debug" ):
-    targets = [
-        ( ident, obj ) for ident, obj in objects.items()
-        if isinstance( obj, dict ) and obj.get( "isa" ) == "PBXNativeTarget"
-    ]
-
-    def settings_for( target_obj ):
-        config_list = objects.get( target_obj.get( "buildConfigurationList", "" ), {} )
-        for cid in config_list.get( "buildConfigurations", [] ):
-            c = objects.get( cid, {} )
-            if c.get( "name" ) == config:
-                return c.get( "buildSettings", {} )
-        return {}
-
-    for _, t in targets:
-        if t.get( "name" ) == name:
-            return name
-
-    for _, t in targets:
-        if settings_for( t ).get( "PRODUCT_NAME" ) == name:
-            return t[ "name" ]
-
-    sys.exit( f"ERROR: no Xcode target matches '{name}' (checked target name and PRODUCT_NAME)" )
+import ios_pbxproj
 
 
 def main():
     if len( sys.argv ) not in ( 2, 3 ):
         sys.exit( "Usage: ios_build.py <target-or-display-name> [config=Debug]" )
-    objects = load_objects()
+    objects = ios_pbxproj.load_objects()
 
     target_name = sys.argv[ 1 ]
 
     config = sys.argv[ 2 ] if len( sys.argv ) == 3 else ""
     if config:
-        valid = project_configs( objects )
+        valid = ios_pbxproj.project_configs( objects )
         if config not in valid:
             sys.exit(
                 f"ERROR: '{config}' is not a valid configuration; "
@@ -86,7 +44,7 @@ def main():
             )
     config = config or "Debug"
 
-    target = resolve_cmake_target( objects, target_name, config )
+    target, _ = ios_pbxproj.resolve_target( objects, target_name, config )
 
     preset = f"ios-{config.lower()}"
     print( f"==> Building {target} ({preset})" )

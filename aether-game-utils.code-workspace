@@ -92,6 +92,15 @@
 				"icon": { "id": "device-mobile" }
 			},
 			{
+				"label": "iOS: Clean",
+				"type": "shell",
+				"command": "rm",
+				"args": [ "-rf", "${workspaceFolder}/build_ios" ],
+				"options": { "cwd": "${workspaceFolder}" },
+				"problemMatcher": [],
+				"presentation": { "reveal": "never", "revealProblems": "never", "panel": "dedicated", "focus": false, "clear": true }
+			},
+			{
 				"label": "iOS: Configure",
 				"type": "shell",
 				"command": "python3",
