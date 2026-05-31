@@ -63,10 +63,8 @@ const char* kFragmentShader = R"(
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-  AE_LOG( "Initialize" );
-
   ae::Window window;
   ae::GraphicsDevice render;
   ae::Input input;
@@ -74,42 +72,44 @@ int main()
   ae::Spline spline( TAG_EXAMPLE );
   ae::SpriteRenderer spriteRender = TAG_EXAMPLE;
   ae::Shader spriteShader;
-  
-  window.Initialize( 800, 600, false, true, true );
-  window.SetTitle( "splines" );
-  render.Initialize( &window );
-  input.Initialize( &window );
-  fileSystem.Initialize( "data", "ae", "splines" );
-  spriteRender.Initialize( 1, 128 );
-  spriteShader.Initialize( kVertexShader, kFragmentShader );
-  spriteShader.SetBlending( true );
-  
-  spline.AppendControlPoint( ae::Vec3( -0.4f, -2.0f, 0.0f ) );
-  spline.AppendControlPoint( ae::Vec3( -2.0f, 2.0f, 0.0f ) );
-  spline.AppendControlPoint( ae::Vec3( 0.0f, 1.0f, 0.0f ) );
-  spline.AppendControlPoint( ae::Vec3( 2.0f, 2.0f, 0.0f ) );
-  spline.AppendControlPoint( ae::Vec3( 0.4f, -2.0f, 0.0f ) );
-  spline.SetLooping( true );
-
   ae::TimeStep timeStep;
-  timeStep.SetTimeStep( 1.0f / 60.0f );
-
   ae::Texture2D tex;
-  {
-    const char* fileName = "circle.tga";
-    uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
-    AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
-    ae::Scratch< uint8_t > fileBuffer( fileSize );
-    fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-    ae::TargaFile targa = TAG_EXAMPLE;
-    targa.Load( fileBuffer.Data(), fileBuffer.Length() );
-    tex.Initialize( targa.textureParams );
-  }
-
   float t = 0.0f;
   float angle = 0.0f;
 
-  while( !input.quit )
+  auto Initialize = [&]()
+  {
+    AE_LOG( "Initialize" );
+    window.Initialize( 800, 600, false, true, true );
+    window.SetTitle( "splines" );
+    render.Initialize( &window );
+    input.Initialize( &window );
+    fileSystem.Initialize( "data", "ae", "splines" );
+    spriteRender.Initialize( 1, 128 );
+    spriteShader.Initialize( kVertexShader, kFragmentShader );
+    spriteShader.SetBlending( true );
+
+    spline.AppendControlPoint( ae::Vec3( -0.4f, -2.0f, 0.0f ) );
+    spline.AppendControlPoint( ae::Vec3( -2.0f, 2.0f, 0.0f ) );
+    spline.AppendControlPoint( ae::Vec3( 0.0f, 1.0f, 0.0f ) );
+    spline.AppendControlPoint( ae::Vec3( 2.0f, 2.0f, 0.0f ) );
+    spline.AppendControlPoint( ae::Vec3( 0.4f, -2.0f, 0.0f ) );
+    spline.SetLooping( true );
+
+    timeStep.SetTimeStep( 1.0f / 60.0f );
+
+    {
+      const char* fileName = "circle.tga";
+      uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
+      AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
+      ae::Scratch< uint8_t > fileBuffer( fileSize );
+      fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
+      ae::TargaFile targa = TAG_EXAMPLE;
+      targa.Load( fileBuffer.Data(), fileBuffer.Length() );
+      tex.Initialize( targa.textureParams );
+    }
+  };
+  auto Update = [&]() -> bool
   {
     input.Pump();
     render.Activate();
@@ -125,7 +125,7 @@ int main()
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.1f ) );
       spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Blue() );
     }
-    
+
     for( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
     {
       transform = ae::Matrix4::Translation( spline.GetControlPoint( i ) - ae::Vec3( 0.0f, 0.0f, 0.1f ) );
@@ -173,13 +173,15 @@ int main()
     spriteRender.Render();
     render.Present();
     timeStep.Tick();
-  }
-
-  AE_LOG( "Terminate" );
-
-  input.Terminate();
-  render.Terminate();
-  window.Terminate();
-
-  return 0;
+    return !input.quit;
+  };
+  auto Terminate = [&]() -> int32_t
+  {
+    AE_LOG( "Terminate" );
+    input.Terminate();
+    render.Terminate();
+    window.Terminate();
+    return 0;
+  };
+  return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

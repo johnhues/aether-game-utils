@@ -9,40 +9,46 @@ extern const char* kFragmentShader;
 	#define DATA_DIR "data"
 #endif
 
-int main()
+int main( int argc, char* argv[] )
 {
 	ae::Window window;
 	ae::GraphicsDevice graphicsDevice;
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::FileSystem fileSystem;
-	window.Initialize( 640, 320, false, true, true );
-	window.SetTitle( "Game" );
-	graphicsDevice.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-	fileSystem.Initialize( DATA_DIR, "ae", "Game" );
-
 	ae::VertexBuffer vertexData;
 	ae::CollisionMesh<> collisionMesh = TAG_RESOURCE;
 	ae::Texture2D tex;
 	ae::Shader shader;
-	shader.Initialize( kVertexShader, kFragmentShader, nullptr, 0 );
-	shader.SetCulling( ae::Culling::CounterclockwiseFront );
-	shader.SetDepthWrite( true );
-	shader.SetDepthTest( true );
-	const ae::File* geoFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.obj", 2.5f );
-	const ae::File* textureFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.tga", 2.5f );
-
+	const ae::File* geoFile = nullptr;
+	const ae::File* textureFile = nullptr;
 	ae::PushOutInfo player;
-	player.sphere.radius = 0.7f;
-	player.sphere.center = ae::Vec3( 0.0f, player.sphere.radius, 0.0f );
 	float yaw = 0.0f;
 	float pitch = 0.0f;
 	uint32_t moveTouchId = 0;
 	uint32_t lookTouchId = 0;
 
-	auto Update = [&]()
+	auto Initialize = [&]()
+	{
+		window.Initialize( 640, 320, false, true, true );
+		window.SetTitle( "Game" );
+		graphicsDevice.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		fileSystem.Initialize( DATA_DIR, "ae", "Game" );
+
+		shader.Initialize( kVertexShader, kFragmentShader, nullptr, 0 );
+		shader.SetCulling( ae::Culling::CounterclockwiseFront );
+		shader.SetDepthWrite( true );
+		shader.SetDepthTest( true );
+		geoFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.obj", 2.5f );
+		textureFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.tga", 2.5f );
+
+		player.sphere.radius = 0.7f;
+		player.sphere.center = ae::Vec3( 0.0f, player.sphere.radius, 0.0f );
+	};
+
+	auto Update = [&]() -> bool
 	{
 		const float dt = ae::Min( timeStep.GetDt(), 0.03f );
 		input.Pump();
@@ -91,7 +97,7 @@ int main()
 				pitch += touchDir.y;
 			}
 			pitch = ae::Clip( pitch, -1.0f, 1.0f );
-			
+
 			// Movement input
 			if( !moveTouch ){ const int32_t idx = newTouches.FindFn( [&]( const ae::Touch& t ){ return t.startPosition.x < window.GetWidth() / 2.0f; } ); if( idx >= 0 ) { moveTouchId = newTouches[ idx ].id; } }
 			ae::Vec3 dir = ae::Vec3( 0.0f );
@@ -107,7 +113,7 @@ int main()
 				dir += forward * touchDir.y;
 				dir -= right * touchDir.x;
 			}
-			
+
 			// Physics
 			player.velocity += dir.TrimCopy( 1.0f ) * dt * 15.0f;
 			player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
@@ -140,18 +146,17 @@ int main()
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
+	auto Terminate = [&]() -> int32_t
+	{
+		// Terminate
+		fileSystem.DestroyAll();
+		input.Terminate();
+		graphicsDevice.Terminate();
+		window.Terminate();
+		return 0;
+	};
 
-	// Terminate
-	fileSystem.DestroyAll();
-	input.Terminate();
-	graphicsDevice.Terminate();
-	window.Terminate();
-	return 0;
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }
 
 const char* kVertexShader = R"(

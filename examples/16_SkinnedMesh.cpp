@@ -82,10 +82,8 @@ const char* kFragShader = R"(
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_INFO( "Initialize" );
-
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
@@ -94,91 +92,96 @@ int main()
 	ae::FileSystem fileSystem;
 	ae::DebugCamera camera = ae::Axis::Y;
 	ae::DebugLines debugLines = TAG_ALL;
-
-	window.Initialize( 800, 600, false, true, true );
-	window.SetTitle( "16_SkinnedMesh" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-	fileSystem.Initialize( "data", "ae", "skinned_mesh" );
-	camera.Reset( ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::Vec3( 0.0f, 0.4f, 3.5f ) );
-	camera.SetDistanceLimits( 1.0f, 25.0f );
-	debugLines.Initialize( 4096 );
-
-	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
-	shader.SetDepthTest( true );
-	shader.SetDepthWrite( true );
-	shader.SetBlending( true );
-	shader.SetCulling( ae::Culling::CounterclockwiseFront );
-
 	ae::Texture2D texture;
-	{
-		ae::TargaFile targaFile = TAG_ALL;
-		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, "character.tga" );
-		AE_ASSERT( fileSize );
-		ae::Scratch< uint8_t > fileData( fileSize );
-		fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", fileData.Data(), fileData.Length() );
-		targaFile.Load( fileData.Data(), fileData.Length() );
-		texture.Initialize( targaFile.textureParams );
-	}
-	
 	ae::Skin skin = TAG_ALL;
 	ae::Animation anim = TAG_ALL;
 	ae::VertexBuffer vertexData;
 	Vertex* vertices = nullptr;
-	{
-		const char* fileName = "character.fbx";
-		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
-		AE_ASSERT_MSG( fileSize, "Could not load '#'", fileName );
-		ae::Scratch< uint8_t > fileData( fileSize );
-		if( !fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() ) )
-		{
-			AE_ERR( "Error reading fbx file: '#'", fileName );
-			return -1;
-		}
-		
-		ae::FbxLoader fbxLoader = TAG_ALL;
-		if( !fbxLoader.Initialize( fileData.Data(), fileData.Length() ) )
-		{
-			AE_ERR( "Error parsing fbx file: '#'", fileName );
-			return -1;
-		}
-		
-		ae::FbxLoaderParams params;
-		params.descriptor.vertexSize = sizeof(Vertex);
-		params.descriptor.indexSize = 4;
-		params.descriptor.posOffset = offsetof( Vertex, pos );
-		params.descriptor.normalOffset = offsetof( Vertex, normal );
-		params.descriptor.colorOffset = offsetof( Vertex, color );
-		params.descriptor.uvOffset = offsetof( Vertex, uv );
-		params.vertexData = &vertexData;
-		params.skin = &skin;
-		params.anim = &anim;
-		params.maxVerts = fbxLoader.GetMeshVertexCount( 0u );
-		vertices = ae::NewArray< Vertex >( TAG_ALL, params.maxVerts );
-		params.vertexOut = vertices;
-		if( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
-		{
-			AE_ERR( "Error loading fbx file data: '#'", fileName );
-			return -1;
-		}
-	}
-	anim.loop = true;
-	
 	double animTime = 0.0;
-	
-	AE_INFO( "Run" );
-	while( !input.quit )
+
+	auto Initialize = [&]()
+	{
+		AE_INFO( "Initialize" );
+
+		window.Initialize( 800, 600, false, true, true );
+		window.SetTitle( "16_SkinnedMesh" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		fileSystem.Initialize( "data", "ae", "skinned_mesh" );
+		camera.Reset( ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::Vec3( 0.0f, 0.4f, 3.5f ) );
+		camera.SetDistanceLimits( 1.0f, 25.0f );
+		debugLines.Initialize( 4096 );
+
+		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
+		shader.SetDepthTest( true );
+		shader.SetDepthWrite( true );
+		shader.SetBlending( true );
+		shader.SetCulling( ae::Culling::CounterclockwiseFront );
+
+		{
+			ae::TargaFile targaFile = TAG_ALL;
+			uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, "character.tga" );
+			AE_ASSERT( fileSize );
+			ae::Scratch< uint8_t > fileData( fileSize );
+			fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", fileData.Data(), fileData.Length() );
+			targaFile.Load( fileData.Data(), fileData.Length() );
+			texture.Initialize( targaFile.textureParams );
+		}
+
+		{
+			const char* fileName = "character.fbx";
+			uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
+			AE_ASSERT_MSG( fileSize, "Could not load '#'", fileName );
+			ae::Scratch< uint8_t > fileData( fileSize );
+			if( !fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() ) )
+			{
+				AE_ERR( "Error reading fbx file: '#'", fileName );
+				return;
+			}
+
+			ae::FbxLoader fbxLoader = TAG_ALL;
+			if( !fbxLoader.Initialize( fileData.Data(), fileData.Length() ) )
+			{
+				AE_ERR( "Error parsing fbx file: '#'", fileName );
+				return;
+			}
+
+			ae::FbxLoaderParams params;
+			params.descriptor.vertexSize = sizeof(Vertex);
+			params.descriptor.indexSize = 4;
+			params.descriptor.posOffset = offsetof( Vertex, pos );
+			params.descriptor.normalOffset = offsetof( Vertex, normal );
+			params.descriptor.colorOffset = offsetof( Vertex, color );
+			params.descriptor.uvOffset = offsetof( Vertex, uv );
+			params.vertexData = &vertexData;
+			params.skin = &skin;
+			params.anim = &anim;
+			params.maxVerts = fbxLoader.GetMeshVertexCount( 0u );
+			vertices = ae::NewArray< Vertex >( TAG_ALL, params.maxVerts );
+			params.vertexOut = vertices;
+			if( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
+			{
+				AE_ERR( "Error loading fbx file data: '#'", fileName );
+				return;
+			}
+		}
+		anim.loop = true;
+
+		AE_INFO( "Run" );
+	};
+
+	auto Update = [&]() -> bool
 	{
 		input.Pump();
 		camera.Update( &input, timeStep.GetDt() );
-		
+
 		animTime += timeStep.GetDt() * 0.01;
-		
+
 		// Update skeleton
 		ae::Skeleton currentPose = TAG_ALL;
 		currentPose.Initialize( &skin.GetBindPose() );
-		
+
 		// Settings update
 		static int32_t s_strength10 = 10;
 		if( input.Get( ae::Key::Minus ) && !input.GetPrev( ae::Key::Minus ) )
@@ -228,12 +231,12 @@ int main()
 			}
 			s_maskCountPrev = mask.Length();
 		}
-		
+
 		// Update mesh
 		anim.AnimateByTime( &currentPose, animTime, s_strength10 / 10.0f, mask.Data(), mask.Length() );
 		skin.ApplyPoseToMesh( &currentPose, vertices->pos.data, vertices->normal.data, sizeof(Vertex), sizeof(Vertex), true, true, vertexData.GetMaxVertexCount() );
 		vertexData.UploadVertices( 0, vertices, vertexData.GetMaxVertexCount() );
-		
+
 		// Debug
 		for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 		{
@@ -245,14 +248,14 @@ int main()
 				debugLines.AddOBB( bone->modelToBone * ae::Matrix4::Scaling( 0.05f ), ae::Color::Red() );
 			}
 		}
-		
+
 		// Start frame
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.25f, 50.0f );
 		ae::Matrix4 worldToProj = viewToProj * worldToView;
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
-		
+
 		// Render mesh
 		ae::Matrix4 modelToWorld = ae::Matrix4::Identity();
 		ae::UniformList uniformList;
@@ -265,19 +268,25 @@ int main()
 		uniformList.Set( "u_tex", &texture );
 		vertexData.Bind( &shader, uniformList );
 		vertexData.Draw();
-		
+
 		// Frame end
 		debugLines.Render( worldToProj );
 		render.Present();
 		timeStep.Tick();
-	}
 
-	AE_INFO( "Terminate" );
-	ae::Delete( vertices );
-	vertices = nullptr;
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
+		return !input.quit;
+	};
 
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_INFO( "Terminate" );
+		ae::Delete( vertices );
+		vertices = nullptr;
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
+
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

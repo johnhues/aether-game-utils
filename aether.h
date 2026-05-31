@@ -3441,6 +3441,42 @@ struct Screen
 ae::Array< ae::Screen, 16 > GetScreens();
 
 //------------------------------------------------------------------------------
+// ae::Application function
+//------------------------------------------------------------------------------
+#if 0
+int main( int argc, char* argv[] )
+{
+	// ...
+	auto init = [] {};
+	auto update = []() { return true; };
+	auto terminate = []() { return 0; };
+	return ae::Application( argc, argv, init, update, terminate );
+}
+#endif
+//------------------------------------------------------------------------------
+//! Called once at startup. This is a good place to initialize an
+//! ae::Window, ae::GraphicsDevice, and ae::Input combo.
+using AppInitializeFn = ae::Function< void(), 256 >;
+//! Called each frame. Return false from your given function to quit the
+//! application. Note that this is called by the system on platforms where the
+//! system owns the main loop (like iOS and web).
+using AppUpdateFn = ae::Function< bool(), 256 >;
+//! Called once at termination, except on platforms where the system owns
+//! the main loop (like iOS and web) Terminate may never be called. The
+//! return value of your given function will be used as the process exit code.
+using AppTerminateFn = ae::Function< int32_t(), 256 >;
+//! Drives a program's lifecycle identically on platforms that own the main loop
+//! and platforms that don't. This function wraps the platform specific
+//! mechanisms that drive the main loop, and calls the given \p initialize,
+//! \p update, and \p terminate functions when appropriate.
+int32_t Application(
+	int32_t argc, char* argv[],
+	const AppInitializeFn& initialize,
+	const AppUpdateFn& update,
+	const AppTerminateFn& terminate
+);
+
+//------------------------------------------------------------------------------
 // ae::Window class
 // @TODO: WindowUnits enum: virtual dpi (OS desktop), Content (actual pixels)
 //! Window size is specified in virtual DPI units. Actual window content width and height are subject to the
@@ -3762,6 +3798,7 @@ struct GamepadState // @TODO: Rename Gamepad
 struct Touch
 {
 	uint32_t id = 0;
+	double startTime = 0.0; // Relative to ae::GetTime()
 	ae::Int2 startPosition = ae::Int2( 0.0f );
 	ae::Int2 position = ae::Int2( 0.0f );
 	ae::Int2 movement = ae::Int2( 0.0f );
@@ -3841,7 +3878,7 @@ public:
 	//! Returns a touch that was just released with the given \p id or nullptr
 	//! if it does not exist
 	const ae::Touch* GetFinishedTouchById( uint32_t id ) const;
-	//! Returns all touches that have stated since the last ae::Input::Pump()
+	//! Returns all touches that have started since the last ae::Input::Pump()
 	//! call
 	ae::TouchArray GetNewTouches() const;
 	//! Returns all touches that have been released since the last
@@ -3860,6 +3897,7 @@ public:
 
 // private:
 	Input( const Input& ) = delete;
+	void m_TryNewFrame();
 	void m_SetMousePos( ae::Int2 pos );
 	void m_SetMousePos( ae::Int2 pos, ae::Int2 movement );
 	void m_SetCursorPos( ae::Int2 pos );
@@ -3867,6 +3905,7 @@ public:
 	void m_UpdateModifiers();
 	ae::TimeStep m_timeStep;
 	ae::Window* m_window = nullptr;
+	bool m_pendingNewFrame = true;
 	bool m_captureMouse = false;
 	ae::Int2 m_capturedMousePos = ae::Int2( INT_MAX );
 	bool m_mousePosSet = false;
@@ -3885,8 +3924,6 @@ public:
 	ae::TouchArray m_touches;
 	ae::TouchArray m_touchesPrev;
 	uint32_t m_touchIndex = 0; // 0 is invalid
-	// Emscripten
-	bool newFrame_HACK = false;
 };
 
 /* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
@@ -7429,8 +7466,11 @@ struct _Globals
 	bool varSerializerInitialized = false;
 #endif // AE_DEPRECATED
 
-	// Graphics
+	// Platform
 	class GraphicsDevice* graphicsDevice = nullptr;
+	class _Application* application = nullptr;
+	void* eaglLayer = nullptr; // iOS: CAEAGLLayer, set by aeApplicationDelegate before Window init
+	class Input* input = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -19992,6 +20032,235 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 namespace ae {
 #endif
 
+//------------------------------------------------------------------------------
+// ae::_Application (internal)
+//------------------------------------------------------------------------------
+//! Internal: holds an ae::Application()'s callbacks and owns the platform main
+//! loop. Constructed by ae::Application(); not used directly.
+class _Application
+{
+public:
+	AppInitializeFn Initialize;
+	AppUpdateFn Update;
+	AppTerminateFn Terminate;
+	int32_t Run( int32_t argc, char* argv[] );
+};
+
+//------------------------------------------------------------------------------
+// ae::Application Objective-C aeApplicationDelegate class (iOS)
+//------------------------------------------------------------------------------
+#if _AE_IOS_
+} // ae end
+@interface aeEAGLView : UIView
+{
+	NSMapTable< UITouch*, NSNumber* >* _touchIds;
+}
+@end
+@implementation aeEAGLView
++ (Class)layerClass
+{
+	return [CAEAGLLayer class];
+}
+- (instancetype)initWithFrame:(CGRect)frame
+{
+	self = [super initWithFrame:frame];
+	if( self )
+	{
+		CAEAGLLayer* layer = (CAEAGLLayer*)self.layer;
+		layer.opaque = YES;
+		layer.contentsScale = [UIScreen mainScreen].scale;
+		layer.drawableProperties = @{
+			kEAGLDrawablePropertyRetainedBacking : @YES,
+			kEAGLDrawablePropertyColorFormat : kEAGLColorFormatRGBA8,
+		};
+		self.multipleTouchEnabled = YES;
+		_touchIds = [NSMapTable weakToStrongObjectsMapTable];
+	}
+	return self;
+}
+- (ae::Int2)aePosForTouch:(UITouch*)t
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	const CGPoint p = [t locationInView:self];
+	const int32_t height = ( input && input->m_window ) ? input->m_window->GetHeight() : (int32_t)self.bounds.size.height;
+	return ae::Int2( (int32_t)p.x, height - (int32_t)p.y );
+}
+- (void)touchesBegan:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		if( input->m_touches.Length() >= input->m_touches.Size() ) { break; }
+		input->m_touchIndex++;
+		if( input->m_touchIndex == 0 ) { input->m_touchIndex = 1; }
+		const ae::Int2 pos = [self aePosForTouch:uiTouch];
+		ae::Touch* touch = &input->m_touches.Append( {} );
+		touch->id = input->m_touchIndex;
+		touch->startPosition = pos;
+		touch->position = pos;
+		touch->startTime = ae::GetTime();
+		[_touchIds setObject:@(touch->id) forKey:uiTouch];
+	}
+}
+- (void)touchesMoved:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		const uint32_t id = idNum.unsignedIntValue;
+		const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
+		const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
+		if( touchIdx >= 0 )
+		{
+			const ae::Int2 pos = [self aePosForTouch:uiTouch];
+			input->m_touches[ touchIdx ].position = pos;
+			if( prevTouchIdx >= 0 )
+			{
+				input->m_touches[ touchIdx ].movement += pos - input->m_touchesPrev[ prevTouchIdx ].position;
+			}
+		}
+	}
+}
+- (void)touchesEnded:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		const uint32_t id = idNum.unsignedIntValue;
+		const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
+		if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
+		[_touchIds removeObjectForKey:uiTouch];
+	}
+}
+- (void)touchesCancelled:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		const uint32_t id = idNum.unsignedIntValue;
+		const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
+		const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
+		if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
+		if( prevTouchIdx >= 0 ) { input->m_touchesPrev.Remove( prevTouchIdx ); }
+		[_touchIds removeObjectForKey:uiTouch];
+	}
+}
+@end
+
+@interface aeViewController : UIViewController
+@property ( nonatomic, strong ) aeEAGLView* glView;
+@end
+@implementation aeViewController
+- (void)loadView
+{
+	self.glView = [[aeEAGLView alloc] initWithFrame:[UIScreen mainScreen].bounds];
+	self.view = self.glView;
+}
+- (void)viewDidLoad {
+	[super viewDidLoad];
+	[self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
+}
+- (BOOL)prefersStatusBarHidden
+{
+	return YES; // Hide battery and time etc
+}
+- (UIRectEdge)preferredScreenEdgesDeferringSystemGestures {
+	return UIRectEdgeAll; // Prevent system gestures from interfering with edge input
+}
+- (BOOL)prefersHomeIndicatorAutoHidden {
+	return NO; // Must be NO for the '...DeferringSystemGestures' to work
+}
+@end
+
+@interface aeApplicationDelegate : UIResponder < UIApplicationDelegate >
+@property ( nonatomic, strong ) UIWindow* window;
+@property ( nonatomic, strong ) aeViewController* viewController;
+@property ( nonatomic, strong ) CADisplayLink* displayLink;
+@end
+@implementation aeApplicationDelegate
+- (BOOL)application:(UIApplication*)app didFinishLaunchingWithOptions:(NSDictionary*)opts
+{
+	self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+	self.viewController = [[aeViewController alloc] init];
+	self.window.rootViewController = self.viewController;
+	[self.window makeKeyAndVisible];
+	[self.viewController.view layoutIfNeeded];
+	// Provide the CAEAGLLayer so Window::Initialize() can attach its
+	// renderbuffer, then run the app's Initialize callback.
+	ae::_Globals::Get()->eaglLayer = (__bridge void*)self.viewController.glView.layer;
+	ae::_Globals::Get()->application->Initialize();
+	self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick: )];
+	[self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
+	return YES;
+}
+- (void)tick:(CADisplayLink*)link
+{
+	if( !ae::_Globals::Get()->application->Update() )
+	{
+		[link invalidate];
+		const int32_t termResult = ae::_Globals::Get()->application->Terminate();
+		exit( termResult );
+	}
+}
+@end
+namespace ae {
+#endif
+
+//------------------------------------------------------------------------------
+// ae::_Application member functions
+//------------------------------------------------------------------------------
+int32_t _Application::Run( int32_t argc, char* argv[] )
+{
+#if _AE_IOS_
+	ae::_Globals::Get()->application = this;
+	@autoreleasepool
+	{
+		return UIApplicationMain( argc, argv, nil, @"aeApplicationDelegate" );
+	}
+#else
+	(void)argc;
+	(void)argv;
+	Initialize();
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
+#else
+	while( Update() )
+	{
+	}
+#endif
+	return Terminate();
+#endif
+}
+
+//------------------------------------------------------------------------------
+// ae::Application
+//------------------------------------------------------------------------------
+int32_t Application( int32_t argc, char* argv[],
+	const AppInitializeFn& initialize,
+	const AppUpdateFn& update,
+	const AppTerminateFn& terminate )
+{
+	_Application app;
+	app.Initialize = initialize;
+	app.Update = update;
+	app.Terminate = terminate;
+	return app.Run( argc, argv );
+}
+
 uint32_t _ae_GetCurrentFramebuffer();
 
 //------------------------------------------------------------------------------
@@ -20160,11 +20429,10 @@ ae::Int2 Window::m_nativeToAe( ae::Int2 pos, ae::Int2 size )
 #endif
 }
 
-// iOS-only: color renderbuffer attached to the host CAEAGLLayer drawable. Used
-// by Window::Present to call [eaglContext presentRenderbuffer:]. The host
-// exposes the CAEAGLLayer pointer.
+// iOS-only: color renderbuffer attached to the CAEAGLLayer drawable. Used by
+// Window::Present to call [eaglContext presentRenderbuffer:]. The layer is
+// created by aeApplicationDelegate and stored in ae::_Globals::eaglLayer.
 #if _AE_IOS_ && AE_ENABLE_OPENGL
-extern "C" void* g_eaglLayer;
 static GLuint g_ae_iOSColorRenderbuffer = 0;
 #endif
 
@@ -20429,23 +20697,25 @@ void Window::m_Initialize( bool rememberPosition )
 	}
 #elif _AE_IOS_
 #if AE_ENABLE_OPENGL
-	// Create the EAGL context, attach a renderbuffer to the host-provided
-	// CAEAGLLayer drawable, wrap it in a default FBO, and stash the renderbuffer
-	// id at module scope so Present() can target it. The host
-	// exposes the layer via the extern symbol g_eaglLayer.
+	// Create the EAGL context, attach a renderbuffer to the CAEAGLLayer drawable
+	// (created by aeApplicationDelegate, stored in ae::_Globals::eaglLayer), wrap
+	// it in a default FBO, and stash the renderbuffer id at module scope so
+	// Present() can target it.
 	EAGLContext* eaglContext = [ [ EAGLContext alloc ] initWithAPI:kEAGLRenderingAPIOpenGLES3 ];
 	AE_ASSERT_MSG( eaglContext, "Failed to create EAGLContext (OpenGL ES 3)" );
 	const BOOL madeCurrent = [ EAGLContext setCurrentContext:eaglContext ];
 	AE_ASSERT_MSG( madeCurrent, "Failed to make EAGLContext current" );
 	m_context = (__bridge_retained void*)eaglContext;
 
-	// Spin briefly while the AppDelegate sets up the view
-	for( int i = 0; i < 100 && !g_eaglLayer; i++ )
+	// aeApplicationDelegate sets eaglLayer before calling Application::Initialize().
+	void* eaglLayerPtr = ae::_Globals::Get()->eaglLayer;
+	for( int i = 0; i < 100 && !eaglLayerPtr; i++ )
 	{
 		[ NSThread sleepForTimeInterval:0.01 ];
+		eaglLayerPtr = ae::_Globals::Get()->eaglLayer;
 	}
-	AE_ASSERT_MSG( g_eaglLayer, "iOS host did not provide CAEAGLLayer" );
-	CAEAGLLayer* eaglLayer = (__bridge CAEAGLLayer*)g_eaglLayer;
+	AE_ASSERT_MSG( eaglLayerPtr, "ae::_Globals::eaglLayer not set (aeApplicationDelegate did not run)" );
+	CAEAGLLayer* eaglLayer = (__bridge CAEAGLLayer*)eaglLayerPtr;
 
 	GLuint colorRb = 0;
 	glGenRenderbuffers( 1, &colorRb );
@@ -20876,24 +21146,6 @@ namespace ae {
 // ae::Input member functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
-void _aeEmscriptenTryNewFrame( Input* input )
-{
-	if( input->newFrame_HACK )
-	{
-		memcpy( input->m_keysPrev, input->m_keys, sizeof(input->m_keys) );
-		input->mousePrev = input->mouse;
-		input->mouse.movement = ae::Int2( 0 );
-		input->mouse.scroll = ae::Vec2( 0.0f );
-		input->mouse.scrollMomentum = ae::Vec2( 0.0f );
-		input->m_touchesPrev = input->m_touches;
-		for( ae::Touch& touch : input->m_touches )
-		{
-			touch.movement = ae::Int2( 0 );
-		}
-		input->newFrame_HACK = false;
-	}
-}
-
 EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
 	static const std::array< ae::Key, 255 > s_keyMap = []()
@@ -20973,7 +21225,7 @@ EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* ke
 	// Start key handling
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 
 	if( keyEvent->which < s_keyMap.size() && (int)s_keyMap[ keyEvent->which ] )
 	{
@@ -20991,7 +21243,7 @@ EM_BOOL _aeEmscriptenHandleWheel( int eventType, const EmscriptenWheelEvent* whe
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 	// DOM_DELTA_PIXEL (0) is the trackpad path; DOM_DELTA_LINE (1) is the mouse wheel path.
 	// DOM_DELTA_PAGE (2) is not handled — too coarse for camera/UI input.
 	if( wheelEvent->deltaMode != DOM_DELTA_PAGE )
@@ -21020,7 +21272,7 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 	
 	const ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY );
 	input->m_SetMousePos( pos.FloorCopy(), ae::Int2( mouseEvent->movementX, -mouseEvent->movementY ) );
@@ -21043,7 +21295,7 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 
 	for( uint32_t i = 0; i < touchEvent->numTouches; i++ )
 	{
@@ -21127,6 +21379,7 @@ void Input::Initialize( Window* window )
 	{
 		window->input = this;
 	}
+	ae::_Globals::Get()->input = this;
 	memset( m_keys, 0, sizeof(m_keys) );
 	memset( m_keysPrev, 0, sizeof(m_keysPrev) );
 
@@ -21174,29 +21427,36 @@ void Input::Initialize( Window* window )
 }
 
 void Input::Terminate()
-{}
+{
+	if( ae::_Globals::Get()->input == this )
+	{
+		ae::_Globals::Get()->input = nullptr;
+	}
+}
+
+void Input::m_TryNewFrame()
+{
+	if( m_pendingNewFrame )
+	{
+		memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
+		mousePrev = mouse;
+		mouse.movement = ae::Int2( 0 );
+		mouse.scroll = ae::Vec2( 0.0f );
+		mouse.scrollMomentum = ae::Vec2( 0.0f );
+		m_touchesPrev = m_touches;
+		for( ae::Touch& touch : m_touches )
+		{
+			touch.movement = ae::Int2( 0 );
+		}
+		m_pendingNewFrame = false;
+	}
+}
 
 void Input::Pump()
 {
 	m_timeStep.Tick();
-#if _AE_EMSCRIPTEN_
-	_aeEmscriptenTryNewFrame( this );
-	newFrame_HACK = true;
-#else
-	// Clear keys each frame and then check for presses below
-	// Emscripten doesn't do this because it uses a callback to set m_keys
-	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-	memset( m_keys, 0, sizeof(m_keys) );
-	mousePrev = mouse;
-	mouse.movement = ae::Int2( 0 );
-	mouse.scroll = ae::Vec2( 0.0f );
-	mouse.scrollMomentum = ae::Vec2( 0.0f );
-	m_touchesPrev = m_touches;
-	for( ae::Touch& touch : m_touches )
-	{
-		touch.movement = ae::Int2( 0 );
-	}
-#endif
+	m_TryNewFrame();
+	m_pendingNewFrame = true;
 	m_textInput = ""; // Clear last frames text input
 
 	// Handle system events

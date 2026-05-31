@@ -386,15 +386,21 @@ void Program::DrawFolders()
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
 	Program program;
-	program.Initialize();
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* program ) { ((Program*)program)->Tick(); }, &program, 0, 1 );
-#else
-	while( program.Tick() ) {}
-#endif
-	program.Terminate();
-	return 0;
+	auto Initialize = [&]()
+	{
+		program.Initialize();
+	};
+	auto Update = [&]() -> bool
+	{
+		return program.Tick();
+	};
+	auto Terminate = [&]() -> int32_t
+	{
+		program.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

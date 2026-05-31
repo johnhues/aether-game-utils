@@ -364,15 +364,21 @@ struct Game
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
 	Game game;
-	game.Initialize();
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* game ) { ((Game*)game)->Tick(); }, &game, 0, 1 );
-#else
-	while( game.Tick() ) {}
-#endif
-	game.Terminate();
-	return 0;
+	auto Initialize = [&]()
+	{
+		game.Initialize();
+	};
+	auto Update = [&]() -> bool
+	{
+		return game.Tick();
+	};
+	auto Terminate = [&]() -> int32_t
+	{
+		game.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }
