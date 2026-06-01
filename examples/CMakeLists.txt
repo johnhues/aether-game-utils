@@ -190,7 +190,7 @@ ae_add_bundle("Triangle"
 	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
-	SRC_FILES "06_Triangle.mm"
+	SRC_FILES "06_Triangle.cpp"
 	RESOURCES "${AE_EXAMPLE_RESOURCES}"
 	LIBS "ae"
 )

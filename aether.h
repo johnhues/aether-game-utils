@@ -3793,18 +3793,44 @@ struct GamepadState // @TODO: Rename Gamepad
 };
 
 //------------------------------------------------------------------------------
+// ae::Touch constants
+//------------------------------------------------------------------------------
+const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
+const uint32_t kMaxTouchSamples = 64; //!< Max number of position samples stored for each touch
+
+//------------------------------------------------------------------------------
 // ae::Touch struct
 //------------------------------------------------------------------------------
 struct Touch
 {
 	uint32_t id = 0;
-	double startTime = 0.0; // Relative to ae::GetTime()
-	ae::Int2 startPosition = ae::Int2( 0.0f );
-	ae::Int2 position = ae::Int2( 0.0f );
-	ae::Int2 movement = ae::Int2( 0.0f );
+	struct Sample
+	{
+		double time; // Relative to ae::GetTime()
+		ae::Int2 position; // Relative to the virtual window size (ie. not affected by window scale factor)
+	};
+	//! The oldest position sample is at index 0, and the newest is at index
+	//! ( length - 1 ). Position samples are added on every system input event,
+	//! so the time between samples is not fixed. Once max samples is reached
+	//! the sample that contributes the least to the 'shape' of the curve formed
+	//! by the consecutive samples is removed to make room for the new sample.
+	ae::Array< Sample, kMaxTouchSamples > samples;
+	//! True after the user releases or cancels the touch. The touch remains
+	//! visible via ae::Input::GetTouches() until ae::Input::ReleaseTouch() is
+	//! called. samples is not modified after the touch ends.
+	bool ended = false;
+
+	ae::Int2 Position() const;
+	ae::Int2 StartPosition() const;
+	ae::Int2 StartDelta() const;
+	bool Ended() const { return ended; }
+	double Lifetime() const;
+
+	// Internal: appends a sample, simplifying the stored curve when full.
+	void _AppendSample( double time, ae::Int2 position );
 };
-const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
-using TouchArray = ae::Array< ae::Touch, ae::kMaxTouches >;
+
+using TouchArray = ae::Array< ae::Touch*, ae::kMaxTouches >;
 
 //------------------------------------------------------------------------------
 // ae::Input class
@@ -3872,22 +3898,26 @@ public:
 	inline bool GetGamepadPressLeft( uint32_t idx = 0 ) const { return gamepads[ idx ].left && !gamepadsPrev[ idx ].left; }
 	inline bool GetGamepadPressRight( uint32_t idx = 0 ) const { return gamepads[ idx ].right && !gamepadsPrev[ idx ].right; }
 
-	//! Returns an active touch with the given \p id or nullptr if it does not
-	//! exist
-	const ae::Touch* GetTouchById( uint32_t id ) const;
-	//! Returns a touch that was just released with the given \p id or nullptr
-	//! if it does not exist
-	const ae::Touch* GetFinishedTouchById( uint32_t id ) const;
-	//! Returns all touches that have started since the last ae::Input::Pump()
-	//! call
-	ae::TouchArray GetNewTouches() const;
-	//! Returns all touches that have been released since the last
-	//! ae::Input::Pump() call
-	ae::TouchArray GetFinishedTouches() const;
-	//! Returns all touches that are currently active
-	const ae::TouchArray& GetTouches() const;
-	//! Returns all touches that were active in the previous frame
-	const ae::TouchArray& GetPreviousTouches() const;
+	//! Adopts the oldest unseen touch into the tracked set, making it visible
+	//! via ae::Input::GetTouches() until released. Returns the adopted touch,
+	//! or nullptr if there are no new touches. Touches that have already
+	//! ended are never returned. The result must be freed with
+	//! ae::Input::ReleaseTouch() when it is no longer needed. Note that if
+	//! touches are not pumped regularly touches may be discarded before they
+	//! are ever returned.
+	const ae::Touch* PumpTouches();
+	//! Returns the touches the caller has opted into tracking via
+	//! ae::Input::PumpTouches() and have not yet released. Touches that have
+	//! not been pumped are not visible here. The array is returned by value so
+	//! it's safe to iterate through this result and call
+	//! ae::Input::ReleaseTouch() on all/any of the touches in any order. Be
+	//! careful not to access the internals of touches in this array that you've
+	//! already released.
+	ae::TouchArray GetTouches() const { return m_touches; }
+	//! Frees a touch returned by PumpTouches(). This **must** be called per
+	//! touch or internal limits will be hit and new touches may be discarded.
+	//! It is not safe to access a touch after it has been released.
+	void ReleaseTouch( const ae::Touch* touch );
 	
 	MouseState mouse;
 	MouseState mousePrev;
@@ -3921,8 +3951,10 @@ public:
 	bool m_gamepadRequiresFocus = true;
 	bool m_naturalScroll = false;
 	// Touch
-	ae::TouchArray m_touches;
-	ae::TouchArray m_touchesPrev;
+	using TouchPool = ae::ObjectPool< ae::Touch, ae::kMaxTouches >;
+	TouchPool m_touchPool;
+	TouchArray m_newTouches;
+	TouchArray m_touches;
 	uint32_t m_touchIndex = 0; // 0 is invalid
 };
 
@@ -20085,6 +20117,17 @@ public:
 	const int32_t height = ( input && input->m_window ) ? input->m_window->GetHeight() : (int32_t)self.bounds.size.height;
 	return ae::Int2( (int32_t)p.x, height - (int32_t)p.y );
 }
+- (ae::Touch*)aeFindTouchById:(uint32_t)id
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return nullptr; }
+	const auto matches = [&]( ae::Touch* t ){ return t->id == id; };
+	int32_t idx = input->m_newTouches.FindFn( matches );
+	if( idx >= 0 ) { return input->m_newTouches[ idx ]; }
+	idx = input->m_touches.FindFn( matches );
+	if( idx >= 0 ) { return input->m_touches[ idx ]; }
+	return nullptr;
+}
 - (void)touchesBegan:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
 {
 	ae::Input* input = ae::_Globals::Get()->input;
@@ -20092,15 +20135,14 @@ public:
 	input->m_TryNewFrame();
 	for( UITouch* uiTouch in touches )
 	{
-		if( input->m_touches.Length() >= input->m_touches.Size() ) { break; }
+		if( input->m_newTouches.Length() >= input->m_newTouches.Size() ) { break; }
+		ae::Touch* touch = input->m_touchPool.New();
+		if( !touch ) { break; }
 		input->m_touchIndex++;
 		if( input->m_touchIndex == 0 ) { input->m_touchIndex = 1; }
-		const ae::Int2 pos = [self aePosForTouch:uiTouch];
-		ae::Touch* touch = &input->m_touches.Append( {} );
 		touch->id = input->m_touchIndex;
-		touch->startPosition = pos;
-		touch->position = pos;
-		touch->startTime = ae::GetTime();
+		touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+		input->m_newTouches.Append( touch );
 		[_touchIds setObject:@(touch->id) forKey:uiTouch];
 	}
 }
@@ -20113,17 +20155,10 @@ public:
 	{
 		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
 		if( !idNum ) { continue; }
-		const uint32_t id = idNum.unsignedIntValue;
-		const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-		const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-		if( touchIdx >= 0 )
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch && !touch->ended )
 		{
-			const ae::Int2 pos = [self aePosForTouch:uiTouch];
-			input->m_touches[ touchIdx ].position = pos;
-			if( prevTouchIdx >= 0 )
-			{
-				input->m_touches[ touchIdx ].movement += pos - input->m_touchesPrev[ prevTouchIdx ].position;
-			}
+			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
 		}
 	}
 }
@@ -20136,9 +20171,12 @@ public:
 	{
 		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
 		if( !idNum ) { continue; }
-		const uint32_t id = idNum.unsignedIntValue;
-		const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-		if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch )
+		{
+			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+			touch->ended = true;
+		}
 		[_touchIds removeObjectForKey:uiTouch];
 	}
 }
@@ -20151,11 +20189,8 @@ public:
 	{
 		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
 		if( !idNum ) { continue; }
-		const uint32_t id = idNum.unsignedIntValue;
-		const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-		const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-		if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
-		if( prevTouchIdx >= 0 ) { input->m_touchesPrev.Remove( prevTouchIdx ); }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch ) { touch->ended = true; }
 		[_touchIds removeObjectForKey:uiTouch];
 	}
 }
@@ -21297,57 +21332,59 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 	Input* input = (Input*)userData;
 	input->m_TryNewFrame();
 
+	const double now = ae::GetTime();
 	for( uint32_t i = 0; i < touchEvent->numTouches; i++ )
 	{
 		const EmscriptenTouchPoint* emTouch = &touchEvent->touches[ i ];
-		if( emTouch->isChanged )
+		if( !emTouch->isChanged ) { continue; }
+		ae::Int2 pos( emTouch->targetX, emTouch->targetY );
+		pos.y = input->m_window->GetHeight() - pos.y;
+		const uint32_t id = (uint32_t)emTouch->identifier;
+		const auto matches = [&]( ae::Touch* t ){ return t->id == id; };
+		ae::Touch* touch = nullptr;
+		int32_t idx = input->m_newTouches.FindFn( matches );
+		if( idx >= 0 ) { touch = input->m_newTouches[ idx ]; }
+		else
 		{
-			ae::Int2 pos( emTouch->targetX, emTouch->targetY );
-			pos.y = input->m_window->GetHeight() - pos.y;
-			switch( eventType )
+			idx = input->m_touches.FindFn( matches );
+			if( idx >= 0 ) { touch = input->m_touches[ idx ]; }
+		}
+		switch( eventType )
+		{
+			case EMSCRIPTEN_EVENT_TOUCHSTART:
 			{
-				case EMSCRIPTEN_EVENT_TOUCHSTART:
-				{
-					if( input->m_touches.Length() < input->m_touches.Size() )
-					{
-						ae::Touch* touch = &input->m_touches.Append( {} );
-						touch->id = emTouch->identifier;
-						touch->startPosition = pos;
-						touch->position = pos;
-					}
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHEND:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHCANCEL:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
-					if( prevTouchIdx >= 0 ) { input->m_touchesPrev.Remove( prevTouchIdx ); }
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHMOVE:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 )
-					{
-						input->m_touches[ touchIdx ].position = pos;
-						if( prevTouchIdx >= 0 )
-						{
-							input->m_touches[ touchIdx ].movement += pos - input->m_touchesPrev[ prevTouchIdx ].position;
-						}
-					}
-					break;
-				}
-				default:
-					break;
+				if( touch ) { break; } // Already known
+				if( input->m_newTouches.Length() >= input->m_newTouches.Size() ) { break; }
+				touch = input->m_touchPool.New();
+				if( !touch ) { break; }
+				touch->id = id;
+				touch->_AppendSample( now, pos );
+				input->m_newTouches.Append( touch );
+				break;
 			}
+			case EMSCRIPTEN_EVENT_TOUCHEND:
+			{
+				if( !touch ) { break; }
+				touch->_AppendSample( now, pos );
+				touch->ended = true;
+				break;
+			}
+			case EMSCRIPTEN_EVENT_TOUCHCANCEL:
+			{
+				if( !touch ) { break; }
+				touch->ended = true;
+				break;
+			}
+			case EMSCRIPTEN_EVENT_TOUCHMOVE:
+			{
+				if( touch && !touch->ended )
+				{
+					touch->_AppendSample( now, pos );
+				}
+				break;
+			}
+			default:
+				break;
 		}
 	}
 
@@ -21443,10 +21480,15 @@ void Input::m_TryNewFrame()
 		mouse.movement = ae::Int2( 0 );
 		mouse.scroll = ae::Vec2( 0.0f );
 		mouse.scrollMomentum = ae::Vec2( 0.0f );
-		m_touchesPrev = m_touches;
-		for( ae::Touch& touch : m_touches )
+		// Discard touches that ended before they were adopted via PumpTouches().
+		// Per the staged API contract, ended touches are never returned.
+		for( int32_t i = (int32_t)m_newTouches.Length() - 1; i >= 0; i-- )
 		{
-			touch.movement = ae::Int2( 0 );
+			if( m_newTouches[ i ]->ended )
+			{
+				m_touchPool.Delete( m_newTouches[ i ] );
+				m_newTouches.Remove( i );
+			}
 		}
 		m_pendingNewFrame = false;
 	}
@@ -22381,55 +22423,81 @@ bool Input::GetPrev( ae::Key key ) const
 	return m_keysPrev[ static_cast< int >( key ) ];
 }
 
-const ae::Touch* Input::GetTouchById( uint32_t id ) const
+ae::Int2 Touch::Position() const
 {
-	const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	return ( touchIdx >= 0 ) ? &m_touches[ touchIdx ] : nullptr;
+	return samples.Length() ? samples[ samples.Length() - 1 ].position : ae::Int2( 0 );
 }
 
-const ae::Touch* Input::GetFinishedTouchById( uint32_t id ) const
+ae::Int2 Touch::StartPosition() const
 {
-	const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	const int32_t prevTouchIdx = m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	return ( touchIdx < 0 && prevTouchIdx >= 0 ) ? &m_touchesPrev[ prevTouchIdx ] : nullptr;
+	return samples.Length() ? samples[ 0 ].position : ae::Int2( 0 );
 }
 
-ae::TouchArray Input::GetNewTouches() const
+ae::Int2 Touch::StartDelta() const
 {
-	ae::TouchArray result;
-	for( const ae::Touch& touch : m_touches )
+	return Position() - StartPosition();
+}
+
+double Touch::Lifetime() const
+{
+	if( samples.Length() < 2 )
 	{
-		const int32_t prevTouchIdx = m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == touch.id; } );
-		if( prevTouchIdx < 0 )
-		{
-			result.Append( touch );
-		}
+		return 0.0;
 	}
+	return samples[ samples.Length() - 1 ].time - samples[ 0 ].time;
+}
+
+void Touch::_AppendSample( double time, ae::Int2 position )
+{
+	if( samples.Length() == samples.Size() )
+	{
+		// Visvalingam: drop the interior sample with the smallest triangle area
+		// against its immediate neighbors. Endpoints (start and most recent)
+		// are preserved.
+		int32_t dropIdx = 1;
+		int64_t minArea = INT64_MAX;
+		for( uint32_t i = 1; i + 1 < samples.Length(); i++ )
+		{
+			const ae::Int2 a = samples[ i - 1 ].position;
+			const ae::Int2 b = samples[ i ].position;
+			const ae::Int2 c = samples[ i + 1 ].position;
+			const int64_t ax = a.x, ay = a.y;
+			const int64_t bx = b.x, by = b.y;
+			const int64_t cx = c.x, cy = c.y;
+			const int64_t cross = ( bx - ax ) * ( cy - ay ) - ( by - ay ) * ( cx - ax );
+			const int64_t area = cross < 0 ? -cross : cross;
+			if( area < minArea )
+			{
+				minArea = area;
+				dropIdx = (int32_t)i;
+			}
+		}
+		samples.Remove( dropIdx );
+	}
+	samples.Append( { time, position } );
+}
+
+const ae::Touch* Input::PumpTouches()
+{
+	if( !m_newTouches.Length() ||
+		m_touches.Length() >= m_touches.Size() )
+	{
+		return nullptr;
+	}
+	ae::Touch* result = m_newTouches[ 0 ];
+	m_newTouches.Remove( 0 );
+	m_touches.Append( result );
 	return result;
 }
 
-ae::TouchArray Input::GetFinishedTouches() const
+void Input::ReleaseTouch( const ae::Touch* touch )
 {
-	ae::TouchArray result;
-	for( const ae::Touch& touch : m_touchesPrev )
+	const int32_t idx = m_touches.Find( touch );
+	if( idx >= 0 )
 	{
-		const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == touch.id; } );
-		if( touchIdx < 0 )
-		{
-			result.Append( touch );
-		}
+		m_touches.Remove( idx );
+		m_touchPool.Delete( const_cast< ae::Touch* >( touch ) );
 	}
-	return result;
-}
-
-const ae::TouchArray& Input::GetTouches() const
-{
-	return m_touches;
-}
-
-const ae::TouchArray& Input::GetPreviousTouches() const
-{
-	return m_touchesPrev;
 }
 
 void Input::m_SetMousePos( ae::Int2 pos )

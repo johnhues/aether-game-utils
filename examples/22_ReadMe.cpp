@@ -25,8 +25,9 @@ int main( int argc, char* argv[] )
 	ae::PushOutInfo player;
 	float yaw = 0.0f;
 	float pitch = 0.0f;
-	uint32_t moveTouchId = 0;
-	uint32_t lookTouchId = 0;
+	const ae::Touch* moveTouch = nullptr;
+	const ae::Touch* lookTouch = nullptr;
+	ae::Int2 lookLastPos = ae::Int2( 0 );
 
 	auto Initialize = [&]()
 	{
@@ -75,7 +76,15 @@ int main( int argc, char* argv[] )
 		if( fileSystem.GetFileStatusCount( ae::File::Status::Success ) == fileSystem.GetFileCount() )
 		{
 			// Misc input
-			const ae::Array< ae::Touch, ae::kMaxTouches > newTouches = input.GetNewTouches();
+			if( lookTouch && lookTouch->Ended() ) { input.ReleaseTouch( lookTouch ); lookTouch = nullptr; }
+			if( moveTouch && moveTouch->Ended() ) { input.ReleaseTouch( moveTouch ); moveTouch = nullptr; }
+			while( const ae::Touch* t = input.PumpTouches() )
+			{
+				const bool onLeft = ( t->StartPosition().x < window.GetWidth() / 2.0f );
+				if( !moveTouch && onLeft ) { moveTouch = t; }
+				else if( !lookTouch ) { lookTouch = t; lookLastPos = t->StartPosition(); }
+				else { input.ReleaseTouch( t ); }
+			}
 			const float displaySize = ae::Min( window.GetWidth(), window.GetHeight() );
 			const ae::Vec3 forward( -cosf( yaw ) * cosf( pitch ), sinf( pitch ), sinf( yaw ) * cosf( pitch ) );
 			const ae::Vec3 right( forward.z, 0.0f, -forward.x );
@@ -85,21 +94,19 @@ int main( int argc, char* argv[] )
 			if( input.GetMouseCaptured() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
 
 			// Camera input
-			const ae::Touch* lookTouch = input.GetTouchById( lookTouchId );
-			const ae::Touch* moveTouch = input.GetTouchById( moveTouchId );
-			if( !lookTouch ){ const int32_t idx = newTouches.FindFn( [&]( const ae::Touch& t ){ return moveTouch || ( t.startPosition.x >= window.GetWidth() / 2.0f ); } ); if( idx >= 0 ) { lookTouchId = newTouches[ idx ].id; } }
 			yaw -= input.gamepads[ 0 ].rightAnalog.x * 2.0f * dt;
 			pitch += input.gamepads[ 0 ].rightAnalog.y * 2.0f * dt;
 			if( lookTouch )
 			{
-				const ae::Vec2 touchDir = ae::Vec2( lookTouch->movement ) / ( displaySize * 0.35f );
+				const ae::Int2 pos = lookTouch->Position();
+				const ae::Vec2 touchDir = ae::Vec2( pos - lookLastPos ) / ( displaySize * 0.35f );
+				lookLastPos = pos;
 				yaw -= touchDir.x;
 				pitch += touchDir.y;
 			}
 			pitch = ae::Clip( pitch, -1.0f, 1.0f );
 
 			// Movement input
-			if( !moveTouch ){ const int32_t idx = newTouches.FindFn( [&]( const ae::Touch& t ){ return t.startPosition.x < window.GetWidth() / 2.0f; } ); if( idx >= 0 ) { moveTouchId = newTouches[ idx ].id; } }
 			ae::Vec3 dir = ae::Vec3( 0.0f );
 			if( input.Get( ae::Key::W ) ) { dir += forward; }
 			if( input.Get( ae::Key::A ) ) { dir += right; }
@@ -109,7 +116,7 @@ int main( int argc, char* argv[] )
 			dir -= right * input.gamepads[ 0 ].leftAnalog.x;
 			if( moveTouch )
 			{
-				const ae::Vec2 touchDir = ( ae::Vec2( moveTouch->position - moveTouch->startPosition ) / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
+				const ae::Vec2 touchDir = ( ae::Vec2( moveTouch->StartDelta() ) / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
 				dir += forward * touchDir.y;
 				dir -= right * touchDir.x;
 			}
