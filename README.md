@@ -260,7 +260,7 @@ TARGET=06_triangle && \
   cmake --preset ios && \
   cmake --build --preset ios-debug --target $TARGET && \
   scripts/ios-install.sh $TARGET && \
-  scripts/ios-launch.sh --console --start-stopped $TARGET && \
+  scripts/ios-launch.sh --console --start-paused $TARGET && \
   scripts/ios-debug.sh $TARGET
 ```
 Device stdout/stderr is captured by `ios-launch.sh --console` into `/tmp/aether-ios-console.log`. Follow it in a second terminal:

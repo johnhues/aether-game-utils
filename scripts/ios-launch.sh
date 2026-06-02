@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #-------------------------------------------------------------------------------
 # ios-launch.sh — launch an installed iOS .app on a device.
-# Usage: ios-launch.sh [--device <UUID>] [--start-stopped] [--console] <path>
+# Usage: ios-launch.sh [--device <UUID>] [--start-paused] [--console] <path>
 #   <path> may be the .app bundle, the inner binary, or cmake-tools'
 #   launchTargetPath form — see ios-resolve-exe.sh.
 #
@@ -11,12 +11,14 @@
 # Default (no flag): plain launch; the app runs and foregrounds normally —
 # this is the "run on device, no debugger" path.
 #
-# --start-stopped: launch held at the entry point (pre-`main`, in dyld) and
-# return immediately with the process suspended. lldb then attaches by name
-# (ios-debug.sh / the `iOS: Debug` config) to the held process — no --waitfor,
-# no ordering race — and `process handle SIGSTOP -s false -n true` set before a
-# plain attach (not --continue) auto-resumes past the launch hold so the app
-# runs. This is the genuine pre-`main` debugging path.
+# --start-paused: launches the app, holds it at its entry point (pre-`main`,
+# inside dyld), and returns immediately with the process suspended. You can
+# then attach with lldb by name using ios-debug.sh or the `iOS: Debug` config;
+# because the process is already running and addressable by name, the attach
+# needs no --waitfor and has no ordering race. Before that attach (which must
+# be plain, not --continue), `process handle SIGSTOP -s false -n true` is set
+# so lldb auto-resumes the process past the launch hold once attached. Use
+# this when you need genuine pre-`main` debugging.
 #
 # --console: capture the device process's stdout/stderr via
 # `devicectl ... --console` and redirect it to a log file (default
@@ -97,7 +99,7 @@ PY
 
 DEV_ID_OVERRIDE=""
 APP_PATH=""
-START_STOPPED=0
+START_PAUSED=0
 CONSOLE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -109,8 +111,8 @@ while [[ $# -gt 0 ]]; do
             DEV_ID_OVERRIDE="${1#--device=}"
             shift
             ;;
-        --start-stopped)
-            START_STOPPED=1
+        --start-paused)
+            START_PAUSED=1
             shift
             ;;
         --console)
@@ -134,7 +136,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$APP_PATH" ]]; then
-    echo "Usage: ios-launch.sh [--device <UUID>] [--start-stopped] <path/to/App.app>" >&2
+    echo "Usage: ios-launch.sh [--device <UUID>] [--start-paused] <path/to/App.app>" >&2
     exit 1
 fi
 
@@ -175,22 +177,24 @@ fi
 warn_if_symbols_not_ready "$DEV_ID"
 
 LAUNCH_ARGS=( --device "$DEV_ID" --terminate-existing )
-if [[ "$START_STOPPED" -eq 1 ]]; then
+if [[ "$START_PAUSED" -eq 1 ]]; then
     echo "==> Launching $BUNDLE_ID (held at entry for debugger attach)"
     LAUNCH_ARGS+=( --start-stopped )
 else
     echo "==> Launching $BUNDLE_ID"
 fi
 
+# Reap any prior streamer/dev-app on this device before the new launch — one
+# dev app per device, so a new launch supersedes whatever was previously held.
+# Without this, cross-bundle handoffs (e.g. SmallEngine → ReadMe) leave the
+# prior streamer holding the device's tunnel/usage assertion and the new
+# launch hangs in devicectl's handshake. Applies to plain and --console
+# paths alike; see ios-stop.sh for the SIGHUP-propagation mechanism.
+"$SCRIPT_DIR/ios-stop.sh" --device "$DEV_ID"
+
 if [[ "$CONSOLE" -eq 1 ]]; then
     LAUNCH_ARGS+=( --console )
     LOG_FILE="${AE_IOS_CONSOLE_LOG:-/tmp/aether-ios-console.log}"
-
-    # Kill any prior devicectl streamer for the same bundle so we don't end up
-    # with two processes interleaving writes to the same log. The app itself
-    # is handled by --terminate-existing on the new launch.
-    pkill -f "devicectl device process launch.*$BUNDLE_ID" 2>/dev/null || true
-    sleep 0.1
 
     # Truncate the log; tail -F follows by name and recovers cleanly.
     : > "$LOG_FILE"

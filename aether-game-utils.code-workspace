@@ -49,30 +49,57 @@
 				"presentation": {
 					"panel": "dedicated",
 					"reveal": "always"
+				},
+				"icon": {
+					"id": "globe"
 				}
 			},
 			{
 				"label": "Emscripten: Configure",
 				"type": "shell",
 				"command": "cmake",
-				"args": [ "--preset", "emscripten" ],
-				"options": { "cwd": "${workspaceFolder}" },
-				"problemMatcher": [ "$gcc" ],
-				"presentation": { "reveal": "silent" }
+				"args": [
+					"--preset",
+					"emscripten"
+				],
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [
+					"$gcc"
+				],
+				"presentation": {
+					"reveal": "silent"
+				},
+				"icon": {
+					"id": "gear"
+				}
 			},
 			{
 				"label": "Emscripten: Build Test",
 				"type": "shell",
 				"command": "cmake",
 				"args": [
-					"--build", "${workspaceFolder}/build_em",
-					"--config", "${command:cmake.buildType}",
-					"--target", "test"
+					"--build",
+					"${workspaceFolder}/build_em",
+					"--config",
+					"${command:cmake.buildType}",
+					"--target",
+					"test"
 				],
 				"dependsOn": "Emscripten: Configure",
-				"options": { "cwd": "${workspaceFolder}" },
-				"problemMatcher": [ "$gcc" ],
-				"presentation": { "reveal": "silent" }
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [
+					"$gcc"
+				],
+				"presentation": {
+					"reveal": "silent"
+				},
+				"icon": {
+					"id": "tools"
+				}
 			},
 			{
 				"label": "iOS: Console",
@@ -80,34 +107,74 @@
 				"command": "touch /tmp/aether-ios-console.log && echo '==> iOS: Console ready (tailing /tmp/aether-ios-console.log)' && exec tail -F /tmp/aether-ios-console.log",
 				"isBackground": true,
 				"problemMatcher": {
-					"pattern": { "regexp": ".", "file": 1, "location": 2, "message": 3 },
+					"pattern": {
+						"regexp": ".",
+						"file": 1,
+						"location": 2,
+						"message": 3
+					},
 					"background": {
 						"activeOnStart": true,
 						"beginsPattern": "NEVER_MATCHES_qweRtY12345",
 						"endsPattern": "iOS: Console ready"
 					}
 				},
-				"runOptions": { "instanceLimit": 1 },
-				"presentation": { "reveal": "always", "panel": "dedicated", "focus": false, "clear": false },
-				"icon": { "id": "device-mobile" }
+				"runOptions": {
+					"instanceLimit": 1
+				},
+				"presentation": {
+					"reveal": "always",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": false
+				},
+				"icon": {
+					"id": "device-mobile"
+				}
 			},
 			{
 				"label": "iOS: Clean",
 				"type": "shell",
 				"command": "rm",
-				"args": [ "-rf", "${workspaceFolder}/build_ios" ],
-				"options": { "cwd": "${workspaceFolder}" },
+				"args": [
+					"-rf",
+					"${workspaceFolder}/build_ios"
+				],
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
 				"problemMatcher": [],
-				"presentation": { "reveal": "never", "revealProblems": "never", "panel": "dedicated", "focus": false, "clear": true }
+				"presentation": {
+					"reveal": "never",
+					"revealProblems": "never",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "trash"
+				}
 			},
 			{
 				"label": "iOS: Configure",
 				"type": "shell",
 				"command": "python3",
-				"args": [ "${workspaceFolder}/scripts/ios_configure.py" ],
-				"options": { "cwd": "${workspaceFolder}" },
+				"args": [
+					"${workspaceFolder}/scripts/ios_configure.py"
+				],
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
 				"problemMatcher": [],
-				"presentation": { "reveal": "silent", "panel": "dedicated", "focus": false, "clear": true  }
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "gear"
+				}
 			},
 			{
 				"label": "iOS: Build",
@@ -119,10 +186,22 @@
 					"${command:cmake.buildType}"
 				],
 				"dependsOn": "iOS: Configure",
-				"options": { "cwd": "${workspaceFolder}" },
-				"problemMatcher": [ "$gcc" ],
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [
+					"$gcc"
+				],
 				"group": "build",
-				"presentation": { "reveal": "silent", "panel": "dedicated", "focus": false, "clear": true  }
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "tools"
+				}
 			},
 			{
 				"label": "iOS: Install",
@@ -132,9 +211,19 @@
 					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
 				],
 				"dependsOn": "iOS: Build",
-				"options": { "cwd": "${workspaceFolder}" },
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
 				"problemMatcher": [],
-				"presentation": { "reveal": "silent", "panel": "dedicated", "focus": false, "clear": true  }
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "device-mobile"
+				}
 			},
 			{
 				"label": "iOS: Launch",
@@ -145,24 +234,68 @@
 					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
 				],
 				"dependsOn": "iOS: Install",
-				"options": { "cwd": "${workspaceFolder}" },
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
 				"problemMatcher": [],
-				"presentation": { "reveal": "silent", "panel": "dedicated", "focus": false, "clear": true }
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "play"
+				}
 			},
 			{
-				"label": "iOS: Launch (Stopped)",
+				"label": "iOS: Launch (Paused)",
 				"type": "shell",
 				"command": "${workspaceFolder}/scripts/ios-launch.sh",
 				"args": [
-					"--start-stopped",
+					"--start-paused",
 					"--console",
 					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
 				],
-				"dependsOn": [ "iOS: Install", "iOS: Console" ],
+				"dependsOn": [
+					"iOS: Install",
+					"iOS: Console"
+				],
 				"dependsOrder": "parallel",
-				"options": { "cwd": "${workspaceFolder}" },
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
 				"problemMatcher": [],
-				"presentation": { "reveal": "silent", "panel": "dedicated", "focus": false, "clear": true }
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "debug-pause"
+				}
+			},
+			{
+				"label": "iOS: Stop All",
+				"type": "shell",
+				"command": "${workspaceFolder}/scripts/ios-stop.sh",
+				"args": [
+					"--all"
+				],
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [],
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "debug-stop"
+				}
 			}
 		]
 	},
@@ -188,9 +321,9 @@
 					"process handle SIGSTOP -s true -n true"
 				],
 				"attachCommands": [
-					"device process attach --name ${command:cmake.launchTargetName}"
+					"device process attach --name \"${command:cmake.launchTargetName}\""
 				],
-				"preLaunchTask": "iOS: Launch (Stopped)"
+				"preLaunchTask": "iOS: Launch (Paused)"
 			},
 			{
 				"name": "iOS: Debug Attach",
@@ -203,7 +336,7 @@
 					"settings set symbols.enable-external-lookup false"
 				],
 				"attachCommands": [
-					"device process attach --name ${command:cmake.launchTargetName}"
+					"device process attach --name \"${command:cmake.launchTargetName}\""
 				],
 				"timeout": 600
 			}

@@ -6,17 +6,17 @@
 #   launchTargetPath form — see ios-resolve-exe.sh.
 #
 # Assumes the app is already installed (ios-install.sh) and already launched
-# held at entry (ios-launch.sh --start-stopped). Attaches by name to the
+# held at entry (ios-launch.sh --start-paused). Attaches by name to the
 # suspended process and lets it run. `process handle SIGSTOP -s false -n true`
 # is set before a plain attach (no --waitfor, no --continue) so lldb
-# auto-resumes past the launch hold — this is what makes a --start-stopped
+# auto-resumes past the launch hold — this is what makes a --start-paused
 # process actually run under the debugger instead of only on detach. Gives
 # genuine pre-`main` debugging: set breakpoints in static initializers / `main`
 # and they halt before any of their code runs.
 #
 # Sequential command-line flow:
 #   scripts/ios-install.sh <app>
-#   scripts/ios-launch.sh --start-stopped <app>
+#   scripts/ios-launch.sh --start-paused <app>
 #   scripts/ios-debug.sh <app>
 #
 # Device UUID resolution order:
@@ -99,4 +99,4 @@ exec xcrun lldb "$EXE_PATH" \
     -o "device select $DEV_ID" \
     -o "settings set target.preload-symbols false" \
     -o "process handle SIGSTOP -s false -n true" \
-    -o "device process attach --name $EXE_NAME"
+    -o "device process attach --name \"$EXE_NAME\""
