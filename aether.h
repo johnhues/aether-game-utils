@@ -3577,6 +3577,10 @@ public:
 	void* m_context = nullptr;
 #endif
 	uint32_t m_defaultFramebuffer = 0;
+#if _AE_IOS_
+	// Depth lives on the GraphicsDevice canvas, not here.
+	uint32_t m_iosColorRenderbuffer = 0;
+#endif
 	class RenderTarget* m_backBuffer = nullptr;
 	class Input* input = nullptr;
 };
@@ -15722,7 +15726,19 @@ T* ae::Cast( C* obj )
 	#include <dlfcn.h>
 	#include <mach-o/dyld.h>
 	#include <sys/stat.h>
-	#ifdef AE_USE_MODULES
+	#if _AE_IOS_
+		#import <Foundation/Foundation.h>
+		#import <UIKit/UIKit.h>
+		#import <QuartzCore/QuartzCore.h>
+		#import <OpenGLES/EAGL.h>
+		#import <OpenGLES/ES3/gl.h>
+		#include <GameController/GameController.h>
+		// @TODO:
+		// <OpenGLES/ES3/glext.h> is NOT imported here on purpose. It defines
+		// GL_BGR / GL_BGRA which clash with `const auto GL_BGR = GL_RGB;` later
+		// in this header. The Window::m_Initialize iOS branch only needs symbols
+		// from <OpenGLES/ES3/gl.h>.
+	#elif defined(AE_USE_MODULES)
 		@import AppKit;
 		@import Carbon;
 		@import Cocoa;
@@ -15731,21 +15747,8 @@ T* ae::Cast( C* obj )
 		@import OpenAL;
 		@import GameController;
 	#else
-		#if _AE_IOS_
-		#import <Foundation/Foundation.h>
-		#import <UIKit/UIKit.h>
-		#import <QuartzCore/QuartzCore.h>
-		#import <OpenGLES/EAGL.h>
-		#import <OpenGLES/ES3/gl.h>
-		// @TODO:
-		// <OpenGLES/ES3/glext.h> is NOT imported here on purpose. It defines
-		// GL_BGR / GL_BGRA which clash with `const auto GL_BGR = GL_RGB;` later
-		// in this header. The Window::m_Initialize iOS branch only needs symbols
-		// from <OpenGLES/ES3/gl.h>.
-		#else
 		#include <Cocoa/Cocoa.h>
 		#include <Carbon/Carbon.h>
-		#endif
 		#include <GameController/GameController.h>
 	#endif
 	#ifndef AE_ENABLE_OPENAL
@@ -16565,13 +16568,10 @@ Quaternion Matrix4::GetRotation() const
 
 Vec3 Matrix4::GetScale() const
 {
-	Vec3 scale(
-		Vec3( &data[ 0 ] ).Length(),
-		Vec3( &data[ 4 ] ).Length(),
-		Vec3( &data[ 8 ] ).Length()
-	);
-	if( Determinant() < 0.0f ) { scale.z = -scale.z; }
-	return scale;
+	const float sx = Vec3( &data[ 0 ] ).Length();
+	const float sy = Vec3( &data[ 4 ] ).Length();
+	const float sz = Vec3( &data[ 8 ] ).Length();
+	return Vec3( sx, sy, ( Determinant() < 0.0f ) ? -sz : sz );
 }
 
 float Matrix4::Determinant() const
@@ -20101,9 +20101,12 @@ public:
 		CAEAGLLayer* layer = (CAEAGLLayer*)self.layer;
 		layer.opaque = YES;
 		layer.contentsScale = [UIScreen mainScreen].scale;
+		// SRGBA8 matches macOS's NSOpenGLPFAColorSize=24 default backing: the
+		// framebuffer auto-applies linear→sRGB on fragment write, so SRGB
+		// textures and linear shading round-trip correctly to display. The
+		// drawable is fully overwritten by GraphicsDevice::Present each frame.
 		layer.drawableProperties = @{
-			kEAGLDrawablePropertyRetainedBacking : @YES,
-			kEAGLDrawablePropertyColorFormat : kEAGLColorFormatRGBA8,
+			kEAGLDrawablePropertyColorFormat : kEAGLColorFormatSRGBA8,
 		};
 		self.multipleTouchEnabled = YES;
 		_touchIds = [NSMapTable weakToStrongObjectsMapTable];
@@ -20205,9 +20208,43 @@ public:
 	self.glView = [[aeEAGLView alloc] initWithFrame:[UIScreen mainScreen].bounds];
 	self.view = self.glView;
 }
-- (void)viewDidLoad {
+- (void)viewDidLoad
+{
 	[super viewDidLoad];
 	[self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
+}
+- (void)viewDidLayoutSubviews
+{
+	[super viewDidLayoutSubviews];
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input || !input->m_window )
+	{
+		return;
+	}
+	ae::Window* window = input->m_window;
+	CAEAGLLayer* eaglLayer = (CAEAGLLayer*)self.glView.layer;
+	const CGSize sizePoints = eaglLayer.bounds.size;
+	const float scale = (float)eaglLayer.contentsScale;
+#if AE_ENABLE_OPENGL
+	if( window->m_context && window->m_iosColorRenderbuffer )
+	{
+		EAGLContext* eaglContext = (__bridge EAGLContext*)window->m_context;
+		[ EAGLContext setCurrentContext:eaglContext ];
+		glBindRenderbuffer( GL_RENDERBUFFER, window->m_iosColorRenderbuffer );
+		GLint currentWidth = 0;
+		GLint currentHeight = 0;
+		glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &currentWidth );
+		glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &currentHeight );
+		const GLint targetWidth = (GLint)( sizePoints.width * scale );
+		const GLint targetHeight = (GLint)( sizePoints.height * scale );
+		if( currentWidth != targetWidth || currentHeight != targetHeight )
+		{
+			const bool storageOk = [ eaglContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:eaglLayer ];
+			AE_ASSERT_MSG( storageOk, "renderbufferStorage:fromDrawable: failed on resize" );
+		}
+	}
+#endif
+	window->m_UpdateSize( (int32_t)sizePoints.width, (int32_t)sizePoints.height, scale );
 }
 - (BOOL)prefersStatusBarHidden
 {
@@ -20463,13 +20500,6 @@ ae::Int2 Window::m_nativeToAe( ae::Int2 pos, ae::Int2 size )
 	return ae::Int2( 0 );
 #endif
 }
-
-// iOS-only: color renderbuffer attached to the CAEAGLLayer drawable. Used by
-// Window::Present to call [eaglContext presentRenderbuffer:]. The layer is
-// created by aeApplicationDelegate and stored in ae::_Globals::eaglLayer.
-#if _AE_IOS_ && AE_ENABLE_OPENGL
-static GLuint g_ae_iOSColorRenderbuffer = 0;
-#endif
 
 void Window::m_Initialize( bool rememberPosition )
 {
@@ -20732,13 +20762,9 @@ void Window::m_Initialize( bool rememberPosition )
 	}
 #elif _AE_IOS_
 #if AE_ENABLE_OPENGL
-	// Create the EAGL context, attach a renderbuffer to the CAEAGLLayer drawable
-	// (created by aeApplicationDelegate, stored in ae::_Globals::eaglLayer), wrap
-	// it in a default FBO, and stash the renderbuffer id at module scope so
-	// Present() can target it.
 	EAGLContext* eaglContext = [ [ EAGLContext alloc ] initWithAPI:kEAGLRenderingAPIOpenGLES3 ];
 	AE_ASSERT_MSG( eaglContext, "Failed to create EAGLContext (OpenGL ES 3)" );
-	const BOOL madeCurrent = [ EAGLContext setCurrentContext:eaglContext ];
+	const bool madeCurrent = [ EAGLContext setCurrentContext:eaglContext ];
 	AE_ASSERT_MSG( madeCurrent, "Failed to make EAGLContext current" );
 	m_context = (__bridge_retained void*)eaglContext;
 
@@ -20755,7 +20781,7 @@ void Window::m_Initialize( bool rememberPosition )
 	GLuint colorRb = 0;
 	glGenRenderbuffers( 1, &colorRb );
 	glBindRenderbuffer( GL_RENDERBUFFER, colorRb );
-	const BOOL storageOk = [ eaglContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:eaglLayer ];
+	const bool storageOk = [ eaglContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:eaglLayer ];
 	AE_ASSERT_MSG( storageOk, "renderbufferStorage:fromDrawable: failed" );
 
 	GLint drawableWidth = 0;
@@ -20763,28 +20789,22 @@ void Window::m_Initialize( bool rememberPosition )
 	glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &drawableWidth );
 	glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &drawableHeight );
 
-	GLuint depthRb = 0;
-	glGenRenderbuffers( 1, &depthRb );
-	glBindRenderbuffer( GL_RENDERBUFFER, depthRb );
-	glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, drawableWidth, drawableHeight );
-
 	GLuint fbo = 0;
 	glGenFramebuffers( 1, &fbo );
 	glBindFramebuffer( GL_FRAMEBUFFER, fbo );
 	glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, colorRb );
-	glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRb );
 	const GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
 	AE_ASSERT_MSG( fboStatus == GL_FRAMEBUFFER_COMPLETE, "Default FBO incomplete: 0x#x", (uint32_t)fboStatus );
 	glBindRenderbuffer( GL_RENDERBUFFER, colorRb );
 
-	g_ae_iOSColorRenderbuffer = colorRb;
+	m_iosColorRenderbuffer = colorRb;
 	m_defaultFramebuffer = fbo;
 
 	glViewport( 0, 0, drawableWidth, drawableHeight );
 
 	m_scaleFactor = (float)eaglLayer.contentsScale;
-	m_width = (int32_t)( drawableWidth / m_scaleFactor );
-	m_height = (int32_t)( drawableHeight / m_scaleFactor );
+	m_width = (int32_t)eaglLayer.bounds.size.width;
+	m_height = (int32_t)eaglLayer.bounds.size.height;
 #else
 	{
 		UIScreen* const screen = [ UIScreen mainScreen ];
@@ -20862,9 +20882,9 @@ void Window::Present()
 		[(NSOpenGLContext*)m_context flushBuffer];
 	}
 #elif _AE_IOS_
-	if( m_context && g_ae_iOSColorRenderbuffer )
+	if( m_context && m_iosColorRenderbuffer )
 	{
-		glBindRenderbuffer( GL_RENDERBUFFER, g_ae_iOSColorRenderbuffer );
+		glBindRenderbuffer( GL_RENDERBUFFER, m_iosColorRenderbuffer );
 		[(__bridge EAGLContext*)m_context presentRenderbuffer:GL_RENDERBUFFER];
 	}
 #elif _AE_WINDOWS_
@@ -25039,6 +25059,8 @@ enum _ae_GLProfileEnum
 #	elif _AE_WINDOWS_
 #		include <GL/gl.h>
 #		include <GL/glu.h>
+#		include <GL/glext.h>
+#		include <GL/wglext.h>
 #	elif _AE_EMSCRIPTEN_
 #		include <GLES3/gl3.h>
 #	elif _AE_LINUX_
@@ -26943,7 +26965,14 @@ void Texture2D::Initialize( const TextureParams& params )
 	m_height = params.height;
 	glBindTexture( GetTarget(), GetTexture() );
 
-	const bool mipmapsEnabled = _AE_EMSCRIPTEN_ ? false : params.autoGenerateMipmaps;
+#if _AE_IOS_
+	// GLES3.0: SRGB8 (3-channel) is filterable but not color-renderable, so
+	// glGenerateMipmap returns GL_INVALID_OPERATION. SRGB8_ALPHA8 is fine.
+	const bool formatSupportsAutoMipmaps = ( params.format != Format::RGB8_SRGB );
+#else
+	const bool formatSupportsAutoMipmaps = true;
+#endif
+	const bool mipmapsEnabled = !_AE_EMSCRIPTEN_ && params.autoGenerateMipmaps && formatSupportsAutoMipmaps;
 	if( mipmapsEnabled )
 	{
 		glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
@@ -27155,7 +27184,9 @@ void Texture2D::Initialize( const TextureParams& params )
 	
 	// Handle vertical flip and/or BGR conversion if needed
 	const bool needsFlip = !params.bottomToTopData; // UV 0,0 corresponds to the bottom-left corner in OpenGL
-#if _AE_EMSCRIPTEN_
+#if _AE_EMSCRIPTEN_ || _AE_IOS_
+	// GLES has no GL_BGR/GL_BGRA — those are aliased to GL_RGB/GL_RGBA above,
+	// so the bytes must be swizzled in software before upload.
 	const bool needsBGRConversion = ( params.bgrData && components >= 3 );
 #else
 	const bool needsBGRConversion = false;
