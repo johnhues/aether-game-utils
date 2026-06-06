@@ -340,7 +340,7 @@ int main()
 			const char* jointNames[] = { "None", "Target", "Test 0", "Test 1" };
 			ImGui::ListBox( "Test Joints", (int*)&selTestJoint, jointNames, countof(jointNames), 4 );
 
-			if( ImGui::ListBoxHeader( "Joints" ) )
+			if( ImGui::BeginListBox( "Joints" ) )
 			{
 				for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 				{
@@ -352,7 +352,7 @@ int main()
 					}
 					ImGui::PopID();
 				}
-				ImGui::ListBoxFooter();
+				ImGui::EndListBox();
 			}
 			bool constraintsModified = false;
 			ae::IKConstraints* constraints = [&]()
