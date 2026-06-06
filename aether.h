@@ -15817,6 +15817,20 @@ T* ae::Cast( C* obj )
 	#include <arm_neon.h>
 #endif
 
+#if AE_ENABLE_OPENGL && _AE_WINDOWS_
+	// Forward declarations so ae::Window::m_Initialize (defined earlier in the
+	// translation unit than the unified GL function pointer table) can name
+	// these. Storage and the rest of the WGL/GL surface live near the X-macro
+	// further down.
+	#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+	#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+	#define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+	#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+	#define WGL_CONTEXT_FLAGS_ARB 0x2094
+	#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
+	extern HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList );
+#endif
+
 namespace ae {
 
 //------------------------------------------------------------------------------
@@ -25056,11 +25070,6 @@ enum _ae_GLProfileEnum
 
 #	if AE_OPENGL_CUSTOM_HEADER
 #		include AE_OPENGL_CUSTOM_HEADER
-#	elif _AE_WINDOWS_
-#		include <GL/gl.h>
-#		include <GL/glu.h>
-#		include <GL/glext.h>
-#		include <GL/wglext.h>
 #	elif _AE_EMSCRIPTEN_
 #		include <GLES3/gl3.h>
 #	elif _AE_LINUX_
@@ -25091,12 +25100,14 @@ enum _ae_GLProfileEnum
 #		define GL_TRUE  1
 #		define GL_FALSE 0
 
-#		define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
-#		define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
-#		define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
-#		define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
-#		define WGL_CONTEXT_FLAGS_ARB 0x2094
-#		define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
+#		ifndef WGL_CONTEXT_MAJOR_VERSION_ARB
+#			define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+#			define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+#			define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+#			define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+#			define WGL_CONTEXT_FLAGS_ARB 0x2094
+#			define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
+#		endif
 
 		// GL primitives
 #		define GL_POINTS                           0x0000
@@ -25271,6 +25282,7 @@ enum _ae_GLProfileEnum
 		_AE_GL_FUNC( void,   glTexParameteri,           ( GLenum target, GLenum pname, GLint param ) ) \
 		_AE_GL_FUNC( void,   glDrawArrays,              ( GLenum mode, GLint first, GLsizei count ) ) \
 		_AE_GL_FUNC( void,   glDrawElements,            ( GLenum mode, GLsizei count, GLenum type, const void* indices ) ) \
+		_AE_GL_FUNC( void,   glPolygonMode,             ( GLenum face, GLenum mode ) ) \
 		_AE_GL_FUNC( GLuint, glCreateProgram,           () ) \
 		_AE_GL_FUNC( void,   glAttachShader,            ( GLuint program, GLuint shader ) ) \
 		_AE_GL_FUNC( void,   glLinkProgram,             ( GLuint program ) ) \
@@ -25353,7 +25365,7 @@ enum _ae_GLProfileEnum
 
 #if AE_ENABLE_OPENGL
 
-#	if _AE_EMSCRIPTEN_ || _AE_IOS_ || _AE_WASM_
+#	if _AE_EMSCRIPTEN_ || _AE_IOS_ || _AE_WASM_ || _AE_WINDOWS_
 #		define glClearDepth glClearDepthf
 #	endif
 
@@ -27562,6 +27574,11 @@ GraphicsDevice::~GraphicsDevice()
 	#define LOAD_OPENGL_FN( _glfn )\
 		_glfn = (decltype(_glfn))wglGetProcAddress( #_glfn );\
 		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
+	// wglGetProcAddress returns null for GL 1.1 entries on Microsoft's ICD;
+	// those live in opengl32.dll and must be resolved with GetProcAddress.
+	#define LOAD_OPENGL11_FN( _glfn )\
+		_glfn = (decltype(_glfn))GetProcAddress( opengl32Module, #_glfn );\
+		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
 #endif
 
 void GraphicsDevice::Initialize( class Window* window )
@@ -27593,6 +27610,26 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_CHECK_GL_ERROR();
 
 #if _AE_WINDOWS_
+	const HMODULE opengl32Module = LoadLibraryA( "opengl32.dll" );
+	AE_ASSERT_MSG( opengl32Module, "Failed to load opengl32.dll" );
+	// GL 1.1 entries — resolved against opengl32.dll, not wglGetProcAddress.
+	LOAD_OPENGL11_FN( glClear );
+	LOAD_OPENGL11_FN( glClearColor );
+	LOAD_OPENGL11_FN( glViewport );
+	LOAD_OPENGL11_FN( glEnable );
+	LOAD_OPENGL11_FN( glDisable );
+	LOAD_OPENGL11_FN( glGetIntegerv );
+	LOAD_OPENGL11_FN( glGetError );
+	LOAD_OPENGL11_FN( glGenTextures );
+	LOAD_OPENGL11_FN( glBindTexture );
+	LOAD_OPENGL11_FN( glDeleteTextures );
+	LOAD_OPENGL11_FN( glTexParameteri );
+	LOAD_OPENGL11_FN( glTexImage2D );
+	LOAD_OPENGL11_FN( glTexSubImage2D );
+	LOAD_OPENGL11_FN( glDrawArrays );
+	LOAD_OPENGL11_FN( glDrawElements );
+	LOAD_OPENGL11_FN( glPolygonMode );
+	// WGL extensions and GL 2.0+ entries.
 	LOAD_OPENGL_FN( wglSwapIntervalEXT );
 	LOAD_OPENGL_FN( wglGetSwapIntervalEXT );
 	// Shader functions
