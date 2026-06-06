@@ -103,48 +103,45 @@ bool SmallEngine::Initialize( int argc, char* argv[] )
 	return true;
 }
 
-void SmallEngine::Run()
+bool SmallEngine::Update()
 {
-	while( !input.quit )
+	input.Pump();
+	editor.Update();
+	if( input.GetMousePressLeft() ) { input.SetMouseCaptured( true ); }
+	if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetMouseCaptured( window.GetFullScreen() ); }
+	if( input.GetPress( ae::Key::Escape ) ) { input.SetMouseCaptured( false ); window.SetFullScreen( false ); }
+	if( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) ) { editor.Launch(); }
+	registry.CallFn< Component >( [&]( Component* component )
 	{
-		// Update
-		input.Pump();
-		editor.Update();
-		if( input.GetMousePressLeft() ) { input.SetMouseCaptured( true ); }
-		if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetMouseCaptured( window.GetFullScreen() ); }
-		if( input.GetPress( ae::Key::Escape ) ) { input.SetMouseCaptured( false ); window.SetFullScreen( false ); }
-		if( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) ) { editor.Launch(); }
-		registry.CallFn< Component >( [&]( Component* component )
+		if( !component->initialized )
 		{
-			if( !component->initialized )
-			{
-				component->Initialize( this );
-				component->initialized = true;
-			}
-		} );
-		registry.CallFn< Component >( [&]( Component* c ){ c->Update( this ); } );
-		
-		worldToView = ae::Matrix4::WorldToView( cameraPos, cameraDir, ae::Vec3( 0.0f, 0.0f, 1.0f ) );
-		viewToProj = ae::Matrix4::ViewToProjection( 1.1f, gfx.GetAspectRatio(), 0.1f, 500.0f );
-		worldToProj = viewToProj * worldToView;
-		uiToNdc = ae::Matrix4::Scaling( 0.5f / gfx.GetAspectRatio(), 0.5f, 1.0f );
-		
-		gfx.Activate();
-		gfx.Clear( skyColor );
-		registry.CallFn< Component >( [&]( Component* c ){ c->Render( this ); } );
-		debugLines.Render( worldToProj );
-		
-		ae::UniformList groupUniforms[ 2 ];
-		groupUniforms[ 0 ].Set( "u_tex", &fontTexture );
-		groupUniforms[ 0 ].Set( "u_uiToNdc", uiToNdc );
-		groupUniforms[ 1 ].Set( "u_uiToNdc", uiToNdc );
-		spriteRenderer.SetParams( 0, &spriteFontShader, groupUniforms[ 0 ] );
-		spriteRenderer.SetParams( 1, &spriteFadeShader, groupUniforms[ 1 ] );
-		spriteRenderer.Render();
-		
-		gfx.Present();
-		timeStep.Tick();
-	}
+			component->Initialize( this );
+			component->initialized = true;
+		}
+	} );
+	registry.CallFn< Component >( [&]( Component* c ){ c->Update( this ); } );
+	
+	worldToView = ae::Matrix4::WorldToView( cameraPos, cameraDir, ae::Vec3( 0.0f, 0.0f, 1.0f ) );
+	viewToProj = ae::Matrix4::ViewToProjection( 1.1f, gfx.GetAspectRatio(), 0.1f, 500.0f );
+	worldToProj = viewToProj * worldToView;
+	uiToNdc = ae::Matrix4::Scaling( 0.5f / gfx.GetAspectRatio(), 0.5f, 1.0f );
+	
+	gfx.Activate();
+	gfx.Clear( skyColor );
+	registry.CallFn< Component >( [&]( Component* c ){ c->Render( this ); } );
+	debugLines.Render( worldToProj );
+	
+	ae::UniformList groupUniforms[ 2 ];
+	groupUniforms[ 0 ].Set( "u_tex", &fontTexture );
+	groupUniforms[ 0 ].Set( "u_uiToNdc", uiToNdc );
+	groupUniforms[ 1 ].Set( "u_uiToNdc", uiToNdc );
+	spriteRenderer.SetParams( 0, &spriteFontShader, groupUniforms[ 0 ] );
+	spriteRenderer.SetParams( 1, &spriteFadeShader, groupUniforms[ 1 ] );
+	spriteRenderer.Render();
+	
+	gfx.Present();
+	timeStep.Tick();
+	return !input.quit;
 }
 
 const SmallEngine::MeshResource* SmallEngine::GetMeshResource( const char* name )

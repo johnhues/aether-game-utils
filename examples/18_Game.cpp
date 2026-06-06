@@ -142,11 +142,11 @@ void Player::Update( SmallEngine* engine )
 	// Movement input
 	ae::Vec3 dir = ae::Vec3( 0.0f );
 	dir += ( forward * ( input.Get( ae::Key::W ) - input.Get( ae::Key::S ) ) + right * ( input.Get( ae::Key::D ) - input.Get( ae::Key::A ) ) ).SafeNormalizeCopy() * ( input.Get( ae::Key::LeftShift ) ? 0.333f : 1.0f );
-	dir += ( forward * input.gamepads[ 0 ].leftAnalog.y - right * input.gamepads[ 0 ].leftAnalog.x );
+	dir += ( forward * input.gamepads[ 0 ].leftAnalog.y + right * input.gamepads[ 0 ].leftAnalog.x );
 	if( moveTouch )
 	{
 		const ae::Vec2 touchDir = ( ae::Vec2( moveTouch->StartDelta() ) / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
-		dir += ( forward * touchDir.y - right * touchDir.x );
+		dir += ( forward * touchDir.y + right * touchDir.x );
 	}
 
 	// Physics
@@ -269,15 +269,19 @@ void Dialog::Update( SmallEngine* engine )
 int main( int argc, char* argv[] )
 {
 	SmallEngine engine;
-	if( engine.Initialize( argc, argv ) )
+	auto initialize = [ & ]()
 	{
-		ae::Str256 levelPath;
-		if( engine.fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
+		if( engine.Initialize( argc, argv ) )
 		{
-			ae::FileSystem::AppendToPath( &levelPath, "example.level" );
-			engine.editor.QueueRead( levelPath.c_str() );
+			ae::Str256 levelPath;
+			if( engine.fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
+			{
+				ae::FileSystem::AppendToPath( &levelPath, "example.level" );
+				engine.editor.QueueRead( levelPath.c_str() );
+			}
 		}
-		engine.Run();
-	}
-	return 0;
+	};
+	auto update = [ & ]() { return engine.Update(); };
+	auto terminate = []() { return 0; };
+	return ae::Application( argc, argv, initialize, update, terminate );
 }

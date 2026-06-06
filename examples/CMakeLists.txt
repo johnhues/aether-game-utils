@@ -321,22 +321,20 @@ if(AE_LOADERS_OFBX)
 	)
 
 	# IK
-	if(AE_DESKTOP)
-		ae_add_bundle("IK"
-			TARGET_NAME "17_ik"
-			BUNDLE_ID "io.aether.Ik"
-			APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
-			MAJOR_MINOR_PATCH_VERSION "0.0.0"
-			ICNS_FILE "data/Icon.icns"
-			SRC_FILES "17_IK.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
-			RESOURCES "${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
-			LIBS "ae;ae_loaders;ae_extras;imgui;imguizmo"
-		)
-	endif()
+	ae_add_bundle("IK"
+		TARGET_NAME "17_ik"
+		BUNDLE_ID "io.aether.Ik"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+		MAJOR_MINOR_PATCH_VERSION "0.0.0"
+		ICNS_FILE "data/Icon.icns"
+		SRC_FILES "17_IK.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
+		RESOURCES "${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
+		LIBS "ae;ae_loaders;ae_extras;imgui;imguizmo"
+	)
 endif()
 
 # Small Engine
-if(AE_DEPRECATED AND AE_DESKTOP)
+if(AE_DEPRECATED)
 	ae_add_bundle("Small Engine"
 		TARGET_NAME "18_SmallEngine"
 		BUNDLE_ID "io.aether.SmallEngine"

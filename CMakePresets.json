@@ -15,7 +15,6 @@
 			"cacheVariables": {
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
 				"AE_LEAN_AND_MEAN": "OFF",
-				"AE_WERROR": "ON",
 				"AE_LOADERS_OFBX": "ON",
 				"AE_DEPRECATED": "ON"
 			},
@@ -38,7 +37,8 @@
 				"ENABLE_BITCODE": "OFF",
 				"ENABLE_ARC": "ON",
 				"AE_LEAN_AND_MEAN": "OFF",
-				"AE_LOADERS_OFBX": "ON"
+				"AE_LOADERS_OFBX": "ON",
+				"AE_DEPRECATED": "ON"
 			},
 			"condition": {
 				"type": "equals",

@@ -55,7 +55,7 @@ public:
 
 	// System
 	bool Initialize( int argc, char* argv[] );
-	void Run();
+	bool Update();
 	ae::Registry registry = TAG_SMALL_ENGINE;
 	ae::Editor editor = TAG_SMALL_ENGINE;
 	ae::Window window;
