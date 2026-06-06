@@ -6,6 +6,9 @@ docker info # Verify Docker is running
 # Note that AE_LEAN_AND_MEAN is not enabled here for local iteration speed. The
 # CI builds test with it enabled.
 
+cmake --preset ios
+cmake --build --preset ios-debug
+
 cmake -G Ninja -B build_clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
 cmake --build build_clang
 build_clang/test/test

@@ -7,18 +7,30 @@ message("")
 message("aether-game-utils examples")
 message("")
 
-if(AE_DESKTOP) # AE_DESKTOP START
-
 # imgui
 add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue where std string.h is included inside another namespace causing a conflict
 if(NOT imgui_FOUND)
 	FetchContent_Declare(
 		imgui
-		GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
-		GIT_TAG 7a4fe3d930fcc93d9579df06f046d0738ef06391
+		GIT_REPOSITORY "https://github.com/ocornut/imgui.git"
+		GIT_TAG v1.92.8-docking
+		SOURCE_SUBDIR "NO-SUBDIRECTORY" # Upstream imgui ships no CMakeLists; we provide our own
 		GIT_PROGRESS TRUE
+		GIT_SHALLOW TRUE
 	)
 	FetchContent_MakeAvailable(imgui)
+	add_library(imgui STATIC
+		${imgui_SOURCE_DIR}/imgui.cpp
+		${imgui_SOURCE_DIR}/imgui_demo.cpp
+		${imgui_SOURCE_DIR}/imgui_draw.cpp
+		${imgui_SOURCE_DIR}/imgui_tables.cpp
+		${imgui_SOURCE_DIR}/imgui_widgets.cpp
+		${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+	)
+	target_include_directories(imgui PUBLIC
+		${imgui_SOURCE_DIR}
+		${imgui_SOURCE_DIR}/backends
+	)
 	target_compile_options(imgui PRIVATE -Wno-nontrivial-memcall) # @TODO: Update imgui to fix this warning
 endif()
 
@@ -26,11 +38,13 @@ endif()
 if(NOT imguizmo_FOUND)
 	FetchContent_Declare(
 		imguizmo
-		GIT_REPOSITORY "https://github.com/johnhues/ImGuizmo.git"
-		GIT_TAG 6e1ea45af646c06bee0e70d93d8cc5d3f2ae45c2
+		GIT_REPOSITORY "https://github.com/CedricGuillemet/ImGuizmo.git"
+		GIT_TAG be8aa4aeab86b402701c8c1df011bd8cd776760b
 		GIT_PROGRESS TRUE
 	)
 	FetchContent_MakeAvailable(imguizmo)
+	cmake_policy(SET CMP0079 NEW) # Allow linking imgui (defined here) into imguizmo (defined in fetched subdirectory)
+	target_link_libraries(imguizmo PUBLIC imgui)
 	target_compile_options(imguizmo PRIVATE -Wno-nontrivial-memcall) # @TODO: Update imgui to fix this warning
 endif()
 
@@ -48,8 +62,6 @@ if(NOT rapidjson_FOUND)
 	add_library(rapidjson INTERFACE) # Header only
 	target_include_directories(rapidjson INTERFACE "${rapidjson_SOURCE_DIR}/include")
 endif()
-
-endif() # AE_DESKTOP END
 
 # Config
 if(APPLE)
