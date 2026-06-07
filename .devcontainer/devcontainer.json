@@ -1,7 +1,7 @@
 {
   "name": "aether-game-utils (ubuntu_clang)",
   "image": "ghcr.io/johnhues/aether-build:latest",
-  "initializeCommand": "bash -lc 'if [ -n \"${localEnv:GHCR_USER}\" ] && [ -n \"${localEnv:GHCR_TOKEN}\" ]; then echo \"${localEnv:GHCR_TOKEN}\" | docker login ghcr.io -u \"${localEnv:GHCR_USER}\" --password-stdin; else echo \"GHCR auth not configured. Set Codespaces secrets GHCR_USER and GHCR_TOKEN.\"; exit 1; fi'",
+  "initializeCommand": "bash -lc 'u=unset; t=unset; [ -n \"${localEnv:GHCR_USER}\" ] && u=set; [ -n \"${localEnv:GHCR_TOKEN}\" ] && t=set; echo \"GHCR credential status: GHCR_USER=${u}, GHCR_TOKEN=${t}.\"; if [ \"${u}\" = set ] && [ \"${t}\" = set ]; then if echo \"${localEnv:GHCR_TOKEN}\" | docker login ghcr.io -u \"${localEnv:GHCR_USER}\" --password-stdin; then echo \"GHCR login succeeded.\"; else echo \"Warning: GHCR login failed (credentials are set but were rejected); continuing without registry auth.\"; fi; else echo \"GHCR login skipped (missing GHCR_USER and/or GHCR_TOKEN); continuing without registry auth.\"; fi'",
   "containerEnv": {
     "CC": "clang",
     "CXX": "clang++"
