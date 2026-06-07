@@ -63,6 +63,7 @@
 #define _AE_LINUX_ 0
 #define _AE_EMSCRIPTEN_ 0
 #define _AE_WASM_ 0
+#define _AE_WASI_ 0
 #if defined(__EMSCRIPTEN__)
 	#undef _AE_EMSCRIPTEN_
 	#define _AE_EMSCRIPTEN_ 1
@@ -92,7 +93,12 @@
 #elif defined(__linux__)
 	#undef _AE_LINUX_
 	#define _AE_LINUX_ 1
-#elif defined(__wasm__) || defined(__wasi__) // @TODO: WASI should be handled separately
+#elif defined(__wasi__)
+	#undef _AE_WASM_
+	#define _AE_WASM_ 1
+	#undef _AE_WASI_
+	#define _AE_WASI_ 1
+#elif defined(__wasm__)
 	#undef _AE_WASM_
 	#define _AE_WASM_ 1
 #else
