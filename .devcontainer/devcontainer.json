@@ -6,7 +6,7 @@
     "CC": "clang",
     "CXX": "clang++"
   },
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "workspaceFolder": "", // Let the engine assign the target path automatically
   "postCreateCommand": "cmake -E make_directory build",
   "remoteUser": "root",
   "customizations": {
@@ -14,6 +14,11 @@
       "extensions": [
         "ms-vscode.cpptools",
         "ms-vscode.cmake-tools"
+      ]
+    },
+    "codespaces": {
+      "openFiles": [
+        "aether-game-utils.code-workspace"
       ]
     }
   }
