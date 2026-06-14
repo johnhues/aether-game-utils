@@ -2429,7 +2429,7 @@ public:
 	bool HasFree() const;
 	//! Returns the number of allocated elements. Is constant time.
 	uint32_t Length() const;
-	//! Returns the maximum length of the list (constxpr for static
+	//! Returns the maximum length of the list (constexpr for static
 	//! ae::FreeList's). Is constant time.
 	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
 	//! Returns the maximum length of the list. Is constant time.
@@ -5514,7 +5514,7 @@ struct IK
 	ae::Matrix4 debugModelToWorld = ae::Matrix4::Identity();
 	float debugJointScale = 0.1f; //!< Useful default when working in meters
 
-	// @TODO: Cleaup IK helpers
+	// @TODO: Cleanup IK helpers
 	static ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 p );
 	static ae::Vec3 GetAxisVector( ae::Axis axis, bool negative = true );
 	ae::Vec3 ClipJoint( float bindBoneLength, ae::Vec3 j0Pos, ae::Quaternion j0Ori, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, ae::Color debugColor );
@@ -6109,7 +6109,7 @@ public:
 	//! ae::NetObject::SetInitData() on the object to finalize the object for
 	//! remote creation. Call ae::NetObjectServer::DestroyNetObject() when finished.
 	NetObject* CreateNetObject();
-	//! Will cause the ae::NetObject to be detroyed on remote clients.
+	//! Will cause the ae::NetObject to be destroyed on remote clients.
 	//! Must be called for each ae::NetObject allocated with
 	//! ae::NetObjectServer::CreateNetObject().
 	void DestroyNetObject( NetObject* netObject );
