@@ -790,6 +790,44 @@ TEST_CASE( "Matrix4 TransformVector3x4 unaffected by translation", "[ae::Matrix4
 	REQUIRE( ae::Matrix4::Translation( 5,5,5 ).TransformVector3x4( ae::Vec3( 0,1,0 ) ) == ae::Vec3( 0,1,0 ) );
 }
 
+TEST_CASE( "Matrix4 TransformVector3x4 applies rotation", "[ae::Matrix4]" )
+{
+	// A direction rotates like a point, using the same M*v convention as
+	// TransformPoint3x4. A transposed 3x3 would rotate the opposite direction.
+	REQUIRE( IsCloseEnough(
+		ae::Matrix4::RotationZ( ae::HalfPi ).TransformVector3x4( ae::Vec3( 1,0,0 ) ),
+		ae::Vec3( 0,1,0 ) ) );
+	REQUIRE( IsCloseEnough(
+		ae::Matrix4::RotationZ( ae::HalfPi ).TransformVector3x4( ae::Vec3( 0,1,0 ) ),
+		ae::Vec3( -1,0,0 ) ) );
+	REQUIRE( IsCloseEnough(
+		ae::Matrix4::RotationX( ae::HalfPi ).TransformVector3x4( ae::Vec3( 0,1,0 ) ),
+		ae::Vec3( 0,0,1 ) ) );
+	REQUIRE( IsCloseEnough(
+		ae::Matrix4::RotationY( ae::HalfPi ).TransformVector3x4( ae::Vec3( 1,0,0 ) ),
+		ae::Vec3( 0,0,-1 ) ) );
+	// Translation is still ignored, but rotation is applied
+	const ae::Matrix4 m = ae::Matrix4::Translation( 10,20,30 ) * ae::Matrix4::RotationZ( ae::HalfPi );
+	REQUIRE( IsCloseEnough( m.TransformVector3x4( ae::Vec3( 1,0,0 ) ), ae::Vec3( 0,1,0 ) ) );
+}
+
+TEST_CASE( "Matrix4 TransformPoint3x4 TransformVector3x4 match operator Vec4", "[ae::Matrix4]" )
+{
+	// The 3x4 helpers must agree with the verified operator*(Vec4) on a full
+	// rotation + non-uniform scale + translation matrix.
+	const ae::Quaternion q( ae::Vec3( 1.0f/3, 2.0f/3, 2.0f/3 ), 1.0f );
+	const ae::Matrix4 m = ae::Matrix4::LocalToWorld( ae::Vec3( 5,6,7 ), q, ae::Vec3( 2,3,4 ) );
+	const ae::Vec3 v( 1.0f, -2.0f, 0.5f );
+	// Point transform == multiplying by a w=1 vector
+	REQUIRE( IsCloseEnough( m.TransformPoint3x4( v ), ( m * ae::Vec4( v, 1.0f ) ).GetXYZ() ) );
+	// Vector transform == multiplying by a w=0 vector (drops translation)
+	REQUIRE( IsCloseEnough( m.TransformVector3x4( v ), ( m * ae::Vec4( v, 0.0f ) ).GetXYZ() ) );
+	// Vector transform == point transform with the origin's image subtracted
+	REQUIRE( IsCloseEnough(
+		m.TransformVector3x4( v ),
+		m.TransformPoint3x4( v ) - m.TransformPoint3x4( ae::Vec3( 0.0f ) ) ) );
+}
+
 TEST_CASE( "Matrix4 RotationZ", "[ae::Matrix4]" )
 {
 	// TransformPoint3x4 uses standard M*v convention; correct for rotation testing
@@ -823,14 +861,27 @@ TEST_CASE( "Matrix4 GetInverse SetInverse", "[ae::Matrix4]" )
 
 TEST_CASE( "Matrix4 GetNormalMatrix", "[ae::Matrix4]" )
 {
-	// For a pure rotation R, GetNormalMatrix = R^{-T} = R
-	const ae::Quaternion q( ae::Vec3( 0,0,1 ), ae::HalfPi );
-	const ae::Matrix4 r = ae::Matrix4::Rotation( q );
+	// For a pure rotation R, GetNormalMatrix = R^{-T} = R, so it rotates a normal
+	// exactly like the rotation itself. Compared against absolute values rather
+	// than against R so a shared transpose error can't cancel out.
+	const ae::Matrix4 r = ae::Matrix4::RotationZ( ae::HalfPi );
 	const ae::Matrix4 nm = r.GetNormalMatrix();
-	const ae::Vec3 v0( 1,0,0 );
-	const ae::Vec3 v1( 0,1,0 );
-	REQUIRE( IsCloseEnough( r.TransformVector3x4( v0 ), nm.TransformVector3x4( v0 ) ) );
-	REQUIRE( IsCloseEnough( r.TransformVector3x4( v1 ), nm.TransformVector3x4( v1 ) ) );
+	REQUIRE( IsCloseEnough( nm.TransformVector3x4( ae::Vec3( 1,0,0 ) ), ae::Vec3( 0,1,0 ) ) );
+	REQUIRE( IsCloseEnough( nm.TransformVector3x4( ae::Vec3( 0,1,0 ) ), ae::Vec3( -1,0,0 ) ) );
+
+	// Under non-uniform scale the normal matrix keeps a normal perpendicular to
+	// its surface tangents, while transforming the normal with the full matrix
+	// skews it off-perpendicular.
+	const ae::Matrix4 m = ae::Matrix4::Scaling( ae::Vec3( 2,1,1 ) );
+	const ae::Vec3 t0( 1,1,0 );
+	const ae::Vec3 t1( 0,0,1 );
+	const ae::Vec3 n = t0.Cross( t1 ); // Perpendicular to both surface tangents
+	const ae::Vec3 mt0 = m.TransformVector3x4( t0 );
+	const ae::Vec3 mt1 = m.TransformVector3x4( t1 );
+	const ae::Vec3 mn = m.GetNormalMatrix().TransformVector3x4( n );
+	REQUIRE( IsCloseEnough( mn.Dot( mt0 ), 0.0f ) );
+	REQUIRE( IsCloseEnough( mn.Dot( mt1 ), 0.0f ) );
+	REQUIRE_FALSE( IsCloseEnough( m.TransformVector3x4( n ).Dot( mt0 ), 0.0f ) );
 }
 
 TEST_CASE( "Matrix4 GetScaleRemoved", "[ae::Matrix4]" )

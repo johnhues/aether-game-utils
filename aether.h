@@ -16659,9 +16659,9 @@ ae::Vec3 Matrix4::TransformPoint3x4( ae::Vec3 v ) const
 ae::Vec3 Matrix4::TransformVector3x4( ae::Vec3 v ) const
 {
 	return Vec3(
-		v.x * data[ 0 ] + v.y * data[ 1 ] + v.z * data[ 2 ],
-		v.x * data[ 4 ] + v.y * data[ 5 ] + v.z * data[ 6 ],
-		v.x * data[ 8 ] + v.y * data[ 9 ] + v.z * data[ 10 ] );
+		v.x * data[ 0 ] + v.y * data[ 4 ] + v.z * data[ 8 ],
+		v.x * data[ 1 ] + v.y * data[ 5 ] + v.z * data[ 9 ],
+		v.x * data[ 2 ] + v.y * data[ 6 ] + v.z * data[ 10 ] );
 }
 
 bool Matrix4::IsNAN() const
