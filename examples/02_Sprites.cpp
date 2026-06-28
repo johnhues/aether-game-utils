@@ -65,9 +65,8 @@ const char* kFragmentShader = R"(
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_LOG( "Initialize" );
 	ae::FileSystem fileSystem;
 	ae::Window window;
 	ae::GraphicsDevice render;
@@ -75,23 +74,25 @@ int main()
 	ae::TimeStep timeStep;
 	ae::SpriteRenderer spriteRenderer = TAG_EXAMPLE;
 	ae::Shader spriteShader;
-
-	fileSystem.Initialize( DATA_DIR, "ae", "sprites" );
-	window.Initialize( 800, 600, false, true, true );
-	window.SetTitle( "sprites" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-	spriteRenderer.Initialize( 1, 16 );
-	spriteShader.Initialize( kVertexShader, kFragmentShader, nullptr, 0 );
-	spriteShader.SetBlending( true );
-	
-	// Sprites
 	ae::Texture2D spriteTex;
-	const ae::File* file = fileSystem.Read( ae::FileSystem::Root::Data, "circle.tga", 2.5f );
-	AE_INFO( "Load texture '#'...", file ? file->GetURL() : "null" );
-	
-	auto Update = [&]()
+	const ae::File* file = nullptr;
+
+	auto Initialize = [&]()
+	{
+		AE_LOG( "Initialize" );
+		fileSystem.Initialize( DATA_DIR, "ae", "sprites" );
+		window.Initialize( 800, 600, false, true, true );
+		window.SetTitle( "sprites" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		spriteRenderer.Initialize( 1, 16 );
+		spriteShader.Initialize( kVertexShader, kFragmentShader, nullptr, 0 );
+		spriteShader.SetBlending( true );
+		file = fileSystem.Read( ae::FileSystem::Root::Data, "circle.tga", 2.5f );
+		AE_INFO( "Load texture '#'...", file ? file->GetURL() : "null" );
+	};
+	auto Update = [&]() -> bool
 	{
 		input.Pump();
 		render.Activate();
@@ -116,11 +117,11 @@ int main()
 			ae::Matrix4 localToWorld = ae::Matrix4::Translation( ae::Vec3( -0.5f, -0.5f, 0.5f ) );
 			localToWorld *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
 			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoRed() );
-	
+
 			// Green
 			localToWorld = ae::Matrix4::Scaling(  ae::Vec3( 1.0f, 1.0f, 0.5f ) );
 			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoGreen() );
-	
+
 			// Blue
 			localToWorld = ae::Matrix4::Translation( ae::Vec3( 0.5f, 0.5f, -0.5f ) );
 			localToWorld *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
@@ -137,19 +138,15 @@ int main()
 		timeStep.Tick();
 		return !input.quit;
 	};
-
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	AE_LOG( "Terminate" );
-	spriteRenderer.Terminate();
-	spriteTex.Terminate();
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_LOG( "Terminate" );
+		spriteRenderer.Terminate();
+		spriteTex.Terminate();
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

@@ -55,7 +55,8 @@ public:
 
 	// System
 	bool Initialize( int argc, char* argv[] );
-	void Run();
+	int32_t Terminate();
+	bool Update();
 	ae::Registry registry = TAG_SMALL_ENGINE;
 	ae::Editor editor = TAG_SMALL_ENGINE;
 	ae::Window window;
@@ -69,17 +70,23 @@ public:
 	// Resources
 	struct MeshResource
 	{
+		enum Status { Pending, Loading, Loaded };
 		ae::VertexBuffer vertexData;
 		ae::CollisionMesh<> collision = TAG_SMALL_ENGINE;
+		Status status = Pending;
+		const ae::File* file = nullptr;
 	};
 	const struct MeshResource* GetMeshResource( const char* name );
 	ae::Map< ae::Str128, MeshResource* > meshResources = TAG_SMALL_ENGINE;
 	ae::Texture2D defaultTexture;
-	ae::Texture2D fontTexture;
+	// ae::Texture2D fontTexture;
 	ae::SpriteFont font;
 	ae::Shader meshShader;
 	ae::Shader spriteFontShader;
 	ae::Shader spriteFadeShader;
+	const ae::File* m_levelTextureFile = nullptr;
+	// const ae::File* m_fontTextureFile = nullptr;
+	bool m_texturesInitialized = false;
 
 	// Rendering
 	void GetUniforms( ae::UniformList* uniformList );

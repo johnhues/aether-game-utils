@@ -85,10 +85,8 @@ uint16_t kCubeIndices[] =
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_INFO( "Initialize" );
-
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
@@ -97,60 +95,65 @@ int main()
 	ae::Shader shader;
 	ae::VertexBuffer vertexData;
 	ae::InstanceData instanceData;
-
-	window.Initialize( 800, 600, false, true, true );
-	window.SetTitle( "instancing" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-
-	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 25.0f ) );
-
-	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
-	shader.SetDepthTest( true );
-	shader.SetDepthWrite( true );
-	shader.SetBlending( true );
-	shader.SetCulling( ae::Culling::CounterclockwiseFront );
-
-	vertexData.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
-	vertexData.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
-	vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
-	vertexData.UploadVertices( 0, kCubeVerts, countof( kCubeVerts ) );
-	vertexData.UploadIndices( 0, kCubeIndices, countof( kCubeIndices ) );
-
-	ae::Vec3* offsets = ae::NewArray< ae::Vec3 >( "instance", kMaxInstances );
-	for( uint32_t z = 0 ; z < kMaxInstancesDimm; z++ )
-	for( uint32_t y = 0 ; y < kMaxInstancesDimm; y++ )
-	for( uint32_t x = 0 ; x < kMaxInstancesDimm; x++ )
-	{
-		ae::Vec3 offset( x, y, z );
-		offset -= ae::Vec3( kMaxInstancesDimm / 2 );
-		offset *= 3.0f;
-		uint32_t idx = x + y * kMaxInstancesDimm + z * kMaxInstancesDimm * kMaxInstancesDimm;
-		offsets[ idx ] = offset;
-	}
-	instanceData.Initialize( sizeof(ae::Vec3), kMaxInstances, ae::Vertex::Usage::Static );
-	instanceData.AddAttribute( "a_offset", 3, ae::Vertex::Type::Float, 0 );
-	instanceData.UploadData( 0, offsets, kMaxInstances );
-	
 	float r0 = 0.0f;
 	float r1 = 0.0f;
 
-	AE_INFO( "Run" );
-	auto Update = [&]()
+	auto Initialize = [&]()
+	{
+		AE_INFO( "Initialize" );
+
+		window.Initialize( 800, 600, false, true, true );
+		window.SetTitle( "instancing" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+
+		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 25.0f ) );
+
+		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
+		shader.SetDepthTest( true );
+		shader.SetDepthWrite( true );
+		shader.SetBlending( true );
+		shader.SetCulling( ae::Culling::CounterclockwiseFront );
+
+		vertexData.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+		vertexData.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
+		vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
+		vertexData.UploadVertices( 0, kCubeVerts, countof( kCubeVerts ) );
+		vertexData.UploadIndices( 0, kCubeIndices, countof( kCubeIndices ) );
+
+		ae::Vec3* offsets = ae::NewArray< ae::Vec3 >( "instance", kMaxInstances );
+		for( uint32_t z = 0 ; z < kMaxInstancesDimm; z++ )
+		for( uint32_t y = 0 ; y < kMaxInstancesDimm; y++ )
+		for( uint32_t x = 0 ; x < kMaxInstancesDimm; x++ )
+		{
+			ae::Vec3 offset( x, y, z );
+			offset -= ae::Vec3( kMaxInstancesDimm / 2 );
+			offset *= 3.0f;
+			uint32_t idx = x + y * kMaxInstancesDimm + z * kMaxInstancesDimm * kMaxInstancesDimm;
+			offsets[ idx ] = offset;
+		}
+		instanceData.Initialize( sizeof(ae::Vec3), kMaxInstances, ae::Vertex::Usage::Static );
+		instanceData.AddAttribute( "a_offset", 3, ae::Vertex::Type::Float, 0 );
+		instanceData.UploadData( 0, offsets, kMaxInstances );
+
+		AE_INFO( "Run" );
+	};
+
+	auto Update = [&]() -> bool
 	{
 		input.Pump();
 		camera.Update( &input, timeStep.GetDt() );
-		
+
 		r0 += timeStep.GetDt() * 0.6f;
 		r1 += timeStep.GetDt() * 0.75f;
 
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
-		
+
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), ae::Vec3( 0.0f, 1.0f, 0.0f ) );
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.5f, 1000.0f );
-		
+
 		ae::UniformList uniformList;
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
@@ -158,21 +161,20 @@ int main()
 		const ae::InstanceData* datas[] = { &instanceData };
 		vertexData.Bind( &shader, uniformList, datas, 1 );
 		vertexData.DrawInstanced( 0, countof( kCubeIndices ) / 3, kMaxInstances );
-		
+
 		render.Present();
 		timeStep.Tick();
 		return !input.quit;
 	};
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
 
-	AE_INFO( "Terminate" );
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_INFO( "Terminate" );
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
 
-	return 0;
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

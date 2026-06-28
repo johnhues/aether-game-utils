@@ -16,7 +16,7 @@
 * Providing utilities that naturally conform to game development best practices
 * Not overstepping or emposing a particular game engine architecture
 
-Modules and utilities include:
+# Documentation
 * [Allocation](docs/Allocation.md)
 * [C++ reflection](docs/Meta.md)
 * [Data structures](docs/DataStructures.md)
@@ -251,17 +251,30 @@ You can run and play the result of the above command by running this in the same
 emrun index.html
 ```
 
+## Running an Example on iOS
+The CMake-built examples can be deployed to a connected iOS device. Make sure your device is setup for development, trusted, connected, and unlocked. Set the following `AE_APPLE_DEVELOPMENT_TEAM` to your Apple "Organizational Unit" ID and `AE_IOS_DEVICE` to the device's UUID (find it with `xcrun devicectl list devices`). The following configures, builds, installs, launches (held at entry), then attaches lldb:
+```
+export AE_APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX
+export AE_IOS_DEVICE=XXXXXXXX-XXXXXXXXXXXXXXXX
+TARGET=06_triangle && \
+  cmake --preset ios && \
+  cmake --build --preset ios-debug --target $TARGET && \
+  scripts/ios-install.sh $TARGET && \
+  scripts/ios-launch.sh --console --start-paused $TARGET && \
+  scripts/ios-debug.sh $TARGET
+```
+Device stdout/stderr is captured by `ios-launch.sh --console` into `/tmp/aether-ios-console.log`. Follow it in a second terminal:
+```
+tail -F /tmp/aether-ios-console.log
+```
+
 ## Building on Linux
 All utilities are currently supported on Linux except for windowing and graphics. Full windowing and graphics support is planned.
 
 # Games using aether game utils
-[Bella Lunaux: The Case of the Diamond Panther Tiara](https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html)
+[Bella Lunaux: The Case of the Diamond Panther Tiara](https://johnhues.itch.io/bella-lunaux-tiara)
 
-<a href="https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
-
-[Play in Browser](https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html)
-
-[See on Itch.io](https://johnhues.itch.io/bella-lunaux-tiara)
+<a href="https://johnhues.itch.io/bella-lunaux-tiara"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
 
 # Dependencies
 * [Catch2](https://github.com/catchorg/Catch2) (Test framework)

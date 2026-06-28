@@ -62,6 +62,8 @@
 #define _AE_MINGW_ 0
 #define _AE_LINUX_ 0
 #define _AE_EMSCRIPTEN_ 0
+#define _AE_WASM_ 0
+#define _AE_WASI_ 0
 #if defined(__EMSCRIPTEN__)
 	#undef _AE_EMSCRIPTEN_
 	#define _AE_EMSCRIPTEN_ 1
@@ -91,6 +93,14 @@
 #elif defined(__linux__)
 	#undef _AE_LINUX_
 	#define _AE_LINUX_ 1
+#elif defined(__wasi__)
+	#undef _AE_WASM_
+	#define _AE_WASM_ 1
+	#undef _AE_WASI_
+	#define _AE_WASI_ 1
+#elif defined(__wasm__)
+	#undef _AE_WASM_
+	#define _AE_WASM_ 1
 #else
 	#error "Platform not supported"
 #endif
@@ -166,6 +176,17 @@
 //------------------------------------------------------------------------------
 #ifndef AE_ENABLE_OPENGL
 	#define AE_ENABLE_OPENGL 1
+#endif
+
+//------------------------------------------------------------------------------
+// AE_OPENGL_CUSTOM_HEADER define
+//------------------------------------------------------------------------------
+//! Define as the path to a custom OpenGL header if you want to use a specific
+//! header other than the default platform headers. Note that if you need to
+//! '#define GL_GLEXT_PROTOTYPES 1' etc. for your custom header, an option is
+//! adding it to your AE_CONFIG_FILE.
+#ifndef AE_OPENGL_CUSTOM_HEADER
+	#define AE_OPENGL_CUSTOM_HEADER 0 // <GL/glcorearb.h>
 #endif
 
 //------------------------------------------------------------------------------
@@ -263,7 +284,6 @@
 #include <array>
 #include <cassert>
 #include <cerrno> // strtoll/strtoull error checking
-
 #include <chrono>
 #include <cinttypes>
 #include <climits>
@@ -278,11 +298,11 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <ostream>
 #include <random>
 #include <sstream>
-#include <mutex>
 #include <thread> // @TODO: Remove. For Globals::allocatorThread.
 #include <type_traits>
 #include <typeinfo>
@@ -306,7 +326,7 @@
 	#include <emscripten/html5.h>
 	#include <webgl/webgl1.h> // For Emscripten WebGL API headers (see also webgl/webgl1_ext.h and webgl/webgl2.h)
 #endif
-#if !_AE_WINDOWS_
+#if !_AE_WINDOWS_ && !_AE_WASM_
 	#include <cxxabi.h>
 	#if defined(__SSE3__)
 		#include <pmmintrin.h>
@@ -319,19 +339,21 @@ namespace ae {
 // Platform Utils
 //------------------------------------------------------------------------------
 #ifndef AE_BREAK
-	#if _AE_WINDOWS_
-		#define AE_BREAK() __debugbreak()
-	#elif _AE_APPLE_
-		#define AE_BREAK() __builtin_debugtrap()
-	#elif _AE_EMSCRIPTEN_
-		#define AE_BREAK() assert( 0 )
-	#elif defined( __aarch64__ )
-		#define AE_BREAK() asm( "brk #0" )
-	#elif defined( __x86_64__ ) || defined( __i386__ ) || defined( _M_X64 ) || defined( _M_IX86 )
-		#define AE_BREAK() asm( "int $3" )
-	#else
-		#define AE_BREAK() assert( 0 )
-	#endif
+#	if _AE_WINDOWS_
+#		define AE_BREAK() __debugbreak()
+#	elif _AE_APPLE_
+#		define AE_BREAK() __builtin_debugtrap()
+#	elif _AE_EMSCRIPTEN_
+#		define AE_BREAK() assert( 0 )
+#	elif _AE_WASM_
+#		define AE_BREAK() __builtin_trap()
+#	elif defined( __aarch64__ )
+#		define AE_BREAK() asm( "brk #0" )
+#	elif defined( __x86_64__ ) || defined( __i386__ ) || defined( _M_X64 ) || defined( _M_IX86 )
+#		define AE_BREAK() asm( "int $3" )
+#	else
+#		define AE_BREAK() assert( 0 )
+#	endif
 #endif
 
 #if _AE_WINDOWS_
@@ -396,6 +418,12 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 #define _AE_DYNAMIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
 #define _AE_PAGED_POOL template< bool P = Paged, typename = std::enable_if_t< P > >
+// ae::IntT rejects scalar * and / by any operand that carries a fraction: a
+// float, or a class convertible to one (eg. a fixed-point or half type).
+// Integers and enums are excluded so integer scaling resolves to the int32_t
+// overload; truncation to int must be explicit.
+template< typename I >
+using EnableIfFractional = std::enable_if_t< std::is_floating_point_v< I > || ( std::is_class_v< I > && std::is_convertible_v< I, float > ) >;
 #if _AE_MSVC_
 	#define AE_DISABLE_INVALID_OFFSET_WARNING
 	#define AE_ENABLE_INVALID_OFFSET_WARNING
@@ -404,6 +432,13 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 	#define AE_ENABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic pop")
 #endif
 #define AE_DISABLE_COPY_ASSIGNMENT( _t ) _t( const _t& ) = delete; _t& operator=( const _t& ) = delete
+#if _AE_WASM_
+#	define AE_WASM_IMPORT( _m ) extern "C" __attribute__( ( import_module( #_m ) ) )
+#	define AE_WASM_EXPORT extern "C" __attribute__( ( visibility( "default" ) ) )
+#else
+#	define AE_WASM_IMPORT( _m )
+#	define AE_WASM_EXPORT
+#endif
 
 //------------------------------------------------------------------------------
 //! \defgroup Platform
@@ -752,7 +787,7 @@ struct VecT
 };
 
 #if _AE_MSVC_
-	#pragma warning(disable:26495) // Vecs are left uninitialized for performance
+	#pragma warning(disable:26495) // Vectors are left uninitialized for performance
 #endif
 
 //------------------------------------------------------------------------------
@@ -765,7 +800,10 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 	explicit Vec2( float v );
 	Vec2( float x, float y );
 	explicit Vec2( const float* xy );
-	explicit Vec2( struct Int2 i2 );
+	//! Allow automatic integer to float conversion for convenience. An explicit
+	//! cast is required in the opposite direction to avoid accidental
+	//! truncation.
+	Vec2( struct Int2 i2 );
 	//! Returns a unit vector at the given angle in radians. Angle 0 maps to
 	//! +X; positive angles rotate CCW toward +Y (standard math convention).
 	static Vec2 FromAngle( float angle );
@@ -1111,18 +1149,23 @@ struct IntT
 	int32_t operator[]( uint32_t idx ) const;
 	int32_t& operator[]( uint32_t idx );
 	T operator-() const;
+	T operator*( int32_t s ) const;
+	T operator/( int32_t s ) const;
 	T operator+( const T& v ) const;
 	T operator-( const T& v ) const;
 	T operator*( const T& v ) const;
 	T operator/( const T& v ) const;
+	void operator*=( int32_t s );
+	void operator/=( int32_t s );
 	void operator+=( const T& v );
 	void operator-=( const T& v );
 	void operator*=( const T& v );
 	void operator/=( const T& v );
-	T operator*( int32_t s ) const;
-	T operator/( int32_t s ) const;
-	void operator*=( int32_t s );
-	void operator/=( int32_t s );
+	// Fractional scalars are rejected so truncation to int is explicit, eg. ae::Int2 * 2.5f
+	template< typename F, typename = ae::EnableIfFractional< F > > T operator*( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
+	template< typename F, typename = ae::EnableIfFractional< F > > T operator/( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
+	template< typename F, typename = ae::EnableIfFractional< F > > void operator*=( F s ) = delete; // Disabled. This operation would be silently lossy.
+	template< typename F, typename = ae::EnableIfFractional< F > > void operator/=( F s ) = delete; // Disabled. This operation would be silently lossy.
 };
 template< typename T >
 inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v );
@@ -3051,6 +3094,7 @@ public:
 	Rect() = default;
 	static Rect FromCenterAndSize( ae::Vec2 center, ae::Vec2 size );
 	static Rect FromPoints( ae::Vec2 p0, ae::Vec2 p1 );
+	static Rect FromPoints( float x0, float y0, float x1, float y1 );
 
 	Vec2 GetMin() const { return m_min; }
 	Vec2 GetMax() const { return m_max; }
@@ -3431,6 +3475,42 @@ struct Screen
 ae::Array< ae::Screen, 16 > GetScreens();
 
 //------------------------------------------------------------------------------
+// ae::Application function
+//------------------------------------------------------------------------------
+#if 0
+int main( int argc, char* argv[] )
+{
+	// ...
+	auto init = [] {};
+	auto update = []() { return true; };
+	auto terminate = []() { return 0; };
+	return ae::Application( argc, argv, init, update, terminate );
+}
+#endif
+//------------------------------------------------------------------------------
+//! Called once at startup. This is a good place to initialize an
+//! ae::Window, ae::GraphicsDevice, and ae::Input combo.
+using AppInitializeFn = ae::Function< void(), 256 >;
+//! Called each frame. Return false from your given function to quit the
+//! application. Note that this is called by the system on platforms where the
+//! system owns the main loop (like iOS and web).
+using AppUpdateFn = ae::Function< bool(), 256 >;
+//! Called once at termination, except on platforms where the system owns
+//! the main loop (like iOS and web) Terminate may never be called. The
+//! return value of your given function will be used as the process exit code.
+using AppTerminateFn = ae::Function< int32_t(), 256 >;
+//! Drives a program's lifecycle identically on platforms that own the main loop
+//! and platforms that don't. This function wraps the platform specific
+//! mechanisms that drive the main loop, and calls the given \p initialize,
+//! \p update, and \p terminate functions when appropriate.
+int32_t Application(
+	int32_t argc, char* argv[],
+	const AppInitializeFn& initialize,
+	const AppUpdateFn& update,
+	const AppTerminateFn& terminate
+);
+
+//------------------------------------------------------------------------------
 // ae::Window class
 // @TODO: WindowUnits enum: virtual dpi (OS desktop), Content (actual pixels)
 //! Window size is specified in virtual DPI units. Actual window content width and height are subject to the
@@ -3479,6 +3559,21 @@ public:
 	ae::Rect GetSafeArea() const;
 	//! Window content scale factor
 	float GetScaleFactor() const { return m_scaleFactor; }
+	//! Low-level context/surface activation. Most rendering code should use
+	//! GraphicsDevice::Activate() instead.
+	void ActivateContext();
+	//! Low-level presentation primitive for custom final compositing. Most
+	//! rendering code should use GraphicsDevice::Present() instead.
+	void BindBackBuffer();
+	//! Low-level platform swap/flush. GraphicsDevice::Present() calls this after
+	//! compositing its canvas to the window back buffer.
+	void Present();
+	//! Drawable pixel size for low-level presentation code. This differs from
+	//! GetWidth() on scaled displays.
+	uint32_t GetDrawWidth() const;
+	//! Drawable pixel size for low-level presentation code. This differs from
+	//! GetHeight() on scaled displays.
+	uint32_t GetDrawHeight() const;
 
 	//! Enable window events logging to console
 	void SetLoggingEnabled( bool enable ) { m_debugLog = enable; }
@@ -3504,11 +3599,23 @@ public:
 	void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
 	void m_UpdateFullScreen( bool fullScreen ) { m_fullScreen = fullScreen; }
 	void m_UpdateFocused( bool focused );
+	void m_UpdateBackBuffer();
 	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
 	ae::Int2 m_nativeToAe( ae::Int2 pos, ae::Int2 size );
 	bool m_fixCanvasStyle = false;
 	void* window = nullptr;
 	class GraphicsDevice* graphicsDevice = nullptr;
+#if _AE_EMSCRIPTEN_
+	EMSCRIPTEN_WEBGL_CONTEXT_HANDLE m_context = 0;
+#else
+	void* m_context = nullptr;
+#endif
+	uint32_t m_defaultFramebuffer = 0;
+#if _AE_IOS_
+	// Depth lives on the GraphicsDevice canvas, not here.
+	uint32_t m_iosColorRenderbuffer = 0;
+#endif
+	class RenderTarget* m_backBuffer = nullptr;
 	class Input* input = nullptr;
 };
 
@@ -3652,16 +3759,17 @@ struct MouseState
 	bool leftButton = false;
 	bool middleButton = false;
 	bool rightButton = false;
-	//! Window space coordinates (ie. not affected by window scale factor). This
+	//! Window space coordinates in points (ie. not affected by window scale factor). This
 	//! value should be used for cursors etc. and not for calculating changes in
 	//! position. In other words don't subtract mouse position from a previous
 	//! frame. Use ae::MouseState::movement for changes in position.
-	ae::Int2 position = ae::Int2( 0 );
-	//! Window space coordinates (ie. not affected by window scale factor). This
+	ae::Vec2 position = ae::Vec2( 0.0f );
+	//! Window space coordinates in points (ie. not affected by window scale factor). This
 	//! value should be used for detecting how much the mouse cursor is moved.
 	//! Cursor jumps are filtered when the mouse is captured and when the window
-	//! becomes active.
-	ae::Int2 movement = ae::Int2( 0 );
+	//! becomes active. Preserves sub-pixel precision for consistent behavior across
+	//! browsers that report movement at different frequencies.
+	ae::Vec2 movement = ae::Vec2( 0.0f );
 	//! Raw scroll input only (no momentum). Wheel gives ~1.0 per notch, and
 	//! uses sub-line float precision if possible. Is reset each frame. Physical
 	//! direction regardless of OS natural scrolling setting, see
@@ -3724,17 +3832,44 @@ struct GamepadState // @TODO: Rename Gamepad
 };
 
 //------------------------------------------------------------------------------
+// ae::Touch constants
+//------------------------------------------------------------------------------
+const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
+const uint32_t kMaxTouchSamples = 64; //!< Max number of position samples stored for each touch
+
+//------------------------------------------------------------------------------
 // ae::Touch struct
 //------------------------------------------------------------------------------
 struct Touch
 {
 	uint32_t id = 0;
-	ae::Int2 startPosition = ae::Int2( 0.0f );
-	ae::Int2 position = ae::Int2( 0.0f );
-	ae::Int2 movement = ae::Int2( 0.0f );
+	struct Sample
+	{
+		double time; // Relative to ae::GetTime()
+		ae::Vec2 position; // Relative to the virtual window size (ie. not affected by window scale factor)
+	};
+	//! The oldest position sample is at index 0, and the newest is at index
+	//! ( length - 1 ). Position samples are added on every system input event,
+	//! so the time between samples is not fixed. Once max samples is reached
+	//! the sample that contributes the least to the 'shape' of the curve formed
+	//! by the consecutive samples is removed to make room for the new sample.
+	ae::Array< Sample, kMaxTouchSamples > samples;
+	//! True after the user releases or cancels the touch. The touch remains
+	//! visible via ae::Input::GetTouches() until ae::Input::ReleaseTouch() is
+	//! called. samples is not modified after the touch ends.
+	bool ended = false;
+
+	ae::Vec2 Position() const;
+	ae::Vec2 StartPosition() const;
+	ae::Vec2 StartDelta() const;
+	bool Ended() const { return ended; }
+	double Lifetime() const;
+
+	// Internal: appends a sample, simplifying the stored curve when full.
+	void _AppendSample( double time, ae::Vec2 position );
 };
-const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
-using TouchArray = ae::Array< ae::Touch, ae::kMaxTouches >;
+
+using TouchArray = ae::Array< ae::Touch*, ae::kMaxTouches >;
 
 //------------------------------------------------------------------------------
 // ae::Input class
@@ -3802,22 +3937,26 @@ public:
 	inline bool GetGamepadPressLeft( uint32_t idx = 0 ) const { return gamepads[ idx ].left && !gamepadsPrev[ idx ].left; }
 	inline bool GetGamepadPressRight( uint32_t idx = 0 ) const { return gamepads[ idx ].right && !gamepadsPrev[ idx ].right; }
 
-	//! Returns an active touch with the given \p id or nullptr if it does not
-	//! exist
-	const ae::Touch* GetTouchById( uint32_t id ) const;
-	//! Returns a touch that was just released with the given \p id or nullptr
-	//! if it does not exist
-	const ae::Touch* GetFinishedTouchById( uint32_t id ) const;
-	//! Returns all touches that have stated since the last ae::Input::Pump()
-	//! call
-	ae::TouchArray GetNewTouches() const;
-	//! Returns all touches that have been released since the last
-	//! ae::Input::Pump() call
-	ae::TouchArray GetFinishedTouches() const;
-	//! Returns all touches that are currently active
-	const ae::TouchArray& GetTouches() const;
-	//! Returns all touches that were active in the previous frame
-	const ae::TouchArray& GetPreviousTouches() const;
+	//! Adopts the oldest unseen touch into the tracked set, making it visible
+	//! via ae::Input::GetTouches() until released. Returns the adopted touch,
+	//! or nullptr if there are no new touches. Touches that have already
+	//! ended are never returned. The result must be freed with
+	//! ae::Input::ReleaseTouch() when it is no longer needed. Note that if
+	//! touches are not pumped regularly touches may be discarded before they
+	//! are ever returned.
+	const ae::Touch* PumpTouches();
+	//! Returns the touches the caller has opted into tracking via
+	//! ae::Input::PumpTouches() and have not yet released. Touches that have
+	//! not been pumped are not visible here. The array is returned by value so
+	//! it's safe to iterate through this result and call
+	//! ae::Input::ReleaseTouch() on all/any of the touches in any order. Be
+	//! careful not to access the internals of touches in this array that you've
+	//! already released.
+	ae::TouchArray GetTouches() const { return m_touches; }
+	//! Frees a touch returned by PumpTouches(). This **must** be called per
+	//! touch or internal limits will be hit and new touches may be discarded.
+	//! It is not safe to access a touch after it has been released.
+	void ReleaseTouch( const ae::Touch* touch );
 	
 	MouseState mouse;
 	MouseState mousePrev;
@@ -3827,16 +3966,21 @@ public:
 
 // private:
 	Input( const Input& ) = delete;
-	void m_SetMousePos( ae::Int2 pos );
-	void m_SetMousePos( ae::Int2 pos, ae::Int2 movement );
-	void m_SetCursorPos( ae::Int2 pos );
+	void m_TryNewFrame();
+	void m_SetMousePos( ae::Vec2 pos );
+	void m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement );
+	void m_WarpCursor( ae::Vec2 pos ); // Attempts to move the OS's cursor to the given position
 	void m_SetMouseCaptured( bool captured );
 	void m_UpdateModifiers();
 	ae::TimeStep m_timeStep;
 	ae::Window* m_window = nullptr;
+	bool m_pendingNewFrame = true;
 	bool m_captureMouse = false;
-	ae::Int2 m_capturedMousePos = ae::Int2( INT_MAX );
+	ae::Optional< ae::Vec2 > m_capturedMousePos;
 	bool m_mousePosSet = false;
+#if _AE_EMSCRIPTEN_
+	int m_pendingPointerLock = 0; // -1 = unlock pending, 1 = lock pending
+#endif
 	bool m_hideCursor = false;
 	bool m_keys[ 256 ];
 	bool m_keysPrev[ 256 ];
@@ -3849,11 +3993,11 @@ public:
 	bool m_gamepadRequiresFocus = true;
 	bool m_naturalScroll = false;
 	// Touch
-	ae::TouchArray m_touches;
-	ae::TouchArray m_touchesPrev;
+	using TouchPool = ae::ObjectPool< ae::Touch, ae::kMaxTouches >;
+	TouchPool m_touchPool;
+	TouchArray m_newTouches;
+	TouchArray m_touches;
 	uint32_t m_touchIndex = 0; // 0 is invalid
-	// Emscripten
-	bool newFrame_HACK = false;
 };
 
 /* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
@@ -4262,8 +4406,9 @@ private:
 //------------------------------------------------------------------------------
 // @TODO: Graphics globals. Should be parameters to modules that need them.
 //------------------------------------------------------------------------------
-extern int32_t GLMajorVersion;
-extern int32_t GLMinorVersion;
+int32_t GLMajorVersion();
+int32_t GLMinorVersion();
+const char* GLProfile(); // es, core, compatibility
 // Caller enables this externally.  The renderer, Shader, math aren't tied to one another
 // enough to pass this locally.  glClipControl is also not accessible in ES or GL 4.1, so
 // doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
@@ -4742,11 +4887,14 @@ public:
 	static Matrix4 GetQuadToNDCTransform( Rect ndc, float z );
 
 private:
+	friend class Window;
+	void m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer );
 	uint32_t m_fbo = 0;
 	Array< Texture2D*, 4 > m_targets;
 	Texture2D m_depth;
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
+	bool m_externalFramebuffer = false;
 };
 
 //------------------------------------------------------------------------------
@@ -7232,16 +7380,21 @@ template< typename T, typename C > T* Cast( C* obj );
 
 //------------------------------------------------------------------------------
 // ae::PatchVTable
-//! Overwrites the v-table of the given \p obj with the v-table of the given
-//! type. Use this over ae::ClassType::PatchVTable() when the type of \p obj
-//! is known at compile time. T Must be the bottom-most class in the given
-//! \p obj inheritance hierarchy. A temporary instance of the object will be
-//! constructed. \p ctorArgs may be provided if the type does not have a default
-//! constructor. 
+//! Replaces the v-table of \p obj with the v-table of type T.
+//!
+//! Use this function instead of ae::ClassType::PatchVTable() when the type is
+//! known at compile time. T must be the most derived class in \p obj's
+//! inheritance hierarchy.
+//!
+//! A temporary instance of T will be constructed to extract its v-table. If T
+//! does not have a default constructor, provide the necessary arguments via \p
+//! ctorArgs.
 //------------------------------------------------------------------------------
 template< typename T, typename... Args >
 void PatchVTable( T* obj, Args... ctorArgs )
 {
+	// @TODO: Could add a conditional safety check here for types with '_metaTypeId'
+	// @TODO: Allocate with ae::ScratchBuffer in case the object doesn't fit on the stack
 	T temp = T( ctorArgs... );
 	void* vtable = *(void**)&temp;
 	memcpy( (void*)obj, &vtable, sizeof(void*) );
@@ -7387,8 +7540,11 @@ struct _Globals
 	bool varSerializerInitialized = false;
 #endif // AE_DEPRECATED
 
-	// Graphics
+	// Platform
 	class GraphicsDevice* graphicsDevice = nullptr;
+	class _Application* application = nullptr;
+	void* eaglLayer = nullptr; // iOS: CAEAGLLayer, set by aeApplicationDelegate before Window init
+	class Input* input = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -15594,10 +15750,13 @@ T* ae::Cast( C* obj )
 		#pragma comment (lib, "Winmm.lib")
 		#pragma comment (lib, "Ws2_32.lib")
 		#pragma comment (lib, "XInput.lib")
-		#pragma comment (lib, "OpenGL32.lib")
-	#endif
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 0
+		#if AE_ENABLE_OPENGL
+			#pragma comment (lib, "opengl32.lib")
+			#pragma comment (lib, "glu32.lib")
+		#endif
+	#endif // _AE_MSVC_
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 0
 	#endif
 	#ifdef RGB
 		#undef RGB
@@ -15609,7 +15768,19 @@ T* ae::Cast( C* obj )
 	#include <dlfcn.h>
 	#include <mach-o/dyld.h>
 	#include <sys/stat.h>
-	#ifdef AE_USE_MODULES
+	#if _AE_IOS_
+		#import <Foundation/Foundation.h>
+		#import <UIKit/UIKit.h>
+		#import <QuartzCore/QuartzCore.h>
+		#import <OpenGLES/EAGL.h>
+		#import <OpenGLES/ES3/gl.h>
+		#include <GameController/GameController.h>
+		// @TODO:
+		// <OpenGLES/ES3/glext.h> is NOT imported here on purpose. It defines
+		// GL_BGR / GL_BGRA which clash with `const auto GL_BGR = GL_RGB;` later
+		// in this header. The Window::m_Initialize iOS branch only needs symbols
+		// from <OpenGLES/ES3/gl.h>.
+	#elif defined(AE_USE_MODULES)
 		@import AppKit;
 		@import Carbon;
 		@import Cocoa;
@@ -15618,33 +15789,26 @@ T* ae::Cast( C* obj )
 		@import OpenAL;
 		@import GameController;
 	#else
-		#if _AE_IOS_
-		#import <Foundation/Foundation.h>
-		#else
 		#include <Cocoa/Cocoa.h>
 		#include <Carbon/Carbon.h>
-		#endif
 		#include <GameController/GameController.h>
 	#endif
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 1
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 1
 	#endif
 #elif _AE_LINUX_
 	#include <unistd.h>
 	#include <pwd.h>
 	#include <limits.h>
 	#include <sys/stat.h>
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 0
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 0
 	#endif
 #elif _AE_EMSCRIPTEN_
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 1
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 1
 	#endif
 #endif
-#include <inttypes.h>
-#include <thread>
-#include <random>
 // Socket
 #if _AE_WINDOWS_
 	// Be caeful with include case-sensitivity here for MinGW/cross-compiling
@@ -15656,6 +15820,13 @@ T* ae::Cast( C* obj )
 	typedef char _ae_sock_buff_t;
 	#define _ae_sock_poll WSAPoll
 	#define _ae_ioctl ioctlsocket
+#elif _AE_WASM_
+	typedef uint16_t _ae_sa_family_t;
+	typedef int _ae_sock_err_t;
+	struct _ae_poll_fd_t { int fd; short events; short revents; };
+	typedef uint8_t _ae_sock_buff_t;
+	inline int _ae_sock_poll( _ae_poll_fd_t*, unsigned int, int ) { return -1; }
+	inline int _ae_ioctl( int, unsigned long, ... ) { return -1; }
 #else
 	#include <netdb.h>
 	#include <netinet/in.h>
@@ -15672,7 +15843,7 @@ T* ae::Cast( C* obj )
 	#define _ae_sock_poll poll
 	#define _ae_ioctl ioctl
 #endif
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	#if _AE_APPLE_
 		#include <OpenAL/al.h>
 		#include <OpenAL/alc.h>
@@ -15686,6 +15857,20 @@ T* ae::Cast( C* obj )
 #endif
 #if defined(__ARM_NEON__) || defined(__ARM_NEON)
 	#include <arm_neon.h>
+#endif
+
+#if AE_ENABLE_OPENGL && _AE_WINDOWS_
+	// Forward declarations so ae::Window::m_Initialize (defined earlier in the
+	// translation unit than the unified GL function pointer table) can name
+	// these. Storage and the rest of the WGL/GL surface live near the X-macro
+	// further down.
+	#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+	#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+	#define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+	#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+	#define WGL_CONTEXT_FLAGS_ARB 0x2094
+	#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
+	extern HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList );
 #endif
 
 namespace ae {
@@ -15767,7 +15952,7 @@ uint32_t GetPID()
 {
 #if _AE_WINDOWS_
 	return GetCurrentProcessId();
-#elif _AE_EMSCRIPTEN_
+#elif _AE_EMSCRIPTEN_ || _AE_WASM_
 	return 0;
 #else
 	return getpid();
@@ -15776,7 +15961,11 @@ uint32_t GetPID()
 
 uint32_t GetMaxConcurrentThreads()
 {
+#if _AE_WASM_
+	return 1;
+#else
 	return std::thread::hardware_concurrency();
+#endif
 }
 
 #if _AE_APPLE_
@@ -15837,6 +16026,10 @@ double GetTime()
 	return performanceCount.QuadPart / (double)counterFrequency.QuadPart;
 #elif _AE_EMSCRIPTEN_
 	return _ae_performance_now() / 1000.0f;
+#elif _AE_WASM_
+	struct timespec ts;
+	clock_gettime( CLOCK_MONOTONIC, &ts );
+	return ts.tv_sec + ts.tv_nsec * 1e-9;
 #else
 	return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::high_resolution_clock::now().time_since_epoch() ).count() / 1000000.0;
 #endif
@@ -16430,13 +16623,10 @@ Quaternion Matrix4::GetRotation() const
 
 Vec3 Matrix4::GetScale() const
 {
-	Vec3 scale(
-		Vec3( &data[ 0 ] ).Length(),
-		Vec3( &data[ 4 ] ).Length(),
-		Vec3( &data[ 8 ] ).Length()
-	);
-	if( Determinant() < 0.0f ) { scale.z = -scale.z; }
-	return scale;
+	const float sx = Vec3( &data[ 0 ] ).Length();
+	const float sy = Vec3( &data[ 4 ] ).Length();
+	const float sz = Vec3( &data[ 8 ] ).Length();
+	return Vec3( sx, sy, ( Determinant() < 0.0f ) ? -sz : sz );
 }
 
 float Matrix4::Determinant() const
@@ -16674,6 +16864,7 @@ ae::Vec3 Matrix4::TransformPoint3x4( ae::Vec3 v ) const
 
 ae::Vec3 Matrix4::TransformVector3x4( ae::Vec3 v ) const
 {
+	// @TODO: This is accidentally transposed!
 	return Vec3(
 		v.x * data[ 0 ] + v.y * data[ 4 ] + v.z * data[ 8 ],
 		v.x * data[ 1 ] + v.y * data[ 5 ] + v.z * data[ 9 ],
@@ -18255,7 +18446,7 @@ void _LogFormat( std::ostream& os, ae::LogSeverity severity, const char* filePat
 		os << LogLevelColors[ (uint32_t)severity ];
 	}
 	const char* levelName = LogLevelNames[ (uint32_t)severity ];
-	os << " [" << levelName << ( strlen( levelName ) < 5 ? "] " : " " );
+	os << " [" << levelName << ( strlen( levelName ) < 5 ? "]  " : "] " );
 #if AE_ENABLE_SOURCE_INFO
 	if( _ae_logColors )
 	{
@@ -18545,8 +18736,8 @@ void TimeStep::SetDt( float sec )
 
 void TimeStep::Tick()
 {
-#if _AE_EMSCRIPTEN_
-	// Frame rate of emscripten builds is controlled by the browser
+#if _AE_EMSCRIPTEN_ || _AE_WASM_
+	// Frame rate of emscripten/WASM builds is controlled externally
 	const bool allowSleep = false;
 #else
 	const bool allowSleep = ( m_timeStep > 0.0 );
@@ -19446,6 +19637,14 @@ Rect Rect::FromPoints( ae::Vec2 p0, ae::Vec2 p1 )
 	return rect;
 }
 
+Rect Rect::FromPoints( float x0, float y0, float x1, float y1 )
+{
+	Rect rect;
+	rect.ExpandPoint( ae::Vec2( x0, y0 ) );
+	rect.ExpandPoint( ae::Vec2( x1, y1 ) );
+	return rect;
+}
+
 bool Rect::Contains( Vec2 pos ) const
 {
 	return ( m_min.x <= pos.x && pos.x <= m_max.x ) && ( m_min.y <= pos.y && pos.y <= m_max.y );
@@ -19896,7 +20095,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	if( _aeWindow->input )
 	{
 		NSPoint mouseScreenPos = [NSEvent mouseLocation];
-		_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+		_aeWindow->input->m_SetMousePos( ae::Vec2( mouseScreenPos.x, mouseScreenPos.y ) );
 	}
 }
 - (void)windowDidMove:(NSNotification *)notification
@@ -19912,7 +20111,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	if( _aeWindow->input )
 	{
 		NSPoint mouseScreenPos = [NSEvent mouseLocation];
-		_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+		_aeWindow->input->m_SetMousePos( ae::Vec2( mouseScreenPos.x, mouseScreenPos.y ) );
 	}
 }
 - (void)windowDidBecomeKey:(NSNotification *)notification
@@ -19928,6 +20127,277 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 @end
 namespace ae {
 #endif
+
+//------------------------------------------------------------------------------
+// ae::_Application (internal)
+//------------------------------------------------------------------------------
+//! Internal: holds an ae::Application()'s callbacks and owns the platform main
+//! loop. Constructed by ae::Application(); not used directly.
+class _Application
+{
+public:
+	AppInitializeFn Initialize;
+	AppUpdateFn Update;
+	AppTerminateFn Terminate;
+	int32_t Run( int32_t argc, char* argv[] );
+};
+
+//------------------------------------------------------------------------------
+// ae::Application Objective-C aeApplicationDelegate class (iOS)
+//------------------------------------------------------------------------------
+#if _AE_IOS_
+} // ae end
+@interface aeEAGLView : UIView
+{
+	NSMapTable< UITouch*, NSNumber* >* _touchIds;
+}
+@end
+@implementation aeEAGLView
++ (Class)layerClass
+{
+	return [CAEAGLLayer class];
+}
+- (instancetype)initWithFrame:(CGRect)frame
+{
+	self = [super initWithFrame:frame];
+	if( self )
+	{
+		CAEAGLLayer* layer = (CAEAGLLayer*)self.layer;
+		layer.opaque = YES;
+		layer.contentsScale = [UIScreen mainScreen].scale;
+		// SRGBA8 matches macOS's NSOpenGLPFAColorSize=24 default backing: the
+		// framebuffer auto-applies linear→sRGB on fragment write, so SRGB
+		// textures and linear shading round-trip correctly to display. The
+		// drawable is fully overwritten by GraphicsDevice::Present each frame.
+		layer.drawableProperties = @{
+			kEAGLDrawablePropertyColorFormat : kEAGLColorFormatSRGBA8,
+		};
+		self.multipleTouchEnabled = YES;
+		_touchIds = [NSMapTable weakToStrongObjectsMapTable];
+	}
+	return self;
+}
+- (ae::Vec2)aePosForTouch:(UITouch*)t
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	const CGPoint p = [t locationInView:self];
+	const float height = ( input && input->m_window ) ? (float)input->m_window->GetHeight() : (float)self.bounds.size.height;
+	return ae::Vec2( (float)p.x, height - (float)p.y );
+}
+- (ae::Touch*)aeFindTouchById:(uint32_t)id
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return nullptr; }
+	const auto matches = [&]( ae::Touch* t ){ return t->id == id; };
+	int32_t idx = input->m_newTouches.FindFn( matches );
+	if( idx >= 0 ) { return input->m_newTouches[ idx ]; }
+	idx = input->m_touches.FindFn( matches );
+	if( idx >= 0 ) { return input->m_touches[ idx ]; }
+	return nullptr;
+}
+- (void)touchesBegan:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		if( input->m_newTouches.Length() >= input->m_newTouches.Size() ) { break; }
+		ae::Touch* touch = input->m_touchPool.New();
+		if( !touch ) { break; }
+		input->m_touchIndex++;
+		if( input->m_touchIndex == 0 ) { input->m_touchIndex = 1; }
+		touch->id = input->m_touchIndex;
+		touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+		input->m_newTouches.Append( touch );
+		[_touchIds setObject:@(touch->id) forKey:uiTouch];
+	}
+}
+- (void)touchesMoved:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch && !touch->ended )
+		{
+			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+		}
+	}
+}
+- (void)touchesEnded:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch )
+		{
+			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+			touch->ended = true;
+		}
+		[_touchIds removeObjectForKey:uiTouch];
+	}
+}
+- (void)touchesCancelled:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch ) { touch->ended = true; }
+		[_touchIds removeObjectForKey:uiTouch];
+	}
+}
+@end
+
+@interface aeViewController : UIViewController
+@property ( nonatomic, strong ) aeEAGLView* glView;
+@end
+@implementation aeViewController
+- (void)loadView
+{
+	self.glView = [[aeEAGLView alloc] initWithFrame:[UIScreen mainScreen].bounds];
+	self.view = self.glView;
+}
+- (void)viewDidLoad
+{
+	[super viewDidLoad];
+	[self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
+}
+- (void)viewDidLayoutSubviews
+{
+	[super viewDidLayoutSubviews];
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input || !input->m_window )
+	{
+		return;
+	}
+	ae::Window* window = input->m_window;
+	CAEAGLLayer* eaglLayer = (CAEAGLLayer*)self.glView.layer;
+	const CGSize sizePoints = eaglLayer.bounds.size;
+	const float scale = (float)eaglLayer.contentsScale;
+#if AE_ENABLE_OPENGL
+	if( window->m_context && window->m_iosColorRenderbuffer )
+	{
+		EAGLContext* eaglContext = (__bridge EAGLContext*)window->m_context;
+		[ EAGLContext setCurrentContext:eaglContext ];
+		glBindRenderbuffer( GL_RENDERBUFFER, window->m_iosColorRenderbuffer );
+		GLint currentWidth = 0;
+		GLint currentHeight = 0;
+		glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &currentWidth );
+		glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &currentHeight );
+		const GLint targetWidth = (GLint)( sizePoints.width * scale );
+		const GLint targetHeight = (GLint)( sizePoints.height * scale );
+		if( currentWidth != targetWidth || currentHeight != targetHeight )
+		{
+			const bool storageOk = [ eaglContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:eaglLayer ];
+			AE_ASSERT_MSG( storageOk, "renderbufferStorage:fromDrawable: failed on resize" );
+		}
+	}
+#endif
+	window->m_UpdateSize( (int32_t)sizePoints.width, (int32_t)sizePoints.height, scale );
+}
+- (BOOL)prefersStatusBarHidden
+{
+	return YES; // Hide battery and time etc
+}
+- (UIRectEdge)preferredScreenEdgesDeferringSystemGestures {
+	return UIRectEdgeAll; // Prevent system gestures from interfering with edge input
+}
+- (BOOL)prefersHomeIndicatorAutoHidden {
+	return NO; // Must be NO for the '...DeferringSystemGestures' to work
+}
+@end
+
+@interface aeApplicationDelegate : UIResponder < UIApplicationDelegate >
+@property ( nonatomic, strong ) UIWindow* window;
+@property ( nonatomic, strong ) aeViewController* viewController;
+@property ( nonatomic, strong ) CADisplayLink* displayLink;
+@end
+@implementation aeApplicationDelegate
+- (BOOL)application:(UIApplication*)app didFinishLaunchingWithOptions:(NSDictionary*)opts
+{
+	self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+	self.viewController = [[aeViewController alloc] init];
+	self.window.rootViewController = self.viewController;
+	[self.window makeKeyAndVisible];
+	[self.viewController.view layoutIfNeeded];
+	// Provide the CAEAGLLayer so Window::Initialize() can attach its
+	// renderbuffer, then run the app's Initialize callback.
+	ae::_Globals::Get()->eaglLayer = (__bridge void*)self.viewController.glView.layer;
+	ae::_Globals::Get()->application->Initialize();
+	self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick: )];
+	[self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
+	return YES;
+}
+- (void)tick:(CADisplayLink*)link
+{
+	if( !ae::_Globals::Get()->application->Update() )
+	{
+		[link invalidate];
+		const int32_t termResult = ae::_Globals::Get()->application->Terminate();
+		exit( termResult );
+	}
+}
+@end
+namespace ae {
+#endif
+
+//------------------------------------------------------------------------------
+// ae::_Application member functions
+//------------------------------------------------------------------------------
+int32_t _Application::Run( int32_t argc, char* argv[] )
+{
+#if _AE_IOS_
+	ae::_Globals::Get()->application = this;
+	@autoreleasepool
+	{
+		return UIApplicationMain( argc, argv, nil, @"aeApplicationDelegate" );
+	}
+#else
+	(void)argc;
+	(void)argv;
+	Initialize();
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
+#else
+	while( Update() )
+	{
+	}
+#endif
+	return Terminate();
+#endif
+}
+
+//------------------------------------------------------------------------------
+// ae::Application
+//------------------------------------------------------------------------------
+int32_t Application( int32_t argc, char* argv[],
+	const AppInitializeFn& initialize,
+	const AppUpdateFn& update,
+	const AppTerminateFn& terminate )
+{
+	_Application app;
+	app.Initialize = initialize;
+	app.Update = update;
+	app.Terminate = terminate;
+	return app.Run( argc, argv );
+}
+
+uint32_t _ae_GetCurrentFramebuffer();
 
 //------------------------------------------------------------------------------
 // ae::Screen functions
@@ -20023,11 +20493,13 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 	m_height = height;
 	m_fullScreen = false;
 
+#if !_AE_IOS_
 	// Center window on primary screen
 	const ae::Array< ae::Screen, 16 > screens = ae::GetScreens();
 	AE_ASSERT( screens.Length() > 0 );
 	m_pos = ( screens[ 0 ].size - ae::Int2( width, height ) ) / 2;
 	m_pos += screens[ 0 ].position;
+#endif
 
 	m_Initialize( rememberPosition );
 
@@ -20190,6 +20662,33 @@ void Window::m_Initialize( bool rememberPosition )
 		AE_FAIL_MSG( "Could not set window pixel format. Error: #", GetLastError() );
 	}
 
+#if AE_ENABLE_OPENGL
+	HGLRC dummyCtx = wglCreateContext( hdc );
+	AE_ASSERT_MSG( dummyCtx, "Failed to create dummy OpenGL Rendering Context" );
+	wglMakeCurrent( hdc, dummyCtx );
+
+	int attribs[] =
+	{
+		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion(),
+		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion(),
+		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+		0
+	};
+	wglCreateContextAttribsARB = (decltype( wglCreateContextAttribsARB ))wglGetProcAddress( "wglCreateContextAttribsARB" );
+	AE_ASSERT_MSG( wglCreateContextAttribsARB, "Failed to load wglCreateContextAttribsARB" );
+	HGLRC ctx = wglCreateContextAttribsARB( hdc, 0, attribs );
+	AE_ASSERT_MSG( ctx, "Failed to create extended OpenGL Rendering Context" );
+
+	wglMakeCurrent( nullptr, nullptr );
+	wglDeleteContext( dummyCtx );
+	if( !wglMakeCurrent( hdc, ctx ) )
+	{
+		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+	}
+	m_context = ctx;
+#endif
+
 	// Finish window setup
 	ShowWindow( hwnd, SW_SHOW );
 	SetForegroundWindow( hwnd ); // Slightly Higher Priority
@@ -20239,14 +20738,15 @@ void Window::m_Initialize( bool rememberPosition )
 		[nsWindow setFrame:frame display:YES];
 		frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
 	}
+	const NSRect viewFrame = NSMakeRect( 0.0, 0.0, frame.size.width, frame.size.height );
 	
 #if AE_ENABLE_OPENGL
 	NSOpenGLPixelFormatAttribute openglProfile;
-	if( ae::GLMajorVersion >= 4 )
+	if( ae::GLMajorVersion() >= 4 )
 	{
 		openglProfile = NSOpenGLProfileVersion4_1Core;
 	}
-	else if( ae::GLMajorVersion >= 3 )
+	else if( ae::GLMajorVersion() >= 3 )
 	{
 		openglProfile = NSOpenGLProfileVersion3_2Core;
 	}
@@ -20271,16 +20771,17 @@ void Window::m_Initialize( bool rememberPosition )
 	NSOpenGLPixelFormat* nsPixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:nsPixelAttribs];
 	AE_ASSERT_MSG( nsPixelFormat, "Could not determine a valid pixel format" );
 	
-	NSOpenGLView* glView = [[NSOpenGLView alloc] initWithFrame:frame pixelFormat:nsPixelFormat];
+	NSOpenGLView* glView = [[NSOpenGLView alloc] initWithFrame:viewFrame pixelFormat:nsPixelFormat];
 	AE_ASSERT_MSG( glView, "Could not create view with specified pixel format" );
 	[glView setWantsBestResolutionOpenGLSurface:true]; // @TODO: Retina. Does this do anything?
 	[glView.openGLContext makeCurrentContext];
+	m_context = glView.openGLContext;
 	
 	[nsPixelFormat release];
 	[nsWindow setContentView:glView];
 	[nsWindow makeFirstResponder:glView];
 #else
-	NSView* view = [[NSView alloc] initWithFrame:frame];
+	NSView* view = [[NSView alloc] initWithFrame:viewFrame];
 	[nsWindow setContentView:view];
 	[nsWindow makeFirstResponder:nsWindow];
 #endif
@@ -20306,18 +20807,170 @@ void Window::m_Initialize( bool rememberPosition )
 	// as a console app.
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #elif _AE_EMSCRIPTEN_
+#if AE_ENABLE_OPENGL
+	EmscriptenWebGLContextAttributes attrs;
+	emscripten_webgl_init_context_attributes( &attrs );
+	attrs.alpha = 0;
+	attrs.majorVersion = ae::GLMajorVersion();
+	attrs.minorVersion = ae::GLMinorVersion();
+	m_context = emscripten_webgl_create_context( "canvas", &attrs );
+	AE_ASSERT( m_context > 0 );
+	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
+	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+#endif
 	_aeEmscriptenGetCanvasInfo( &m_width, &m_height, &m_scaleFactor );
 	if( m_width == 300 && m_height == 150 )
 	{
 		AE_WARN( "Canvas size was not configured. Defaulting to WxH 100\%." );
 		m_fixCanvasStyle = true;
 	}
+#elif _AE_IOS_
+#if AE_ENABLE_OPENGL
+	EAGLContext* eaglContext = [ [ EAGLContext alloc ] initWithAPI:kEAGLRenderingAPIOpenGLES3 ];
+	AE_ASSERT_MSG( eaglContext, "Failed to create EAGLContext (OpenGL ES 3)" );
+	const bool madeCurrent = [ EAGLContext setCurrentContext:eaglContext ];
+	AE_ASSERT_MSG( madeCurrent, "Failed to make EAGLContext current" );
+	m_context = (__bridge_retained void*)eaglContext;
+
+	// aeApplicationDelegate sets eaglLayer before calling Application::Initialize().
+	void* eaglLayerPtr = ae::_Globals::Get()->eaglLayer;
+	for( int i = 0; i < 100 && !eaglLayerPtr; i++ )
+	{
+		[ NSThread sleepForTimeInterval:0.01 ];
+		eaglLayerPtr = ae::_Globals::Get()->eaglLayer;
+	}
+	AE_ASSERT_MSG( eaglLayerPtr, "ae::_Globals::eaglLayer not set (aeApplicationDelegate did not run)" );
+	CAEAGLLayer* eaglLayer = (__bridge CAEAGLLayer*)eaglLayerPtr;
+
+	GLuint colorRb = 0;
+	glGenRenderbuffers( 1, &colorRb );
+	glBindRenderbuffer( GL_RENDERBUFFER, colorRb );
+	const bool storageOk = [ eaglContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:eaglLayer ];
+	AE_ASSERT_MSG( storageOk, "renderbufferStorage:fromDrawable: failed" );
+
+	GLint drawableWidth = 0;
+	GLint drawableHeight = 0;
+	glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &drawableWidth );
+	glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &drawableHeight );
+
+	GLuint fbo = 0;
+	glGenFramebuffers( 1, &fbo );
+	glBindFramebuffer( GL_FRAMEBUFFER, fbo );
+	glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, colorRb );
+	const GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	AE_ASSERT_MSG( fboStatus == GL_FRAMEBUFFER_COMPLETE, "Default FBO incomplete: 0x#x", (uint32_t)fboStatus );
+	glBindRenderbuffer( GL_RENDERBUFFER, colorRb );
+
+	m_iosColorRenderbuffer = colorRb;
+	m_defaultFramebuffer = fbo;
+
+	glViewport( 0, 0, drawableWidth, drawableHeight );
+
+	m_scaleFactor = (float)eaglLayer.contentsScale;
+	m_width = (int32_t)eaglLayer.bounds.size.width;
+	m_height = (int32_t)eaglLayer.bounds.size.height;
+#else
+	{
+		UIScreen* const screen = [ UIScreen mainScreen ];
+		const CGRect bounds = screen.bounds;
+		m_width = (int32_t)bounds.size.width;
+		m_height = (int32_t)bounds.size.height;
+		m_scaleFactor = (float)screen.scale;
+	}
+#endif
+#endif
+#if AE_ENABLE_OPENGL
+	m_defaultFramebuffer = _ae_GetCurrentFramebuffer();
+	m_UpdateBackBuffer();
 #endif
 }
 
 void Window::Terminate()
 {
-	// @TODO
+	if( m_backBuffer )
+	{
+		ae::Delete( m_backBuffer );
+		m_backBuffer = nullptr;
+	}
+}
+
+void Window::ActivateContext()
+{
+#if AE_ENABLE_OPENGL
+#if _AE_WINDOWS_
+	if( window && m_context )
+	{
+		HDC hdc = GetDC( (HWND)window );
+		AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+		if( !wglMakeCurrent( hdc, (HGLRC)m_context ) )
+		{
+			AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+		}
+	}
+#elif _AE_OSX_
+	if( m_context )
+	{
+		[(NSOpenGLContext*)m_context makeCurrentContext];
+	}
+#elif _AE_IOS_
+	if( m_context )
+	{
+		[ EAGLContext setCurrentContext:(__bridge EAGLContext*)m_context ];
+	}
+#elif _AE_EMSCRIPTEN_
+	if( m_context )
+	{
+		EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
+		AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+	}
+#endif
+#endif
+}
+
+void Window::BindBackBuffer()
+{
+	ActivateContext();
+#if AE_ENABLE_OPENGL
+	m_UpdateBackBuffer();
+	AE_ASSERT( m_backBuffer );
+	m_backBuffer->Activate();
+#endif
+}
+
+void Window::Present()
+{
+#if AE_ENABLE_OPENGL
+#if _AE_OSX_
+	if( m_context )
+	{
+		[(NSOpenGLContext*)m_context flushBuffer];
+	}
+#elif _AE_IOS_
+	if( m_context && m_iosColorRenderbuffer )
+	{
+		glBindRenderbuffer( GL_RENDERBUFFER, m_iosColorRenderbuffer );
+		[(__bridge EAGLContext*)m_context presentRenderbuffer:GL_RENDERBUFFER];
+	}
+#elif _AE_WINDOWS_
+	if( window )
+	{
+		HDC hdc = GetDC( (HWND)window );
+		AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+		SwapBuffers( hdc );
+	}
+#endif
+#endif
+}
+
+void Window::m_UpdateBackBuffer()
+{
+#if AE_ENABLE_OPENGL
+	if( !m_backBuffer )
+	{
+		m_backBuffer = ae::New< RenderTarget >( AE_ALLOC_TAG_RENDER );
+	}
+	m_backBuffer->m_Initialize( GetDrawWidth(), GetDrawHeight(), m_defaultFramebuffer );
+#endif
 }
 
 int32_t Window::GetWidth() const
@@ -20330,9 +20983,25 @@ int32_t Window::GetHeight() const
 	return m_height;
 }
 
+uint32_t Window::GetDrawWidth() const
+{
+	return (uint32_t)( m_width * m_scaleFactor );
+}
+
+uint32_t Window::GetDrawHeight() const
+{
+	return (uint32_t)( m_height * m_scaleFactor );
+}
+
 ae::Rect Window::GetSafeArea() const
 {
-	return Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( m_width, m_height ) );
+#if _AE_EMSCRIPTEN_
+	EM_ASM( {
+		console.log( window.innerWidth, window.innerHeight );
+		console.log( window.visualViewport );
+	} );
+#endif
+	return ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( m_width, m_height ) );
 }
 
 void Window::SetTitle( const char* title )
@@ -20596,24 +21265,6 @@ namespace ae {
 // ae::Input member functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
-void _aeEmscriptenTryNewFrame( Input* input )
-{
-	if( input->newFrame_HACK )
-	{
-		memcpy( input->m_keysPrev, input->m_keys, sizeof(input->m_keys) );
-		input->mousePrev = input->mouse;
-		input->mouse.movement = ae::Int2( 0 );
-		input->mouse.scroll = ae::Vec2( 0.0f );
-		input->mouse.scrollMomentum = ae::Vec2( 0.0f );
-		input->m_touchesPrev = input->m_touches;
-		for( ae::Touch& touch : input->m_touches )
-		{
-			touch.movement = ae::Int2( 0 );
-		}
-		input->newFrame_HACK = false;
-	}
-}
-
 EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
 	static const std::array< ae::Key, 255 > s_keyMap = []()
@@ -20693,7 +21344,7 @@ EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* ke
 	// Start key handling
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 
 	if( keyEvent->which < s_keyMap.size() && (int)s_keyMap[ keyEvent->which ] )
 	{
@@ -20711,7 +21362,7 @@ EM_BOOL _aeEmscriptenHandleWheel( int eventType, const EmscriptenWheelEvent* whe
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 	// DOM_DELTA_PIXEL (0) is the trackpad path; DOM_DELTA_LINE (1) is the mouse wheel path.
 	// DOM_DELTA_PAGE (2) is not handled — too coarse for camera/UI input.
 	if( wheelEvent->deltaMode != DOM_DELTA_PAGE )
@@ -20740,14 +21391,35 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 	
 	const ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY );
-	input->m_SetMousePos( pos.FloorCopy(), ae::Int2( mouseEvent->movementX, -mouseEvent->movementY ) );
+	input->m_SetMousePos( pos, ae::Vec2( mouseEvent->movementX, -mouseEvent->movementY ) );
 	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
 	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
 	input->mouse.middleButton = ( mouseEvent->buttons & 4 );
-	
+
+	// Process pending pointer lock request synchronously (required by Safari)
+	if( input->m_pendingPointerLock > 0 )
+	{
+		input->m_pendingPointerLock = 0;
+		const ae::Vec2 localCenter( input->m_window->GetWidth() / 2.0f, input->m_window->GetHeight() / 2.0f );
+		input->m_WarpCursor( localCenter );
+		input->m_mousePosSet = false;
+		input->m_capturedMousePos = ae::Optional< ae::Vec2 >( pos );
+		emscripten_request_pointerlock( "canvas", true );
+	}
+	else if( input->m_pendingPointerLock < 0 )
+	{
+		input->m_pendingPointerLock = 0;
+		if( const ae::Vec2* p = input->m_capturedMousePos.TryGet() )
+		{
+			input->m_WarpCursor( *p );
+			input->mouse.position = *p;
+		}
+		emscripten_exit_pointerlock();
+	}
+
 	return true;
 }
 
@@ -20763,59 +21435,61 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 
+	const double now = ae::GetTime();
 	for( uint32_t i = 0; i < touchEvent->numTouches; i++ )
 	{
 		const EmscriptenTouchPoint* emTouch = &touchEvent->touches[ i ];
-		if( emTouch->isChanged )
+		if( !emTouch->isChanged ) { continue; }
+		ae::Vec2 pos( (float)emTouch->targetX, (float)emTouch->targetY );
+		pos.y = input->m_window->GetHeight() - pos.y;
+		const uint32_t id = (uint32_t)emTouch->identifier;
+		const auto matches = [&]( ae::Touch* t ){ return t->id == id; };
+		ae::Touch* touch = nullptr;
+		int32_t idx = input->m_newTouches.FindFn( matches );
+		if( idx >= 0 ) { touch = input->m_newTouches[ idx ]; }
+		else
 		{
-			ae::Int2 pos( emTouch->targetX, emTouch->targetY );
-			pos.y = input->m_window->GetHeight() - pos.y;
-			switch( eventType )
+			idx = input->m_touches.FindFn( matches );
+			if( idx >= 0 ) { touch = input->m_touches[ idx ]; }
+		}
+		switch( eventType )
+		{
+			case EMSCRIPTEN_EVENT_TOUCHSTART:
 			{
-				case EMSCRIPTEN_EVENT_TOUCHSTART:
-				{
-					if( input->m_touches.Length() < input->m_touches.Capacity() )
-					{
-						ae::Touch* touch = &input->m_touches.Append( {} );
-						touch->id = emTouch->identifier;
-						touch->startPosition = pos;
-						touch->position = pos;
-					}
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHEND:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHCANCEL:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
-					if( prevTouchIdx >= 0 ) { input->m_touchesPrev.Remove( prevTouchIdx ); }
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHMOVE:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 )
-					{
-						input->m_touches[ touchIdx ].position = pos;
-						if( prevTouchIdx >= 0 )
-						{
-							input->m_touches[ touchIdx ].movement += pos - input->m_touchesPrev[ prevTouchIdx ].position;
-						}
-					}
-					break;
-				}
-				default:
-					break;
+				if( touch ) { break; } // Already known
+				if( input->m_newTouches.Length() >= input->m_newTouches.Size() ) { break; }
+				touch = input->m_touchPool.New();
+				if( !touch ) { break; }
+				touch->id = id;
+				touch->_AppendSample( now, pos );
+				input->m_newTouches.Append( touch );
+				break;
 			}
+			case EMSCRIPTEN_EVENT_TOUCHEND:
+			{
+				if( !touch ) { break; }
+				touch->_AppendSample( now, pos );
+				touch->ended = true;
+				break;
+			}
+			case EMSCRIPTEN_EVENT_TOUCHCANCEL:
+			{
+				if( !touch ) { break; }
+				touch->ended = true;
+				break;
+			}
+			case EMSCRIPTEN_EVENT_TOUCHMOVE:
+			{
+				if( touch && !touch->ended )
+				{
+					touch->_AppendSample( now, pos );
+				}
+				break;
+			}
+			default:
+				break;
 		}
 	}
 
@@ -20847,6 +21521,7 @@ void Input::Initialize( Window* window )
 	{
 		window->input = this;
 	}
+	ae::_Globals::Get()->input = this;
 	memset( m_keys, 0, sizeof(m_keys) );
 	memset( m_keysPrev, 0, sizeof(m_keysPrev) );
 
@@ -20873,7 +21548,7 @@ void Input::Initialize( Window* window )
 	emscripten_set_focus_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_blur_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
-	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleLockChange );
+	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, true, &_aeEmscriptenHandleLockChange );
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -20894,29 +21569,41 @@ void Input::Initialize( Window* window )
 }
 
 void Input::Terminate()
-{}
+{
+	if( ae::_Globals::Get()->input == this )
+	{
+		ae::_Globals::Get()->input = nullptr;
+	}
+}
+
+void Input::m_TryNewFrame()
+{
+	if( m_pendingNewFrame )
+	{
+		memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
+		mousePrev = mouse;
+		mouse.movement = ae::Vec2( 0.0f );
+		mouse.scroll = ae::Vec2( 0.0f );
+		mouse.scrollMomentum = ae::Vec2( 0.0f );
+		// Discard touches that ended before they were adopted via PumpTouches().
+		// Per the staged API contract, ended touches are never returned.
+		for( int32_t i = (int32_t)m_newTouches.Length() - 1; i >= 0; i-- )
+		{
+			if( m_newTouches[ i ]->ended )
+			{
+				m_touchPool.Delete( m_newTouches[ i ] );
+				m_newTouches.Remove( i );
+			}
+		}
+		m_pendingNewFrame = false;
+	}
+}
 
 void Input::Pump()
 {
 	m_timeStep.Tick();
-#if _AE_EMSCRIPTEN_
-	_aeEmscriptenTryNewFrame( this );
-	newFrame_HACK = true;
-#else
-	// Clear keys each frame and then check for presses below
-	// Emscripten doesn't do this because it uses a callback to set m_keys
-	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-	memset( m_keys, 0, sizeof(m_keys) );
-	mousePrev = mouse;
-	mouse.movement = ae::Int2( 0 );
-	mouse.scroll = ae::Vec2( 0.0f );
-	mouse.scrollMomentum = ae::Vec2( 0.0f );
-	m_touchesPrev = m_touches;
-	for( ae::Touch& touch : m_touches )
-	{
-		touch.movement = ae::Int2( 0 );
-	}
-#endif
+	m_TryNewFrame();
+	m_pendingNewFrame = true;
 	m_textInput = ""; // Clear last frames text input
 
 	// Handle system events
@@ -21005,8 +21692,8 @@ void Input::Pump()
 		{
 			if( ScreenToClient( (HWND)m_window->window, &mouseWindowPt ) )
 			{
-				ae::RectInt windowRect = ae::RectInt::FromPointAndSize( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
-				ae::Int2 localMouse( mouseWindowPt.x, m_window->GetHeight() - mouseWindowPt.y );
+				const ae::Rect windowRect = ae::Rect::FromPoints( 0.0f, 0.0f, m_window->GetWidth(), m_window->GetHeight() );
+				const ae::Vec2 localMouse( mouseWindowPt.x, m_window->GetHeight() - mouseWindowPt.y );
 				if( windowRect.Contains( localMouse ) )
 				{
 					m_SetMousePos( localMouse );
@@ -21034,13 +21721,13 @@ void Input::Pump()
 			}
 			
 			// Cursor
-			const ae::RectInt windowRect = ae::RectInt::FromPointAndSize(
-				0,
-				0,
+			const ae::Rect windowRect = ae::Rect::FromPoints(
+				0.0f,
+				0.0f,
 				m_window->GetWidth(),
-				m_window->GetHeight() - 4 );
+				m_window->GetHeight() - 4.0f );
 			const NSPoint cursorScreenPos = [NSEvent mouseLocation];
-			const ae::Int2 cursorLocalPos = ae::Int2( cursorScreenPos.x, cursorScreenPos.y ) - m_window->GetPosition();
+			const ae::Vec2 cursorLocalPos = ae::Vec2( cursorScreenPos.x, cursorScreenPos.y ) - m_window->GetPosition();
 			const bool cursorWithinWindow = windowRect.Contains( cursorLocalPos );
 			if( cursorWithinWindow )
 			{
@@ -21175,12 +21862,11 @@ void Input::Pump()
 	// Mouse capture
 	if( m_captureMouse )
 	{
-		mouse.movement = ae::Int2( 0 );
+		mouse.movement = ae::Vec2( 0.0f );
 		if( m_window )
 		{
-			// Calculate center in case the window height is an odd number
-			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-			m_SetCursorPos( localCenter );
+			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
+			m_WarpCursor( localCenter );
 			// Mouse pos is previously set elsewhere, so when the mouse position is set
 			// to the window center the movement vector needs to be reversed.
 			m_SetMousePos( localCenter );
@@ -21765,39 +22451,38 @@ void Input::SetMouseCaptured( bool enable )
 	
 	if( enable != m_captureMouse )
 	{
+#if _AE_EMSCRIPTEN_
+		m_pendingPointerLock = enable ? 1 : -1;
+#else
 		if( enable )
 		{
 			// Remember original cursor position
-			m_capturedMousePos = m_mousePosSet ? mouse.position : ae::Int2( INT_MAX );
+			m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( mouse.position ) : ae::Optional< ae::Vec2 >();
 #if _AE_WINDOWS_
 			ShowCursor( FALSE );
 #elif _AE_OSX_
 			CGDisplayHideCursor( kCGDirectMainDisplay );
-#elif _AE_EMSCRIPTEN_
-			emscripten_request_pointerlock( "canvas", true );
 #endif
-			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-			m_SetCursorPos( localCenter );
+			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
+			m_WarpCursor( localCenter );
 			m_mousePosSet = false;
 		}
 		else
 		{
 			// Restore original cursor position
-			if( m_capturedMousePos != ae::Int2( INT_MAX ) )
+			if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
 			{
-				m_SetCursorPos( m_capturedMousePos );
-				mouse.position = m_capturedMousePos;
+				m_WarpCursor( *pos );
+				mouse.position = *pos;
 			}
 #if _AE_WINDOWS_
 			ShowCursor( TRUE );
 #elif _AE_OSX_
 			CGDisplayShowCursor( kCGDirectMainDisplay );
-#elif _AE_EMSCRIPTEN_
-			emscripten_exit_pointerlock();
 #endif
 		}
-		
 		m_captureMouse = enable;
+#endif
 	}
 }
 
@@ -21841,58 +22526,97 @@ bool Input::GetPrev( ae::Key key ) const
 	return m_keysPrev[ static_cast< int >( key ) ];
 }
 
-const ae::Touch* Input::GetTouchById( uint32_t id ) const
+ae::Vec2 Touch::Position() const
 {
-	const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	return ( touchIdx >= 0 ) ? &m_touches[ touchIdx ] : nullptr;
-}
-
-const ae::Touch* Input::GetFinishedTouchById( uint32_t id ) const
-{
-	const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	const int32_t prevTouchIdx = m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	return ( touchIdx < 0 && prevTouchIdx >= 0 ) ? &m_touchesPrev[ prevTouchIdx ] : nullptr;
-}
-
-ae::TouchArray Input::GetNewTouches() const
-{
-	ae::TouchArray result;
-	for( const ae::Touch& touch : m_touches )
+	if( samples.Length() )
 	{
-		const int32_t prevTouchIdx = m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == touch.id; } );
-		if( prevTouchIdx < 0 )
-		{
-			result.Append( touch );
-		}
+		return samples[ samples.Length() - 1 ].position; // Last sample
 	}
+	else
+	{
+		AE_DEBUG_FAIL_MSG( "Touch has no samples" );
+		return ae::Vec2( 0.0f );
+	}
+}
+
+ae::Vec2 Touch::StartPosition() const
+{
+	if( samples.Length() )
+	{
+		return samples[ 0 ].position; // First sample
+	}
+	else
+	{
+		AE_DEBUG_FAIL_MSG( "Touch has no samples" );
+		return ae::Vec2( 0.0f );
+	}
+}
+
+ae::Vec2 Touch::StartDelta() const
+{
+	return Position() - StartPosition();
+}
+
+double Touch::Lifetime() const
+{
+	if( samples.Length() < 2 )
+	{
+		return 0.0;
+	}
+	return samples[ samples.Length() - 1 ].time - samples[ 0 ].time;
+}
+
+void Touch::_AppendSample( double time, ae::Vec2 position )
+{
+	if( samples.Length() == samples.Size() )
+	{
+		// Visvalingam: drop the interior sample with the smallest triangle area
+		// against its immediate neighbors. Endpoints (start and most recent)
+		// are preserved.
+		int32_t dropIdx = 1;
+		float minArea = ae::MaxValue< float >();
+		for( uint32_t i = 1; i + 1 < samples.Length(); i++ )
+		{
+			const ae::Vec2 a = samples[ i - 1 ].position;
+			const ae::Vec2 b = samples[ i ].position;
+			const ae::Vec2 c = samples[ i + 1 ].position;
+			const float cross = ( b.x - a.x ) * ( c.y - a.y ) - ( b.y - a.y ) * ( c.x - a.x );
+			const float area = ae::Abs( cross );
+			if( area < minArea )
+			{
+				minArea = area;
+				dropIdx = (int32_t)i;
+			}
+		}
+		samples.Remove( dropIdx );
+	}
+	samples.Append( { time, position } );
+}
+
+const ae::Touch* Input::PumpTouches()
+{
+	if( !m_newTouches.Length() ||
+		m_touches.Length() >= m_touches.Size() )
+	{
+		return nullptr;
+	}
+	ae::Touch* result = m_newTouches[ 0 ];
+	m_newTouches.Remove( 0 );
+	m_touches.Append( result );
 	return result;
 }
 
-ae::TouchArray Input::GetFinishedTouches() const
+void Input::ReleaseTouch( const ae::Touch* touch )
 {
-	ae::TouchArray result;
-	for( const ae::Touch& touch : m_touchesPrev )
+	const int32_t idx = m_touches.Find( touch );
+	if( idx >= 0 )
 	{
-		const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == touch.id; } );
-		if( touchIdx < 0 )
-		{
-			result.Append( touch );
-		}
+		m_touches.Remove( idx );
+		m_touchPool.Delete( const_cast< ae::Touch* >( touch ) );
 	}
-	return result;
 }
 
-const ae::TouchArray& Input::GetTouches() const
-{
-	return m_touches;
-}
-
-const ae::TouchArray& Input::GetPreviousTouches() const
-{
-	return m_touchesPrev;
-}
-
-void Input::m_SetMousePos( ae::Int2 pos )
+void Input::m_SetMousePos( ae::Vec2 pos )
 {
 	AE_ASSERT( m_window );
 	if( m_mousePosSet )
@@ -21903,7 +22627,7 @@ void Input::m_SetMousePos( ae::Int2 pos )
 	m_mousePosSet = true;
 }
 
-void Input::m_SetMousePos( ae::Int2 pos, ae::Int2 movement )
+void Input::m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement )
 {
 	AE_ASSERT( m_window );
 	mouse.movement += movement;
@@ -21911,11 +22635,13 @@ void Input::m_SetMousePos( ae::Int2 pos, ae::Int2 movement )
 	m_mousePosSet = true;
 }
 
-void Input::m_SetCursorPos( ae::Int2 pos )
+void Input::m_WarpCursor( ae::Vec2 pos )
 {
 #if _AE_WINDOWS_
 	{
-		POINT centerPt = { pos.x, m_window->GetHeight() - pos.y };
+		// SetCursorPos takes integer screen pixels, so round to the nearest
+		const ae::Int2 px = pos.NearestCopy();
+		POINT centerPt = { px.x, m_window->GetHeight() - px.y };
 		if( ClientToScreen( (HWND)m_window->window, &centerPt ) )
 		{
 			SetCursorPos( centerPt.x, centerPt.y );
@@ -22153,6 +22879,15 @@ void _ae_GetCurrentWorkingDir( Str256* outDir )
 	url[ 0 ] = 0;
 	EM_ASM( { stringToUTF8(window.location.href, $0, 256) }, url );
 	*outDir = ae::FileSystem::GetDirectoryFromPath( url );
+}
+#elif _AE_WASM_
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+	return false;
+}
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+	return false;
 }
 #endif
 
@@ -23601,6 +24336,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 //------------------------------------------------------------------------------
 // ae::Socket and ae::ListenerSocket helpers
 //------------------------------------------------------------------------------
+#if !_AE_WASM_
 uint32_t _winsockCount = 0;
 bool _WinsockInit()
 {
@@ -24372,197 +25108,383 @@ uint32_t ListenerSocket::GetConnectionCount() const
 	return m_connections.Length();
 }
 
+#endif // !_AE_WASM_
+
 }  // ae end
+
+//------------------------------------------------------------------------------
+// OpenGL start
+//------------------------------------------------------------------------------
+// clang-format off
+// _ae_GLProfileEnum returns an int enum (0=none, 1=core, 2=es, 3=compatibility)
+// rather than a string so the value crosses the WASM<->host ABI cleanly. The
+// public ae::GLProfile() below maps it back to a string on the local side.
+enum _ae_GLProfileEnum
+{
+	_AE_GLProfile_None = 0,
+	_AE_GLProfile_Core = 1,
+	_AE_GLProfile_ES = 2
+};
+#if !AE_ENABLE_OPENGL
+	int32_t _ae_GLMajorVersion() { return 0; }
+	int32_t _ae_GLMinorVersion() { return 0; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_None; }
+#elif _AE_IOS_ || _AE_EMSCRIPTEN_
+	int32_t _ae_GLMajorVersion() { return 3; }
+	int32_t _ae_GLMinorVersion() { return 0; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_ES; }
+#elif _AE_WASM_
+	// Instead of defining values here, the WASM host must provide these function implementations
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLMajorVersion();
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLMinorVersion();
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLProfileEnum();
+#else
+	int32_t _ae_GLMajorVersion() { return 4; }
+	int32_t _ae_GLMinorVersion() { return 1; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_Core; }
+#endif
+
+//------------------------------------------------------------------------------
+// OpenGL includes / declarations
+//------------------------------------------------------------------------------
+#if AE_ENABLE_OPENGL
+#	ifndef AE_GL_DEBUG_MODE
+#		define AE_GL_DEBUG_MODE 0
+#	endif
+
+#	if AE_OPENGL_CUSTOM_HEADER
+#		include AE_OPENGL_CUSTOM_HEADER
+#	elif _AE_EMSCRIPTEN_
+#		include <GLES3/gl3.h>
+#	elif _AE_LINUX_
+#		define GL_GLEXT_PROTOTYPES 1
+#		include <GL/glcorearb.h>
+#	elif _AE_IOS_
+#		include <OpenGLES/ES3/gl.h>
+#	elif _AE_APPLE_
+#		include <OpenGL/glext.h>
+#		include <OpenGL/gl3.h>
+#		include <OpenGL/gl3ext.h>
+#	else
+		// Define minimal GL types and constants for platforms without headers
+		typedef uint32_t GLenum;
+		typedef uint32_t GLbitfield;
+		typedef uint32_t GLuint;
+		typedef int32_t  GLint;
+		typedef int32_t  GLsizei;
+		typedef float    GLfloat;
+		typedef double   GLdouble;
+		typedef uint8_t  GLboolean;
+		typedef char GLchar;
+		typedef uint8_t GLubyte;
+		typedef void GLvoid;
+		typedef intptr_t GLsizeiptr;
+		typedef intptr_t GLintptr;
+
+#		define GL_TRUE  1
+#		define GL_FALSE 0
+
+#		ifndef WGL_CONTEXT_MAJOR_VERSION_ARB
+#			define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+#			define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+#			define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+#			define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+#			define WGL_CONTEXT_FLAGS_ARB 0x2094
+#			define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
+#		endif
+
+		// GL primitives
+#		define GL_POINTS                           0x0000
+#		define GL_LINES                            0x0001
+#		define GL_LINE_STRIP                       0x0003
+#		define GL_TRIANGLES                        0x0004
+#		define GL_TRIANGLE_STRIP                   0x0005
+
+		// GL data types
+#		define GL_BYTE                             0x1400
+#		define GL_UNSIGNED_BYTE                    0x1401
+#		define GL_SHORT                            0x1402
+#		define GL_UNSIGNED_SHORT                   0x1403
+#		define GL_INT                              0x1404
+#		define GL_UNSIGNED_INT                     0x1405
+#		define GL_FLOAT                            0x1406
+
+		// GL depth functions
+#		define GL_LESS                             0x0201
+#		define GL_EQUAL                            0x0202
+#		define GL_LEQUAL                           0x0203
+#		define GL_GREATER                          0x0204
+#		define GL_GEQUAL                           0x0206
+#		define GL_ALWAYS                           0x0207
+
+		// GL blend factors
+#		define GL_ZERO                             0x0000
+#		define GL_ONE                              0x0001
+#		define GL_SRC_ALPHA                        0x0302
+#		define GL_ONE_MINUS_SRC_ALPHA              0x0303
+#		define GL_DST_ALPHA                        0x0304
+#		define GL_ONE_MINUS_DST_ALPHA              0x0305
+
+		// GL state / caps
+#		define GL_CULL_FACE                        0x0B44
+#		define GL_DEPTH_TEST                       0x0B71
+#		define GL_BLEND                            0x0BE2
+#		define GL_SCISSOR_TEST                     0x0C11
+#		define GL_UNPACK_ALIGNMENT                 0x0CF5
+#		define GL_MAX_TEXTURE_SIZE                 0x0D33
+#		define GL_VIEWPORT                         0x0BA2
+
+		// GL winding / face
+#		define GL_CW                               0x0900
+#		define GL_CCW                              0x0901
+#		define GL_FRONT                            0x0404
+#		define GL_BACK                             0x0405
+#		define GL_FRONT_AND_BACK                   0x0408
+#		define GL_LINE                             0x1B01
+#		define GL_FILL                             0x1B02
+
+		// GL clear bits
+#		define GL_DEPTH_BUFFER_BIT                 0x00000100
+#		define GL_STENCIL_BUFFER_BIT               0x00000400
+#		define GL_COLOR_BUFFER_BIT                 0x00004000
+
+		// GL textures
+#		define GL_TEXTURE_2D                       0x0DE1
+#		define GL_TEXTURE_CUBE_MAP                 0x8513
+#		define GL_TEXTURE_CUBE_MAP_POSITIVE_X      0x8515
+#		define GL_TEXTURE_MIN_FILTER               0x2801
+#		define GL_TEXTURE_MAG_FILTER               0x2800
+#		define GL_TEXTURE_WRAP_S                   0x2802
+#		define GL_TEXTURE_WRAP_T                   0x2803
+#		define GL_NEAREST                          0x2600
+#		define GL_LINEAR                           0x2601
+#		define GL_NEAREST_MIPMAP_NEAREST           0x2700
+#		define GL_LINEAR_MIPMAP_LINEAR             0x2703
+#		define GL_REPEAT                           0x2901
+
+		// GL formats
+#		define GL_RED                              0x1903
+#		define GL_RG                               0x8227
+#		define GL_RGB                              0x1907
+#		define GL_RGBA                             0x1908
+#		define GL_RG8                              0x822B
+#		define GL_RG16F                            0x822F
+#		define GL_RG32F                            0x8230
+#		define GL_RGB8                             0x8051
+#		define GL_RGBA8                            0x8058
+#		define GL_DEPTH_COMPONENT                  0x1902
+
+		// GL buffers / usage
+#		define GL_STREAM_DRAW                      0x88E0
+
+		// GL_VERSION_1_2
+#		define GL_TEXTURE_3D                     0x806F
+#		define GL_BGR                            0x80E0
+#		define GL_BGRA                           0x80E1
+#		define GL_CLAMP_TO_EDGE                  0x812F
+		// GL_VERSION_1_3
+#		define GL_TEXTURE0                       0x84C0
+		// GL_VERSION_1_4
+#		define GL_DEPTH_COMPONENT16              0x81A5
+		// GL_VERSION_1_5
+#		define GL_ARRAY_BUFFER                   0x8892
+#		define GL_ELEMENT_ARRAY_BUFFER           0x8893
+#		define GL_STATIC_DRAW                    0x88E4
+#		define GL_DYNAMIC_DRAW                   0x88E8
+		// GL_VERSION_2_0
+#		define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
+#		define GL_FRAGMENT_SHADER                0x8B30
+#		define GL_VERTEX_SHADER                  0x8B31
+#		define GL_FLOAT_VEC2                     0x8B50
+#		define GL_FLOAT_VEC3                     0x8B51
+#		define GL_FLOAT_VEC4                     0x8B52
+#		define GL_FLOAT_MAT4                     0x8B5C
+#		define GL_SAMPLER_2D                     0x8B5E
+#		define GL_SAMPLER_3D                     0x8B5F
+#		define GL_COMPILE_STATUS                 0x8B81
+#		define GL_LINK_STATUS                    0x8B82
+#		define GL_INFO_LOG_LENGTH                0x8B84
+#		define GL_ACTIVE_UNIFORMS                0x8B86
+#		define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
+#		define GL_ACTIVE_ATTRIBUTES              0x8B89
+#		define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
+		// GL_VERSION_2_1
+#		define GL_SRGB8                          0x8C41
+#		define GL_SRGB8_ALPHA8                   0x8C43
+		// GL_VERSION_3_0
+#		define GL_RGBA32F                        0x8814
+#		define GL_RGB32F                         0x8815
+#		define GL_RGBA16F                        0x881A
+#		define GL_RGB16F                         0x881B
+#		define GL_DEPTH_COMPONENT32F             0x8CAC
+#		define GL_FRAMEBUFFER_UNDEFINED          0x8219
+#		define GL_FRAMEBUFFER_BINDING            0x8CA6
+#		define GL_READ_FRAMEBUFFER               0x8CA8
+#		define GL_DRAW_FRAMEBUFFER               0x8CA9
+#		define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#		define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
+#		define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+#		define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
+#		define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
+#		define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
+#		define GL_COLOR_ATTACHMENT0              0x8CE0
+#		define GL_DEPTH_ATTACHMENT               0x8D00
+#		define GL_FRAMEBUFFER                    0x8D40
+#		define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
+#		define GL_FRAMEBUFFER_SRGB               0x8DB9
+#		define GL_HALF_FLOAT                     0x140B
+#		define GL_R8                             0x8229
+#		define GL_R16F                           0x822D
+#		define GL_R32F                           0x822E
+#		define GL_R16UI                          0x8234
+		// GL_VERSION_3_2
+#		define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
+		// GL_VERSION_4_3
+		typedef void ( *GLDEBUGPROC )( GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam );
+#		define GL_DEBUG_SEVERITY_HIGH            0x9146
+#		define GL_DEBUG_SEVERITY_MEDIUM          0x9147
+#		define GL_DEBUG_SEVERITY_LOW             0x9148
+#	endif
+
+#	define _AE_EACH_GL_FUNC \
+		_AE_GL_FUNC( void,   glClear,                   ( GLbitfield mask ) ) \
+		_AE_GL_FUNC( void,   glClearColor,              ( GLfloat r, GLfloat g, GLfloat b, GLfloat a ) ) \
+		_AE_GL_FUNC( void,   glClearDepthf,             ( GLfloat depth ) ) \
+		_AE_GL_FUNC( void,   glViewport,                ( GLint x, GLint y, GLsizei width, GLsizei height ) ) \
+		_AE_GL_FUNC( void,   glEnable,                  ( GLenum cap ) ) \
+		_AE_GL_FUNC( void,   glDisable,                 ( GLenum cap ) ) \
+		_AE_GL_FUNC( void,   glDepthMask,               ( GLboolean flag ) ) \
+		_AE_GL_FUNC( void,   glDepthFunc,               ( GLenum func ) ) \
+		_AE_GL_FUNC( void,   glBlendFunc,               ( GLenum sfactor, GLenum dfactor ) ) \
+		_AE_GL_FUNC( void,   glFrontFace,               ( GLenum mode ) ) \
+		_AE_GL_FUNC( void,   glGetIntegerv,             ( GLenum pname, GLint* data ) ) \
+		_AE_GL_FUNC( void,   glPixelStorei,             ( GLenum pname, GLint param ) ) \
+		_AE_GL_FUNC( GLenum, glGetError,                () ) \
+		_AE_GL_FUNC( void,   glBindTexture,             ( GLenum target, GLuint texture ) ) \
+		_AE_GL_FUNC( void,   glGenTextures,             ( GLsizei n, GLuint* textures ) ) \
+		_AE_GL_FUNC( void,   glDeleteTextures,          ( GLsizei n, const GLuint* textures ) ) \
+		_AE_GL_FUNC( void,   glTexParameteri,           ( GLenum target, GLenum pname, GLint param ) ) \
+		_AE_GL_FUNC( void,   glDrawArrays,              ( GLenum mode, GLint first, GLsizei count ) ) \
+		_AE_GL_FUNC( void,   glDrawElements,            ( GLenum mode, GLsizei count, GLenum type, const void* indices ) ) \
+		_AE_GL_FUNC( void,   glPolygonMode,             ( GLenum face, GLenum mode ) ) \
+		_AE_GL_FUNC( GLuint, glCreateProgram,           () ) \
+		_AE_GL_FUNC( void,   glAttachShader,            ( GLuint program, GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glLinkProgram,             ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glGetProgramiv,            ( GLuint program, GLenum pname, GLint* params ) ) \
+		_AE_GL_FUNC( void,   glGetProgramInfoLog,       ( GLuint program, GLsizei bufSize, GLsizei* length, GLchar* infoLog ) ) \
+		_AE_GL_FUNC( void,   glGetActiveAttrib,         ( GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name ) ) \
+		_AE_GL_FUNC( GLint,  glGetAttribLocation,       ( GLuint program, const GLchar* name ) ) \
+		_AE_GL_FUNC( void,   glGetActiveUniform,        ( GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name ) ) \
+		_AE_GL_FUNC( GLint,  glGetUniformLocation,      ( GLuint program, const GLchar* name ) ) \
+		_AE_GL_FUNC( void,   glDeleteShader,            ( GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glDeleteProgram,           ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glUseProgram,              ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glBlendFuncSeparate,       ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) ) \
+		_AE_GL_FUNC( GLuint, glCreateShader,            ( GLenum type ) ) \
+		_AE_GL_FUNC( void,   glShaderSource,            ( GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length ) ) \
+		_AE_GL_FUNC( void,   glCompileShader,           ( GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glGetShaderiv,             ( GLuint shader, GLenum pname, GLint* params ) ) \
+		_AE_GL_FUNC( void,   glGetShaderInfoLog,        ( GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* infoLog ) ) \
+		_AE_GL_FUNC( void,   glActiveTexture,           ( GLenum texture ) ) \
+		_AE_GL_FUNC( void,   glUniform1i,               ( GLint location, GLint v0 ) ) \
+		_AE_GL_FUNC( void,   glUniform1fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform2fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform3fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform4fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniformMatrix4fv,        ( GLint location, GLsizei count, GLboolean transpose, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glGenerateMipmap,          ( GLenum target ) ) \
+		_AE_GL_FUNC( void,   glBindFramebuffer,         ( GLenum target, GLuint framebuffer ) ) \
+		_AE_GL_FUNC( void,   glFramebufferTexture2D,    ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) ) \
+		_AE_GL_FUNC( void,   glGenFramebuffers,         ( GLsizei n, GLuint* framebuffers ) ) \
+		_AE_GL_FUNC( void,   glDeleteFramebuffers,      ( GLsizei n, const GLuint* framebuffers ) ) \
+		_AE_GL_FUNC( GLenum, glCheckFramebufferStatus,  ( GLenum target ) ) \
+		_AE_GL_FUNC( void,   glDrawBuffers,             ( GLsizei n, const GLenum* bufs ) ) \
+		_AE_GL_FUNC( void,   glTextureBarrierNV,        () ) \
+		_AE_GL_FUNC( void,   glGenVertexArrays,         ( GLsizei n, GLuint* arrays ) ) \
+		_AE_GL_FUNC( void,   glBindVertexArray,         ( GLuint array ) ) \
+		_AE_GL_FUNC( void,   glDeleteVertexArrays,      ( GLsizei n, const GLuint* arrays ) ) \
+		_AE_GL_FUNC( void,   glDeleteBuffers,           ( GLsizei n, const GLuint* buffers ) ) \
+		_AE_GL_FUNC( void,   glBindBuffer,              ( GLenum target, GLuint buffer ) ) \
+		_AE_GL_FUNC( void,   glGenBuffers,              ( GLsizei n, GLuint* buffers ) ) \
+		_AE_GL_FUNC( void,   glBufferData,              ( GLenum target, GLsizeiptr size, const void* data, GLenum usage ) ) \
+		_AE_GL_FUNC( void,   glBufferSubData,           ( GLenum target, GLintptr offset, GLsizeiptr size, const void* data ) ) \
+		_AE_GL_FUNC( void,   glEnableVertexAttribArray, ( GLuint index ) ) \
+		_AE_GL_FUNC( void,   glVertexAttribPointer,     ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer ) ) \
+		_AE_GL_FUNC( void,   glVertexAttribDivisor,     ( GLuint index, GLuint divisor ) ) \
+		_AE_GL_FUNC( void,   glDrawElementsInstanced,   ( GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount ) ) \
+		_AE_GL_FUNC( void,   glDrawArraysInstanced,     ( GLenum mode, GLint first, GLsizei count, GLsizei instancecount ) ) \
+		_AE_GL_FUNC( void,   glTexImage2D,              ( GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels ) ) \
+		_AE_GL_FUNC( void,   glTexSubImage2D,           ( GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels ) ) \
+		_AE_GL_FUNC( void,   glTexStorage2D,            ( GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height ) ) \
+		_AE_GL_FUNC( void,   glDebugMessageCallback,    ( GLDEBUGPROC callback, const void* userParam ) )
+
+#	if _AE_WINDOWS_
+
+		// WGL extensions
+		HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList ) = nullptr;
+		bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
+		int ( *wglGetSwapIntervalEXT ) () = nullptr;
+#		define _AE_GL_FUNC( ret, name, params ) ret ( *name ) params = nullptr;
+		_AE_EACH_GL_FUNC
+#		undef _AE_GL_FUNC
+
+#	elif _AE_WASM_
+
+#		ifdef AE_GL_IMPORT
+#			define _AE_GL_IMPORT_ATTRIBUTE __attribute__(( AE_GL_IMPORT ))
+#		else
+#			define _AE_GL_IMPORT_ATTRIBUTE
+#		endif
+#		define _AE_GL_FUNC( ret, name, params ) _AE_GL_IMPORT_ATTRIBUTE __attribute__(( import_name( #name ) )) extern ret name params;
+		_AE_EACH_GL_FUNC
+#		undef _AE_GL_FUNC
+#		undef _AE_GL_IMPORT_ATTRIBUTE
+
+#	else
+		// Native macOS/Linux: system GL headers provide all declarations.
+#	endif
+
+#	undef _AE_EACH_GL_FUNC
+#endif // AE_ENABLE_OPENGL
 
 #if AE_ENABLE_OPENGL
-//------------------------------------------------------------------------------
-// OpenGL includes
-//------------------------------------------------------------------------------
-#if _AE_WINDOWS_
-	#pragma comment (lib, "opengl32.lib")
-	#pragma comment (lib, "glu32.lib")
-	#include <GL/gl.h>
-	#include <GL/glu.h>
-#elif _AE_EMSCRIPTEN_
-	#include <GLES3/gl3.h>
-#elif _AE_LINUX_
-	#define GL_GLEXT_PROTOTYPES 1
-	#include <GL/glcorearb.h>
-#elif _AE_IOS_
-	#include <OpenGLES/ES3/gl.h>
-#else
-	#include <OpenGL/glext.h>
-	#include <OpenGL/gl3.h>
-	#include <OpenGL/gl3ext.h>
-#endif
 
-namespace ae
-{
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	int32_t GLMajorVersion = 3;
-	int32_t GLMinorVersion = 0;
-#else
-	int32_t GLMajorVersion = 4;
-	int32_t GLMinorVersion = 1;
-#endif
-bool ReverseZ = false;
-}  // ae end
+#	if _AE_EMSCRIPTEN_ || _AE_IOS_ || _AE_WASM_ || _AE_WINDOWS_
+#		define glClearDepth glClearDepthf
+#	endif
 
-#ifndef AE_GL_DEBUG_MODE
-	#define AE_GL_DEBUG_MODE 0
-#endif
-
-#if _AE_WINDOWS_
-// OpenGL function pointers
-typedef char GLchar;
-typedef intptr_t GLsizeiptr;
-typedef intptr_t GLintptr;
-
-#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
-#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
-#define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
-#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
-#define WGL_CONTEXT_FLAGS_ARB 0x2094
-#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
-
-// GL_VERSION_1_2
-#define GL_TEXTURE_3D                     0x806F
-#define GL_BGR                            0x80E0
-#define GL_BGRA                           0x80E1
-#define GL_CLAMP_TO_EDGE                  0x812F
-// GL_VERSION_1_3
-#define GL_TEXTURE0                       0x84C0
-// GL_VERSION_1_4
-#define GL_DEPTH_COMPONENT16              0x81A5
-// GL_VERSION_1_5
-#define GL_ARRAY_BUFFER                   0x8892
-#define GL_ELEMENT_ARRAY_BUFFER           0x8893
-#define GL_STATIC_DRAW                    0x88E4
-#define GL_DYNAMIC_DRAW                   0x88E8
-// GL_VERSION_2_0
-#define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
-#define GL_FRAGMENT_SHADER                0x8B30
-#define GL_VERTEX_SHADER                  0x8B31
-#define GL_FLOAT_VEC2                     0x8B50
-#define GL_FLOAT_VEC3                     0x8B51
-#define GL_FLOAT_VEC4                     0x8B52
-#define GL_FLOAT_MAT4                     0x8B5C
-#define GL_SAMPLER_2D                     0x8B5E
-#define GL_SAMPLER_3D                     0x8B5F
-#define GL_COMPILE_STATUS                 0x8B81
-#define GL_LINK_STATUS                    0x8B82
-#define GL_INFO_LOG_LENGTH                0x8B84
-#define GL_ACTIVE_UNIFORMS                0x8B86
-#define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
-#define GL_ACTIVE_ATTRIBUTES              0x8B89
-#define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
-// GL_VERSION_2_1
-#define GL_SRGB8                          0x8C41
-#define GL_SRGB8_ALPHA8                   0x8C43
-// GL_VERSION_3_0
-#define GL_RGBA32F                        0x8814
-#define GL_RGB32F                         0x8815
-#define GL_RGBA16F                        0x881A
-#define GL_RGB16F                         0x881B
-#define GL_DEPTH_COMPONENT32F             0x8CAC
-#define GL_FRAMEBUFFER_UNDEFINED          0x8219
-#define GL_FRAMEBUFFER_BINDING            0x8CA6
-#define GL_READ_FRAMEBUFFER               0x8CA8
-#define GL_DRAW_FRAMEBUFFER               0x8CA9
-#define GL_FRAMEBUFFER_COMPLETE           0x8CD5
-#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
-#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
-#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
-#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
-#define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
-#define GL_COLOR_ATTACHMENT0              0x8CE0
-#define GL_DEPTH_ATTACHMENT               0x8D00
-#define GL_FRAMEBUFFER                    0x8D40
-#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
-#define GL_FRAMEBUFFER_SRGB               0x8DB9
-#define GL_HALF_FLOAT                     0x140B
-#define GL_R8                             0x8229
-#define GL_R16F                           0x822D
-#define GL_R32F                           0x822E
-#define GL_R16UI                          0x8234
-// GL_VERSION_3_2
-#define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
-// GL_VERSION_4_3
-typedef void ( *GLDEBUGPROC )(GLenum source,GLenum type,GLuint id,GLenum severity,GLsizei length,const GLchar *message,const void *userParam);
-#define GL_DEBUG_SEVERITY_HIGH            0x9146
-#define GL_DEBUG_SEVERITY_MEDIUM          0x9147
-#define GL_DEBUG_SEVERITY_LOW             0x9148
-// WGL extensions
-HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList ) = nullptr;
-bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
-int ( *wglGetSwapIntervalEXT ) () = nullptr;
-// OpenGL Shader Functions
-GLuint ( *glCreateProgram ) () = nullptr;
-void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
-void ( *glLinkProgram ) ( GLuint program ) = nullptr;
-void ( *glGetProgramiv ) ( GLuint program, GLenum pname, GLint *params ) = nullptr;
-void ( *glGetProgramInfoLog ) ( GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
-void ( *glGetActiveAttrib ) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name ) = nullptr;
-GLint (*glGetAttribLocation) ( GLuint program, const GLchar *name ) = nullptr;
-void (*glGetActiveUniform) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name );
-GLint (*glGetUniformLocation) ( GLuint program, const GLchar *name ) = nullptr;
-void (*glDeleteShader) ( GLuint shader ) = nullptr;
-void ( *glDeleteProgram) ( GLuint program ) = nullptr;
-void ( *glUseProgram) ( GLuint program ) = nullptr;
-void ( *glBlendFuncSeparate ) ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) = nullptr;
-GLuint( *glCreateShader) ( GLenum type ) = nullptr;
-void (*glShaderSource) ( GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length ) = nullptr;
-void (*glCompileShader)( GLuint shader ) = nullptr;
-void ( *glGetShaderiv)( GLuint shader, GLenum pname, GLint *params );
-void ( *glGetShaderInfoLog)( GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
-void ( *glActiveTexture) ( GLenum texture ) = nullptr;
-void ( *glUniform1i ) ( GLint location, GLint v0 ) = nullptr;
-void ( *glUniform1fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform2fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform3fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform4fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniformMatrix4fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
-// OpenGL Texture Functions
-void ( *glGenerateMipmap ) ( GLenum target ) = nullptr;
-void ( *glBindFramebuffer ) ( GLenum target, GLuint framebuffer ) = nullptr;
-void ( *glFramebufferTexture2D ) ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) = nullptr;
-void ( *glGenFramebuffers ) ( GLsizei n, GLuint *framebuffers ) = nullptr;
-void ( *glDeleteFramebuffers ) ( GLsizei n, const GLuint *framebuffers ) = nullptr;
-GLenum ( *glCheckFramebufferStatus ) ( GLenum target ) = nullptr;
-void ( *glDrawBuffers ) ( GLsizei n, const GLenum *bufs ) = nullptr;
-void ( *glTextureBarrierNV ) () = nullptr;
-// OpenGL Vertex Functions
-void ( *glGenVertexArrays ) (GLsizei n, GLuint *arrays ) = nullptr;
-void ( *glBindVertexArray ) ( GLuint array ) = nullptr;
-void ( *glDeleteVertexArrays ) ( GLsizei n, const GLuint *arrays ) = nullptr;
-void ( *glDeleteBuffers ) ( GLsizei n, const GLuint *buffers ) = nullptr;
-void ( *glBindBuffer ) ( GLenum target, GLuint buffer ) = nullptr;
-void ( *glGenBuffers ) ( GLsizei n, GLuint *buffers ) = nullptr;
-void ( *glBufferData ) ( GLenum target, GLsizeiptr size, const void *data, GLenum usage ) = nullptr;
-void ( *glBufferSubData ) ( GLenum target, GLintptr offset, GLsizeiptr size, const void *data ) = nullptr;
-void ( *glEnableVertexAttribArray ) ( GLuint index ) = nullptr;
-void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer ) = nullptr;
-void ( *glVertexAttribDivisor )( GLuint index, GLuint divisor ) = nullptr;
-void ( *glDrawElementsInstanced )( GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount ) = nullptr;
-void ( *glDrawArraysInstanced )( GLenum mode, GLint first, GLsizei count, GLsizei instancecount ) = nullptr;
-// Debug functions
-void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void* userParam ) = nullptr;
-#endif
-
-#if _AE_EMSCRIPTEN_ || _AE_IOS_
-#define glClearDepth glClearDepthf
-#endif
-
-// Helpers
-// clang-format off
-#if _AE_DEBUG_
-	#define AE_CHECK_GL_ERROR() do { if( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while( 0 )
-#else
-	#define AE_CHECK_GL_ERROR() do {} while( 0 )
-#endif
+#	if _AE_DEBUG_
+		#define AE_CHECK_GL_ERROR() do { if( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while( 0 )
+	#else
+		#define AE_CHECK_GL_ERROR() do {} while( 0 )
+#	endif
 // clang-format on
 
 namespace ae {
+
+int32_t GLMajorVersion() { return _ae_GLMajorVersion(); }
+int32_t GLMinorVersion() { return _ae_GLMinorVersion(); }
+const char* GLProfile()
+{
+	switch( _ae_GLProfileEnum() )
+	{
+		case _AE_GLProfile_Core: return "core";
+		case _AE_GLProfile_ES: return "es";
+		default: return "";
+	}
+}
+bool ReverseZ = false;
+
+uint32_t _ae_GetCurrentFramebuffer()
+{
+#if AE_ENABLE_OPENGL
+	GLint framebuffer = 0;
+	glGetIntegerv( GL_FRAMEBUFFER_BINDING, &framebuffer );
+	return (uint32_t)framebuffer;
+#else
+	return 0;
+#endif
+}
 
 int32_t _GLGetTypeCount( uint32_t glType )
 {
@@ -24827,8 +25749,25 @@ const UniformList::Value* UniformList::Get( const char* name ) const
 //------------------------------------------------------------------------------
 // ae::Shader member functions
 //------------------------------------------------------------------------------
-ae::Hash32 s_shaderHash;
-ae::Hash32 s_uniformHash;
+} // ae end
+#if _AE_WASM_
+
+AE_WASM_IMPORT( ae ) void _ae_SetShaderHash( uint32_t hash );
+AE_WASM_IMPORT( ae ) void _ae_SetUniformHash( uint32_t hash );
+AE_WASM_IMPORT( ae ) uint32_t _ae_GetShaderHash();
+AE_WASM_IMPORT( ae ) uint32_t _ae_GetUniformHash();
+
+#else
+
+static uint32_t s_shaderHash;
+static uint32_t s_uniformHash;
+void _ae_SetShaderHash( uint32_t hash ) { s_shaderHash = hash; }
+void _ae_SetUniformHash( uint32_t hash ) { s_uniformHash = hash; }
+uint32_t _ae_GetShaderHash() { return s_shaderHash; }
+uint32_t _ae_GetUniformHash() { return s_uniformHash; }
+
+#endif
+namespace ae {
 
 Shader::~Shader()
 {
@@ -24845,10 +25784,7 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 	m_vertexShader = m_LoadShader( vertexStr, Type::Vertex, defines, defineCount );
 	m_fragmentShader = m_LoadShader( fragStr, Type::Fragment, defines, defineCount );
 
-	if( !m_vertexShader || !m_fragmentShader )
-	{
-		AE_FAIL();
-	}
+	AE_ASSERT_MSG( m_vertexShader && m_fragmentShader, "Shader compilation failed: v:# f:#", vertexStr, fragStr );
 
 	glAttachShader( m_program, m_vertexShader );
 	glAttachShader( m_program, m_fragmentShader );
@@ -24980,10 +25916,10 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 	shaderHash.HashType( m_depthTest );
 	shaderHash.HashType( m_culling );
 	shaderHash.HashType( m_wireframe );
-	bool shaderDirty = ( s_shaderHash != shaderHash );
+	const bool shaderDirty = ( _ae_GetShaderHash() != shaderHash.Get() );
 	if( shaderDirty )
 	{
-		s_shaderHash = shaderHash;
+		_ae_SetShaderHash( shaderHash.Get() );
 		
 		AE_CHECK_GL_ERROR();
 
@@ -25037,7 +25973,7 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 		}
 
 		// Wireframe
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_ || _AE_WASM_
 		AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on this platform" );
 #else
 		glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
@@ -25048,11 +25984,11 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 	}
 	
 	// Always update uniforms after a shader change
-	if( !shaderDirty && s_uniformHash == uniforms.GetHash() )
+	if( !shaderDirty && _ae_GetUniformHash() == uniforms.GetHash().Get() )
 	{
 		return;
 	}
-	s_uniformHash = uniforms.GetHash();
+	_ae_SetUniformHash( uniforms.GetHash().Get() );
 	
 	// Set shader uniforms
 	bool missingUniforms = false;
@@ -25146,23 +26082,17 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
 	// Version
 	ae::Str32 glVersionStr = "#version ";
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
-#else
-	glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
-#endif
-	glVersionStr += "\n";
+	glVersionStr += ae::Str16::Format( "##0 #\n", ae::GLMajorVersion(), ae::GLMinorVersion(), ae::GLProfile() );
 	if( glVersionStr.Length() )
 	{
 		shaderSource.Append( glVersionStr.c_str() );
 	}
 
-	// Precision
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	shaderSource.Append( "precision highp float;\n" );
-#else
-	// No default precision specified
-#endif
+	// GLES requires explicit precision qualifiers in fragment shaders
+	if( _ae_GLProfileEnum() == _AE_GLProfile_ES )
+	{
+		shaderSource.Append( "precision highp float;\n" );
+	}
 
 	// Input/output
 //	#if _AE_EMSCRIPTEN_
@@ -26131,7 +27061,14 @@ void Texture2D::Initialize( const TextureParams& params )
 	m_height = params.height;
 	glBindTexture( GetTarget(), GetTexture() );
 
-	const bool mipmapsEnabled = _AE_EMSCRIPTEN_ ? false : params.autoGenerateMipmaps;
+#if _AE_IOS_
+	// GLES3.0: SRGB8 (3-channel) is filterable but not color-renderable, so
+	// glGenerateMipmap returns GL_INVALID_OPERATION. SRGB8_ALPHA8 is fine.
+	const bool formatSupportsAutoMipmaps = ( params.format != Format::RGB8_SRGB );
+#else
+	const bool formatSupportsAutoMipmaps = true;
+#endif
+	const bool mipmapsEnabled = !_AE_EMSCRIPTEN_ && params.autoGenerateMipmaps && formatSupportsAutoMipmaps;
 	if( mipmapsEnabled )
 	{
 		glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
@@ -26343,7 +27280,9 @@ void Texture2D::Initialize( const TextureParams& params )
 	
 	// Handle vertical flip and/or BGR conversion if needed
 	const bool needsFlip = !params.bottomToTopData; // UV 0,0 corresponds to the bottom-left corner in OpenGL
-#if _AE_EMSCRIPTEN_
+#if _AE_EMSCRIPTEN_ || _AE_IOS_
+	// GLES has no GL_BGR/GL_BGRA — those are aliased to GL_RGB/GL_RGBA above,
+	// so the bytes must be swizzled in software before upload.
 	const bool needsBGRConversion = ( params.bgrData && components >= 3 );
 #else
 	const bool needsBGRConversion = false;
@@ -26434,6 +27373,7 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 	Terminate();
 
 	AE_ASSERT( m_fbo == 0 );
+	m_externalFramebuffer = false;
 
 	if( width * height == 0 )
 	{
@@ -26452,15 +27392,31 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 	AE_CHECK_GL_ERROR();
 }
 
+void RenderTarget::m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer )
+{
+	if( m_externalFramebuffer && m_width == width && m_height == height && m_fbo == framebuffer )
+	{
+		return;
+	}
+
+	Terminate();
+
+	m_width = width;
+	m_height = height;
+	m_fbo = framebuffer;
+	m_externalFramebuffer = true;
+}
+
 void RenderTarget::Terminate()
 {
-	if( m_fbo )
+	if( m_fbo && !m_externalFramebuffer )
 	{
 		// With WebGL it seems to matter that the framebuffer is deleted
 		// first so it's not referencing its textures.
 		glDeleteFramebuffers( 1, (uint32_t*)&m_fbo );
-		m_fbo = 0;
 	}
+	m_fbo = 0;
+	m_externalFramebuffer = false;
 	
 	for( uint32_t i = 0; i < m_targets.Length(); i++ )
 	{
@@ -26476,6 +27432,7 @@ void RenderTarget::Terminate()
 
 void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 {
+	AE_ASSERT_MSG( !m_externalFramebuffer, "Cannot add textures to an externally owned ae::RenderTarget" );
 	AE_ASSERT( m_targets.Length() < _kMaxFrameBufferAttachments );
 	if( m_width * m_height == 0 )
 	{
@@ -26503,6 +27460,7 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 
 void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 {
+	AE_ASSERT_MSG( !m_externalFramebuffer, "Cannot add depth to an externally owned ae::RenderTarget" );
 	AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
 	if( m_width * m_height == 0 )
 	{
@@ -26526,6 +27484,14 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 void RenderTarget::Activate()
 {
 	AE_ASSERT_MSG( GetWidth() && GetHeight(), "ae::RenderTarget is not initialized" );
+	if( m_externalFramebuffer )
+	{
+		glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+		glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+		glViewport( 0, 0, GetWidth(), GetHeight() );
+		AE_CHECK_GL_ERROR();
+		return;
+	}
 	AE_ASSERT_MSG( m_targets.Length() || m_depth.GetTexture(), "ae::RenderTarget is not complete. Call AddTexture() and/or AddDepth() before Activate()." );
 	AE_CHECK_GL_ERROR();
 	
@@ -26692,6 +27658,11 @@ GraphicsDevice::~GraphicsDevice()
 	#define LOAD_OPENGL_FN( _glfn )\
 		_glfn = (decltype(_glfn))wglGetProcAddress( #_glfn );\
 		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
+	// wglGetProcAddress returns null for GL 1.1 entries on Microsoft's ICD;
+	// those live in opengl32.dll and must be resolved with GetProcAddress.
+	#define LOAD_OPENGL11_FN( _glfn )\
+		_glfn = (decltype(_glfn))GetProcAddress( opengl32Module, #_glfn );\
+		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
 #endif
 
 void GraphicsDevice::Initialize( class Window* window )
@@ -26708,61 +27679,41 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT( !window->graphicsDevice );
 	window->graphicsDevice = this;
 
-#if !_AE_EMSCRIPTEN_
+#if !_AE_EMSCRIPTEN_ && !_AE_IOS_
 	AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
 #endif
 
+	window->ActivateContext();
+	m_context = window->m_context;
+	AE_ASSERT( m_context );
+
 #if _AE_WINDOWS_
 	uint32_t glFnLoadFailed = 0;
-	// Create OpenGL context
-	HWND hWnd = (HWND)m_window->window;
-	AE_ASSERT_MSG( hWnd, "ae::Window must be initialized" );
-	HDC hdc = GetDC( hWnd );
-	AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
-
-	HGLRC dummyCtx = wglCreateContext( hdc );
-	AE_ASSERT_MSG( dummyCtx, "Failed to create dummy OpenGL Rendering Context" );
-	wglMakeCurrent( hdc, dummyCtx );
-	
-	int attribs[] = 
-	{
-		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion,
-		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion,
-		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
-		0
-	};
-	LOAD_OPENGL_FN( wglCreateContextAttribsARB );
-	HGLRC ctx = wglCreateContextAttribsARB( hdc, 0, attribs );
-	AE_ASSERT_MSG( ctx, "Failed to create extended OpenGL Rendering Context" );
-
-	wglMakeCurrent( nullptr, nullptr );
-	wglDeleteContext( dummyCtx );
-	wglMakeCurrent( hdc, ctx );
-	
-	AE_ASSERT_MSG( ctx, "Failed to create the OpenGL Rendering Context" );
-	if( !wglMakeCurrent( hdc, ctx ) )
-	{
-		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
-	}
-	m_context = ctx;
-#elif _AE_OSX_ 
-	m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
-#elif _AE_EMSCRIPTEN_
-	EmscriptenWebGLContextAttributes attrs;
-	emscripten_webgl_init_context_attributes( &attrs );
-	attrs.alpha = 0;
-	attrs.majorVersion = ae::GLMajorVersion;
-	attrs.minorVersion = ae::GLMinorVersion;
-	m_context = emscripten_webgl_create_context( "canvas", &attrs );
-	AE_ASSERT( m_context > 0 );
-	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
-	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
 #endif
 	
 	AE_CHECK_GL_ERROR();
 
 #if _AE_WINDOWS_
+	const HMODULE opengl32Module = LoadLibraryA( "opengl32.dll" );
+	AE_ASSERT_MSG( opengl32Module, "Failed to load opengl32.dll" );
+	// GL 1.1 entries — resolved against opengl32.dll, not wglGetProcAddress.
+	LOAD_OPENGL11_FN( glClear );
+	LOAD_OPENGL11_FN( glClearColor );
+	LOAD_OPENGL11_FN( glViewport );
+	LOAD_OPENGL11_FN( glEnable );
+	LOAD_OPENGL11_FN( glDisable );
+	LOAD_OPENGL11_FN( glGetIntegerv );
+	LOAD_OPENGL11_FN( glGetError );
+	LOAD_OPENGL11_FN( glGenTextures );
+	LOAD_OPENGL11_FN( glBindTexture );
+	LOAD_OPENGL11_FN( glDeleteTextures );
+	LOAD_OPENGL11_FN( glTexParameteri );
+	LOAD_OPENGL11_FN( glTexImage2D );
+	LOAD_OPENGL11_FN( glTexSubImage2D );
+	LOAD_OPENGL11_FN( glDrawArrays );
+	LOAD_OPENGL11_FN( glDrawElements );
+	LOAD_OPENGL11_FN( glPolygonMode );
+	// WGL extensions and GL 2.0+ entries.
 	LOAD_OPENGL_FN( wglSwapIntervalEXT );
 	LOAD_OPENGL_FN( wglGetSwapIntervalEXT );
 	// Shader functions
@@ -26829,9 +27780,6 @@ void GraphicsDevice::Initialize( class Window* window )
 	glDebugMessageCallback( ae::OpenGLDebugCallback, nullptr );
 #endif
 
-	glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
-	AE_CHECK_GL_ERROR();
-	
 	// Initialize shared RenderTarget resources
 	struct Vertex
 	{
@@ -26860,13 +27808,13 @@ void GraphicsDevice::Initialize( class Window* window )
 	// Because of all of this it's easiest to convert to SRGB manually on non-OpenGLES platforms.
 	const char* vertexStr = R"(
 		AE_UNIFORM_HIGHP mat4 u_localToNdc;
-		AE_IN_HIGHP vec3 a_position;
 		AE_IN_HIGHP vec2 a_uv;
 		AE_OUT_HIGHP vec2 v_uv;
 		void main()
 		{
 			v_uv = a_uv;
-			gl_Position = u_localToNdc * vec4( a_position, 1.0 );
+			vec2 localPos = a_uv - vec2( 0.5 );
+			gl_Position = u_localToNdc * vec4( localPos, 0.0, 1.0 );
 		})";
 	const char* fragStr = R"(
 		uniform sampler2D u_tex;
@@ -26931,10 +27879,10 @@ void GraphicsDevice::Activate()
 {
 	AE_ASSERT( m_window );
 	AE_ASSERT( m_context );
+	m_window->ActivateContext();
 
-	const float scaleFactor = m_window->GetScaleFactor();
-	const int32_t contentWidth = m_window->GetWidth() * scaleFactor;
-	const int32_t contentHeight = m_window->GetHeight() * scaleFactor;
+	const int32_t contentWidth = m_window->GetDrawWidth();
+	const int32_t contentHeight = m_window->GetDrawHeight();
 	if( contentWidth != m_canvas.GetWidth() || contentHeight != m_canvas.GetHeight() )
 	{
 #if _AE_EMSCRIPTEN_
@@ -26985,19 +27933,14 @@ void GraphicsDevice::Present()
 
 	AE_ASSERT( m_context );
 	AE_CHECK_GL_ERROR();
-
-#if _AE_EMSCRIPTEN_
-	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
-	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
-#endif
-	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-	glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() );
+	m_window->BindBackBuffer();
 
 	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
 	glClearDepth( 1.0f );
 
 	glDepthMask( GL_TRUE );
 
+	glDisable( GL_SCISSOR_TEST );
 	glDisable( GL_DEPTH_TEST );
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	AE_CHECK_GL_ERROR();
@@ -27014,17 +27957,7 @@ void GraphicsDevice::Present()
 	m_rgbToSrgb = false;
 	
 	AE_CHECK_GL_ERROR();
-
-	// Swap Buffers
-#if _AE_OSX_
-	[(NSOpenGLContext*)m_context flushBuffer];
-#elif _AE_WINDOWS_
-	AE_ASSERT( m_window );
-	HWND hWnd = (HWND)m_window->window;
-	AE_ASSERT( hWnd );
-	HDC hdc = GetDC( hWnd );
-	SwapBuffers( hdc );
-#endif
+	m_window->Present();
 }
 
 float GraphicsDevice::GetAspectRatio() const
@@ -27049,8 +27982,8 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 	m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
 	
 	// Force refresh uniforms for new canvas
-	s_shaderHash = ae::Hash32();
-	s_uniformHash = ae::Hash32();
+	_ae_SetShaderHash( ae::Hash32().Get() );
+	_ae_SetUniformHash( ae::Hash32().Get() );
 }
 
 //------------------------------------------------------------------------------
@@ -28004,8 +28937,6 @@ void SpriteRenderer::Clear()
 #else // !AE_ENABLE_OPENGL
 namespace ae
 {
-int32_t GLMajorVersion = 0;
-int32_t GLMinorVersion = 0;
 bool ReverseZ = false;
 
 //------------------------------------------------------------------------------
@@ -28096,6 +29027,7 @@ void Texture2D::Terminate() {}
 //------------------------------------------------------------------------------
 RenderTarget::~RenderTarget() {}
 void RenderTarget::Initialize( uint32_t width, uint32_t height ) {}
+void RenderTarget::m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer ) {}
 void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap ) {}
 void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap ) {}
 void RenderTarget::Terminate() {}
@@ -30078,7 +31010,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 //------------------------------------------------------------------------------
 void _CheckALError()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	const char* errStr = "UNKNOWN_ERROR";
 	switch( alGetError() )
 	{
@@ -30097,7 +31029,7 @@ void _CheckALError()
 
 void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* bufferOut, float* lengthOut )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	struct ChunkHeader
 	{
 		char chunkId[ 4 ];
@@ -30234,7 +31166,7 @@ Audio::Channel::Channel()
 //------------------------------------------------------------------------------
 void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels, uint32_t maxAudioDatas )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	ALCdevice* device = alcOpenDevice( nullptr );
 	AE_ASSERT( device );
 	ALCcontext* ctx = alcCreateContext( device, nullptr );
@@ -30296,7 +31228,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 
 void Audio::Terminate()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_musicChannels.Length(); i++ )
 	{
 		Channel* channel = &m_musicChannels[ i ];
@@ -30334,7 +31266,7 @@ void Audio::Terminate()
 
 void Audio::SetVolume( float volume )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	volume = ae::Clip01( volume );
 	alListenerf( AL_GAIN, volume );
 #endif
@@ -30342,7 +31274,7 @@ void Audio::SetVolume( float volume )
 
 void Audio::SetMusicVolume( float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel >= m_musicChannels.Length() )
 	{
 		return;
@@ -30355,7 +31287,7 @@ void Audio::SetMusicVolume( float volume, uint32_t channel )
 
 void Audio::SetSfxLoopVolume( float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel >= m_sfxLoopChannels.Length() )
 	{
 		return;
@@ -30368,7 +31300,7 @@ void Audio::SetSfxLoopVolume( float volume, uint32_t channel )
 
 void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	AE_ASSERT( audioFile );
 	if( channel >= m_musicChannels.Length() )
 	{
@@ -30400,7 +31332,7 @@ void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channe
 
 void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	ALint state;
 	AE_ASSERT( audioFile );
 
@@ -30458,7 +31390,7 @@ void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority 
 
 void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	AE_ASSERT( audioFile );
 	if( channel >= m_sfxLoopChannels.Length() )
 	{
@@ -30492,7 +31424,7 @@ void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t chan
 
 void Audio::StopMusic( uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel < m_musicChannels.Length() )
 	{
 		alSourceStop( m_musicChannels[ channel ].source );
@@ -30503,7 +31435,7 @@ void Audio::StopMusic( uint32_t channel )
 
 void Audio::StopSfxLoop( uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel < m_sfxLoopChannels.Length() )
 	{
 		alSourceStop( m_sfxLoopChannels[ channel ].source );
@@ -30514,7 +31446,7 @@ void Audio::StopSfxLoop( uint32_t channel )
 
 void Audio::StopAllSfx()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxChannels[ i ].source );
@@ -30525,7 +31457,7 @@ void Audio::StopAllSfx()
 
 void Audio::StopAllSfxLoops()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_sfxLoopChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxLoopChannels[ i ].source );
@@ -30552,8 +31484,8 @@ uint32_t Audio::GetSfxLoopChannelCount() const
 // @TODO: Should return a string with current state of audio channels
 void Audio::Log()
 {
-#if AE_USE_OPENAL
- 	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
+#if AE_ENABLE_OPENAL
+	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		ALint state = 0;
 		const Channel* channel = &m_sfxChannels[ i ];

@@ -30,24 +30,25 @@ const ae::Tag kClientAllocTag = "client";
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_LOG( "Initialize" );
-
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::Socket conn = kClientAllocTag;
-	
-	window.Initialize( 400, 300, false, true, true );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	
 	ae::TimeStep timeStep;
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-
 	bool wasConnected = false;
-	while( !input.quit )
+
+	auto Initialize = [&]()
+	{
+		AE_LOG( "Initialize" );
+		window.Initialize( 400, 300, false, true, true );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+	};
+
+	auto Update = [&]() -> bool
 	{
 		input.Pump();
 		window.SetTitle( conn.IsConnected() ? "Client (Connected)" : "Client (Connecting...)" );
@@ -60,7 +61,7 @@ int main()
 				conn.GetPort() );
 			wasConnected = true;
 		}
-		
+
 		uint16_t messageLen = 0;
 		uint8_t messageData[ 64 ];
 		while( ( messageLen = conn.ReceiveMsg( messageData, sizeof(messageData) ) ) )
@@ -77,7 +78,7 @@ int main()
 			rStream.SerializeString( msg );
 			AE_INFO( "Received '#'", msg );
 		}
-		
+
 		if( wasConnected && !conn.IsConnected() )
 		{
 			AE_INFO( "Disconnected" );
@@ -105,13 +106,18 @@ int main()
 		render.Clear( conn.IsConnected() ? ae::Color::PicoGreen() : ae::Color::PicoRed() );
 		render.Present();
 		timeStep.Tick();
-	}
 
-	AE_LOG( "Terminate" );
+		return !input.quit;
+	};
 
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_LOG( "Terminate" );
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
 
-	return 0;
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }
