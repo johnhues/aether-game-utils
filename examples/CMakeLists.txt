@@ -14,7 +14,7 @@ if(NOT imgui_FOUND)
 		imgui
 		GIT_REPOSITORY "https://github.com/ocornut/imgui.git"
 		GIT_TAG v1.92.8-docking
-		SOURCE_SUBDIR "NO-SUBDIRECTORY" # Upstream imgui ships no CMakeLists; we provide our own
+		SOURCE_SUBDIR "NO-SUBDIRECTORY" # imgui has no CMakeLists.txt
 		GIT_PROGRESS TRUE
 		GIT_SHALLOW TRUE
 	)

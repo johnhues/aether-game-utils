@@ -414,16 +414,14 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 		}\
 	}()
 
+//------------------------------------------------------------------------------
+// Internal Helpers
+//------------------------------------------------------------------------------
 #define _AE_STATIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
 #define _AE_DYNAMIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
 #define _AE_PAGED_POOL template< bool P = Paged, typename = std::enable_if_t< P > >
-// ae::IntT rejects scalar * and / by any operand that carries a fraction: a
-// float, or a class convertible to one (eg. a fixed-point or half type).
-// Integers and enums are excluded so integer scaling resolves to the int32_t
-// overload; truncation to int must be explicit.
-template< typename I >
-using EnableIfFractional = std::enable_if_t< std::is_floating_point_v< I > || ( std::is_class_v< I > && std::is_convertible_v< I, float > ) >;
+template< typename T > using _EnableIfFractional = std::enable_if_t< std::is_floating_point_v< T > || ( std::is_class_v< T > && std::is_convertible_v< T, float > ) >;
 #if _AE_MSVC_
 	#define AE_DISABLE_INVALID_OFFSET_WARNING
 	#define AE_ENABLE_INVALID_OFFSET_WARNING
@@ -1161,11 +1159,16 @@ struct IntT
 	void operator-=( const T& v );
 	void operator*=( const T& v );
 	void operator/=( const T& v );
-	// Fractional scalars are rejected so truncation to int is explicit, eg. ae::Int2 * 2.5f
-	template< typename F, typename = ae::EnableIfFractional< F > > T operator*( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
-	template< typename F, typename = ae::EnableIfFractional< F > > T operator/( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
-	template< typename F, typename = ae::EnableIfFractional< F > > void operator*=( F s ) = delete; // Disabled. This operation would be silently lossy.
-	template< typename F, typename = ae::EnableIfFractional< F > > void operator/=( F s ) = delete; // Disabled. This operation would be silently lossy.
+	// ae::IntT rejects scalar * and / by any operand that carries a fraction: a
+	// float, or a class convertible to one (eg. a fixed-point or half type), so
+	// rounding and truncation is explicit. Convert to an ae::Vec3 first, then
+	// floor/round/ceil. This is much more verbose, but can avoid accidental
+	// negative value truncation discrepancies.
+	// eg. '( ae::Vec3( int3Value ) * 2.5f ).FloorCopy()'
+	template< typename F, typename = ae::_EnableIfFractional< F > > T operator*( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
+	template< typename F, typename = ae::_EnableIfFractional< F > > T operator/( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
+	template< typename F, typename = ae::_EnableIfFractional< F > > void operator*=( F s ) = delete; // Disabled. This operation would be silently lossy.
+	template< typename F, typename = ae::_EnableIfFractional< F > > void operator/=( F s ) = delete; // Disabled. This operation would be silently lossy.
 };
 template< typename T >
 inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v );
@@ -3477,6 +3480,7 @@ ae::Array< ae::Screen, 16 > GetScreens();
 //------------------------------------------------------------------------------
 // ae::Application function
 //------------------------------------------------------------------------------
+// A full minimal program using ae::Application:
 #if 0
 int main( int argc, char* argv[] )
 {
@@ -3488,23 +3492,26 @@ int main( int argc, char* argv[] )
 }
 #endif
 //------------------------------------------------------------------------------
-//! Called once at startup. This is a good place to initialize an
-//! ae::Window, ae::GraphicsDevice, and ae::Input combo.
 using AppInitializeFn = ae::Function< void(), 256 >;
-//! Called each frame. Return false from your given function to quit the
-//! application. Note that this is called by the system on platforms where the
-//! system owns the main loop (like iOS and web).
 using AppUpdateFn = ae::Function< bool(), 256 >;
-//! Called once at termination, except on platforms where the system owns
-//! the main loop (like iOS and web) Terminate may never be called. The
-//! return value of your given function will be used as the process exit code.
 using AppTerminateFn = ae::Function< int32_t(), 256 >;
-//! Drives a program's lifecycle identically on platforms that own the main loop
-//! and platforms that don't. This function wraps the platform specific
-//! mechanisms that drive the main loop, and calls the given \p initialize,
-//! \p update, and \p terminate functions when appropriate.
+//! Call this function to drive a program's lifecycle identically on platforms
+//! that own the main loop and platforms that don't. This function wraps the
+//! platform specific mechanisms that drive the main loop, and calls the given
+//! functions when appropriate.
+//! \param argc Forward from main()
+//! \param argv Forward from main()
+//! \param initialize Called once at startup. This is a good place to initialize
+//! an ae::Window, ae::GraphicsDevice, and ae::Input combo.
+//! \param update Called each frame. Return false from your given function to
+//! quit the application. Note that this is called by the system on platforms
+//! where the system owns the main loop (like iOS and web).
+//! \param terminate Called once at termination, except on platforms where the
+//! system owns the main loop (like iOS and web), Terminate may never be called.
+//! \return The return value of \p terminate
 int32_t Application(
-	int32_t argc, char* argv[],
+	int32_t argc,
+	char* argv[],
 	const AppInitializeFn& initialize,
 	const AppUpdateFn& update,
 	const AppTerminateFn& terminate
@@ -3937,21 +3944,22 @@ public:
 	inline bool GetGamepadPressLeft( uint32_t idx = 0 ) const { return gamepads[ idx ].left && !gamepadsPrev[ idx ].left; }
 	inline bool GetGamepadPressRight( uint32_t idx = 0 ) const { return gamepads[ idx ].right && !gamepadsPrev[ idx ].right; }
 
-	//! Adopts the oldest unseen touch into the tracked set, making it visible
-	//! via ae::Input::GetTouches() until released. Returns the adopted touch,
-	//! or nullptr if there are no new touches. Touches that have already
-	//! ended are never returned. The result must be freed with
-	//! ae::Input::ReleaseTouch() when it is no longer needed. Note that if
-	//! touches are not pumped regularly touches may be discarded before they
-	//! are ever returned.
+	//! Adopts the oldest un-pumped touch into the tracked set, making it
+	//! visible via ae::Input::GetTouches() until explicitly released with
+	//! ae::Input::ReleaseTouch(). Failure to release pumped touches will result
+	//! in new lost touches. It is safe to hold on to a pumped touch pointer
+	//! until it is released. Pumped touches will continue to be updated over
+	//! their lifetime. Returns the adopted touch, or nullptr if there are no
+	//! new touches. Touches are discarded if they start and end before
+	//! ae::Input::PumpTouches() is called.
 	const ae::Touch* PumpTouches();
 	//! Returns the touches the caller has opted into tracking via
 	//! ae::Input::PumpTouches() and have not yet released. Touches that have
 	//! not been pumped are not visible here. The array is returned by value so
 	//! it's safe to iterate through this result and call
-	//! ae::Input::ReleaseTouch() on all/any of the touches in any order. Be
-	//! careful not to access the internals of touches in this array that you've
-	//! already released.
+	//! ae::Input::ReleaseTouch() on all/any of the touches in any order
+	//! (although you should be careful not to access the internals of touches
+	//! in this array that you've already released).
 	ae::TouchArray GetTouches() const { return m_touches; }
 	//! Frees a touch returned by PumpTouches(). This **must** be called per
 	//! touch or internal limits will be hit and new touches may be discarded.
@@ -15962,7 +15970,7 @@ uint32_t GetPID()
 uint32_t GetMaxConcurrentThreads()
 {
 #if _AE_WASM_
-	return 1;
+	return 1; // @TODO: Detect threads at runtime (SharedArrayBuffer requires COOP/COEP cross-origin isolation, etc.)
 #else
 	return std::thread::hardware_concurrency();
 #endif
@@ -16864,7 +16872,6 @@ ae::Vec3 Matrix4::TransformPoint3x4( ae::Vec3 v ) const
 
 ae::Vec3 Matrix4::TransformVector3x4( ae::Vec3 v ) const
 {
-	// @TODO: This is accidentally transposed!
 	return Vec3(
 		v.x * data[ 0 ] + v.y * data[ 4 ] + v.z * data[ 8 ],
 		v.x * data[ 1 ] + v.y * data[ 5 ] + v.z * data[ 9 ],
@@ -20131,8 +20138,9 @@ namespace ae {
 //------------------------------------------------------------------------------
 // ae::_Application (internal)
 //------------------------------------------------------------------------------
-//! Internal: holds an ae::Application()'s callbacks and owns the platform main
-//! loop. Constructed by ae::Application(); not used directly.
+// Internal: holds an ae::Application()'s callbacks and owns the platform main
+// loop. Constructed by ae::Application(); not intended to be used directly
+// outside of aether.
 class _Application
 {
 public:
@@ -20188,10 +20196,10 @@ public:
 {
 	ae::Input* input = ae::_Globals::Get()->input;
 	if( !input ) { return nullptr; }
-	const auto matches = [&]( ae::Touch* t ){ return t->id == id; };
-	int32_t idx = input->m_newTouches.FindFn( matches );
+	const auto matchFn = [&]( ae::Touch* t ){ return t->id == id; };
+	int32_t idx = input->m_newTouches.FindFn( matchFn );
 	if( idx >= 0 ) { return input->m_newTouches[ idx ]; }
-	idx = input->m_touches.FindFn( matches );
+	idx = input->m_touches.FindFn( matchFn );
 	if( idx >= 0 ) { return input->m_touches[ idx ]; }
 	return nullptr;
 }
@@ -20202,7 +20210,7 @@ public:
 	input->m_TryNewFrame();
 	for( UITouch* uiTouch in touches )
 	{
-		if( input->m_newTouches.Length() >= input->m_newTouches.Size() ) { break; }
+		if( input->m_newTouches.Full() ) { break; }
 		ae::Touch* touch = input->m_touchPool.New();
 		if( !touch ) { break; }
 		input->m_touchIndex++;
@@ -20371,13 +20379,11 @@ int32_t _Application::Run( int32_t argc, char* argv[] )
 	(void)argc;
 	(void)argv;
 	Initialize();
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
-#else
-	while( Update() )
-	{
-	}
-#endif
+#	if _AE_EMSCRIPTEN_
+		emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
+#	else
+		while( Update() ) {}
+#	endif
 	return Terminate();
 #endif
 }
@@ -21445,13 +21451,13 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 		ae::Vec2 pos( (float)emTouch->targetX, (float)emTouch->targetY );
 		pos.y = input->m_window->GetHeight() - pos.y;
 		const uint32_t id = (uint32_t)emTouch->identifier;
-		const auto matches = [&]( ae::Touch* t ){ return t->id == id; };
+		const auto matchFn = [&]( ae::Touch* t ){ return t->id == id; };
 		ae::Touch* touch = nullptr;
-		int32_t idx = input->m_newTouches.FindFn( matches );
+		int32_t idx = input->m_newTouches.FindFn( matchFn );
 		if( idx >= 0 ) { touch = input->m_newTouches[ idx ]; }
 		else
 		{
-			idx = input->m_touches.FindFn( matches );
+			idx = input->m_touches.FindFn( matchFn );
 			if( idx >= 0 ) { touch = input->m_touches[ idx ]; }
 		}
 		switch( eventType )
@@ -21459,7 +21465,7 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 			case EMSCRIPTEN_EVENT_TOUCHSTART:
 			{
 				if( touch ) { break; } // Already known
-				if( input->m_newTouches.Length() >= input->m_newTouches.Size() ) { break; }
+				if( input->m_newTouches.Full() ) { break; }
 				touch = input->m_touchPool.New();
 				if( !touch ) { break; }
 				touch->id = id;
@@ -22568,7 +22574,7 @@ double Touch::Lifetime() const
 
 void Touch::_AppendSample( double time, ae::Vec2 position )
 {
-	if( samples.Length() == samples.Size() )
+	if( samples.Full() )
 	{
 		// Visvalingam: drop the interior sample with the smallest triangle area
 		// against its immediate neighbors. Endpoints (start and most recent)
@@ -22595,8 +22601,7 @@ void Touch::_AppendSample( double time, ae::Vec2 position )
 
 const ae::Touch* Input::PumpTouches()
 {
-	if( !m_newTouches.Length() ||
-		m_touches.Length() >= m_touches.Size() )
+	if( !m_newTouches.Length() || m_touches.Full() )
 	{
 		return nullptr;
 	}
