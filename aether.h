@@ -418,6 +418,12 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 #define _AE_DYNAMIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
 #define _AE_PAGED_POOL template< bool P = Paged, typename = std::enable_if_t< P > >
+// ae::IntT rejects scalar * and / by any operand that carries a fraction: a
+// float, or a class convertible to one (eg. a fixed-point or half type).
+// Integers and enums are excluded so integer scaling resolves to the int32_t
+// overload; truncation to int must be explicit.
+template< typename I >
+using EnableIfFractional = std::enable_if_t< std::is_floating_point_v< I > || ( std::is_class_v< I > && std::is_convertible_v< I, float > ) >;
 #if _AE_MSVC_
 	#define AE_DISABLE_INVALID_OFFSET_WARNING
 	#define AE_ENABLE_INVALID_OFFSET_WARNING
@@ -781,7 +787,7 @@ struct VecT
 };
 
 #if _AE_MSVC_
-	#pragma warning(disable:26495) // Vecs are left uninitialized for performance
+	#pragma warning(disable:26495) // Vectors are left uninitialized for performance
 #endif
 
 //------------------------------------------------------------------------------
@@ -794,7 +800,10 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 	explicit Vec2( float v );
 	Vec2( float x, float y );
 	explicit Vec2( const float* xy );
-	explicit Vec2( struct Int2 i2 );
+	//! Allow automatic integer to float conversion for convenience. An explicit
+	//! cast is required in the opposite direction to avoid accidental
+	//! truncation.
+	Vec2( struct Int2 i2 );
 	//! Returns a unit vector at the given angle in radians. Angle 0 maps to
 	//! +X; positive angles rotate CCW toward +Y (standard math convention).
 	static Vec2 FromAngle( float angle );
@@ -1140,18 +1149,23 @@ struct IntT
 	int32_t operator[]( uint32_t idx ) const;
 	int32_t& operator[]( uint32_t idx );
 	T operator-() const;
+	T operator*( int32_t s ) const;
+	T operator/( int32_t s ) const;
 	T operator+( const T& v ) const;
 	T operator-( const T& v ) const;
 	T operator*( const T& v ) const;
 	T operator/( const T& v ) const;
+	void operator*=( int32_t s );
+	void operator/=( int32_t s );
 	void operator+=( const T& v );
 	void operator-=( const T& v );
 	void operator*=( const T& v );
 	void operator/=( const T& v );
-	T operator*( int32_t s ) const;
-	T operator/( int32_t s ) const;
-	void operator*=( int32_t s );
-	void operator/=( int32_t s );
+	// Fractional scalars are rejected so truncation to int is explicit, eg. ae::Int2 * 2.5f
+	template< typename F, typename = ae::EnableIfFractional< F > > T operator*( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
+	template< typename F, typename = ae::EnableIfFractional< F > > T operator/( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
+	template< typename F, typename = ae::EnableIfFractional< F > > void operator*=( F s ) = delete; // Disabled. This operation would be silently lossy.
+	template< typename F, typename = ae::EnableIfFractional< F > > void operator/=( F s ) = delete; // Disabled. This operation would be silently lossy.
 };
 template< typename T >
 inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v );
@@ -3067,6 +3081,7 @@ public:
 	Rect() = default;
 	static Rect FromCenterAndSize( ae::Vec2 center, ae::Vec2 size );
 	static Rect FromPoints( ae::Vec2 p0, ae::Vec2 p1 );
+	static Rect FromPoints( float x0, float y0, float x1, float y1 );
 
 	Vec2 GetMin() const { return m_min; }
 	Vec2 GetMax() const { return m_max; }
@@ -3731,16 +3746,17 @@ struct MouseState
 	bool leftButton = false;
 	bool middleButton = false;
 	bool rightButton = false;
-	//! Window space coordinates (ie. not affected by window scale factor). This
+	//! Window space coordinates in points (ie. not affected by window scale factor). This
 	//! value should be used for cursors etc. and not for calculating changes in
 	//! position. In other words don't subtract mouse position from a previous
 	//! frame. Use ae::MouseState::movement for changes in position.
-	ae::Int2 position = ae::Int2( 0 );
-	//! Window space coordinates (ie. not affected by window scale factor). This
+	ae::Vec2 position = ae::Vec2( 0.0f );
+	//! Window space coordinates in points (ie. not affected by window scale factor). This
 	//! value should be used for detecting how much the mouse cursor is moved.
 	//! Cursor jumps are filtered when the mouse is captured and when the window
-	//! becomes active.
-	ae::Int2 movement = ae::Int2( 0 );
+	//! becomes active. Preserves sub-pixel precision for consistent behavior across
+	//! browsers that report movement at different frequencies.
+	ae::Vec2 movement = ae::Vec2( 0.0f );
 	//! Raw scroll input only (no momentum). Wheel gives ~1.0 per notch, and
 	//! uses sub-line float precision if possible. Is reset each frame. Physical
 	//! direction regardless of OS natural scrolling setting, see
@@ -3817,7 +3833,7 @@ struct Touch
 	struct Sample
 	{
 		double time; // Relative to ae::GetTime()
-		ae::Int2 position; // Relative to the virtual window size (ie. not affected by window scale factor)
+		ae::Vec2 position; // Relative to the virtual window size (ie. not affected by window scale factor)
 	};
 	//! The oldest position sample is at index 0, and the newest is at index
 	//! ( length - 1 ). Position samples are added on every system input event,
@@ -3830,14 +3846,14 @@ struct Touch
 	//! called. samples is not modified after the touch ends.
 	bool ended = false;
 
-	ae::Int2 Position() const;
-	ae::Int2 StartPosition() const;
-	ae::Int2 StartDelta() const;
+	ae::Vec2 Position() const;
+	ae::Vec2 StartPosition() const;
+	ae::Vec2 StartDelta() const;
 	bool Ended() const { return ended; }
 	double Lifetime() const;
 
 	// Internal: appends a sample, simplifying the stored curve when full.
-	void _AppendSample( double time, ae::Int2 position );
+	void _AppendSample( double time, ae::Vec2 position );
 };
 
 using TouchArray = ae::Array< ae::Touch*, ae::kMaxTouches >;
@@ -3938,17 +3954,20 @@ public:
 // private:
 	Input( const Input& ) = delete;
 	void m_TryNewFrame();
-	void m_SetMousePos( ae::Int2 pos );
-	void m_SetMousePos( ae::Int2 pos, ae::Int2 movement );
-	void m_SetCursorPos( ae::Int2 pos );
+	void m_SetMousePos( ae::Vec2 pos );
+	void m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement );
+	void m_WarpCursor( ae::Vec2 pos ); // Attempts to move the OS's cursor to the given position
 	void m_SetMouseCaptured( bool captured );
 	void m_UpdateModifiers();
 	ae::TimeStep m_timeStep;
 	ae::Window* m_window = nullptr;
 	bool m_pendingNewFrame = true;
 	bool m_captureMouse = false;
-	ae::Int2 m_capturedMousePos = ae::Int2( INT_MAX );
+	ae::Optional< ae::Vec2 > m_capturedMousePos;
 	bool m_mousePosSet = false;
+#if _AE_EMSCRIPTEN_
+	int m_pendingPointerLock = 0; // -1 = unlock pending, 1 = lock pending
+#endif
 	bool m_hideCursor = false;
 	bool m_keys[ 256 ];
 	bool m_keysPrev[ 256 ];
@@ -16829,6 +16848,7 @@ ae::Vec3 Matrix4::TransformPoint3x4( ae::Vec3 v ) const
 
 ae::Vec3 Matrix4::TransformVector3x4( ae::Vec3 v ) const
 {
+	// @TODO: This is accidentally transposed!
 	return Vec3(
 		v.x * data[ 0 ] + v.y * data[ 1 ] + v.z * data[ 2 ],
 		v.x * data[ 4 ] + v.y * data[ 5 ] + v.z * data[ 6 ],
@@ -18410,7 +18430,7 @@ void _LogFormat( std::ostream& os, ae::LogSeverity severity, const char* filePat
 		os << LogLevelColors[ (uint32_t)severity ];
 	}
 	const char* levelName = LogLevelNames[ (uint32_t)severity ];
-	os << " [" << levelName << ( strlen( levelName ) < 5 ? "] " : " " );
+	os << " [" << levelName << ( strlen( levelName ) < 5 ? "]  " : "] " );
 #if AE_ENABLE_SOURCE_INFO
 	if( _ae_logColors )
 	{
@@ -19601,6 +19621,14 @@ Rect Rect::FromPoints( ae::Vec2 p0, ae::Vec2 p1 )
 	return rect;
 }
 
+Rect Rect::FromPoints( float x0, float y0, float x1, float y1 )
+{
+	Rect rect;
+	rect.ExpandPoint( ae::Vec2( x0, y0 ) );
+	rect.ExpandPoint( ae::Vec2( x1, y1 ) );
+	return rect;
+}
+
 bool Rect::Contains( Vec2 pos ) const
 {
 	return ( m_min.x <= pos.x && pos.x <= m_max.x ) && ( m_min.y <= pos.y && pos.y <= m_max.y );
@@ -20051,7 +20079,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	if( _aeWindow->input )
 	{
 		NSPoint mouseScreenPos = [NSEvent mouseLocation];
-		_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+		_aeWindow->input->m_SetMousePos( ae::Vec2( mouseScreenPos.x, mouseScreenPos.y ) );
 	}
 }
 - (void)windowDidMove:(NSNotification *)notification
@@ -20067,7 +20095,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	if( _aeWindow->input )
 	{
 		NSPoint mouseScreenPos = [NSEvent mouseLocation];
-		_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+		_aeWindow->input->m_SetMousePos( ae::Vec2( mouseScreenPos.x, mouseScreenPos.y ) );
 	}
 }
 - (void)windowDidBecomeKey:(NSNotification *)notification
@@ -20133,12 +20161,12 @@ public:
 	}
 	return self;
 }
-- (ae::Int2)aePosForTouch:(UITouch*)t
+- (ae::Vec2)aePosForTouch:(UITouch*)t
 {
 	ae::Input* input = ae::_Globals::Get()->input;
 	const CGPoint p = [t locationInView:self];
-	const int32_t height = ( input && input->m_window ) ? input->m_window->GetHeight() : (int32_t)self.bounds.size.height;
-	return ae::Int2( (int32_t)p.x, height - (int32_t)p.y );
+	const float height = ( input && input->m_window ) ? (float)input->m_window->GetHeight() : (float)self.bounds.size.height;
+	return ae::Vec2( (float)p.x, height - (float)p.y );
 }
 - (ae::Touch*)aeFindTouchById:(uint32_t)id
 {
@@ -21350,11 +21378,32 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 	input->m_TryNewFrame();
 	
 	const ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY );
-	input->m_SetMousePos( pos.FloorCopy(), ae::Int2( mouseEvent->movementX, -mouseEvent->movementY ) );
+	input->m_SetMousePos( pos, ae::Vec2( mouseEvent->movementX, -mouseEvent->movementY ) );
 	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
 	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
 	input->mouse.middleButton = ( mouseEvent->buttons & 4 );
-	
+
+	// Process pending pointer lock request synchronously (required by Safari)
+	if( input->m_pendingPointerLock > 0 )
+	{
+		input->m_pendingPointerLock = 0;
+		const ae::Vec2 localCenter( input->m_window->GetWidth() / 2.0f, input->m_window->GetHeight() / 2.0f );
+		input->m_WarpCursor( localCenter );
+		input->m_mousePosSet = false;
+		input->m_capturedMousePos = ae::Optional< ae::Vec2 >( pos );
+		emscripten_request_pointerlock( "canvas", true );
+	}
+	else if( input->m_pendingPointerLock < 0 )
+	{
+		input->m_pendingPointerLock = 0;
+		if( const ae::Vec2* p = input->m_capturedMousePos.TryGet() )
+		{
+			input->m_WarpCursor( *p );
+			input->mouse.position = *p;
+		}
+		emscripten_exit_pointerlock();
+	}
+
 	return true;
 }
 
@@ -21377,7 +21426,7 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 	{
 		const EmscriptenTouchPoint* emTouch = &touchEvent->touches[ i ];
 		if( !emTouch->isChanged ) { continue; }
-		ae::Int2 pos( emTouch->targetX, emTouch->targetY );
+		ae::Vec2 pos( (float)emTouch->targetX, (float)emTouch->targetY );
 		pos.y = input->m_window->GetHeight() - pos.y;
 		const uint32_t id = (uint32_t)emTouch->identifier;
 		const auto matches = [&]( ae::Touch* t ){ return t->id == id; };
@@ -21483,7 +21532,7 @@ void Input::Initialize( Window* window )
 	emscripten_set_focus_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_blur_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
-	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleLockChange );
+	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, true, &_aeEmscriptenHandleLockChange );
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -21517,7 +21566,7 @@ void Input::m_TryNewFrame()
 	{
 		memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
 		mousePrev = mouse;
-		mouse.movement = ae::Int2( 0 );
+		mouse.movement = ae::Vec2( 0.0f );
 		mouse.scroll = ae::Vec2( 0.0f );
 		mouse.scrollMomentum = ae::Vec2( 0.0f );
 		// Discard touches that ended before they were adopted via PumpTouches().
@@ -21627,8 +21676,8 @@ void Input::Pump()
 		{
 			if( ScreenToClient( (HWND)m_window->window, &mouseWindowPt ) )
 			{
-				ae::RectInt windowRect = ae::RectInt::FromPointAndSize( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
-				ae::Int2 localMouse( mouseWindowPt.x, m_window->GetHeight() - mouseWindowPt.y );
+				const ae::Rect windowRect = ae::Rect::FromPoints( 0.0f, 0.0f, m_window->GetWidth(), m_window->GetHeight() );
+				const ae::Vec2 localMouse( mouseWindowPt.x, m_window->GetHeight() - mouseWindowPt.y );
 				if( windowRect.Contains( localMouse ) )
 				{
 					m_SetMousePos( localMouse );
@@ -21656,13 +21705,13 @@ void Input::Pump()
 			}
 			
 			// Cursor
-			const ae::RectInt windowRect = ae::RectInt::FromPointAndSize(
-				0,
-				0,
+			const ae::Rect windowRect = ae::Rect::FromPoints(
+				0.0f,
+				0.0f,
 				m_window->GetWidth(),
-				m_window->GetHeight() - 4 );
+				m_window->GetHeight() - 4.0f );
 			const NSPoint cursorScreenPos = [NSEvent mouseLocation];
-			const ae::Int2 cursorLocalPos = ae::Int2( cursorScreenPos.x, cursorScreenPos.y ) - m_window->GetPosition();
+			const ae::Vec2 cursorLocalPos = ae::Vec2( cursorScreenPos.x, cursorScreenPos.y ) - m_window->GetPosition();
 			const bool cursorWithinWindow = windowRect.Contains( cursorLocalPos );
 			if( cursorWithinWindow )
 			{
@@ -21797,12 +21846,11 @@ void Input::Pump()
 	// Mouse capture
 	if( m_captureMouse )
 	{
-		mouse.movement = ae::Int2( 0 );
+		mouse.movement = ae::Vec2( 0.0f );
 		if( m_window )
 		{
-			// Calculate center in case the window height is an odd number
-			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-			m_SetCursorPos( localCenter );
+			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
+			m_WarpCursor( localCenter );
 			// Mouse pos is previously set elsewhere, so when the mouse position is set
 			// to the window center the movement vector needs to be reversed.
 			m_SetMousePos( localCenter );
@@ -22387,39 +22435,38 @@ void Input::SetMouseCaptured( bool enable )
 	
 	if( enable != m_captureMouse )
 	{
+#if _AE_EMSCRIPTEN_
+		m_pendingPointerLock = enable ? 1 : -1;
+#else
 		if( enable )
 		{
 			// Remember original cursor position
-			m_capturedMousePos = m_mousePosSet ? mouse.position : ae::Int2( INT_MAX );
+			m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( mouse.position ) : ae::Optional< ae::Vec2 >();
 #if _AE_WINDOWS_
 			ShowCursor( FALSE );
 #elif _AE_OSX_
 			CGDisplayHideCursor( kCGDirectMainDisplay );
-#elif _AE_EMSCRIPTEN_
-			emscripten_request_pointerlock( "canvas", true );
 #endif
-			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-			m_SetCursorPos( localCenter );
+			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
+			m_WarpCursor( localCenter );
 			m_mousePosSet = false;
 		}
 		else
 		{
 			// Restore original cursor position
-			if( m_capturedMousePos != ae::Int2( INT_MAX ) )
+			if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
 			{
-				m_SetCursorPos( m_capturedMousePos );
-				mouse.position = m_capturedMousePos;
+				m_WarpCursor( *pos );
+				mouse.position = *pos;
 			}
 #if _AE_WINDOWS_
 			ShowCursor( TRUE );
 #elif _AE_OSX_
 			CGDisplayShowCursor( kCGDirectMainDisplay );
-#elif _AE_EMSCRIPTEN_
-			emscripten_exit_pointerlock();
 #endif
 		}
-		
 		m_captureMouse = enable;
+#endif
 	}
 }
 
@@ -22463,17 +22510,33 @@ bool Input::GetPrev( ae::Key key ) const
 	return m_keysPrev[ static_cast< int >( key ) ];
 }
 
-ae::Int2 Touch::Position() const
+ae::Vec2 Touch::Position() const
 {
-	return samples.Length() ? samples[ samples.Length() - 1 ].position : ae::Int2( 0 );
+	if( samples.Length() )
+	{
+		return samples[ samples.Length() - 1 ].position; // Last sample
+	}
+	else
+	{
+		AE_DEBUG_FAIL_MSG( "Touch has no samples" );
+		return ae::Vec2( 0.0f );
+	}
 }
 
-ae::Int2 Touch::StartPosition() const
+ae::Vec2 Touch::StartPosition() const
 {
-	return samples.Length() ? samples[ 0 ].position : ae::Int2( 0 );
+	if( samples.Length() )
+	{
+		return samples[ 0 ].position; // First sample
+	}
+	else
+	{
+		AE_DEBUG_FAIL_MSG( "Touch has no samples" );
+		return ae::Vec2( 0.0f );
+	}
 }
 
-ae::Int2 Touch::StartDelta() const
+ae::Vec2 Touch::StartDelta() const
 {
 	return Position() - StartPosition();
 }
@@ -22487,7 +22550,7 @@ double Touch::Lifetime() const
 	return samples[ samples.Length() - 1 ].time - samples[ 0 ].time;
 }
 
-void Touch::_AppendSample( double time, ae::Int2 position )
+void Touch::_AppendSample( double time, ae::Vec2 position )
 {
 	if( samples.Length() == samples.Size() )
 	{
@@ -22495,17 +22558,14 @@ void Touch::_AppendSample( double time, ae::Int2 position )
 		// against its immediate neighbors. Endpoints (start and most recent)
 		// are preserved.
 		int32_t dropIdx = 1;
-		int64_t minArea = INT64_MAX;
+		float minArea = ae::MaxValue< float >();
 		for( uint32_t i = 1; i + 1 < samples.Length(); i++ )
 		{
-			const ae::Int2 a = samples[ i - 1 ].position;
-			const ae::Int2 b = samples[ i ].position;
-			const ae::Int2 c = samples[ i + 1 ].position;
-			const int64_t ax = a.x, ay = a.y;
-			const int64_t bx = b.x, by = b.y;
-			const int64_t cx = c.x, cy = c.y;
-			const int64_t cross = ( bx - ax ) * ( cy - ay ) - ( by - ay ) * ( cx - ax );
-			const int64_t area = cross < 0 ? -cross : cross;
+			const ae::Vec2 a = samples[ i - 1 ].position;
+			const ae::Vec2 b = samples[ i ].position;
+			const ae::Vec2 c = samples[ i + 1 ].position;
+			const float cross = ( b.x - a.x ) * ( c.y - a.y ) - ( b.y - a.y ) * ( c.x - a.x );
+			const float area = ae::Abs( cross );
 			if( area < minArea )
 			{
 				minArea = area;
@@ -22540,7 +22600,7 @@ void Input::ReleaseTouch( const ae::Touch* touch )
 	}
 }
 
-void Input::m_SetMousePos( ae::Int2 pos )
+void Input::m_SetMousePos( ae::Vec2 pos )
 {
 	AE_ASSERT( m_window );
 	if( m_mousePosSet )
@@ -22551,7 +22611,7 @@ void Input::m_SetMousePos( ae::Int2 pos )
 	m_mousePosSet = true;
 }
 
-void Input::m_SetMousePos( ae::Int2 pos, ae::Int2 movement )
+void Input::m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement )
 {
 	AE_ASSERT( m_window );
 	mouse.movement += movement;
@@ -22559,11 +22619,13 @@ void Input::m_SetMousePos( ae::Int2 pos, ae::Int2 movement )
 	m_mousePosSet = true;
 }
 
-void Input::m_SetCursorPos( ae::Int2 pos )
+void Input::m_WarpCursor( ae::Vec2 pos )
 {
 #if _AE_WINDOWS_
 	{
-		POINT centerPt = { pos.x, m_window->GetHeight() - pos.y };
+		// SetCursorPos takes integer screen pixels, so round to the nearest
+		const ae::Int2 px = pos.NearestCopy();
+		POINT centerPt = { px.x, m_window->GetHeight() - px.y };
 		if( ClientToScreen( (HWND)m_window->window, &centerPt ) )
 		{
 			SetCursorPos( centerPt.x, centerPt.y );

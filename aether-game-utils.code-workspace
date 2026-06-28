@@ -18,7 +18,6 @@
 		],
 		"cmake.useCMakePresets": "always",
 		"cmake.copyCompileCommands": "${workspaceFolder}/build_vscode/compile_commands.json",
-		"C_Cpp.intelliSenseEngine": "disabled",
 		"explorer.excludeGitIgnore": true,
 		"files.associations": {
 			"**/aether.h": "objective-cpp"
@@ -31,8 +30,11 @@
 			{
 				"label": "Emscripten: Start Web Server",
 				"type": "shell",
-				"command": "python3 -m http.server 58000 --directory build_em",
+				"command": "python3 -m http.server 58000",
 				"isBackground": true,
+				"runOptions": {
+					"instanceLimit": 1
+				},
 				"problemMatcher": {
 					"pattern": {
 						"regexp": ".",
@@ -66,7 +68,7 @@
 					"cwd": "${workspaceFolder}"
 				},
 				"problemMatcher": [
-					"$gcc"
+					"$msCompile"
 				],
 				"presentation": {
 					"reveal": "silent"
@@ -83,7 +85,7 @@
 					"--build",
 					"${workspaceFolder}/build_em",
 					"--config",
-					"${command:cmake.buildType}",
+					"RelWithDebInfo",
 					"--target",
 					"test"
 				],
@@ -92,7 +94,7 @@
 					"cwd": "${workspaceFolder}"
 				},
 				"problemMatcher": [
-					"$gcc"
+					"$msCompile"
 				],
 				"presentation": {
 					"reveal": "silent"
@@ -100,6 +102,46 @@
 				"icon": {
 					"id": "tools"
 				}
+			},
+			{
+				"label": "Emscripten: Build",
+				"type": "shell",
+				"command": "cmake",
+				"args": [
+					"--build",
+					"${workspaceFolder}/build_em",
+					"--config",
+					"RelWithDebInfo",
+					"--target",
+					"${command:cmake.buildTargetName}"
+				],
+				"dependsOn": "Emscripten: Configure",
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [
+					"$msCompile"
+				],
+				"presentation": {
+					"reveal": "silent"
+				},
+				"icon": {
+					"id": "tools"
+				}
+			},
+			{
+				"label": "Emscripten: Build & Serve",
+				"dependsOn": [
+					"Emscripten: Build",
+					"Emscripten: Start Web Server"
+				],
+				"dependsOrder": "parallel",
+				"icon": {
+					"id": "play"
+				},
+				"problemMatcher": [
+					"$msCompile"
+				]
 			},
 			{
 				"label": "iOS: Console",
@@ -182,15 +224,15 @@
 				"command": "python3",
 				"args": [
 					"${workspaceFolder}/scripts/ios_build.py",
-					"${command:cmake.launchTargetName}",
-					"${command:cmake.buildType}"
+					"${command:cmake.buildTargetName}",
+					"RelWithDebInfo"
 				],
 				"dependsOn": "iOS: Configure",
 				"options": {
 					"cwd": "${workspaceFolder}"
 				},
 				"problemMatcher": [
-					"$gcc"
+					"$msCompile"
 				],
 				"group": "build",
 				"presentation": {
@@ -208,7 +250,7 @@
 				"type": "shell",
 				"command": "${workspaceFolder}/scripts/ios-install.sh",
 				"args": [
-					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
+					"${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app"
 				],
 				"dependsOn": "iOS: Build",
 				"options": {
@@ -231,7 +273,7 @@
 				"command": "${workspaceFolder}/scripts/ios-launch.sh",
 				"args": [
 					"--console",
-					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
+					"${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app"
 				],
 				"dependsOn": "iOS: Install",
 				"options": {
@@ -255,7 +297,7 @@
 				"args": [
 					"--start-paused",
 					"--console",
-					"${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app"
+					"${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app"
 				],
 				"dependsOn": [
 					"iOS: Install",
@@ -306,22 +348,37 @@
 				"name": "Emscripten: Test",
 				"type": "node",
 				"request": "launch",
-				"program": "${workspaceFolder}/build_em/test/${command:cmake.buildType}/test.js",
+				"program": "${workspaceFolder}/build_em/test/RelWithDebInfo/test.js",
 				"cwd": "${workspaceFolder}/build_em",
 				"preLaunchTask": "Emscripten: Build Test"
+			},
+			{
+				"name": "Emscripten: 18_SmallEngine",
+				"type": "chrome",
+				"request": "launch",
+				"url": "http://localhost:58000/build_em/examples/18_SmallEngine/RelWithDebInfo/",
+				"preLaunchTask": "Emscripten: Build" // & Serve
+			},
+			{
+				"name": "Launch Browser & Debug WASM",
+				"type": "chrome",
+				"request": "launch",
+				"url": "http://localhost:58000/build_em/examples/18_SmallEngine/RelWithDebInfo",
+				"webRoot": "${workspaceFolder}",
+				"sourceMaps": true
 			},
 			{
 				"name": "iOS: Debug Launch",
 				"type": "lldb-dap",
 				"request": "attach",
 				"debugAdapterExecutable": "${workspaceFolder}/scripts/lldb-dap.sh",
-				"program": "${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app/${command:cmake.launchTargetName}",
+				"program": "${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app/${command:cmake.getLaunchTargetName}",
 				"initCommands": [
 					"settings set target.preload-symbols false",
 					"process handle SIGSTOP -s true -n true"
 				],
 				"attachCommands": [
-					"device process attach --name \"${command:cmake.launchTargetName}\""
+					"device process attach --name \"${command:cmake.getLaunchTargetName}\""
 				],
 				"preLaunchTask": "iOS: Launch (Paused)"
 			},
@@ -330,13 +387,13 @@
 				"type": "lldb-dap",
 				"request": "attach",
 				"debugAdapterExecutable": "${workspaceFolder}/scripts/lldb-dap.sh",
-				"program": "${workspaceFolder}/build_ios/examples/${command:cmake.buildType}-iphoneos/${command:cmake.launchTargetName}.app/${command:cmake.launchTargetName}",
+				"program": "${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app/${command:cmake.getLaunchTargetName}",
 				"initCommands": [
 					"settings set target.preload-symbols false",
 					"settings set symbols.enable-external-lookup false"
 				],
 				"attachCommands": [
-					"device process attach --name \"${command:cmake.launchTargetName}\""
+					"device process attach --name \"${command:cmake.getLaunchTargetName}\""
 				],
 				"timeout": 600
 			}

@@ -362,7 +362,7 @@ void Program::DrawCursor()
 
 void Program::DrawFolders()
 {
-	const ae::Vec2 currentCursorPos = ae::Vec2( m_input.mouse.position ) * m_window.GetScaleFactor();
+	const ae::Vec2 currentCursorPos = m_input.mouse.position * m_window.GetScaleFactor();
 	const ae::Vec2 dragOffset = currentCursorPos - m_dragStart;
 	for( const Folder* folder : m_currentFolder->subFolders )
 	{

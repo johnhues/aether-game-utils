@@ -27,7 +27,7 @@ int main( int argc, char* argv[] )
 	float pitch = 0.0f;
 	const ae::Touch* moveTouch = nullptr;
 	const ae::Touch* lookTouch = nullptr;
-	ae::Int2 lookLastPos = ae::Int2( 0 );
+	ae::Vec2 lookLastPos = ae::Vec2( 0.0f );
 
 	auto Initialize = [&]()
 	{
@@ -98,8 +98,8 @@ int main( int argc, char* argv[] )
 			pitch += input.gamepads[ 0 ].rightAnalog.y * 2.0f * dt;
 			if( lookTouch )
 			{
-				const ae::Int2 pos = lookTouch->Position();
-				const ae::Vec2 touchDir = ae::Vec2( pos - lookLastPos ) / ( displaySize * 0.35f );
+				const ae::Vec2 pos = lookTouch->Position();
+				const ae::Vec2 touchDir = ( pos - lookLastPos ) / ( displaySize * 0.35f );
 				lookLastPos = pos;
 				yaw -= touchDir.x;
 				pitch += touchDir.y;
@@ -116,7 +116,7 @@ int main( int argc, char* argv[] )
 			dir -= right * input.gamepads[ 0 ].leftAnalog.x;
 			if( moveTouch )
 			{
-				const ae::Vec2 touchDir = ( ae::Vec2( moveTouch->StartDelta() ) / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
+				const ae::Vec2 touchDir = ( moveTouch->StartDelta() / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
 				dir += forward * touchDir.y;
 				dir -= right * touchDir.x;
 			}

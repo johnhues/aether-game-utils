@@ -182,10 +182,10 @@ void Player::Update( HotSpotWorld* world, ae::Window* window, ae::Input* input, 
 	bool jumpTap = false;
 	for( ae::Touch* t : input->GetTouches() )
 	{
-		const ae::Int2 delta = t->StartDelta();
+		const ae::Vec2 delta = t->StartDelta();
 		if( t->Ended() )
 		{
-			const float distSqr = (float)( delta.x * delta.x + delta.y * delta.y );
+			const float distSqr = delta.LengthSquared();
 			if( distSqr < kTapMaxMovementSqr && t->Lifetime() < kTapMaxDuration )
 			{
 				jumpTap = true;

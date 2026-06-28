@@ -6,7 +6,6 @@
     "CC": "clang",
     "CXX": "clang++"
   },
-  "workspaceFolder": "", // Let the engine assign the target path automatically
   "postCreateCommand": "cmake -E make_directory build",
   "remoteUser": "root",
   "customizations": {

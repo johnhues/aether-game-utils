@@ -260,9 +260,9 @@ function(ae_add_bundle BUNDLE_NAME)
 			"-s GL_SUPPORT_SIMPLE_ENABLE_EXTENSIONS=0" # Reduce WebGL code size: do not emit code for extensions that we might not need.
 			# "-s FILESYSTEM=0" # Reduce code size: We do not need native POSIX filesystem emulation support (Emscripten FS/MEMFS) @TODO: Filesystem is required for sockets
 			# Choose the oldest browser versions that should be supported. The higher minimum bar you choose, the less emulation code may be present for old browser quirks.
-			"-s MIN_FIREFOX_VERSION=70"
-			"-s MIN_SAFARI_VERSION=130000"
-			"-s MIN_CHROME_VERSION=80"
+			"-s MIN_FIREFOX_VERSION=130"
+			"-s MIN_SAFARI_VERSION=180100"
+			"-s MIN_CHROME_VERSION=130"
 		)
 		string(TOLOWER "${CMAKE_BUILD_TYPE}" cmake_build_type_tolower)
 		if (cmake_build_type_tolower STREQUAL "debug")

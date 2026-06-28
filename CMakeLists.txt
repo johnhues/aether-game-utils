@@ -22,12 +22,6 @@ if(NOT ${AE_LEAN_AND_MEAN})
 		message(FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there.")
 	endif()
 
-	# Default to RelWithDebInfo when not specified for single-config generators
-	if (NOT GENERATOR_IS_MULTI_CONFIG AND (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
-		set(CMAKE_BUILD_TYPE "RelWithDebInfo")
-	endif()
-	message("Build type: ${CMAKE_BUILD_TYPE}")
-
 	# Enable generation of compile_commands.json for intellisense and clangd
 	set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -45,6 +39,7 @@ endif()
 project(aether-game-utils LANGUAGES CXX C VERSION 1.0.0)
 set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(AE_NAMESPACE aether-game-utils)
+
 if(NOT ${AE_LEAN_AND_MEAN})
 	set(CMAKE_CXX_STANDARD 17)
 	set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -56,6 +51,17 @@ if(NOT ${AE_LEAN_AND_MEAN})
 	endif()
 	add_compile_options(-fno-rtti) # Disable RTTI (not used in aether)
 
+	message("Generator information:")
+	message("  CMAKE_GENERATOR: ${CMAKE_GENERATOR}")
+	if(CMAKE_CONFIGURATION_TYPES)
+		message("  CMAKE_BUILD_TYPE: Multi-Config")
+	else()
+		# Default to RelWithDebInfo when not specified for single-config generators
+		if((NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
+			set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+		endif()
+		message("  CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+	endif()
 	message("Compiler Information:")
 	message("  CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
 	message("  CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")

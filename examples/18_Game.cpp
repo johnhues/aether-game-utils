@@ -43,7 +43,7 @@ public:
 	float pitch = 0.0f;
 	const ae::Touch* lookTouch = nullptr;
 	const ae::Touch* moveTouch = nullptr;
-	ae::Int2 lookLastPos = ae::Int2( 0 );
+	ae::Vec2 lookLastPos = ae::Vec2( 0.0f );
 };
 
 //------------------------------------------------------------------------------
@@ -131,8 +131,8 @@ void Player::Update( SmallEngine* engine )
 	pitch += input.gamepads[ 0 ].rightAnalog.y * 2.0f * dt;
 	if( lookTouch )
 	{
-		const ae::Int2 pos = lookTouch->Position();
-		const ae::Vec2 touchDir = ae::Vec2( pos - lookLastPos ) / ( displaySize * 0.35f );
+		const ae::Vec2 pos = lookTouch->Position();
+		const ae::Vec2 touchDir = ( pos - lookLastPos ) / ( displaySize * 0.35f );
 		lookLastPos = pos;
 		yaw -= touchDir.x;
 		pitch += touchDir.y;
@@ -145,7 +145,7 @@ void Player::Update( SmallEngine* engine )
 	dir += ( forward * input.gamepads[ 0 ].leftAnalog.y + right * input.gamepads[ 0 ].leftAnalog.x );
 	if( moveTouch )
 	{
-		const ae::Vec2 touchDir = ( ae::Vec2( moveTouch->StartDelta() ) / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
+		const ae::Vec2 touchDir = ( moveTouch->StartDelta() / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
 		dir += ( forward * touchDir.y + right * touchDir.x );
 	}
 
@@ -201,7 +201,9 @@ void Mesh::Initialize( SmallEngine* engine )
 
 void Mesh::Render( SmallEngine* engine )
 {
-	if( meshResource )
+	if( meshResource &&
+		meshResource->status == SmallEngine::MeshResource::Loaded &&
+		engine->defaultTexture.GetTexture() )
 	{
 		ae::UniformList uniformList;
 		engine->GetUniforms( &uniformList );
@@ -273,6 +275,10 @@ int main( int argc, char* argv[] )
 	{
 		if( engine.Initialize( argc, argv ) )
 		{
+			engine.meshResources.Set( "bunny.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
+			engine.meshResources.Set( "tall_tree.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
+			engine.meshResources.Set( "BlobCube.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
+
 			ae::Str256 levelPath;
 			if( engine.fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
 			{
@@ -282,6 +288,6 @@ int main( int argc, char* argv[] )
 		}
 	};
 	auto update = [ & ]() { return engine.Update(); };
-	auto terminate = []() { return 0; };
+	auto terminate = [ & ]() { return engine.Terminate(); };
 	return ae::Application( argc, argv, initialize, update, terminate );
 }
