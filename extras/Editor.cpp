@@ -4352,7 +4352,7 @@ ae::Array< const ae::ClassVar*, 8 > GetTypeVarsByName( const ae::ClassType* type
 {
 	ae::Array< const ae::ClassVar*, 8 > vars;
 	const ae::ClassType* currentType = type;
-	while( currentType && vars.Length() < vars.Size() )
+	while( currentType && vars.Length() < vars.Capacity() )
 	{
 		if( const ae::ClassVar* var = currentType->GetVarByName( name, false ) )
 		{

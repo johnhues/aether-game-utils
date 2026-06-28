@@ -516,7 +516,7 @@ void Free( void* data );
 // ae::Scratch< T > class
 //! Can be used for scoped allocations within a single frame. Because this uses
 //! a stack internally it can be used to make many cheap allocations, while
-//! avoiding memory fragmentation. Up to kMaxScratchSize bytes may be allocated
+//! avoiding memory fragmentation. Up to kScratchCapacity bytes may be allocated
 //! at a time. Allocated objects will have their constructors and destructors
 //! called in ae::Scratch() and ~ae::Scratch respectively.
 //------------------------------------------------------------------------------
@@ -536,11 +536,11 @@ public:
 	const T& GetSafe( int32_t index ) const;
 
 	//! The max size of each thread's internal scratch stack
-	static const uint32_t kMaxScratchSize = AE_MAX_SCRATCH_BYTES_CONFIG;
+	static const uint32_t kScratchCapacity = AE_MAX_SCRATCH_BYTES_CONFIG;
 
 private:
 	T* m_data;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	uint32_t m_prevOffsetCheck;
 };
 
@@ -1669,7 +1669,7 @@ public:
 	void Trim( uint32_t len );
 
 	uint32_t Length() const;
-	uint32_t Size() const;
+	uint32_t Capacity() const;
 	bool Empty() const;
 	static constexpr uint32_t MaxLength() { return N - 3u; } // Leave room for length var and null terminator
 
@@ -1833,28 +1833,28 @@ class Array
 {
 public:
 	//! Static array (N > 0) only. Constructs an empty array, where
-	//! ae::Array::Length() == 0 and ae::Array::Size() == N.
+	//! ae::Array::Length() == 0 and ae::Array::Capacity() == N.
 	Array();
 	//! Static array (N > 0) only. Appends 'length' number of 'val's, so that
-	//! ae::Array::Length() == 'length' and ae::Array::Size() == N.
+	//! ae::Array::Length() == 'length' and ae::Array::Capacity() == N.
 	Array( const T& val, uint32_t length );
 	//! Static array (N > 0) only. Constructs from a standard initializer list,
-	//! so that ae::Array::Length() == 'initList.size()' and ae::Array::Size() == N.
+	//! so that ae::Array::Length() == 'initList.Capacity()' and ae::Array::Capacity() == N.
 	Array( std::initializer_list< T > initList );
 
 	//! Dynamic array (N == 0) only. Constructs an empty array, where
-	//! ae::Array::Length() == 0 and ae::Array::Size() == N.
+	//! ae::Array::Length() == 0 and ae::Array::Capacity() == N.
 	Array( ae::Tag tag );
 	//! Dynamic array (N == 0) only. Constructs an empty array, while reserving
-	//! 'size' elements. ae::Array::Length() == 0 and ae::Array::Size() == 'size'.
-	Array( ae::Tag tag, uint32_t size );
+	//! 'capacity' elements. ae::Array::Length() == 0 and ae::Array::Capacity() == 'capacity'.
+	Array( ae::Tag tag, uint32_t capacity );
 	//! Dynamic array (N == 0) only. Reserves 'length' and appends 'length'
-	//! number of 'val's. ae::Array::Length() == 'length' and ae::Array::Size() >= 'length'.
+	//! number of 'val's. ae::Array::Length() == 'length' and ae::Array::Capacity() >= 'length'.
 	Array( ae::Tag tag, const T& val, uint32_t length );
 	//! Dynamic array (N == 0) only. Expands the internal array storage to avoid
 	//! copying data unnecessarily on Append(). This does not affect the number
 	//! of elements returned by Length(). Retrieve the current storage limit
-	//! with Size().
+	//! with Capacity().
 	void Reserve( uint32_t total );
 
 	//! Copy constructor. The ae::Tag of \p other will be used for the newly
@@ -1930,7 +1930,7 @@ public:
 	//! less than or equal to Length().
 	void Remove( uint32_t index, uint32_t count = 1 );
 	//! Destructs all elements in the array and resets the array to length zero.
-	//! Does not affect the size of the array.
+	//! Does not affect the capacity of the array.
 	void Clear();
 
 	//! Performs bounds checking in debug mode, use 'GetData()' instead to
@@ -1950,7 +1950,7 @@ public:
 	//! Returns the last element. Performs bounds checking in debug mode.
 	T& Last();
 	//! Returns true when it is no longer safe to append to this array.
-	_AE_STATIC_STORAGE bool Full() { return m_length == m_size; }
+	_AE_STATIC_STORAGE bool Full() { return m_length == m_capacity; }
 	//! It is always safe to append to dynamic arrays, barring system memory limits.
 	_AE_DYNAMIC_STORAGE bool Full(...) const { return false; }
 
@@ -1962,17 +1962,17 @@ public:
 	const T* Data() const { return m_array; }
 	//! Returns the number of elements currently in the array
 	uint32_t Length() const { return m_length; }
-	//! Returns the total size of a static array (N > 0)
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
-	//! Returns the total size of a dynamic array (N == 0)
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
+	//! Returns the total capacity of a static array (N > 0)
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
+	//! Returns the total capacity of a dynamic array (N == 0)
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_capacity; }
 	//! Returns the tag provided to the constructor for dynamic arrays (N == 0).
 	//! Returns ae::Tag() for all static arrays (N > 0).
 	ae::Tag Tag() const { return m_tag; }
 
 private:
 	uint32_t m_length;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	T* m_array;
 	ae::Tag m_tag;
 	// clang-format off
@@ -2018,10 +2018,10 @@ public:
 	HashMap();
 	//! Constructor for a hash map with dynamically allocated storage (N == 0).
 	HashMap( ae::Tag pool );
-	//! Expands the storage if necessary so a \p size number of key/index pairs
+	//! Expands the storage if necessary so a \p capacity number of key/index pairs
 	//! can be added without any internal allocations. Asserts if using static
-	//! storage and \p size is greater than N.
-	void Reserve( uint32_t size );
+	//! storage and \p capacity is greater than N.
+	void Reserve( uint32_t capacity );
 	
 	HashMap( const HashMap< Key, N, Hash >& other );
 	void operator =( const HashMap< Key, N, Hash >& other );
@@ -2053,9 +2053,9 @@ public:
 	//! Returns the number of entries.
 	uint32_t Length() const;
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the number of allocated entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_capacity; }
 
 private:
 	bool m_Insert( Key key, typename Hash::UInt hash, int32_t index );
@@ -2068,7 +2068,7 @@ private:
 	};
 	ae::Tag m_tag;
 	Entry* m_entries;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	uint32_t m_length;
 	// clang-format off
 #if _AE_LINUX_|| _AE_WINDOWS_
@@ -2157,9 +2157,9 @@ public:
 	//! Returns the number of key/value pairs in the map
 	uint32_t Length() const;
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the number of allocated entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_pairs.Size(); }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_pairs.Capacity(); }
 
 	// Ranged-based loop. Lowercase to match c++ standard
 	ae::Pair< Key, Value >* begin() { return m_pairs.begin(); }
@@ -2215,9 +2215,9 @@ public:
 	const char* GetValue( uint32_t idx ) const;
 	uint32_t Length() const { return m_entries.Length(); }
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the max number of entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_entries.Size(); }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_entries.Capacity(); }
 	
 	// Ranged-based loop. Lowercase to match c++ standard
 	ae::Pair< ae::Str128, ae::Str128 >* begin() { return m_entries.begin(); }
@@ -2332,14 +2332,14 @@ public:
 	//! Constructor for a ring buffer with static allocated storage (N > 0).
 	RingBuffer();
 	//! Constructor for a ring buffer with dynamically allocated storage (N == 0).
-	RingBuffer( ae::Tag tag, uint32_t size );
+	RingBuffer( ae::Tag tag, uint32_t capacity );
 	//! Appends an element to the current end of the ring buffer. It's safe to
 	//! call this when the ring buffer is full, although in this case the
 	//! element previously at index 0 to be destroyed. Does not affect
-	//! ae::RingBuffer::Size().
+	//! ae::RingBuffer::Capacity().
 	T& Append( const T& val );
 	//! Resets ae::RingBuffer::Length() and ae::RingBuffer::GetOffset() to 0.
-	//! Does not affect ae::RingBuffer::Size().
+	//! Does not affect ae::RingBuffer::Capacity().
 	void Clear();
 
 	//! Returns the element at the given \p index, which must be less than
@@ -2365,7 +2365,7 @@ public:
 	//! (or 0 when the buffer is empty). Use this in conjunction with
 	//! ae::RingBuffer::Data() to get a pointer to the the first element in the
 	//! buffer, iterate 0 to ae::RingBuffer::Length() elements, and reduce the
-	//! iteration index modulo ae::RingBuffer::Size() when indexing the buffer.
+	//! iteration index modulo ae::RingBuffer::Capacity() when indexing the buffer.
 	//! This is a more complicated approach than using ae::RingBuffer::Get() but
 	//! can be useful to avoid copying data for APIs that accept generic ring
 	//! buffer data, such as ImGui.
@@ -2373,37 +2373,37 @@ public:
 	//! \code
 	//! for( uint32_t i = 0; i < ringBuffer.Length(); i++ )
 	//! {
-	//!     const uint32_t index = ( ringBuffer.GetOffset() + i ) % ringBuffer.Size();
+	//!     const uint32_t index = ( ringBuffer.GetOffset() + i ) % ringBuffer.Capacity();
 	//!     const T& element = ringBuffer.Data()[ index ];
 	//! }
 	//! \endcode
 	uint32_t GetOffset() const { return m_first; }
 
-	//! Returns the number of appended entries up to ae::RingBuffer::Size().
+	//! Returns the number of appended entries up to ae::RingBuffer::Capacity().
 	uint32_t Length() const { return m_buffer.Length(); }
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the max number of entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_capacity; }
 
 private:
 	uint32_t m_first;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	ae::Array< T, N > m_buffer;
 };
 
 //------------------------------------------------------------------------------
 // ae::FreeList class
 //! ae::FreeList can be used along side a separate data array to track allocated
-//! elements. Given a size, ae::FreeList allows allocation and release of array
-//! indices from 0 to size - 1.
+//! elements. Given a capacity, ae::FreeList allows allocation and release of array
+//! indices from 0 to capacity - 1.
 //------------------------------------------------------------------------------
 template< uint32_t N = 0 >
 class FreeList
 {
 public:
 	FreeList();
-	FreeList( const ae::Tag& tag, uint32_t size );
+	FreeList( const ae::Tag& tag, uint32_t capacity );
 
 	//! Returns (0 <= index < N) on success, and negative on failure.
 	int32_t Allocate();
@@ -2431,9 +2431,9 @@ public:
 	uint32_t Length() const;
 	//! Returns the maximum length of the list (constexpr for static
 	//! ae::FreeList's). Is constant time.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the maximum length of the list. Is constant time.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_pool.Length(); }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_pool.Length(); }
 
 private:
 	struct Entry { Entry* next; };
@@ -2484,9 +2484,9 @@ public:
 	//! Returns the number of allocated objects. Is constant time.
 	uint32_t Length() const;
 	//! Returns the total number of available objects in the pool. Is constant time.
-	_AE_FIXED_POOL static constexpr uint32_t Size() { return N; }
+	_AE_FIXED_POOL static constexpr uint32_t Capacity() { return N; }
 	//! Returns INT32_MAX max, as paged pools can grow indefinitely. Is constant time.
-	_AE_PAGED_POOL uint32_t Size(...) const { return INT32_MAX; }
+	_AE_PAGED_POOL uint32_t Capacity(...) const { return INT32_MAX; }
 
 private:
 	struct Page; // Internal forward declaration
@@ -2581,12 +2581,12 @@ public:
 	//! Constructs an ae::OpaquePool with dynamic internal storage. \p tag will
 	//! be used for all internal allocations. All objects returned by the pool
 	//! will have \p objectSize and \p objectAlignment. If the pool is \p paged
-	//! it will allocate pages of \p size as necessary. If the pool is
-	//! not \p paged, then \p size objects can be allocated at a time. It may be
+	//! it will allocate pages of \p capacity as necessary. If the pool is
+	//! not \p paged, then \p capacity objects can be allocated at a time. It may be
 	//! useful to use this in conjunction with registered ae::ClassType's, passing the
 	//! results of ae::ClassType::GetSize() to \p objectSize and ae::ClassType::GetAlignment()
 	//! to \p objectAlignment.
-	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t size, bool paged );
+	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t capacity, bool paged );
 	//! All objects allocated with ae::OpaquePool::Allocate/New() must be destroyed before
 	//! the ae::OpaquePool is destroyed.
 	~OpaquePool();
@@ -2623,9 +2623,9 @@ public:
 	uint32_t Length() const { return m_length; }
 	//! Returns the max number of objects that can be allocated, or INT32_MAX
 	//! for paged pools as they can grow indefinitely. Is constant time.
-	uint32_t Size() const { return m_paged ? INT32_MAX : m_pageSize; }
+	uint32_t Capacity() const { return m_paged ? INT32_MAX : m_pageCapacity; }
 	//! Returns the maximum number of objects per page. Is constant time.
-	uint32_t PageSize() const { return m_pageSize; }
+	uint32_t PageCapacity() const { return m_pageCapacity; }
 
 private:
 	struct Page; // Internal forward declaration
@@ -2671,7 +2671,7 @@ private:
 	{
 		// Pages are deleted by the pool when empty, so it's safe to
 		// assume pages always contain at least one object.
-		Page( const ae::Tag& tag, uint32_t size ) : freeList( tag, size ) {}
+		Page( const ae::Tag& tag, uint32_t capacity ) : freeList( tag, capacity ) {}
 		ae::ListNode< Page > node = this; // List node.
 		ae::FreeList<> freeList; // Free object information.
 		void* objects; // Pointer to array of objects in this page.
@@ -2679,7 +2679,7 @@ private:
 	const void* m_GetFirst() const;
 	const void* m_GetNext( const Page*& page, const void* obj, uint32_t seq ) const;
 	ae::Tag m_tag;
-	uint32_t m_pageSize; // Number of objects per page.
+	uint32_t m_pageCapacity; // Number of objects per page.
 	bool m_paged; // If true, pool can be infinitely big.
 	uint32_t m_objectSize; // Size of each object.
 	uint32_t m_objectAlignment; // Alignment of each object.
@@ -2693,13 +2693,13 @@ private:
 // ae::Any
 //------------------------------------------------------------------------------
 //! A fixed-size, type-safe container for opaque storage of a single value.
-//! The template parameters \p Size (bytes) and \p Alignment control the
+//! The template parameters \p Capacity (bytes) and \p Alignment control the
 //! internal buffer; no dynamic allocation is ever performed. Only trivially
 //! copyable and trivially destructible types are accepted, enforced at compile
 //! time. The type of the stored value is recorded so that reads are type-safe.
 //! C-strings are explicitly rejected; use an ae::Str instead.
 //------------------------------------------------------------------------------
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 struct Any
 {
 	Any() = default;
@@ -2726,16 +2726,20 @@ struct Any
 
 private:
 	uint32_t m_typeId = 0; // ae::TypeId
-	alignas( Alignment ) std::byte m_data[ Size ] = {};
+	alignas( Alignment ) std::byte m_data[ Capacity ] = {};
 };
 
+// Intentionally unimplemented ae::Function forward declaration, to handle degenerate function signatures.
+template< typename Signature, size_t Capacity = 32 > class Function;
 //------------------------------------------------------------------------------
 // ae::Function class
 //------------------------------------------------------------------------------
-// Unimplemented ae::Function forward declaration, to handle degenerate function signatures.
-template< typename Signature, size_t MaxSize = 32 > class Function;
-// The lambda capture invoker is stateless so it's trivially copyable. Small
-// captures like a few pointers/ints work.
+//! An opaque callable wrapper for free functions, member functions, and
+//! lambdas, so long as their return and parameter types match the ae::Function
+//! signature. Captured values must be trivially copyable. Storage is fixed-size
+//! and no dynamic allocations are made. Storing a callable larger than \tparam
+//! Capacity bytes is a compile time error. ae::Function itself is trivially
+//! copyable.
 // Usage:
 /*
 	int total = 0;
@@ -2745,21 +2749,30 @@ template< typename Signature, size_t MaxSize = 32 > class Function;
 	const int three = increment( 1 );
 	const int ten = increment( 7 );
 */
-template< typename R, typename... Args, size_t MaxSize >
-class Function< R( Args... ), MaxSize >
+//------------------------------------------------------------------------------
+template< typename R, typename... Args, size_t Capacity >
+class Function< R( Args... ), Capacity >
 {
 public:
+	//! Default construction. Note that it is not 
 	Function();
+	//! Lambda or free function capture
 	template< typename F > Function( F&& f );
+	//! Member function capture
 	template< typename T > Function( T* obj, R ( T::*mfp )( Args... ) );
+	//! Member function capture
 	template< typename T > Function( const T* obj, R ( T::*mfp )( Args... ) const );
+	//! Opaquely call the captured function. It is undefined behavior to call
+	//! this when no function has been assigned. Check for validity with
+	//! ae::Function::operator bool.
 	R operator()( Args... args ) const;
+	//! Return true if this ae::Function instance is callable.
 	explicit operator bool() const;
 
 private:
 	using InvokerType = R ( * )( const void*, Args... );
 	InvokerType m_invoker;
-	alignas( std::max_align_t ) uint8_t m_storage[ MaxSize ];
+	alignas( std::max_align_t ) uint8_t m_storage[ Capacity ];
 };
 
 //------------------------------------------------------------------------------
@@ -7336,7 +7349,7 @@ private:
 class _ScratchBuffer
 {
 public:
-	_ScratchBuffer( uint32_t size );
+	_ScratchBuffer( uint32_t capacity );
 	~_ScratchBuffer();
 	static uint32_t GetScratchBytes( uint32_t bytes );
 
@@ -7347,7 +7360,7 @@ public:
 #endif
 	uint8_t* data = nullptr;
 	uint32_t offset = 0;
-	uint32_t size = 0;
+	uint32_t capacity = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -7593,7 +7606,7 @@ template< typename... Args >
 void PushLogTag( const char* format, Args... args )
 {
 	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
-	const bool canAppendMessage = ( threadLocals->logTagStack.Length() < threadLocals->logTagStack.Size() );
+	const bool canAppendMessage = ( threadLocals->logTagStack.Length() < threadLocals->logTagStack.Capacity() );
 	AE_DEBUG_ASSERT( canAppendMessage );
 	if( canAppendMessage )
 	{
@@ -7644,7 +7657,7 @@ std::string _Log( ae::LogSeverity severity, const char* filePath, uint32_t line,
 		os << assertInfo << " ";
 	}
 	_BuildLogMessage( os, format, args... );
-	const char* tags[ decltype(threadLocals->logTagStack)::Size() ];
+	const char* tags[ decltype(threadLocals->logTagStack)::Capacity() ];
 	for( uint32_t i = 0; i < threadLocals->logTagStack.Length(); i++ )
 	{
 		tags[ i ] = threadLocals->logTagStack[ i ].c_str();
@@ -7811,29 +7824,29 @@ inline void Free( void* data )
 // ae::Scratch< T > member functions
 //------------------------------------------------------------------------------
 template< typename T >
-Scratch< T >::Scratch( uint32_t count )
+Scratch< T >::Scratch( uint32_t capacity )
 {
 	AE_STATIC_ASSERT( alignof(T) <= _ScratchBuffer::kScratchAlignment );
 	ae::_ScratchBuffer* scratchBuffer = &ae::_ThreadLocals::Get()->scratchBuffer;
-	const uint32_t bytes = scratchBuffer->GetScratchBytes( count * sizeof(T) );
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( capacity * sizeof(T) );
 	
-	m_size = count;
+	m_capacity = capacity;
 	m_data = (T*)( scratchBuffer->data + scratchBuffer->offset );
 	AE_DEBUG_ASSERT( ( (intptr_t)m_data % ae::_ScratchBuffer::kScratchAlignment ) == 0 );
 	m_prevOffsetCheck = scratchBuffer->offset;
 	scratchBuffer->offset += bytes;
-	AE_ASSERT_MSG( scratchBuffer->offset <= scratchBuffer->size, "Scratch buffer size exceeded: # bytes / (# bytes). The per-thread max can be set with AE_MAX_SCRATCH_BYTES_CONFIG.", scratchBuffer->offset, scratchBuffer->size );
+	AE_ASSERT_MSG( scratchBuffer->offset <= scratchBuffer->capacity, "Scratch buffer capacity exceeded: # bytes / (# bytes). The per-thread max can be set with AE_MAX_SCRATCH_BYTES_CONFIG.", scratchBuffer->offset, scratchBuffer->capacity );
 	
 #if _AE_DEBUG_
-	memset( m_data, 0xCD, m_size * sizeof(T) );
+	memset( m_data, 0xCD, m_capacity * sizeof(T) );
 	// Guard
-	uint8_t* guard = (uint8_t*)m_data + m_size * sizeof(T);
+	uint8_t* guard = (uint8_t*)m_data + m_capacity * sizeof(T);
 	const intptr_t guardLength = ( (uint8_t*)m_data + bytes ) - guard;
 	for( uint32_t i = 0; i < guardLength; i++ ) { guard[ i ] = 0xBD; }
 #endif
 	if( !std::is_trivially_constructible< T >::value )
 	{
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			new ( &m_data[ i ] ) T();
 		}
@@ -7845,10 +7858,10 @@ Scratch< T >::~Scratch()
 {
 	ae::_ScratchBuffer* scratchBuffer = &ae::_ThreadLocals::Get()->scratchBuffer;
 	
-	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_size * sizeof(T) );
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_capacity * sizeof(T) );
 #if _AE_DEBUG_
 	// Guard
-	const uint8_t* guard = (uint8_t*)m_data + m_size * sizeof(T);
+	const uint8_t* guard = (uint8_t*)m_data + m_capacity * sizeof(T);
 	const intptr_t guardLength = ( (uint8_t*)m_data + bytes ) - guard;
 	for( uint32_t i = 0; i < guardLength; i++ ) { AE_ASSERT_MSG( guard[ i ] == 0xBD, "Scratch buffer guard has been overwritten" ); }
 #endif
@@ -7856,7 +7869,7 @@ Scratch< T >::~Scratch()
 	
 	if( !std::is_trivially_constructible< T >::value )
 	{
-		for( int32_t i = m_size - 1; i >= 0; i-- )
+		for( int32_t i = m_capacity - 1; i >= 0; i-- )
 		{
 			m_data[ i ].~T();
 		}
@@ -7875,7 +7888,7 @@ T* Scratch< T >::Data()
 template< typename T >
 uint32_t Scratch< T >::Length() const
 {
-	return m_size;
+	return m_capacity;
 }
 
 template< typename T >
@@ -7893,14 +7906,14 @@ const T& Scratch< T >::operator[] ( int32_t index ) const
 template< typename T >
 T& Scratch< T >::GetSafe( int32_t index )
 {
-	AE_ASSERT( index < (int32_t)m_size );
+	AE_ASSERT( index < (int32_t)m_capacity );
 	return m_data[ index ];
 }
 
 template< typename T >
 const T& Scratch< T >::GetSafe( int32_t index ) const
 {
-	AE_ASSERT( index < (int32_t)m_size );
+	AE_ASSERT( index < (int32_t)m_capacity );
 	return m_data[ index ];
 }
 
@@ -9950,7 +9963,7 @@ uint32_t Str< N >::Length() const
 }
 
 template< uint32_t N >
-uint32_t Str< N >::Size() const
+uint32_t Str< N >::Capacity() const
 {
 	return MaxLength();
 }
@@ -10469,7 +10482,7 @@ Array< T, N >::Array()
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 	
 	m_length = 0;
-	m_size = N;
+	m_capacity = N;
 	m_array = (T*)&m_storage;
 }
 
@@ -10479,7 +10492,7 @@ Array< T, N >::Array( const T& value, uint32_t length )
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 	
 	m_length = length;
-	m_size = N;
+	m_capacity = N;
 	m_array = (T*)&m_storage;
 	for( uint32_t i = 0; i < length; i++ )
 	{
@@ -10494,7 +10507,7 @@ Array< T, N >::Array( std::initializer_list< T > initList )
 	AE_ASSERT_MSG( N >= initList.size(), "Initializer list is longer than max length (# >= #)", N, initList.size() );
 	
 	m_length = (uint32_t)initList.size();
-	m_size = N;
+	m_capacity = N;
 	m_array = (T*)&m_storage;
 	uint32_t i = 0;
 	for( const T& value : initList )
@@ -10507,7 +10520,7 @@ Array< T, N >::Array( std::initializer_list< T > initList )
 template< typename T, uint32_t N >
 Array< T, N >::Array( ae::Tag tag ) :
 	m_length( 0 ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_array( nullptr ),
 	m_tag( tag )
 {
@@ -10516,20 +10529,20 @@ Array< T, N >::Array( ae::Tag tag ) :
 }
 
 template< typename T, uint32_t N >
-Array< T, N >::Array( ae::Tag tag, uint32_t size ) :
+Array< T, N >::Array( ae::Tag tag, uint32_t capacity ) :
 	m_length( 0 ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_array( nullptr ),
 	m_tag( tag )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
-	Reserve( size );
+	Reserve( capacity );
 }
 
 template< typename T, uint32_t N >
 Array< T, N >::Array( ae::Tag tag, const T& value, uint32_t length ) :
 	m_length( 0 ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_array( nullptr ),
 	m_tag( tag )
 {
@@ -10541,7 +10554,7 @@ template< typename T, uint32_t N >
 Array< T, N >::Array( const Array< T, N >& other )
 {
 	m_length = 0;
-	m_size = N;
+	m_capacity = N;
 	m_array = N ? (T*)&m_storage : nullptr;
 	m_tag = other.m_tag;
 	
@@ -10563,7 +10576,7 @@ Array< T, N >::Array( Array< T, N >&& other ) noexcept
 		AE_DEBUG_ASSERT( m_tag == ae::Tag() );
 		AE_DEBUG_ASSERT( other.m_tag == ae::Tag() );
 		m_length = 0;
-		m_size = N;
+		m_capacity = N;
 		m_array = (T*)&m_storage;
 		*this = other; // Regular assignment (without std::move)
 	}
@@ -10571,11 +10584,11 @@ Array< T, N >::Array( Array< T, N >&& other ) noexcept
 	{
 		m_tag = other.m_tag;
 		m_length = other.m_length;
-		m_size = other.m_size;
+		m_capacity = other.m_capacity;
 		m_array = other.m_array;
 		
 		other.m_length = 0;
-		other.m_size = 0;
+		other.m_capacity = 0;
 		other.m_array = nullptr;
 		// @NOTE: Don't reset tag. 'other' must remain in a valid state.
 	}
@@ -10620,11 +10633,11 @@ void Array< T, N >::operator =( Array< T, N >&& other ) noexcept
 		}
 		
 		m_length = other.m_length;
-		m_size = other.m_size;
+		m_capacity = other.m_capacity;
 		m_array = other.m_array;
 		
 		other.m_length = 0;
-		other.m_size = 0;
+		other.m_capacity = 0;
 		other.m_array = nullptr;
 	}
 }
@@ -10637,7 +10650,7 @@ Array< T, N >::~Array()
 	{
 		ae::Free( m_array );
 	}
-	m_size = 0;
+	m_capacity = 0;
 	m_array = nullptr;
 }
 
@@ -10664,7 +10677,7 @@ template< typename T, uint32_t N >
 T* Array< T, N >::AppendArray( const T* values, uint32_t count )
 {
 	Reserve( m_length + count );
-	AE_DEBUG_ASSERT( m_size >= m_length + count );
+	AE_DEBUG_ASSERT( m_capacity >= m_length + count );
 	T* result = m_array + m_length;
 	for( uint32_t i = 0; i < count; i++ )
 	{
@@ -10847,54 +10860,54 @@ int32_t Array< T, N >::FindLastFn( Fn testFn ) const
 }
 
 template< typename T, uint32_t N >
-void Array< T, N >::Reserve( uint32_t _size )
+void Array< T, N >::Reserve( uint32_t _capacity )
 {
 	if( N > 0 )
 	{
 		AE_DEBUG_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
-		AE_ASSERT_MSG( N >= _size, "# >= #", N, _size );
+		AE_ASSERT_MSG( N >= _capacity, "# >= #", N, _capacity );
 		return;
 	}
-	else if( _size <= m_size )
+	else if( _capacity <= m_capacity )
 	{
 		return;
 	}
 	
 	AE_DEBUG_ASSERT( m_tag != ae::Tag() );
 	
-	constexpr uint32_t maxExponentialSize = ( 1 << 18 );
-	uint32_t size = _size;
-	if( m_size == 0 && size > 1 )
+	constexpr uint32_t maxExponentialCapacity = ( 1 << 18 );
+	uint32_t capacity = _capacity;
+	if( m_capacity == 0 && capacity > 1 )
 	{
 		// Exact amount specified, so use that
 	}
-	else if( size <= maxExponentialSize )
+	else if( capacity <= maxExponentialCapacity )
 	{
-		if( m_size == 0 )
+		if( m_capacity == 0 )
 		{
 			// Initially allocate at least 64 bytes (rounded down) of type
-			size = ae::Max( size, 64u / (uint32_t)sizeof(T) );
+			capacity = ae::Max( capacity, 64u / (uint32_t)sizeof(T) );
 		}
 		else
 		{
-			// At least double the size, to reduce the number of resizes
-			size = ae::Max( size, m_size * 2 );
+			// At least double the capacity, to reduce the number of resizes
+			capacity = ae::Max( capacity, m_capacity * 2 );
 		}
-		size = ae::NextPowerOfTwo( size );
+		capacity = ae::NextPowerOfTwo( capacity );
 	}
 	else
 	{
-		// Don't double the size or use powers of two here, as the array will
+		// Don't double the capacity or use powers of two here, as the array will
 		// become very very large. At this point the user should be manually
-		// calling reserve with the expected needed size.
-		size = ( size / maxExponentialSize + 1 ) * maxExponentialSize;
+		// calling reserve with the expected needed capacity.
+		capacity = ( capacity / maxExponentialCapacity + 1 ) * maxExponentialCapacity;
 	}
-	AE_DEBUG_ASSERT( size );
-	AE_DEBUG_ASSERT( size >= _size );
-	m_size = size;
+	AE_DEBUG_ASSERT( capacity );
+	AE_DEBUG_ASSERT( capacity >= _capacity );
+	m_capacity = capacity;
 	
 	// @TODO: Try to use realloc
-	T* arr = (T*)ae::Allocate( m_tag, m_size * sizeof(T), alignof(T) );
+	T* arr = (T*)ae::Allocate( m_tag, m_capacity * sizeof(T), alignof(T) );
 	for( uint32_t i = 0; i < m_length; i++ )
 	{
 		new ( &arr[ i ] ) T ( std::move( m_array[ i ] ) );
@@ -10961,7 +10974,7 @@ T& Array< T, N >::Last()
 template< typename Key, uint32_t N, typename Hash >
 HashMap< Key, N, Hash >::HashMap() :
 	m_entries( (Entry*)&m_storage ),
-	m_size( N ),
+	m_capacity( N ),
 	m_length( 0 )
 {
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
@@ -10971,7 +10984,7 @@ template< typename Key, uint32_t N, typename Hash >
 HashMap< Key, N, Hash >::HashMap( ae::Tag tag ) :
 	m_tag( tag ),
 	m_entries( nullptr ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_length( 0 )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
@@ -10979,28 +10992,28 @@ HashMap< Key, N, Hash >::HashMap( ae::Tag tag ) :
 }
 
 template< typename Key, uint32_t N, typename Hash >
-void HashMap< Key, N, Hash >::Reserve( uint32_t size )
+void HashMap< Key, N, Hash >::Reserve( uint32_t capacity )
 {
 	if( N )
 	{
-		AE_DEBUG_ASSERT_MSG( m_size >= size, "Static array size is fixed (# >= #)", m_size, size );
+		AE_DEBUG_ASSERT_MSG( m_capacity >= capacity, "Static array capacity is fixed (# >= #)", m_capacity, capacity );
 		return;
 	}
-	else if( m_size >= size )
+	else if( m_capacity >= capacity )
 	{
 		return;
 	}
 	
 	Entry* prevEntries = m_entries;
-	const uint32_t prevSize = m_size;
+	const uint32_t prevCapacity = m_capacity;
 	const uint32_t prevLength = m_length;
 	m_length = 0;
-	m_size = size;
+	m_capacity = capacity;
 	// @TODO: Support 'Entry' having no default constructor
-	m_entries = ae::NewArray< Entry >( m_tag, m_size );
+	m_entries = ae::NewArray< Entry >( m_tag, m_capacity );
 	if( prevEntries )
 	{
-		for( uint32_t i = 0; i < prevSize; i++ )
+		for( uint32_t i = 0; i < prevCapacity; i++ )
 		{
 			const Entry& e = prevEntries[ i ];
 			if( e.index >= 0 )
@@ -11016,7 +11029,7 @@ void HashMap< Key, N, Hash >::Reserve( uint32_t size )
 
 template< typename Key, uint32_t N, typename Hash >
 HashMap< Key, N, Hash >::HashMap( const HashMap< Key, N, Hash >& other ) :
-	m_size( N ),
+	m_capacity( N ),
 	m_length( 0 )
 {
 	if( N )
@@ -11041,15 +11054,15 @@ void HashMap< Key, N, Hash >::operator =( const HashMap< Key, N, Hash >& other )
 		return;
 	}
 	Clear();
-	Reserve( other.m_size );
-	if( m_size == other.m_size )
+	Reserve( other.m_capacity );
+	if( m_capacity == other.m_capacity )
 	{
-		std::copy_n( other.m_entries, m_size, m_entries );
+		std::copy_n( other.m_entries, m_capacity, m_entries );
 		m_length = other.m_length;
 	}
 	else
 	{
-		for( uint32_t i = 0; i < other.m_size; i++ )
+		for( uint32_t i = 0; i < other.m_capacity; i++ )
 		{
 			Entry e = other.m_entries[ i ];
 			if( e.index >= 0 )
@@ -11068,7 +11081,7 @@ HashMap< Key, N, Hash >::~HashMap()
 		ae::Delete( m_entries );
 	}
 	m_length = 0;
-	m_size = 0;
+	m_capacity = 0;
 	m_entries = nullptr;
 }
 
@@ -11079,11 +11092,11 @@ bool HashMap< Key, N, Hash >::Set( Key key, uint32_t index )
 	const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
 	if( m_length )
 	{
-		AE_DEBUG_ASSERT( m_size );
-		const uint32_t startIdx = hash % m_size;
-		for( uint32_t i = 0; i < m_size; i++ )
+		AE_DEBUG_ASSERT( m_capacity );
+		const uint32_t startIdx = hash % m_capacity;
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
-			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			Entry* e = &m_entries[ ( i + startIdx ) % m_capacity ];
 			if( e->index < 0 )
 			{
 				break;
@@ -11102,9 +11115,9 @@ bool HashMap< Key, N, Hash >::Set( Key key, uint32_t index )
 	{
 		return false;
 	}
-	else if( !N && ( !m_size || ( m_length / (float)m_size ) > 0.8f ) )
+	else if( !N && ( !m_capacity || ( m_length / (float)m_capacity ) > 0.8f ) )
 	{
-		Reserve( m_size ? m_size * 2 : 32 );
+		Reserve( m_capacity ? m_capacity * 2 : 32 );
 	}
 	return m_Insert( key, hash, index );
 }
@@ -11118,12 +11131,12 @@ int32_t HashMap< Key, N, Hash >::Remove( Key key )
 	}
 	Entry* entry = nullptr;
 	{
-		AE_DEBUG_ASSERT( m_size );
+		AE_DEBUG_ASSERT( m_capacity );
 		const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
-		const uint32_t startIdx = hash % m_size;
-		for( uint32_t i = 0; i < m_size; i++ )
+		const uint32_t startIdx = hash % m_capacity;
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
-			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			Entry* e = &m_entries[ ( i + startIdx ) % m_capacity ];
 			if( e->index < 0 )
 			{
 				return -1;
@@ -11143,11 +11156,11 @@ int32_t HashMap< Key, N, Hash >::Remove( Key key )
 		// their hash index exactly or a gap is found.
 		const uint32_t startIndex = uint32_t( entry - m_entries );
 		uint32_t targetIndex = startIndex;
-		for( uint32_t i = 1; i < m_size; i++ )
+		for( uint32_t i = 1; i < m_capacity; i++ )
 		{
-			uint32_t fromIndex = ( i + startIndex ) % m_size;
+			uint32_t fromIndex = ( i + startIndex ) % m_capacity;
 			Entry* e = &m_entries[ fromIndex ];
-			if( e->index < 0 || ( ( e->hash % m_size ) == fromIndex ) )
+			if( e->index < 0 || ( ( e->hash % m_capacity ) == fromIndex ) )
 			{
 				break;
 			}
@@ -11167,7 +11180,7 @@ void HashMap< Key, N, Hash >::Increment( uint32_t index )
 {
 	if( m_length )
 	{
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			Entry* e = &m_entries[ i ];
 			if( e->index >= (int32_t)index )
@@ -11183,7 +11196,7 @@ void HashMap< Key, N, Hash >::Decrement( uint32_t index )
 {
 	if( m_length )
 	{
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			Entry* e = &m_entries[ i ];
 			if( e->index > (int32_t)index )
@@ -11199,12 +11212,12 @@ int32_t HashMap< Key, N, Hash >::Get( Key key ) const
 {
 	if( m_length )
 	{
-		AE_DEBUG_ASSERT( m_size );
+		AE_DEBUG_ASSERT( m_capacity );
 		const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
-		const uint32_t startIdx = hash % m_size;
-		for( uint32_t i = 0; i < m_size; i++ )
+		const uint32_t startIdx = hash % m_capacity;
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
-			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			Entry* e = &m_entries[ ( i + startIdx ) % m_capacity ];
 			if( e->index < 0 )
 			{
 				return -1;
@@ -11224,7 +11237,7 @@ void HashMap< Key, N, Hash >::Clear()
 	if( m_length )
 	{
 		m_length = 0;
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			m_entries[ i ].index = -1;
 		}
@@ -11243,10 +11256,10 @@ bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32
 	AE_DEBUG_ASSERT( index >= 0 );
 	AE_DEBUG_ASSERT( ae::GetHash< typename Hash::UInt >( key ) == hash );
 	// 'hash' is modified in loop
-	const uint32_t startIdx = ( hash % m_size );
-	for( uint32_t i = 0; i < m_size; i++ )
+	const uint32_t startIdx = ( hash % m_capacity );
+	for( uint32_t i = 0; i < m_capacity; i++ )
 	{
-		const uint32_t currentIdx = ( i + startIdx ) % m_size;
+		const uint32_t currentIdx = ( i + startIdx ) % m_capacity;
 		Entry* e = &m_entries[ currentIdx ];
 		if( e->index < 0 )
 		{
@@ -11256,9 +11269,9 @@ bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32
 			m_length++;
 			return true;
 		}
-#define mod_subtract( idx, baseIdx ) ( ( (idx) + m_size - (baseIdx) ) % m_size )
-		const uint32_t currDist = mod_subtract( currentIdx, ( e->hash % m_size ) );
-		const uint32_t dist = mod_subtract( currentIdx, ( hash % m_size ) );
+#define mod_subtract( idx, baseIdx ) ( ( (idx) + m_capacity - (baseIdx) ) % m_capacity )
+		const uint32_t currDist = mod_subtract( currentIdx, ( e->hash % m_capacity ) );
+		const uint32_t dist = mod_subtract( currentIdx, ( hash % m_capacity ) );
 #undef mod_subtract
 		if( dist > currDist )
 		{
@@ -11447,7 +11460,7 @@ template< typename K, typename V, uint32_t N, typename H, MapMode M >
 void Map< K, V, N, H, M >::Reserve( uint32_t count )
 {
 	m_pairs.Reserve( count );
-	m_hashMap.Reserve( m_pairs.Size() ); // @TODO: Should this be bigger than storage, so it's faster to do lookups?
+	m_hashMap.Reserve( m_pairs.Capacity() ); // @TODO: Should this be bigger than storage, so it's faster to do lookups?
 	AE_DEBUG_ASSERT( m_pairs.Length() == m_hashMap.Length() );
 }
 
@@ -12004,27 +12017,27 @@ uint32_t List< T >::Length() const
 template< typename T, uint32_t N >
 RingBuffer< T, N >::RingBuffer() :
 	m_first( 0 ),
-	m_size( N )
+	m_capacity( N )
 {}
 
 template< typename T, uint32_t N >
-RingBuffer< T, N >::RingBuffer( ae::Tag tag, uint32_t size ) :
+RingBuffer< T, N >::RingBuffer( ae::Tag tag, uint32_t capacity ) :
 	m_first( 0 ),
-	m_size( size ),
+	m_capacity( capacity ),
 	m_buffer( tag )
 {}
 
 template< typename T, uint32_t N >
 T& RingBuffer< T, N >::Append( const T& val )
 {
-	if( m_buffer.Length() < Size() )
+	if( m_buffer.Length() < Capacity() )
 	{
 		return m_buffer.Append( val );
 	}
 	else
 	{
-		AE_DEBUG_ASSERT( m_buffer.Length() == Size() );
-		uint32_t idx = m_first % Size();
+		AE_DEBUG_ASSERT( m_buffer.Length() == Capacity() );
+		uint32_t idx = m_first % Capacity();
 		m_buffer[ idx ] = val;
 		m_first++;
 		return m_buffer[ idx ];
@@ -12042,14 +12055,14 @@ template< typename T, uint32_t N >
 T& RingBuffer< T, N >::Get( uint32_t index )
 {
 	AE_ASSERT( index < m_buffer.Length() );
-	return m_buffer[ ( m_first + index ) % Size() ];
+	return m_buffer[ ( m_first + index ) % Capacity() ];
 }
 
 template< typename T, uint32_t N >
 const T& RingBuffer< T, N >::Get( uint32_t index ) const
 {
 	AE_ASSERT( index < m_buffer.Length() );
-	return m_buffer[ ( m_first + index ) % Size() ];
+	return m_buffer[ ( m_first + index ) % Capacity() ];
 }
 
 //------------------------------------------------------------------------------
@@ -12064,8 +12077,8 @@ FreeList< N >::FreeList() :
 }
 
 template< uint32_t N >
-FreeList< N >::FreeList( const ae::Tag& tag, uint32_t size ) :
-	m_pool( tag, Entry(), size )
+FreeList< N >::FreeList( const ae::Tag& tag, uint32_t capacity ) :
+	m_pool( tag, Entry(), capacity )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
 	FreeAll();
@@ -12367,7 +12380,7 @@ T* ObjectPool< T, N, Paged >::GetNext( T* obj )
 template< typename T, uint32_t N, bool Paged >
 bool ObjectPool< T, N, Paged >::HasFree() const
 {
-	return Length() < Size();
+	return Length() < Capacity();
 }
 
 template< typename T, uint32_t N, bool Paged >
@@ -12564,9 +12577,9 @@ OpaquePool::Iterator< T > OpaquePool::Iterator< T >::end()
 //------------------------------------------------------------------------------
 // ae::Any templated member functions
 //------------------------------------------------------------------------------
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-Any< Size, Alignment >::Any( const T& value )
+Any< Capacity, Alignment >::Any( const T& value )
 {
 	*this = value;
 }
@@ -12580,9 +12593,9 @@ template< typename... > inline constexpr bool _False = false;
 template< typename T > struct _RemovePointerConst { using Type = T; };
 template< typename U > struct _RemovePointerConst< const U* > { using Type = U*; };
 
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-void Any< Size, Alignment >::operator=( const T& value )
+void Any< Capacity, Alignment >::operator=( const T& value )
 {
 	if constexpr( !std::is_trivially_destructible_v< T > )
 	{
@@ -12592,7 +12605,7 @@ void Any< Size, Alignment >::operator=( const T& value )
 	{
 		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T must be trivially copyable" );
 	}
-	else if constexpr( sizeof( T ) > Size )
+	else if constexpr( sizeof( T ) > Capacity )
 	{
 		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T is too large to store in DocumentValue" );
 	}
@@ -12613,24 +12626,24 @@ void Any< Size, Alignment >::operator=( const T& value )
 	}
 }
 
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-T Any< Size, Alignment >::Get( const T& defaultValue ) const
+T Any< Capacity, Alignment >::Get( const T& defaultValue ) const
 {
 	const T* value = TryGet< T >();
 	return value ? *value : defaultValue;
 }
 
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-T* Any< Size, Alignment >::TryGet()
+T* Any< Capacity, Alignment >::TryGet()
 {
 	return AE_CALL_CONST_MEMBER_FUNCTION( template TryGet< T >() );
 }
 
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-const T* Any< Size, Alignment >::TryGet() const
+const T* Any< Capacity, Alignment >::TryGet() const
 {
 	const ae::TypeId returnTypeId = ae::GetTypeIdWithQualifiers< T >();
 	if( m_typeId == returnTypeId )
@@ -12649,14 +12662,14 @@ const T* Any< Size, Alignment >::TryGet() const
 	return nullptr;
 }
 
-template< uint32_t Size, uint32_t Alignment >
-uint32_t Any< Size, Alignment >::GetTypeId() const
+template< uint32_t Capacity, uint32_t Alignment >
+uint32_t Any< Capacity, Alignment >::GetTypeId() const
 {
 	return m_typeId;
 }
 
-template< uint32_t Size, uint32_t Alignment >
-Any< Size, Alignment >::operator bool() const
+template< uint32_t Capacity, uint32_t Alignment >
+Any< Capacity, Alignment >::operator bool() const
 {
 	return m_typeId != 0;
 }
@@ -12664,27 +12677,30 @@ Any< Size, Alignment >::operator bool() const
 //------------------------------------------------------------------------------
 // ae::Function templated member functions
 //------------------------------------------------------------------------------
-template< typename R, typename... Args, size_t MaxSize >
-Function< R( Args... ), MaxSize >::Function() : m_invoker( nullptr )
+template< typename R, typename... Args, size_t Capacity >
+Function< R( Args... ), Capacity >::Function() : m_invoker( nullptr )
 {
 }
-template< typename R, typename... Args, size_t MaxSize >
+template< typename R, typename... Args, size_t Capacity >
 template< typename F >
-Function< R( Args... ), MaxSize >::Function( F&& f )
+Function< R( Args... ), Capacity >::Function( F&& f )
 {
 	using FT = std::decay_t< F >;
-	static_assert( sizeof( FT ) <= MaxSize, "Callable too large" );
+	static_assert( sizeof( FT ) <= Capacity, "Callable too large" );
 	static_assert( std::is_trivially_copyable< FT >::value, "Callable must be trivially copyable" );
 	FT stored = f;
 	memcpy( m_storage, &stored, sizeof( FT ) );
-	m_invoker = []( const void* ptr, Args... args ) -> R { return ( *reinterpret_cast< const FT* >( ptr ) )( args... ); };
+	m_invoker = []( const void* ptr, Args... args ) -> R
+	{
+		return ( *reinterpret_cast< const FT* >( ptr ) )( args... );
+	};
 }
-template< typename R, typename... Args, size_t MaxSize >
+template< typename R, typename... Args, size_t Capacity >
 template< typename T >
-Function< R( Args... ), MaxSize >::Function( T* obj, R ( T::*mfp )( Args... ) )
+Function< R( Args... ), Capacity >::Function( T* obj, R ( T::*mfp )( Args... ) )
 {
 	struct Bound { T* obj; R ( T::*mfp )( Args... ); };
-	static_assert( sizeof( Bound ) <= MaxSize, "Bound member too large" );
+	static_assert( sizeof( Bound ) <= Capacity, "Bound member too large" );
 	const Bound b = { obj, mfp };
 	memcpy( m_storage, &b, sizeof( Bound ) );
 	m_invoker = []( const void* ptr, Args... args ) -> R
@@ -12693,12 +12709,12 @@ Function< R( Args... ), MaxSize >::Function( T* obj, R ( T::*mfp )( Args... ) )
 		return ( p->obj->*p->mfp )( args... );
 	};
 }
-template< typename R, typename... Args, size_t MaxSize >
+template< typename R, typename... Args, size_t Capacity >
 template< typename T >
-Function< R( Args... ), MaxSize >::Function( const T* obj, R ( T::*mfp )( Args... ) const )
+Function< R( Args... ), Capacity >::Function( const T* obj, R ( T::*mfp )( Args... ) const )
 {
 	struct Bound { const T* obj; R ( T::*mfp )( Args... ) const; };
-	static_assert( sizeof( Bound ) <= MaxSize, "Bound member too large" );
+	static_assert( sizeof( Bound ) <= Capacity, "Bound member too large" );
 	const Bound b = { obj, mfp };
 	memcpy( m_storage, &b, sizeof( Bound ) );
 	m_invoker = []( const void* ptr, Args... args ) -> R
@@ -12707,13 +12723,14 @@ Function< R( Args... ), MaxSize >::Function( const T* obj, R ( T::*mfp )( Args..
 		return ( p->obj->*p->mfp )( args... );
 	};
 }
-template< typename R, typename... Args, size_t MaxSize >
-R Function< R( Args... ), MaxSize >::operator()( Args... args ) const
+template< typename R, typename... Args, size_t Capacity >
+R Function< R( Args... ), Capacity >::operator()( Args... args ) const
 {
+	AE_DEBUG_ASSERT( m_invoker );
 	return m_invoker( m_storage, args... );
 }
-template< typename R, typename... Args, size_t MaxSize >
-Function< R( Args... ), MaxSize >::operator bool() const
+template< typename R, typename... Args, size_t Capacity >
+Function< R( Args... ), Capacity >::operator bool() const
 {
 	return m_invoker != nullptr;
 }
@@ -12998,7 +13015,7 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 #if _AE_DEBUG_ && ( N == 0 )
 	if( m_limit )
 	{
-		AE_ASSERT( m_nodes.Size() >= m_limit );
+		AE_ASSERT( m_nodes.Capacity() >= m_limit );
 	}
 	auto* preCheck = m_nodes.Data();
 #endif
@@ -13122,7 +13139,7 @@ template< uint32_t V, uint32_t T, uint32_t B >
 void CollisionMesh< V, T, B >::Reserve( uint32_t vertCount, uint32_t triCount, uint32_t bvhNodeCount )
 {
 	AE_DEBUG_ASSERT( m_positions.Length() == m_collisionExtras.Length() );
-	if( m_positions.Size() < vertCount || m_tris.Size() < triCount || m_bvh.GetLimit() < bvhNodeCount )
+	if( m_positions.Capacity() < vertCount || m_tris.Capacity() < triCount || m_bvh.GetLimit() < bvhNodeCount )
 	{
 		m_positions.Reserve( vertCount );
 		m_collisionExtras.Reserve( vertCount );
@@ -13427,7 +13444,7 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 					result.velocity.ZeroDirection( -triNormal );
 		
 					// @TODO: Sort. Shouldn't randomly discard hits.
-					if( result.hits.Length() < result.hits.Size() )
+					if( result.hits.Length() < result.hits.Capacity() )
 					{
 						ae::PushOutInfo::Hit& hitOut = result.hits.Append( {} );
 						hitOut.position = triHitPos;
@@ -14626,7 +14643,7 @@ public:
 	_ClassTypeT( const char* typeName )
 	{
 		_Globals* globals = _Globals::Get();
-		AE_ASSERT_MSG( globals->classTypes.Length() < globals->classTypes.Size(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->classTypes.Size() );
+		AE_ASSERT_MSG( globals->classTypes.Length() < globals->classTypes.Capacity(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->classTypes.Capacity() );
 		Init< T >( typeName );
 		globals->classTypes.Set( GetId(), this ); // @TODO: Should check for hash collision
 		globals->metaCacheSeq++;
@@ -14742,7 +14759,7 @@ struct ae::TypeT< ae::Map< K, V, N, H > > : public ae::MapType
 			if( const K* key = static_cast< const K* >( _key.Get( &GetKeyVarType() ) ) )
 			{
 				V* value = map->TryGet( *key );
-				if( !value && ( ( N == 0 ) || ( map->Length() < map->Size() ) ) )
+				if( !value && ( ( N == 0 ) || ( map->Length() < map->Capacity() ) ) )
 				{
 					value = &map->Set( *key, {} );
 				}
@@ -15055,7 +15072,7 @@ T ae::EnumType::GetValueByIndex( int32_t index ) const
 template< typename T >
 void ae::EnumType::m_AppendValue( const char* name, T value )
 {
-	AE_ASSERT_MSG( m_enumValueToName.Length() < m_enumValueToName.Size(), "Set/increase AE_MAX_META_ENUM_VALUES_CONFIG (Currently: #)", m_enumValueToName.Size() );
+	AE_ASSERT_MSG( m_enumValueToName.Length() < m_enumValueToName.Capacity(), "Set/increase AE_MAX_META_ENUM_VALUES_CONFIG (Currently: #)", m_enumValueToName.Capacity() );
 	const uint64_t storedValue = uint64_t( value );
 	m_enumValueToName.Set( storedValue, name );
 	m_enumNameToValue.Set( name, storedValue );
@@ -15685,10 +15702,9 @@ ae::_Globals::~_Globals()
 //------------------------------------------------------------------------------
 // Internal ae::_ScratchBuffer storage
 //------------------------------------------------------------------------------
-_ScratchBuffer::_ScratchBuffer( uint32_t size ) : size( size )
+_ScratchBuffer::_ScratchBuffer( uint32_t capacity ) : offset( 0 ), capacity( capacity )
 {
-	offset = 0;
-	data = new uint8_t[ size ]; // @TODO: Maybe this shouldn't use new/delete?
+	data = new uint8_t[ capacity ]; // @TODO: Maybe this shouldn't use new/delete?
 	AE_ASSERT( (intptr_t)data % kScratchAlignment == 0 );
 }
 _ScratchBuffer::~_ScratchBuffer()
@@ -15719,7 +15735,7 @@ ae::_Globals* ae::_Globals::Get()
 // Internal ae::_ThreadLocals functions
 //------------------------------------------------------------------------------
 ae::_ThreadLocals::_ThreadLocals() :
-	scratchBuffer( ae::Scratch< uint8_t >::kMaxScratchSize )
+	scratchBuffer( ae::Scratch< uint8_t >::kScratchCapacity )
 {
 	std::random_device randomDevice;
 	const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -18686,13 +18702,13 @@ template<> uint64_t GetHash64( const ae::Color& v ) { return ae::Hash64().HashTy
 //------------------------------------------------------------------------------
 #define _AE_POOL_ELEMENT( _arr, _idx ) ( (uint8_t*)_arr + (intptr_t)_idx * m_objectSize )
 
-OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t size, bool paged ) :
-	m_firstPage( tag, size )
+OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t capacity, bool paged ) :
+	m_firstPage( tag, capacity )
 {
 	AE_ASSERT( tag != ae::Tag() );
-	AE_ASSERT( size > 0 );
+	AE_ASSERT( capacity > 0 );
 	m_tag = tag;
-	m_pageSize = size;
+	m_pageCapacity = capacity;
 	m_paged = paged;
 	m_objectSize = objectSize;
 	m_objectAlignment = objectAlignment;
@@ -18714,13 +18730,13 @@ void* OpaquePool::Allocate()
 		{
 			AE_DEBUG_ASSERT( m_firstPage.freeList.Length() == 0 );
 			page = &m_firstPage;
-			page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
+			page->objects = ae::Allocate( m_tag, m_pageCapacity * m_objectSize, m_objectAlignment );
 			m_pages.Append( page->node );
 		}
 		else if( m_paged )
 		{
-			page = ae::New< Page >( m_tag, m_tag, m_pageSize );
-			page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
+			page = ae::New< Page >( m_tag, m_tag, m_pageCapacity );
+			page->objects = ae::Allocate( m_tag, m_pageCapacity * m_objectSize, m_objectAlignment );
 			m_pages.Append( page->node );
 		}
 	}
@@ -18748,7 +18764,7 @@ void OpaquePool::Free( void* obj )
 	while( page )
 	{
 		index = (int32_t)( ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize );
-		bool found = ( 0 <= index && index < (int32_t)m_pageSize );
+		bool found = ( 0 <= index && index < (int32_t)m_pageCapacity );
 		if( found )
 		{
 			break;
@@ -18783,7 +18799,7 @@ void OpaquePool::Free( void* obj )
 		return;
 	}
 #if _AE_DEBUG_
-	AE_FAIL_MSG( "Object '#' not found in pool '#:#:#:#'", obj, m_objectSize, m_objectAlignment, m_pageSize, m_paged );
+	AE_FAIL_MSG( "Object '#' not found in pool '#:#:#:#'", obj, m_objectSize, m_objectAlignment, m_pageCapacity, m_paged );
 #endif
 }
 
@@ -18811,7 +18827,7 @@ void OpaquePool::FreeAll()
 
 bool OpaquePool::HasFree() const
 {
-	return Length() < Size();
+	return Length() < Capacity();
 }
 
 const void* OpaquePool::m_GetFirst() const
@@ -18837,7 +18853,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj, uint32_t 
 		page = m_pages.FindFn( [&]( const Page* page )
 		{
 			const uint8_t* pageStart = reinterpret_cast< const uint8_t* >( page->objects );
-			const uint8_t* pageEnd = pageStart + m_pageSize * m_objectSize;
+			const uint8_t* pageEnd = pageStart + m_pageCapacity * m_objectSize;
 			return ( pageStart <= pageObj ) && ( pageObj < pageEnd );
 		} );
 	}
@@ -18846,7 +18862,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj, uint32_t 
 		AE_DEBUG_ASSERT( m_length > 0 );
 		AE_DEBUG_ASSERT( page->freeList.Length() );
 		const int32_t index = (int32_t)( ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize );
-		const bool found = ( 0 <= index && index < (int32_t)m_pageSize );
+		const bool found = ( 0 <= index && index < (int32_t)m_pageCapacity );
 		if( found )
 		{
 			AE_DEBUG_ASSERT( _AE_POOL_ELEMENT( page->objects, index ) == obj );
@@ -18863,7 +18879,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj, uint32_t 
 			// Given object is last element of previous page so return the first element on next page
 			AE_DEBUG_ASSERT( page->freeList.Length() > 0 );
 			const int32_t next = page->freeList.GetFirst();
-			AE_DEBUG_ASSERT( 0 <= next && next < (int32_t)m_pageSize );
+			AE_DEBUG_ASSERT( 0 <= next && next < (int32_t)m_pageCapacity );
 			return _AE_POOL_ELEMENT( page->objects, next );
 		}
 	}
@@ -20760,7 +20776,7 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 			{
 				case EMSCRIPTEN_EVENT_TOUCHSTART:
 				{
-					if( input->m_touches.Length() < input->m_touches.Size() )
+					if( input->m_touches.Length() < input->m_touches.Capacity() )
 					{
 						ae::Touch* touch = &input->m_touches.Append( {} );
 						touch->id = emTouch->identifier;
@@ -24726,7 +24742,7 @@ void UniformList::Set( const char* name, float value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 1;
 	uniform.value.data[ 0 ] = value;
@@ -24738,7 +24754,7 @@ void UniformList::Set( const char* name, Vec2 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 2;
 	uniform.value.data[ 0 ] = value.x;
@@ -24751,7 +24767,7 @@ void UniformList::Set( const char* name, Vec3 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 3;
 	uniform.value.data[ 0 ] = value.x;
@@ -24765,7 +24781,7 @@ void UniformList::Set( const char* name, Vec4 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 4;
 	uniform.value.data[ 0 ] = value.x;
@@ -24780,7 +24796,7 @@ void UniformList::Set( const char* name, const Matrix4& value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 16;
 	uniform.value = value;
@@ -24794,7 +24810,7 @@ void UniformList::Set( const char* name, const Texture* tex )
 	AE_ASSERT( name[ 0 ] );
 	AE_ASSERT_MSG( tex, "Texture uniform value '#' is invalid", name );
 	AE_ASSERT_MSG( tex->GetTexture(), "Texture uniform value '#' is invalid", name );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.sampler = tex->GetTexture();
 	uniform.target = tex->GetTarget();
@@ -28864,9 +28880,9 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 	{
 		return;
 	}
-	constexpr uint32_t hitsSize = decltype(next->hits)::Size();
+	constexpr uint32_t hitsCapacity = decltype(next->hits)::Capacity();
 	uint32_t accumHitCount = 0;
-	Hit accumHits[ hitsSize * 2 ];
+	Hit accumHits[ hitsCapacity * 2 ];
 	
 	for( uint32_t i = 0; i < next->hits.Length(); i++ )
 	{
@@ -28881,7 +28897,7 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 	std::sort( accumHits, accumHits + accumHitCount, []( const Hit& h0, const Hit& h1 ){ return h0.distance < h1.distance; } );
 	
 	next->hits.Clear();
-	accumHitCount = ae::Min( accumHitCount, params.maxHits, hitsSize );
+	accumHitCount = ae::Min( accumHitCount, params.maxHits, hitsCapacity );
 	for( uint32_t i = 0; i < accumHitCount; i++ )
 	{
 		next->hits.Append( accumHits[ i ] );
@@ -28980,7 +28996,7 @@ void PushOutInfo::Accumulate( const PushOutParams& params, const PushOutInfo& pr
 	auto&& nHits = next->hits;
 	for( auto&& hit : prev.hits )
 	{
-		if( nHits.Length() < nHits.Size() )
+		if( nHits.Length() < nHits.Capacity() )
 		{
 			nHits.Append( hit );
 		}
@@ -29124,9 +29140,9 @@ void Skeleton::Initialize( const Skeleton* otherPose )
 const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::Matrix4& parentToChild )
 {
 	Bone* parent = const_cast< Bone* >( _parent );
-	AE_ASSERT_MSG( m_bones.Size(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
+	AE_ASSERT_MSG( m_bones.Capacity(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
 	AE_ASSERT_MSG( m_bones.begin() <= parent && parent < m_bones.end(), "ae::Bones must have a parent from the same ae::Skeleton" );
-	if( !parent || m_bones.Length() == m_bones.Size() )
+	if( !parent || m_bones.Length() == m_bones.Capacity() )
 	{
 		return nullptr;
 	}
@@ -30597,7 +30613,7 @@ BinaryStream::BinaryStream( Array< uint8_t >* array )
 	{
 		m_extArray = array;
 		m_offset = m_extArray->Length();
-		m_length = m_extArray->Size();
+		m_length = m_extArray->Capacity();
 		m_isValid = true;
 	}
 }
@@ -30811,7 +30827,7 @@ void BinaryStream::SerializeRaw( void* data, uint32_t length )
 			AE_ASSERT( m_extArray );
 			m_extArray->AppendArray( (uint8_t*)data, length );
 			m_offset = m_extArray->Length();
-			m_length = m_extArray->Size();
+			m_length = m_extArray->Capacity();
 		}
 	}
 }
@@ -32677,7 +32693,7 @@ const char* ae::ClassVar::GetPropertyValue( const char* propName, uint32_t value
 }
 void ae::ClassVar::m_AddProp( const char* prop, const char* value )
 {
-	AE_ASSERT_MSG( m_props.Length() < m_props.Size(), "Set/increase AE_MAX_META_PROP_LIST_LENGTH_CONFIG (Currently: #)", m_props.Size() );
+	AE_ASSERT_MSG( m_props.Length() < m_props.Capacity(), "Set/increase AE_MAX_META_PROP_LIST_LENGTH_CONFIG (Currently: #)", m_props.Capacity() );
 	auto* props = m_props.TryGet( prop );
 	if( !props )
 	{
@@ -33441,7 +33457,7 @@ void ae::ClassType::m_AddProp( const char* prop, const char* value )
 
 void ae::ClassType::m_AddVar( const ae::ClassVar* var )
 {
-	AE_ASSERT_MSG( m_vars.Length() < m_vars.Size(), "Set/increase AE_MAX_META_VARS_CONFIG (Currently: #)", m_vars.Size() );
+	AE_ASSERT_MSG( m_vars.Length() < m_vars.Capacity(), "Set/increase AE_MAX_META_VARS_CONFIG (Currently: #)", m_vars.Capacity() );
 	m_vars.Append( var );
 	std::sort( m_vars.begin(), m_vars.end(), []( const ae::ClassVar* a, const ae::ClassVar* b )
 	{
@@ -33456,7 +33472,7 @@ ae::TypeId ae::ClassType::GetBaseVarTypeId() const { return ae::GetTypeIdWithout
 //------------------------------------------------------------------------------
 void ae::AttributeList::m_Add( Attribute* attribute )
 {
-	AE_ASSERT_MSG( m_attributes.Length() < m_attributes.Size(), "Set/increase AE_MAX_META_ATTRIBUTES_CONFIG (Currently: #)", m_attributes.Size() );
+	AE_ASSERT_MSG( m_attributes.Length() < m_attributes.Capacity(), "Set/increase AE_MAX_META_ATTRIBUTES_CONFIG (Currently: #)", m_attributes.Capacity() );
 	
 	m_attributes.Append( attribute );
 	std::stable_sort( m_attributes.begin(), m_attributes.end(), []( const ae::Attribute* a, const ae::Attribute* b )

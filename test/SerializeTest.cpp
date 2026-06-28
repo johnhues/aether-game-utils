@@ -205,7 +205,7 @@ TEST_CASE( "BinaryWriter( Array< uint8_t >* array )", "[ae::BinaryStream]" )
 		REQUIRE( wStream.GetOffset() == 0 );
 		REQUIRE( wStream.GetRemainingBytes() == 0 ); // Stream storage is dynamic
 		REQUIRE( wStream.GetSize() == 0 ); // Stream storage is dynamic
-		REQUIRE( wStream.GetSize() == buffer.Size() ); // Stream storage is dynamic
+		REQUIRE( wStream.GetSize() == buffer.Capacity() ); // Stream storage is dynamic
 	}
 
 	SECTION( "Create writer with a valid non-zero length array" )
@@ -220,8 +220,8 @@ TEST_CASE( "BinaryWriter( Array< uint8_t >* array )", "[ae::BinaryStream]" )
 		REQUIRE( wStream.IsValid() );
 		REQUIRE( wStream.GetData() == buffer.Data() ); // Stream storage is dynamic
 		REQUIRE( wStream.GetOffset() == buffer.Length() ); // Stream storage is dynamic
-		REQUIRE( wStream.GetRemainingBytes() == buffer.Size() - buffer.Length() ); // Stream storage is dynamic
-		REQUIRE( wStream.GetSize() == buffer.Size() ); // Stream storage is dynamic
+		REQUIRE( wStream.GetRemainingBytes() == buffer.Capacity() - buffer.Length() ); // Stream storage is dynamic
+		REQUIRE( wStream.GetSize() == buffer.Capacity() ); // Stream storage is dynamic
 	}
 
 	SECTION( "Create writer with a null array" )
@@ -292,7 +292,7 @@ TEST_CASE( "BinaryReader( const Array< uint8_t >& data )", "[ae::BinaryStream]" 
 		REQUIRE( !rStream.IsValid() );
 		REQUIRE( rStream.GetData() == buffer.Data() );
 		REQUIRE( rStream.GetOffset() == 0 );
-		REQUIRE( rStream.GetSize() == buffer.Size() );
+		REQUIRE( rStream.GetSize() == buffer.Capacity() );
 		REQUIRE( rStream.PeekReadData() == nullptr );
 		REQUIRE( rStream.GetRemainingBytes() == 0 );
 	}
