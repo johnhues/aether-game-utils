@@ -131,7 +131,7 @@ class Player
 public:
 	void Initialize( HotSpotWorld* world, ae::Vec2 startPos );
 	void OnCollision( const HotSpotObject::CollisionInfo* info );
-	void Update( HotSpotWorld* world, ae::Input* input, float dt );
+	void Update( HotSpotWorld* world, ae::Window* window, ae::Input* input, float dt );
 
 	void Render( ae::SpriteRenderer* spriteRender );
 	ae::Vec2 GetPosition() const { return m_body->GetPosition(); }
@@ -142,6 +142,7 @@ private:
 	HotSpotObject* m_body = nullptr;
 	float m_canJumpTimer = 0.0f;
 	float m_jumpHoldTimer = 0.0f;
+	float m_tapJumpHoldTimer = 0.0f; // Keeps jumpButton effective after a tap
 };
 
 //------------------------------------------------------------------------------
@@ -166,15 +167,50 @@ void Player::OnCollision( const HotSpotObject::CollisionInfo* info )
 	}
 }
 
-void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
+void Player::Update( HotSpotWorld* world, ae::Window* window, ae::Input* input, float dt )
 {
 	const uint32_t tile = world->GetTile( HotSpotWorld::_GetTilePos( m_body->GetPosition() ) );
-	
-	const bool up = input->Get( ae::Key::Up ) || input->gamepads[ 0 ].leftAnalog.y > 0.1f || input->gamepads[ 0 ].dpad.y > 0;
-	const bool down = input->Get( ae::Key::Down ) || input->gamepads[ 0 ].leftAnalog.y < -0.1f || input->gamepads[ 0 ].dpad.y < 0;
-	const bool left = input->Get( ae::Key::Left ) || input->gamepads[ 0 ].leftAnalog.x < -0.1f || input->gamepads[ 0 ].dpad.x < 0;
-	const bool right = input->Get( ae::Key::Right ) || input->gamepads[ 0 ].leftAnalog.x > 0.1f || input->gamepads[ 0 ].dpad.x > 0;
-	const bool jumpButton = ( input->Get( ae::Key::Up ) || input->Get( ae::Key::Space ) || input->gamepads[ 0 ].a );
+
+	// Touch controls: any touch is a virtual stick centered on its start
+	// position; releasing a short, mostly-stationary touch fires a jump and
+	// keeps the jump button effective for the normal hold window.
+	const float kStickRadius = ae::Min( window->GetWidth(), window->GetHeight() ) / 6.0f;
+	const float kTapMaxMovementSqr = 16.0f * 16.0f;
+	const double kTapMaxDuration = 0.25;
+	while( input->PumpTouches() ) {} // Adopt every new touch this frame
+	ae::Vec2 stick( 0.0f );
+	bool jumpTap = false;
+	for( ae::Touch* t : input->GetTouches() )
+	{
+		const ae::Vec2 delta = t->StartDelta();
+		if( t->Ended() )
+		{
+			const float distSqr = delta.LengthSquared();
+			if( distSqr < kTapMaxMovementSqr && t->Lifetime() < kTapMaxDuration )
+			{
+				jumpTap = true;
+			}
+			input->ReleaseTouch( t );
+			continue;
+		}
+		stick += ae::Vec2( delta ) / kStickRadius;
+	}
+	stick = stick.TrimCopy( 1.0f );
+	if( jumpTap ) { m_tapJumpHoldTimer = kJumpHoldTimeMax; }
+	m_tapJumpHoldTimer = ae::Max( 0.0f, m_tapJumpHoldTimer - dt );
+
+	const float kTouchDeadzone = 0.2f;
+	const bool touchUp = stick.y > kTouchDeadzone;
+	const bool touchDown = stick.y < -kTouchDeadzone;
+	const bool touchLeft = stick.x < -kTouchDeadzone;
+	const bool touchRight = stick.x > kTouchDeadzone;
+	const bool touchJump = touchUp || jumpTap || ( m_tapJumpHoldTimer > 0.0f );
+
+	const bool up = input->Get( ae::Key::Up ) || ( input->gamepads[ 0 ].leftAnalog.y > 0.1f ) || ( input->gamepads[ 0 ].dpad.y > 0 ) || touchUp;
+	const bool down = input->Get( ae::Key::Down ) || ( input->gamepads[ 0 ].leftAnalog.y < -0.1f ) || ( input->gamepads[ 0 ].dpad.y < 0 ) || touchDown;
+	const bool left = input->Get( ae::Key::Left ) || ( input->gamepads[ 0 ].leftAnalog.x < -0.1f ) || ( input->gamepads[ 0 ].dpad.x < 0 ) || touchLeft;
+	const bool right = input->Get( ae::Key::Right ) || ( input->gamepads[ 0 ].leftAnalog.x > 0.1f ) || ( input->gamepads[ 0 ].dpad.x > 0 ) || touchRight;
+	const bool jumpButton = ( input->Get( ae::Key::Up ) || input->Get( ae::Key::Space ) || input->gamepads[ 0 ].a || touchJump );
 
 	m_canJumpTimer -= dt;
 
@@ -285,7 +321,7 @@ struct Game
 	bool Tick()
 	{
 		input.Pump();
-		player.Update( &world, &input, timeStep.GetDt() );
+		player.Update( &world, &window, &input, timeStep.GetDt() );
 		world.Update( timeStep.GetDt() );
 		
 		render.Activate();
@@ -340,7 +376,8 @@ struct Game
 
 		ae::Vec2 camera = player.GetPosition();
 		ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 5.0f * render.GetAspectRatio() ), 1.0f / 5.0f, 1.0f ) );
-		screenTransform *= ae::Matrix4::Translation( ae::Vec3( -camera.x, -1.5f - camera.y, 0.0f ) );
+		const float screenCenterY = _AE_IOS_ ? 1.5f : -1.5f; // Shift up on iOS to account for virtual stick
+		screenTransform *= ae::Matrix4::Translation( ae::Vec3( -camera.x, screenCenterY - camera.y, 0.0f ) );
 		ae::UniformList uniformList;
 		uniformList.Set( "u_worldToProj", screenTransform );
 		spriteRender.SetParams( 0, &spriteShader, uniformList );
@@ -352,27 +389,25 @@ struct Game
 		return !input.quit;
 	}
 
-	void Terminate()
+	int32_t Terminate()
 	{
 		AE_LOG( "Terminate" );
 		input.Terminate();
 		render.Terminate();
 		window.Terminate();
+		return 0;
 	}
 };
 
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
 	Game game;
-	game.Initialize();
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* game ) { ((Game*)game)->Tick(); }, &game, 0, 1 );
-#else
-	while( game.Tick() ) {}
-#endif
-	game.Terminate();
-	return 0;
+	return ae::Application( argc, argv,
+		{ &game, &Game::Initialize },
+		{ &game, &Game::Tick },
+		{ &game, &Game::Terminate }
+	);
 }

@@ -63,10 +63,8 @@ void UpdateResource( ae::FileSystem* fileSystem, const ae::File** _resourceFile,
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_INFO( "Initialize" );
-
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
@@ -80,43 +78,51 @@ int main()
 	ae::VertexBuffer meshVertexData;
 	ae::CollisionMesh<> meshCollision = TAG_EXAMPLE;
 	
-	window.Initialize( 800, 600, false, true, true );
-	window.SetTitle( "geometry" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-	fileSystem.Initialize( "data", "ae", "geometry" );
-	debug.Initialize( 2048 );
-	const ae::File* fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
-	AE_INFO( "Loading '#'", fontFile->GetURL() );
-	meshShader.Initialize(
-		R"(
-			AE_UNIFORM_HIGHP mat4 u_modelToProj;
-			AE_UNIFORM_HIGHP mat4 u_normalToWorld;
-			AE_IN_HIGHP vec3 a_position;
-			AE_IN_HIGHP vec3 a_normal;
-			AE_OUT_HIGHP vec3 v_normal;
-			void main()
-			{
-				v_normal = ( u_normalToWorld * vec4( a_normal, 0.0 ) ).xyz;
-				gl_Position = u_modelToProj * vec4( a_position, 1.0 );
-			}
-		)",
-		R"(
-			AE_IN_HIGHP vec3 v_normal;
-			void main()
-			{
-				float light = 0.5 + 0.5 * max( dot( normalize( v_normal ), vec3( 0.577, 0.577, 0.577 ) ), 0.0 );
-				AE_COLOR = vec4( vec3( 0.8, 0.5, 0.6 ) * light, 1.0 );
-			}
-		)"
-	);
-	meshShader.SetDepthWrite( true );
-	meshShader.SetDepthTest( true );
-	const ae::File* objFile = fileSystem.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
-	AE_INFO( "Loading '#'", objFile->GetURL() );
-	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
-	
+	const ae::File* fontFile = nullptr;
+	const ae::File* objFile = nullptr;
+
+	auto Initialize = [&]()
+	{
+		AE_INFO( "Initialize" );
+		window.Initialize( 800, 600, false, true, true );
+		window.SetTitle( "geometry" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		fileSystem.Initialize( "data", "ae", "geometry" );
+		debug.Initialize( 2048 );
+		fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
+		AE_INFO( "Loading '#'", fontFile->GetURL() );
+		meshShader.Initialize(
+			R"(
+				AE_UNIFORM_HIGHP mat4 u_modelToProj;
+				AE_UNIFORM_HIGHP mat4 u_normalToWorld;
+				AE_IN_HIGHP vec3 a_position;
+				AE_IN_HIGHP vec3 a_normal;
+				AE_OUT_HIGHP vec3 v_normal;
+				void main()
+				{
+					v_normal = ( u_normalToWorld * vec4( a_normal, 0.0 ) ).xyz;
+					gl_Position = u_modelToProj * vec4( a_position, 1.0 );
+				}
+			)",
+			R"(
+				AE_IN_HIGHP vec3 v_normal;
+				void main()
+				{
+					float light = 0.5 + 0.5 * max( dot( normalize( v_normal ), vec3( 0.577, 0.577, 0.577 ) ), 0.0 );
+					AE_COLOR = vec4( vec3( 0.8, 0.5, 0.6 ) * light, 1.0 );
+				}
+			)"
+		);
+		meshShader.SetDepthWrite( true );
+		meshShader.SetDepthTest( true );
+		objFile = fileSystem.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
+		AE_INFO( "Loading '#'", objFile->GetURL() );
+		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
+		AE_INFO( "Run" );
+	};
+
 	// AABB and OBB test state
 	static ae::Vec3 s_translation( 0.0f );
 	static ae::Vec3 s_rotation( 0.0f );
@@ -124,7 +130,6 @@ int main()
 	static float s_pa = 0.0f;
 	static float s_pb = 0.0f;
 
-	AE_INFO( "Run" );
 	auto UpdateResources = [&]()
 	{
 		UpdateResource( &fileSystem, &fontFile, [&]()
@@ -967,17 +972,14 @@ int main()
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	AE_INFO( "Terminate" );
-	text.Terminate();
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_INFO( "Terminate" );
+		text.Terminate();
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

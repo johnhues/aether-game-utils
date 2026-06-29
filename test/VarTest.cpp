@@ -186,7 +186,7 @@ TEST_CASE( "MapType Dynamic", "[aeMeta]" )
 	const ae::MapType* mapVarType = map.GetVarType().AsVarType< ae::MapType >();
 	REQUIRE( mapVarType );
 	REQUIRE( mapVarType->GetMaxLength() == UINT32_MAX );
-	REQUIRE( _map.Size() == 2 );
+	REQUIRE( _map.Capacity() == 2 );
 	
 	const ae::BasicType* keyVarType = mapVarType->GetKeyVarType().AsVarType< ae::BasicType >();
 	const ae::BasicType* valueVarType = mapVarType->GetValueVarType().AsVarType< ae::BasicType >();
@@ -219,7 +219,7 @@ TEST_CASE( "MapType Dynamic", "[aeMeta]" )
 		REQUIRE( valueVarType->GetVarData( valueVarData, &value ) );
 		REQUIRE( value == 1000 );
 	}
-	REQUIRE( _map.Size() == 2 );
+	REQUIRE( _map.Capacity() == 2 );
 
 	const ae::Str32 keyStr1 = "Something1001";
 	{
@@ -246,7 +246,7 @@ TEST_CASE( "MapType Dynamic", "[aeMeta]" )
 		REQUIRE( _map.Get( "Something1000" ) == 1000 );
 		REQUIRE( _map.Get( "Something1001" ) == 1101 );
 	}
-	REQUIRE( _map.Size() == 2 );
+	REQUIRE( _map.Capacity() == 2 );
 
 	const ae::Str32 keyStr2 = "Something1002";
 	{
@@ -258,7 +258,7 @@ TEST_CASE( "MapType Dynamic", "[aeMeta]" )
 		REQUIRE( _map.Get( "Something1001" ) == 1101 );
 		REQUIRE( _map.Get( "Something1002" ) == 1002 );
 	}
-	REQUIRE( _map.Size() >= 3 );
+	REQUIRE( _map.Capacity() >= 3 );
 
 	const ae::Str32 keyStr3 = "Something1003";
 	{
@@ -271,7 +271,7 @@ TEST_CASE( "MapType Dynamic", "[aeMeta]" )
 		REQUIRE( _map.Get( "Something1002" ) == 1002 );
 		REQUIRE( _map.Get( "Something1003" ) == 1003 );
 	}
-	REQUIRE( _map.Size() >= 4 );
+	REQUIRE( _map.Capacity() >= 4 );
 }
 
 TEST_CASE( "MapType Iteration", "[aeMeta]" )

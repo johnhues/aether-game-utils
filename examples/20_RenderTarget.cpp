@@ -98,60 +98,63 @@ uint16_t kCursorIndices[] =
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_INFO( "Initialize" );
-
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::Shader shader;
 	ae::VertexBuffer cube, cursor;
-
-	window.Initialize( 800, 600, false, true, true );
-	window.SetTitle( "render target" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	input.SetCursorHidden( true );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-
-	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
-	shader.SetDepthTest( true );
-	shader.SetDepthWrite( true );
-	shader.SetBlending( true );
-	shader.SetCulling( ae::Culling::CounterclockwiseFront );
-
-	cube.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
-	cube.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
-	cube.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
-	cube.UploadVertices( 0, kCubeVerts, countof( kCubeVerts ) );
-	cube.UploadIndices( 0, kCubeIndices, countof( kCubeIndices ) );
-
-	cursor.Initialize( sizeof( *kCursorVerts ), sizeof( *kCursorIndices ), countof( kCursorVerts ), countof( kCursorIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
-	cursor.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
-	cursor.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
-	cursor.UploadVertices( 0, kCursorVerts, countof( kCursorVerts ) );
-	cursor.UploadIndices( 0, kCursorIndices, countof( kCursorIndices ) );
-
 	ae::RenderTarget target;
-	target.Initialize( 240, 160 );
-	target.AddTexture( ae::Texture::Filter::Nearest, ae::Texture::Wrap::Clamp );
-	
 	float r0 = 0.0f;
 	float r1 = 0.0f;
 
-	AE_INFO( "Run" );
+	auto Initialize = [&]()
+	{
+		AE_INFO( "Initialize" );
+
+		window.Initialize( 800, 600, false, true, true );
+		window.SetTitle( "render target" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		input.SetCursorHidden( true );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+
+		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
+		shader.SetDepthTest( true );
+		shader.SetDepthWrite( true );
+		shader.SetBlending( true );
+		shader.SetCulling( ae::Culling::CounterclockwiseFront );
+
+		cube.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+		cube.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
+		cube.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
+		cube.UploadVertices( 0, kCubeVerts, countof( kCubeVerts ) );
+		cube.UploadIndices( 0, kCubeIndices, countof( kCubeIndices ) );
+
+		cursor.Initialize( sizeof( *kCursorVerts ), sizeof( *kCursorIndices ), countof( kCursorVerts ), countof( kCursorIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+		cursor.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
+		cursor.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
+		cursor.UploadVertices( 0, kCursorVerts, countof( kCursorVerts ) );
+		cursor.UploadIndices( 0, kCursorIndices, countof( kCursorIndices ) );
+
+		target.Initialize( 240, 160 );
+		target.AddTexture( ae::Texture::Filter::Nearest, ae::Texture::Wrap::Clamp );
+
+		AE_INFO( "Run" );
+	};
+
 	auto Update = [&]() -> bool
 	{
 		input.Pump();
-		
+
 		r0 += timeStep.GetDt() * 0.6f;
 		r1 += timeStep.GetDt() * 0.75f;
 
 		target.Activate();
 		target.Clear( ae::Color::AetherBlack() );
-		
+
 		ae::UniformList uniformList;
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( ae::Vec3( 0.0f, 3.5f, -0.4f ), -ae::Vec3( 0.0f, 3.5f, 0.0f ), ae::Vec3( 0.0f, 0.0f, 1.0f ) );
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, target.GetAspectRatio(), 0.25f, 50.0f );
@@ -159,14 +162,14 @@ int main()
 		ae::Rect ndcRect = target.GetNDCFillRectForTarget( render.GetCanvas()->GetWidth(), render.GetCanvas()->GetHeight() );
 		ae::Matrix4 windowToTarget = target.GetTargetPixelsToLocalTransform( window.GetWidth(), window.GetHeight(), ndcRect );
 		ae::Vec4 mouse = windowToTarget * ae::Vec4( input.mouse.position.x, input.mouse.position.y, 0.0f, 1.0f );
-		
+
 		// Cube
 		ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 		cube.Bind( &shader, uniformList );
 		cube.Draw();
-		
+
 		// Shadow
 		ae::Matrix4 flat = ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, -1.25f ) ) * ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * flat * modelToWorld );
@@ -180,7 +183,7 @@ int main()
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 		cursor.Bind( &shader, uniformList );
 		cursor.Draw();
-		
+
 		render.Clear( ae::Color::Black() );
 		target.Render2D( 0, ndcRect, 0.0f );
 		render.Present();
@@ -189,16 +192,14 @@ int main()
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_INFO( "Terminate" );
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
 
-	AE_INFO( "Terminate" );
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-
-	return 0;
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

@@ -62,6 +62,8 @@
 #define _AE_MINGW_ 0
 #define _AE_LINUX_ 0
 #define _AE_EMSCRIPTEN_ 0
+#define _AE_WASM_ 0
+#define _AE_WASI_ 0
 #if defined(__EMSCRIPTEN__)
 	#undef _AE_EMSCRIPTEN_
 	#define _AE_EMSCRIPTEN_ 1
@@ -91,6 +93,14 @@
 #elif defined(__linux__)
 	#undef _AE_LINUX_
 	#define _AE_LINUX_ 1
+#elif defined(__wasi__)
+	#undef _AE_WASM_
+	#define _AE_WASM_ 1
+	#undef _AE_WASI_
+	#define _AE_WASI_ 1
+#elif defined(__wasm__)
+	#undef _AE_WASM_
+	#define _AE_WASM_ 1
 #else
 	#error "Platform not supported"
 #endif
@@ -169,11 +179,22 @@
 #endif
 
 //------------------------------------------------------------------------------
+// AE_OPENGL_CUSTOM_HEADER define
+//------------------------------------------------------------------------------
+//! Define as the path to a custom OpenGL header if you want to use a specific
+//! header other than the default platform headers. Note that if you need to
+//! '#define GL_GLEXT_PROTOTYPES 1' etc. for your custom header, an option is
+//! adding it to your AE_CONFIG_FILE.
+#ifndef AE_OPENGL_CUSTOM_HEADER
+	#define AE_OPENGL_CUSTOM_HEADER 0 // <GL/glcorearb.h>
+#endif
+
+//------------------------------------------------------------------------------
 // AE_MAX_SCRATCH_BYTES_CONFIG define
 //------------------------------------------------------------------------------
-//! The cumulative maximum bytes of all currently allocated ae::ScratchBuffers.
-//! Note that ae::ScratchBuffer memory is always released in the reverse order
-//! that it was allocated, so this limit should accommodate the worst case.
+//! The maximum bytes available to each thread's ae::Scratch stack. Scratch
+//! memory is always released in reverse allocation order, so this limit should
+//! accommodate the worst-case stack usage of a single thread.
 //------------------------------------------------------------------------------
 #ifndef AE_MAX_SCRATCH_BYTES_CONFIG
 	#define AE_MAX_SCRATCH_BYTES_CONFIG ( 4 * 1024 *1024 )
@@ -263,7 +284,6 @@
 #include <array>
 #include <cassert>
 #include <cerrno> // strtoll/strtoull error checking
-
 #include <chrono>
 #include <cinttypes>
 #include <climits>
@@ -278,10 +298,11 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <ostream>
+#include <random>
 #include <sstream>
-#include <mutex>
 #include <thread> // @TODO: Remove. For Globals::allocatorThread.
 #include <type_traits>
 #include <typeinfo>
@@ -305,7 +326,7 @@
 	#include <emscripten/html5.h>
 	#include <webgl/webgl1.h> // For Emscripten WebGL API headers (see also webgl/webgl1_ext.h and webgl/webgl2.h)
 #endif
-#if !_AE_WINDOWS_
+#if !_AE_WINDOWS_ && !_AE_WASM_
 	#include <cxxabi.h>
 	#if defined(__SSE3__)
 		#include <pmmintrin.h>
@@ -318,19 +339,21 @@ namespace ae {
 // Platform Utils
 //------------------------------------------------------------------------------
 #ifndef AE_BREAK
-	#if _AE_WINDOWS_
-		#define AE_BREAK() __debugbreak()
-	#elif _AE_APPLE_
-		#define AE_BREAK() __builtin_debugtrap()
-	#elif _AE_EMSCRIPTEN_
-		#define AE_BREAK() assert( 0 )
-	#elif defined( __aarch64__ )
-		#define AE_BREAK() asm( "brk #0" )
-	#elif defined( __x86_64__ ) || defined( __i386__ ) || defined( _M_X64 ) || defined( _M_IX86 )
-		#define AE_BREAK() asm( "int $3" )
-	#else
-		#define AE_BREAK() assert( 0 )
-	#endif
+#	if _AE_WINDOWS_
+#		define AE_BREAK() __debugbreak()
+#	elif _AE_APPLE_
+#		define AE_BREAK() __builtin_debugtrap()
+#	elif _AE_EMSCRIPTEN_
+#		define AE_BREAK() assert( 0 )
+#	elif _AE_WASM_
+#		define AE_BREAK() __builtin_trap()
+#	elif defined( __aarch64__ )
+#		define AE_BREAK() asm( "brk #0" )
+#	elif defined( __x86_64__ ) || defined( __i386__ ) || defined( _M_X64 ) || defined( _M_IX86 )
+#		define AE_BREAK() asm( "int $3" )
+#	else
+#		define AE_BREAK() assert( 0 )
+#	endif
 #endif
 
 #if _AE_WINDOWS_
@@ -391,10 +414,14 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 		}\
 	}()
 
+//------------------------------------------------------------------------------
+// Internal Helpers
+//------------------------------------------------------------------------------
 #define _AE_STATIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
 #define _AE_DYNAMIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
 #define _AE_PAGED_POOL template< bool P = Paged, typename = std::enable_if_t< P > >
+template< typename T > using _EnableIfFractional = std::enable_if_t< std::is_floating_point_v< T > || ( std::is_class_v< T > && std::is_convertible_v< T, float > ) >;
 #if _AE_MSVC_
 	#define AE_DISABLE_INVALID_OFFSET_WARNING
 	#define AE_ENABLE_INVALID_OFFSET_WARNING
@@ -403,6 +430,13 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 	#define AE_ENABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic pop")
 #endif
 #define AE_DISABLE_COPY_ASSIGNMENT( _t ) _t( const _t& ) = delete; _t& operator=( const _t& ) = delete
+#if _AE_WASM_
+#	define AE_WASM_IMPORT( _m ) extern "C" __attribute__( ( import_module( #_m ) ) )
+#	define AE_WASM_EXPORT extern "C" __attribute__( ( visibility( "default" ) ) )
+#else
+#	define AE_WASM_IMPORT( _m )
+#	define AE_WASM_EXPORT
+#endif
 
 //------------------------------------------------------------------------------
 //! \defgroup Platform
@@ -515,7 +549,7 @@ void Free( void* data );
 // ae::Scratch< T > class
 //! Can be used for scoped allocations within a single frame. Because this uses
 //! a stack internally it can be used to make many cheap allocations, while
-//! avoiding memory fragmentation. Up to kMaxScratchSize bytes may be allocated
+//! avoiding memory fragmentation. Up to kScratchCapacity bytes may be allocated
 //! at a time. Allocated objects will have their constructors and destructors
 //! called in ae::Scratch() and ~ae::Scratch respectively.
 //------------------------------------------------------------------------------
@@ -534,12 +568,12 @@ public:
 	T& GetSafe( int32_t index );
 	const T& GetSafe( int32_t index ) const;
 
-	//! The max cumulative size of the internal scratch stack
-	static const uint32_t kMaxScratchSize = AE_MAX_SCRATCH_BYTES_CONFIG;
+	//! The max size of each thread's internal scratch stack
+	static const uint32_t kScratchCapacity = AE_MAX_SCRATCH_BYTES_CONFIG;
 
 private:
 	T* m_data;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	uint32_t m_prevOffsetCheck;
 };
 
@@ -751,7 +785,7 @@ struct VecT
 };
 
 #if _AE_MSVC_
-	#pragma warning(disable:26495) // Vecs are left uninitialized for performance
+	#pragma warning(disable:26495) // Vectors are left uninitialized for performance
 #endif
 
 //------------------------------------------------------------------------------
@@ -764,7 +798,10 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 	explicit Vec2( float v );
 	Vec2( float x, float y );
 	explicit Vec2( const float* xy );
-	explicit Vec2( struct Int2 i2 );
+	//! Allow automatic integer to float conversion for convenience. An explicit
+	//! cast is required in the opposite direction to avoid accidental
+	//! truncation.
+	Vec2( struct Int2 i2 );
 	//! Returns a unit vector at the given angle in radians. Angle 0 maps to
 	//! +X; positive angles rotate CCW toward +Y (standard math convention).
 	static Vec2 FromAngle( float angle );
@@ -1110,18 +1147,28 @@ struct IntT
 	int32_t operator[]( uint32_t idx ) const;
 	int32_t& operator[]( uint32_t idx );
 	T operator-() const;
+	T operator*( int32_t s ) const;
+	T operator/( int32_t s ) const;
 	T operator+( const T& v ) const;
 	T operator-( const T& v ) const;
 	T operator*( const T& v ) const;
 	T operator/( const T& v ) const;
+	void operator*=( int32_t s );
+	void operator/=( int32_t s );
 	void operator+=( const T& v );
 	void operator-=( const T& v );
 	void operator*=( const T& v );
 	void operator/=( const T& v );
-	T operator*( int32_t s ) const;
-	T operator/( int32_t s ) const;
-	void operator*=( int32_t s );
-	void operator/=( int32_t s );
+	// ae::IntT rejects scalar * and / by any operand that carries a fraction: a
+	// float, or a class convertible to one (eg. a fixed-point or half type), so
+	// rounding and truncation is explicit. Convert to an ae::Vec3 first, then
+	// floor/round/ceil. This is much more verbose, but can avoid accidental
+	// negative value truncation discrepancies.
+	// eg. '( ae::Vec3( int3Value ) * 2.5f ).FloorCopy()'
+	template< typename F, typename = ae::_EnableIfFractional< F > > T operator*( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
+	template< typename F, typename = ae::_EnableIfFractional< F > > T operator/( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
+	template< typename F, typename = ae::_EnableIfFractional< F > > void operator*=( F s ) = delete; // Disabled. This operation would be silently lossy.
+	template< typename F, typename = ae::_EnableIfFractional< F > > void operator/=( F s ) = delete; // Disabled. This operation would be silently lossy.
 };
 template< typename T >
 inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v );
@@ -1668,7 +1715,7 @@ public:
 	void Trim( uint32_t len );
 
 	uint32_t Length() const;
-	uint32_t Size() const;
+	uint32_t Capacity() const;
 	bool Empty() const;
 	static constexpr uint32_t MaxLength() { return N - 3u; } // Leave room for length var and null terminator
 
@@ -1832,28 +1879,28 @@ class Array
 {
 public:
 	//! Static array (N > 0) only. Constructs an empty array, where
-	//! ae::Array::Length() == 0 and ae::Array::Size() == N.
+	//! ae::Array::Length() == 0 and ae::Array::Capacity() == N.
 	Array();
 	//! Static array (N > 0) only. Appends 'length' number of 'val's, so that
-	//! ae::Array::Length() == 'length' and ae::Array::Size() == N.
+	//! ae::Array::Length() == 'length' and ae::Array::Capacity() == N.
 	Array( const T& val, uint32_t length );
 	//! Static array (N > 0) only. Constructs from a standard initializer list,
-	//! so that ae::Array::Length() == 'initList.size()' and ae::Array::Size() == N.
+	//! so that ae::Array::Length() == 'initList.Capacity()' and ae::Array::Capacity() == N.
 	Array( std::initializer_list< T > initList );
 
 	//! Dynamic array (N == 0) only. Constructs an empty array, where
-	//! ae::Array::Length() == 0 and ae::Array::Size() == N.
+	//! ae::Array::Length() == 0 and ae::Array::Capacity() == N.
 	Array( ae::Tag tag );
 	//! Dynamic array (N == 0) only. Constructs an empty array, while reserving
-	//! 'size' elements. ae::Array::Length() == 0 and ae::Array::Size() == 'size'.
-	Array( ae::Tag tag, uint32_t size );
+	//! 'capacity' elements. ae::Array::Length() == 0 and ae::Array::Capacity() == 'capacity'.
+	Array( ae::Tag tag, uint32_t capacity );
 	//! Dynamic array (N == 0) only. Reserves 'length' and appends 'length'
-	//! number of 'val's. ae::Array::Length() == 'length' and ae::Array::Size() >= 'length'.
+	//! number of 'val's. ae::Array::Length() == 'length' and ae::Array::Capacity() >= 'length'.
 	Array( ae::Tag tag, const T& val, uint32_t length );
 	//! Dynamic array (N == 0) only. Expands the internal array storage to avoid
 	//! copying data unnecessarily on Append(). This does not affect the number
 	//! of elements returned by Length(). Retrieve the current storage limit
-	//! with Size().
+	//! with Capacity().
 	void Reserve( uint32_t total );
 
 	//! Copy constructor. The ae::Tag of \p other will be used for the newly
@@ -1929,7 +1976,7 @@ public:
 	//! less than or equal to Length().
 	void Remove( uint32_t index, uint32_t count = 1 );
 	//! Destructs all elements in the array and resets the array to length zero.
-	//! Does not affect the size of the array.
+	//! Does not affect the capacity of the array.
 	void Clear();
 
 	//! Performs bounds checking in debug mode, use 'GetData()' instead to
@@ -1949,7 +1996,7 @@ public:
 	//! Returns the last element. Performs bounds checking in debug mode.
 	T& Last();
 	//! Returns true when it is no longer safe to append to this array.
-	_AE_STATIC_STORAGE bool Full() { return m_length == m_size; }
+	_AE_STATIC_STORAGE bool Full() { return m_length == m_capacity; }
 	//! It is always safe to append to dynamic arrays, barring system memory limits.
 	_AE_DYNAMIC_STORAGE bool Full(...) const { return false; }
 
@@ -1961,17 +2008,17 @@ public:
 	const T* Data() const { return m_array; }
 	//! Returns the number of elements currently in the array
 	uint32_t Length() const { return m_length; }
-	//! Returns the total size of a static array (N > 0)
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
-	//! Returns the total size of a dynamic array (N == 0)
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
+	//! Returns the total capacity of a static array (N > 0)
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
+	//! Returns the total capacity of a dynamic array (N == 0)
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_capacity; }
 	//! Returns the tag provided to the constructor for dynamic arrays (N == 0).
 	//! Returns ae::Tag() for all static arrays (N > 0).
 	ae::Tag Tag() const { return m_tag; }
 
 private:
 	uint32_t m_length;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	T* m_array;
 	ae::Tag m_tag;
 	// clang-format off
@@ -2017,10 +2064,10 @@ public:
 	HashMap();
 	//! Constructor for a hash map with dynamically allocated storage (N == 0).
 	HashMap( ae::Tag pool );
-	//! Expands the storage if necessary so a \p size number of key/index pairs
+	//! Expands the storage if necessary so a \p capacity number of key/index pairs
 	//! can be added without any internal allocations. Asserts if using static
-	//! storage and \p size is greater than N.
-	void Reserve( uint32_t size );
+	//! storage and \p capacity is greater than N.
+	void Reserve( uint32_t capacity );
 	
 	HashMap( const HashMap< Key, N, Hash >& other );
 	void operator =( const HashMap< Key, N, Hash >& other );
@@ -2052,9 +2099,9 @@ public:
 	//! Returns the number of entries.
 	uint32_t Length() const;
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the number of allocated entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_capacity; }
 
 private:
 	bool m_Insert( Key key, typename Hash::UInt hash, int32_t index );
@@ -2067,7 +2114,7 @@ private:
 	};
 	ae::Tag m_tag;
 	Entry* m_entries;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	uint32_t m_length;
 	// clang-format off
 #if _AE_LINUX_|| _AE_WINDOWS_
@@ -2156,9 +2203,9 @@ public:
 	//! Returns the number of key/value pairs in the map
 	uint32_t Length() const;
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the number of allocated entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_pairs.Size(); }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_pairs.Capacity(); }
 
 	// Ranged-based loop. Lowercase to match c++ standard
 	ae::Pair< Key, Value >* begin() { return m_pairs.begin(); }
@@ -2214,9 +2261,9 @@ public:
 	const char* GetValue( uint32_t idx ) const;
 	uint32_t Length() const { return m_entries.Length(); }
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the max number of entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_entries.Size(); }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_entries.Capacity(); }
 	
 	// Ranged-based loop. Lowercase to match c++ standard
 	ae::Pair< ae::Str128, ae::Str128 >* begin() { return m_entries.begin(); }
@@ -2331,14 +2378,14 @@ public:
 	//! Constructor for a ring buffer with static allocated storage (N > 0).
 	RingBuffer();
 	//! Constructor for a ring buffer with dynamically allocated storage (N == 0).
-	RingBuffer( ae::Tag tag, uint32_t size );
+	RingBuffer( ae::Tag tag, uint32_t capacity );
 	//! Appends an element to the current end of the ring buffer. It's safe to
 	//! call this when the ring buffer is full, although in this case the
 	//! element previously at index 0 to be destroyed. Does not affect
-	//! ae::RingBuffer::Size().
+	//! ae::RingBuffer::Capacity().
 	T& Append( const T& val );
 	//! Resets ae::RingBuffer::Length() and ae::RingBuffer::GetOffset() to 0.
-	//! Does not affect ae::RingBuffer::Size().
+	//! Does not affect ae::RingBuffer::Capacity().
 	void Clear();
 
 	//! Returns the element at the given \p index, which must be less than
@@ -2364,7 +2411,7 @@ public:
 	//! (or 0 when the buffer is empty). Use this in conjunction with
 	//! ae::RingBuffer::Data() to get a pointer to the the first element in the
 	//! buffer, iterate 0 to ae::RingBuffer::Length() elements, and reduce the
-	//! iteration index modulo ae::RingBuffer::Size() when indexing the buffer.
+	//! iteration index modulo ae::RingBuffer::Capacity() when indexing the buffer.
 	//! This is a more complicated approach than using ae::RingBuffer::Get() but
 	//! can be useful to avoid copying data for APIs that accept generic ring
 	//! buffer data, such as ImGui.
@@ -2372,37 +2419,37 @@ public:
 	//! \code
 	//! for( uint32_t i = 0; i < ringBuffer.Length(); i++ )
 	//! {
-	//!     const uint32_t index = ( ringBuffer.GetOffset() + i ) % ringBuffer.Size();
+	//!     const uint32_t index = ( ringBuffer.GetOffset() + i ) % ringBuffer.Capacity();
 	//!     const T& element = ringBuffer.Data()[ index ];
 	//! }
 	//! \endcode
 	uint32_t GetOffset() const { return m_first; }
 
-	//! Returns the number of appended entries up to ae::RingBuffer::Size().
+	//! Returns the number of appended entries up to ae::RingBuffer::Capacity().
 	uint32_t Length() const { return m_buffer.Length(); }
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the max number of entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_capacity; }
 
 private:
 	uint32_t m_first;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	ae::Array< T, N > m_buffer;
 };
 
 //------------------------------------------------------------------------------
 // ae::FreeList class
 //! ae::FreeList can be used along side a separate data array to track allocated
-//! elements. Given a size, ae::FreeList allows allocation and release of array
-//! indices from 0 to size - 1.
+//! elements. Given a capacity, ae::FreeList allows allocation and release of array
+//! indices from 0 to capacity - 1.
 //------------------------------------------------------------------------------
 template< uint32_t N = 0 >
 class FreeList
 {
 public:
 	FreeList();
-	FreeList( const ae::Tag& tag, uint32_t size );
+	FreeList( const ae::Tag& tag, uint32_t capacity );
 
 	//! Returns (0 <= index < N) on success, and negative on failure.
 	int32_t Allocate();
@@ -2428,11 +2475,11 @@ public:
 	bool HasFree() const;
 	//! Returns the number of allocated elements. Is constant time.
 	uint32_t Length() const;
-	//! Returns the maximum length of the list (constxpr for static
+	//! Returns the maximum length of the list (constexpr for static
 	//! ae::FreeList's). Is constant time.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the maximum length of the list. Is constant time.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_pool.Length(); }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_pool.Length(); }
 
 private:
 	struct Entry { Entry* next; };
@@ -2483,9 +2530,9 @@ public:
 	//! Returns the number of allocated objects. Is constant time.
 	uint32_t Length() const;
 	//! Returns the total number of available objects in the pool. Is constant time.
-	_AE_FIXED_POOL static constexpr uint32_t Size() { return N; }
+	_AE_FIXED_POOL static constexpr uint32_t Capacity() { return N; }
 	//! Returns INT32_MAX max, as paged pools can grow indefinitely. Is constant time.
-	_AE_PAGED_POOL uint32_t Size(...) const { return INT32_MAX; }
+	_AE_PAGED_POOL uint32_t Capacity(...) const { return INT32_MAX; }
 
 private:
 	struct Page; // Internal forward declaration
@@ -2580,12 +2627,12 @@ public:
 	//! Constructs an ae::OpaquePool with dynamic internal storage. \p tag will
 	//! be used for all internal allocations. All objects returned by the pool
 	//! will have \p objectSize and \p objectAlignment. If the pool is \p paged
-	//! it will allocate pages of \p size as necessary. If the pool is
-	//! not \p paged, then \p size objects can be allocated at a time. It may be
+	//! it will allocate pages of \p capacity as necessary. If the pool is
+	//! not \p paged, then \p capacity objects can be allocated at a time. It may be
 	//! useful to use this in conjunction with registered ae::ClassType's, passing the
 	//! results of ae::ClassType::GetSize() to \p objectSize and ae::ClassType::GetAlignment()
 	//! to \p objectAlignment.
-	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t size, bool paged );
+	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t capacity, bool paged );
 	//! All objects allocated with ae::OpaquePool::Allocate/New() must be destroyed before
 	//! the ae::OpaquePool is destroyed.
 	~OpaquePool();
@@ -2622,9 +2669,9 @@ public:
 	uint32_t Length() const { return m_length; }
 	//! Returns the max number of objects that can be allocated, or INT32_MAX
 	//! for paged pools as they can grow indefinitely. Is constant time.
-	uint32_t Size() const { return m_paged ? INT32_MAX : m_pageSize; }
+	uint32_t Capacity() const { return m_paged ? INT32_MAX : m_pageCapacity; }
 	//! Returns the maximum number of objects per page. Is constant time.
-	uint32_t PageSize() const { return m_pageSize; }
+	uint32_t PageCapacity() const { return m_pageCapacity; }
 
 private:
 	struct Page; // Internal forward declaration
@@ -2670,7 +2717,7 @@ private:
 	{
 		// Pages are deleted by the pool when empty, so it's safe to
 		// assume pages always contain at least one object.
-		Page( const ae::Tag& tag, uint32_t size ) : freeList( tag, size ) {}
+		Page( const ae::Tag& tag, uint32_t capacity ) : freeList( tag, capacity ) {}
 		ae::ListNode< Page > node = this; // List node.
 		ae::FreeList<> freeList; // Free object information.
 		void* objects; // Pointer to array of objects in this page.
@@ -2678,7 +2725,7 @@ private:
 	const void* m_GetFirst() const;
 	const void* m_GetNext( const Page*& page, const void* obj, uint32_t seq ) const;
 	ae::Tag m_tag;
-	uint32_t m_pageSize; // Number of objects per page.
+	uint32_t m_pageCapacity; // Number of objects per page.
 	bool m_paged; // If true, pool can be infinitely big.
 	uint32_t m_objectSize; // Size of each object.
 	uint32_t m_objectAlignment; // Alignment of each object.
@@ -2692,13 +2739,13 @@ private:
 // ae::Any
 //------------------------------------------------------------------------------
 //! A fixed-size, type-safe container for opaque storage of a single value.
-//! The template parameters \p Size (bytes) and \p Alignment control the
+//! The template parameters \p Capacity (bytes) and \p Alignment control the
 //! internal buffer; no dynamic allocation is ever performed. Only trivially
 //! copyable and trivially destructible types are accepted, enforced at compile
 //! time. The type of the stored value is recorded so that reads are type-safe.
 //! C-strings are explicitly rejected; use an ae::Str instead.
 //------------------------------------------------------------------------------
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 struct Any
 {
 	Any() = default;
@@ -2725,16 +2772,20 @@ struct Any
 
 private:
 	uint32_t m_typeId = 0; // ae::TypeId
-	alignas( Alignment ) std::byte m_data[ Size ] = {};
+	alignas( Alignment ) std::byte m_data[ Capacity ] = {};
 };
 
+// Intentionally unimplemented ae::Function forward declaration, to handle degenerate function signatures.
+template< typename Signature, size_t Capacity = 32 > class Function;
 //------------------------------------------------------------------------------
 // ae::Function class
 //------------------------------------------------------------------------------
-// Unimplemented ae::Function forward declaration, to handle degenerate function signatures.
-template< typename Signature, size_t MaxSize = 32 > class Function;
-// The lambda capture invoker is stateless so it's trivially copyable. Small
-// captures like a few pointers/ints work.
+//! An opaque callable wrapper for free functions, member functions, and
+//! lambdas, so long as their return and parameter types match the ae::Function
+//! signature. Captured values must be trivially copyable. Storage is fixed-size
+//! and no dynamic allocations are made. Storing a callable larger than \tparam
+//! Capacity bytes is a compile time error. ae::Function itself is trivially
+//! copyable.
 // Usage:
 /*
 	int total = 0;
@@ -2744,19 +2795,30 @@ template< typename Signature, size_t MaxSize = 32 > class Function;
 	const int three = increment( 1 );
 	const int ten = increment( 7 );
 */
-template< typename R, typename... Args, size_t MaxSize >
-class Function< R( Args... ), MaxSize >
+//------------------------------------------------------------------------------
+template< typename R, typename... Args, size_t Capacity >
+class Function< R( Args... ), Capacity >
 {
 public:
+	//! Default construction. Note that it is not 
 	Function();
+	//! Lambda or free function capture
 	template< typename F > Function( F&& f );
+	//! Member function capture
+	template< typename T > Function( T* obj, R ( T::*mfp )( Args... ) );
+	//! Member function capture
+	template< typename T > Function( const T* obj, R ( T::*mfp )( Args... ) const );
+	//! Opaquely call the captured function. It is undefined behavior to call
+	//! this when no function has been assigned. Check for validity with
+	//! ae::Function::operator bool.
 	R operator()( Args... args ) const;
+	//! Return true if this ae::Function instance is callable.
 	explicit operator bool() const;
 
 private:
 	using InvokerType = R ( * )( const void*, Args... );
 	InvokerType m_invoker;
-	alignas( std::max_align_t ) uint8_t m_storage[ MaxSize ];
+	alignas( std::max_align_t ) uint8_t m_storage[ Capacity ];
 };
 
 //------------------------------------------------------------------------------
@@ -3055,6 +3117,7 @@ public:
 	Rect() = default;
 	static Rect FromCenterAndSize( ae::Vec2 center, ae::Vec2 size );
 	static Rect FromPoints( ae::Vec2 p0, ae::Vec2 p1 );
+	static Rect FromPoints( float x0, float y0, float x1, float y1 );
 
 	Vec2 GetMin() const { return m_min; }
 	Vec2 GetMax() const { return m_max; }
@@ -3292,7 +3355,7 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 // Assertion functions
 //------------------------------------------------------------------------------
 #ifndef AE_ASSERT_IMPL
-	#define AE_ASSERT_IMPL( msgStr ) { if( !ae::IsDebuggerAttached() ) { ae::ShowMessage( msgStr ? msgStr : "Unspecified Fatal Error" ); } else { AE_BREAK(); } }
+#	define AE_ASSERT_IMPL( msgStr ) do { (void)(msgStr); AE_BREAK(); } while(0)
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 #define AE_ASSERT( _x ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
@@ -3435,10 +3498,51 @@ struct Screen
 ae::Array< ae::Screen, 16 > GetScreens();
 
 //------------------------------------------------------------------------------
+// ae::Application function
+//------------------------------------------------------------------------------
+// A full minimal program using ae::Application:
+#if 0
+int main( int argc, char* argv[] )
+{
+	// ...
+	auto init = [] {};
+	auto update = []() { return true; };
+	auto terminate = []() { return 0; };
+	return ae::Application( argc, argv, init, update, terminate );
+}
+#endif
+//------------------------------------------------------------------------------
+using AppInitializeFn = ae::Function< void(), 256 >;
+using AppUpdateFn = ae::Function< bool(), 256 >;
+using AppTerminateFn = ae::Function< int32_t(), 256 >;
+//! Call this function to drive a program's lifecycle identically on platforms
+//! that own the main loop and platforms that don't. This function wraps the
+//! platform specific mechanisms that drive the main loop, and calls the given
+//! functions when appropriate.
+//! \param argc Forward from main()
+//! \param argv Forward from main()
+//! \param initialize Called once at startup. This is a good place to initialize
+//! an ae::Window, ae::GraphicsDevice, and ae::Input combo.
+//! \param update Called each frame. Return false from your given function to
+//! quit the application. Note that this is called by the system on platforms
+//! where the system owns the main loop (like iOS and web).
+//! \param terminate Called once at termination, except on platforms where the
+//! system owns the main loop (like iOS and web), Terminate may never be called.
+//! \return The return value of \p terminate
+int32_t Application(
+	int32_t argc,
+	char* argv[],
+	const AppInitializeFn& initialize,
+	const AppUpdateFn& update,
+	const AppTerminateFn& terminate
+);
+
+//------------------------------------------------------------------------------
 // ae::Window class
+// @TODO: WindowUnits enum: virtual dpi (OS desktop), Content (actual pixels)
 //! Window size is specified in virtual DPI units. Actual window content width and height are subject to the
 //! displays scale factor. Passing a width and height of 1280x720 on a display with a scale factor of 2 will result
-//! in a virtual window size of 1280x720 and a backbuffer size of 2560x1440. The windows scale factor can be
+//! in a virtual window size of 1280x720 and a back buffer size of 2560x1440. The windows scale factor can be
 //! checked with ae::Window::GetScaleFactor().
 //------------------------------------------------------------------------------
 class Window
@@ -3468,13 +3572,35 @@ public:
 	bool GetMaximized() const { return m_maximized; }
 	//! True if the user is currently working with this window
 	bool GetFocused() const { return m_focused; }
+	//! Top left window position in virtual DPI units @TODO: Content or window width in dpi units?
 	Int2 GetPosition() const { return m_pos; }
-	//! Virtual window width (unscaled by display scale factor)
+	//! Virtual DPI window width @TODO: Content or window width in dpi units?
 	int32_t GetWidth() const;
-	//! Virtual window height (unscaled by display scale factor)
+	//! Virtual DPI window height @TODO: Content or window height in dpi units?
 	int32_t GetHeight() const;
+	//! Get the safe area of the window: the area not obscured by notches,
+	//! rounded corners, or other display cutouts. Coordinates are in
+	//! virtual DPI window space. Note that the windows content area (graphics
+	//! surface) will be larger than any non-trivial safe area, so this is only
+	//! relevant for visual layout purposes on devices.
+	ae::Rect GetSafeArea() const;
 	//! Window content scale factor
 	float GetScaleFactor() const { return m_scaleFactor; }
+	//! Low-level context/surface activation. Most rendering code should use
+	//! GraphicsDevice::Activate() instead.
+	void ActivateContext();
+	//! Low-level presentation primitive for custom final compositing. Most
+	//! rendering code should use GraphicsDevice::Present() instead.
+	void BindBackBuffer();
+	//! Low-level platform swap/flush. GraphicsDevice::Present() calls this after
+	//! compositing its canvas to the window back buffer.
+	void Present();
+	//! Drawable pixel size for low-level presentation code. This differs from
+	//! GetWidth() on scaled displays.
+	uint32_t GetDrawWidth() const;
+	//! Drawable pixel size for low-level presentation code. This differs from
+	//! GetHeight() on scaled displays.
+	uint32_t GetDrawHeight() const;
 
 	//! Enable window events logging to console
 	void SetLoggingEnabled( bool enable ) { m_debugLog = enable; }
@@ -3500,11 +3626,23 @@ public:
 	void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
 	void m_UpdateFullScreen( bool fullScreen ) { m_fullScreen = fullScreen; }
 	void m_UpdateFocused( bool focused );
+	void m_UpdateBackBuffer();
 	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
 	ae::Int2 m_nativeToAe( ae::Int2 pos, ae::Int2 size );
 	bool m_fixCanvasStyle = false;
 	void* window = nullptr;
 	class GraphicsDevice* graphicsDevice = nullptr;
+#if _AE_EMSCRIPTEN_
+	EMSCRIPTEN_WEBGL_CONTEXT_HANDLE m_context = 0;
+#else
+	void* m_context = nullptr;
+#endif
+	uint32_t m_defaultFramebuffer = 0;
+#if _AE_IOS_
+	// Depth lives on the GraphicsDevice canvas, not here.
+	uint32_t m_iosColorRenderbuffer = 0;
+#endif
+	class RenderTarget* m_backBuffer = nullptr;
 	class Input* input = nullptr;
 };
 
@@ -3602,7 +3740,7 @@ enum class Key : uint8_t
 	Down = 81,
 	Up = 82,
 
-	NumLock = 84,
+	NumLock = 83,
 	NumPadDivide = 84,
 	NumPadMultiply = 85,
 	NumPadMinus = 86,
@@ -3648,16 +3786,17 @@ struct MouseState
 	bool leftButton = false;
 	bool middleButton = false;
 	bool rightButton = false;
-	//! Window space coordinates (ie. not affected by window scale factor). This
+	//! Window space coordinates in points (ie. not affected by window scale factor). This
 	//! value should be used for cursors etc. and not for calculating changes in
 	//! position. In other words don't subtract mouse position from a previous
 	//! frame. Use ae::MouseState::movement for changes in position.
-	ae::Int2 position = ae::Int2( 0 );
-	//! Window space coordinates (ie. not affected by window scale factor). This
+	ae::Vec2 position = ae::Vec2( 0.0f );
+	//! Window space coordinates in points (ie. not affected by window scale factor). This
 	//! value should be used for detecting how much the mouse cursor is moved.
 	//! Cursor jumps are filtered when the mouse is captured and when the window
-	//! becomes active.
-	ae::Int2 movement = ae::Int2( 0 );
+	//! becomes active. Preserves sub-pixel precision for consistent behavior across
+	//! browsers that report movement at different frequencies.
+	ae::Vec2 movement = ae::Vec2( 0.0f );
 	//! Raw scroll input only (no momentum). Wheel gives ~1.0 per notch, and
 	//! uses sub-line float precision if possible. Is reset each frame. Physical
 	//! direction regardless of OS natural scrolling setting, see
@@ -3720,17 +3859,44 @@ struct GamepadState // @TODO: Rename Gamepad
 };
 
 //------------------------------------------------------------------------------
+// ae::Touch constants
+//------------------------------------------------------------------------------
+const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
+const uint32_t kMaxTouchSamples = 64; //!< Max number of position samples stored for each touch
+
+//------------------------------------------------------------------------------
 // ae::Touch struct
 //------------------------------------------------------------------------------
 struct Touch
 {
 	uint32_t id = 0;
-	ae::Int2 startPosition = ae::Int2( 0.0f );
-	ae::Int2 position = ae::Int2( 0.0f );
-	ae::Int2 movement = ae::Int2( 0.0f );
+	struct Sample
+	{
+		double time; // Relative to ae::GetTime()
+		ae::Vec2 position; // Relative to the virtual window size (ie. not affected by window scale factor)
+	};
+	//! The oldest position sample is at index 0, and the newest is at index
+	//! ( length - 1 ). Position samples are added on every system input event,
+	//! so the time between samples is not fixed. Once max samples is reached
+	//! the sample that contributes the least to the 'shape' of the curve formed
+	//! by the consecutive samples is removed to make room for the new sample.
+	ae::Array< Sample, kMaxTouchSamples > samples;
+	//! True after the user releases or cancels the touch. The touch remains
+	//! visible via ae::Input::GetTouches() until ae::Input::ReleaseTouch() is
+	//! called. samples is not modified after the touch ends.
+	bool ended = false;
+
+	ae::Vec2 Position() const;
+	ae::Vec2 StartPosition() const;
+	ae::Vec2 StartDelta() const;
+	bool Ended() const { return ended; }
+	double Lifetime() const;
+
+	// Internal: appends a sample, simplifying the stored curve when full.
+	void _AppendSample( double time, ae::Vec2 position );
 };
-const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
-using TouchArray = ae::Array< ae::Touch, ae::kMaxTouches >;
+
+using TouchArray = ae::Array< ae::Touch*, ae::kMaxTouches >;
 
 //------------------------------------------------------------------------------
 // ae::Input class
@@ -3798,22 +3964,27 @@ public:
 	inline bool GetGamepadPressLeft( uint32_t idx = 0 ) const { return gamepads[ idx ].left && !gamepadsPrev[ idx ].left; }
 	inline bool GetGamepadPressRight( uint32_t idx = 0 ) const { return gamepads[ idx ].right && !gamepadsPrev[ idx ].right; }
 
-	//! Returns an active touch with the given \p id or nullptr if it does not
-	//! exist
-	const ae::Touch* GetTouchById( uint32_t id ) const;
-	//! Returns a touch that was just released with the given \p id or nullptr
-	//! if it does not exist
-	const ae::Touch* GetFinishedTouchById( uint32_t id ) const;
-	//! Returns all touches that have stated since the last ae::Input::Pump()
-	//! call
-	ae::TouchArray GetNewTouches() const;
-	//! Returns all touches that have been released since the last
-	//! ae::Input::Pump() call
-	ae::TouchArray GetFinishedTouches() const;
-	//! Returns all touches that are currently active
-	const ae::TouchArray& GetTouches() const;
-	//! Returns all touches that were active in the previous frame
-	const ae::TouchArray& GetPreviousTouches() const;
+	//! Adopts the oldest un-pumped touch into the tracked set, making it
+	//! visible via ae::Input::GetTouches() until explicitly released with
+	//! ae::Input::ReleaseTouch(). Failure to release pumped touches will result
+	//! in new lost touches. It is safe to hold on to a pumped touch pointer
+	//! until it is released. Pumped touches will continue to be updated over
+	//! their lifetime. Returns the adopted touch, or nullptr if there are no
+	//! new touches. Touches are discarded if they start and end before
+	//! ae::Input::PumpTouches() is called.
+	const ae::Touch* PumpTouches();
+	//! Returns the touches the caller has opted into tracking via
+	//! ae::Input::PumpTouches() and have not yet released. Touches that have
+	//! not been pumped are not visible here. The array is returned by value so
+	//! it's safe to iterate through this result and call
+	//! ae::Input::ReleaseTouch() on all/any of the touches in any order
+	//! (although you should be careful not to access the internals of touches
+	//! in this array that you've already released).
+	ae::TouchArray GetTouches() const { return m_touches; }
+	//! Frees a touch returned by PumpTouches(). This **must** be called per
+	//! touch or internal limits will be hit and new touches may be discarded.
+	//! It is not safe to access a touch after it has been released.
+	void ReleaseTouch( const ae::Touch* touch );
 	
 	MouseState mouse;
 	MouseState mousePrev;
@@ -3823,16 +3994,21 @@ public:
 
 // private:
 	Input( const Input& ) = delete;
-	void m_SetMousePos( ae::Int2 pos );
-	void m_SetMousePos( ae::Int2 pos, ae::Int2 movement );
-	void m_SetCursorPos( ae::Int2 pos );
+	void m_TryNewFrame();
+	void m_SetMousePos( ae::Vec2 pos );
+	void m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement );
+	void m_WarpCursor( ae::Vec2 pos ); // Attempts to move the OS's cursor to the given position
 	void m_SetMouseCaptured( bool captured );
 	void m_UpdateModifiers();
 	ae::TimeStep m_timeStep;
 	ae::Window* m_window = nullptr;
+	bool m_pendingNewFrame = true;
 	bool m_captureMouse = false;
-	ae::Int2 m_capturedMousePos = ae::Int2( INT_MAX );
+	ae::Optional< ae::Vec2 > m_capturedMousePos;
 	bool m_mousePosSet = false;
+#if _AE_EMSCRIPTEN_
+	int m_pendingPointerLock = 0; // -1 = unlock pending, 1 = lock pending
+#endif
 	bool m_hideCursor = false;
 	bool m_keys[ 256 ];
 	bool m_keysPrev[ 256 ];
@@ -3845,11 +4021,11 @@ public:
 	bool m_gamepadRequiresFocus = true;
 	bool m_naturalScroll = false;
 	// Touch
-	ae::TouchArray m_touches;
-	ae::TouchArray m_touchesPrev;
+	using TouchPool = ae::ObjectPool< ae::Touch, ae::kMaxTouches >;
+	TouchPool m_touchPool;
+	TouchArray m_newTouches;
+	TouchArray m_touches;
 	uint32_t m_touchIndex = 0; // 0 is invalid
-	// Emscripten
-	bool newFrame_HACK = false;
 };
 
 /* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
@@ -3940,8 +4116,8 @@ public:
 		Data, //!< A given existing directory
 		User, //!< A directory for storing preferences and savedata
 		Cache, //!< A directory for storing expensive to generate data (computed, downloaded, etc)
-		UserShared, //!< Same as above but shared accross the 'organization name'
-		CacheShared //!< Same as above but shared accross the 'organization name'
+		UserShared, //!< Same as above but shared across the 'organization name'
+		CacheShared //!< Same as above but shared across the 'organization name'
 	};
 	
 	//! If \p dataDir is absolute no processing on the path will be done. Passing
@@ -3992,6 +4168,7 @@ public:
 	bool GetRootDir( Root root, Str256* outDir ) const;
 	uint32_t GetSize( Root root, const char* filePath ) const;
 	uint32_t Read( Root root, const char* filePath, void* buffer, uint32_t bufferSize ) const;
+	//! Returns the number of bytes written
 	uint32_t Write( Root root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const;
 	bool CreateFolder( Root root, const char* folderPath ) const;
 	void ShowFolder( Root root, const char* folderPath ) const;
@@ -4002,6 +4179,7 @@ public:
 	// Static member functions intended to be used when not creating a instance
 	static uint32_t GetSize( const char* filePath );
 	static uint32_t Read( const char* filePath, void* buffer, uint32_t bufferSize );
+	//! Returns the number of bytes written
 	static uint32_t Write( const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs );
 	static bool CreateFolder( const char* folderPath );
 	static void ShowFolder( const char* folderPath );
@@ -4018,24 +4196,30 @@ public:
 	//! Returns the entire file extension in the case of multiple dots. If
 	//! \p includeDot is true the returned string will include the first dot,
 	//! which can be useful for creating a substring of the file name.
-	static const char* GetFileExtFromPath( const char* filePath, bool includeDot = false );
+	static const char* GetFileExtensionFromPath( const char* filePath, bool includeDot = false );
 	//! Returns a range within \p filePath to the first section of a path. Eg.
 	//! "/User/Documents/file.txt" will allow the extraction of the directory
 	//! "User" by returning a pointer to both "User/Documents/file.txt" and
-	//! /Documents/file.txt". No exceptions are made for file names (ie. files
+	//! "/Documents/file.txt". No exceptions are made for file names (ie. files
 	//! with a '.' in the name). The path can be separated by forward or
 	//! backward slashes.
 	static std::pair< const char*, const char* > TraversePath( const char* filePath );
 	static Str256 GetDirectoryFromPath( const char* filePath );
 	static void AppendToPath( Str256* path, const char* str );
-	//! Replaces the extension of the given path with \p ext. If the given path
-	//! does not have an extension then \p ext will be appended to the path.
-	//! \p ext must be only alphanumeric characters.
+	//! Replaces the extension of the given \p path with \p ext, or appends
+	//! \p ext if \p path has no extension. Returns true if \p path was updated.
+	//! Returns false and leaves \p path unchanged if \p path is null, empty, a
+	//! directory path, or if \p ext is null, empty, or contains characters other
+	//! than letters and numbers.
 	static bool SetExtension( Str256* path, const char* ext );
-	// @todo delete
-	//! Returns true if the given path is a directory. This function does not
-	//! access the underlying filesystem to see if the directory exists.
-	static bool IsDirectory( const char* path );
+	//! Returns true if the given \p filePath has the complete \p extension.
+	//! The extension can include any number of dots, and may include multiple
+	//! dot-separated segments. A leading dot in \p extension is ignored before
+	//! matching. For example ".TAR.GZ" or "tAr.gZ" are valid extensions, and
+	//! are considered equivalent to "tar.gz" when \p caseSensitive is false.
+	//! Empty segments are allowed, but "tar..gz" and "tar.gz" are not
+	//! considered equivalent.
+	static bool HasExtension( const char* filePath, const char* extension, bool caseSensitive = false );
 	//! Returns true if the given path is a file and the current user has write permissions. This function accesses the
 	//! underlying filesystem to see if the file exists and is not a directory.
 	static bool IsWritable( const char* path );
@@ -4063,6 +4247,11 @@ private:
 	ae::Str256 m_cacheDir;
 	ae::Str256 m_userSharedDir;
 	ae::Str256 m_cacheSharedDir;
+public:
+	//! Returns true if the given path is a directory. This
+	//! function does not access the underlying filesystem to see if the
+	//! directory exists.
+	static bool IsDirectory( const char* path ); // @todo delete
 };
 
 //------------------------------------------------------------------------------
@@ -4245,8 +4434,9 @@ private:
 //------------------------------------------------------------------------------
 // @TODO: Graphics globals. Should be parameters to modules that need them.
 //------------------------------------------------------------------------------
-extern int32_t GLMajorVersion;
-extern int32_t GLMinorVersion;
+int32_t GLMajorVersion();
+int32_t GLMinorVersion();
+const char* GLProfile(); // es, core, compatibility
 // Caller enables this externally.  The renderer, Shader, math aren't tied to one another
 // enough to pass this locally.  glClipControl is also not accessible in ES or GL 4.1, so
 // doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
@@ -4725,11 +4915,14 @@ public:
 	static Matrix4 GetQuadToNDCTransform( Rect ndc, float z );
 
 private:
+	friend class Window;
+	void m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer );
 	uint32_t m_fbo = 0;
 	Array< Texture2D*, 4 > m_targets;
 	Texture2D m_depth;
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
+	bool m_externalFramebuffer = false;
 };
 
 //------------------------------------------------------------------------------
@@ -5355,9 +5548,9 @@ struct AStarNode
 	//--------------------------------------------------------------------------
 	// ae::AStar type T must implement these following functions:
 	//--------------------------------------------------------------------------
-	//! Returns the next node in the path. \p index is the index of the next
-	//! node in the path. Edges between paths can be uni-directional or
-	//! bi-directional.
+	//! Returns one of the next traversable nodes in the path. Argument \p index
+	//! should be no more than ae::AStarNode::GetNextCount() - 1. Note that
+	//! edges between paths can be uni or bi-directional.
 	const AStarNodeT* GetNext( uint32_t index ) const { return next[ index ]; }
 	//! Returns the number of nodes directly visitable from this node.
 	uint32_t GetNextCount() const { return next.Length(); }
@@ -5510,7 +5703,7 @@ struct IK
 	ae::Matrix4 debugModelToWorld = ae::Matrix4::Identity();
 	float debugJointScale = 0.1f; //!< Useful default when working in meters
 
-	// @TODO: Cleaup IK helpers
+	// @TODO: Cleanup IK helpers
 	static ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 p );
 	static ae::Vec3 GetAxisVector( ae::Axis axis, bool negative = true );
 	ae::Vec3 ClipJoint( float bindBoneLength, ae::Vec3 j0Pos, ae::Quaternion j0Ori, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, ae::Color debugColor );
@@ -6105,7 +6298,7 @@ public:
 	//! ae::NetObject::SetInitData() on the object to finalize the object for
 	//! remote creation. Call ae::NetObjectServer::DestroyNetObject() when finished.
 	NetObject* CreateNetObject();
-	//! Will cause the ae::NetObject to be detroyed on remote clients.
+	//! Will cause the ae::NetObject to be destroyed on remote clients.
 	//! Must be called for each ae::NetObject allocated with
 	//! ae::NetObjectServer::CreateNetObject().
 	void DestroyNetObject( NetObject* netObject );
@@ -7124,12 +7317,15 @@ template< typename T, typename C > T* Cast( C* obj );
 
 //------------------------------------------------------------------------------
 // ae::PatchVTable
-//! Overwrites the v-table of the given \p obj with the v-table of the given
-//! type. Use this over ae::ClassType::PatchVTable() when the type of \p obj
-//! is known at compile time. T Must be the bottom-most class in the given
-//! \p obj inheritance hierarchy. A temporary instance of the object will be
-//! constructed. \p ctorArgs may be provided if the type does not have a default
-//! constructor. 
+//! Replaces the v-table of \p obj with the v-table of type T.
+//!
+//! Use this function instead of ae::ClassType::PatchVTable() when the type is
+//! known at compile time. T must be the most derived class in \p obj's
+//! inheritance hierarchy.
+//!
+//! A temporary instance of T will be constructed to extract its v-table. If T
+//! does not have a default constructor, provide the necessary arguments via \p
+//! ctorArgs.
 //------------------------------------------------------------------------------
 template< typename T, typename... Args >
 void PatchVTable( T* obj, Args... ctorArgs )
@@ -7243,7 +7439,7 @@ private:
 class _ScratchBuffer
 {
 public:
-	_ScratchBuffer( uint32_t size );
+	_ScratchBuffer( uint32_t capacity );
 	~_ScratchBuffer();
 	static uint32_t GetScratchBytes( uint32_t bytes );
 
@@ -7254,7 +7450,7 @@ public:
 #endif
 	uint8_t* data = nullptr;
 	uint32_t offset = 0;
-	uint32_t size = 0;
+	uint32_t capacity = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -7272,16 +7468,16 @@ struct _Globals
 	std::thread::id allocatorThread;
 	_DefaultAllocator defaultAllocator;
 
-	// Scratch
-	_ScratchBuffer scratchBuffer = ae::Scratch< uint8_t >::kMaxScratchSize;
-
 	// Reflection
 	uint32_t metaCacheSeq = 0;
 	ae::Map< ae::TypeId, const ae::EnumType*, kMaxMetaEnumTypes, ae::Hash32, ae::MapMode::Stable > enumTypes;
 	ae::Map< ae::TypeId, ae::ClassType*, kMaxMetaTypes, ae::Hash32, ae::MapMode::Stable > classTypes;
 
-	// Graphics
+	// Platform
 	class GraphicsDevice* graphicsDevice = nullptr;
+	class _Application* application = nullptr;
+	void* eaglLayer = nullptr; // iOS: CAEAGLLayer, set by aeApplicationDelegate before Window init
+	class Input* input = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -7289,8 +7485,11 @@ struct _Globals
 //------------------------------------------------------------------------------
 struct _ThreadLocals
 {
+	_ThreadLocals();
 	static _ThreadLocals* Get();
 
+	_ScratchBuffer scratchBuffer;
+	std::mt19937_64 uuidRandom;
 	ae::Array< ae::Str64, 8 > logTagStack;
 };
 
@@ -7496,7 +7695,7 @@ template< typename... Args >
 void PushLogTag( const char* format, Args... args )
 {
 	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
-	const bool canAppendMessage = ( threadLocals->logTagStack.Length() < threadLocals->logTagStack.Size() );
+	const bool canAppendMessage = ( threadLocals->logTagStack.Length() < threadLocals->logTagStack.Capacity() );
 	AE_DEBUG_ASSERT( canAppendMessage );
 	if( canAppendMessage )
 	{
@@ -7547,7 +7746,7 @@ std::string _Log( ae::LogSeverity severity, const char* filePath, uint32_t line,
 		os << assertInfo << " ";
 	}
 	_BuildLogMessage( os, format, args... );
-	const char* tags[ decltype(threadLocals->logTagStack)::Size() ];
+	const char* tags[ decltype(threadLocals->logTagStack)::Capacity() ];
 	for( uint32_t i = 0; i < threadLocals->logTagStack.Length(); i++ )
 	{
 		tags[ i ] = threadLocals->logTagStack[ i ].c_str();
@@ -7714,29 +7913,29 @@ inline void Free( void* data )
 // ae::Scratch< T > member functions
 //------------------------------------------------------------------------------
 template< typename T >
-Scratch< T >::Scratch( uint32_t count )
+Scratch< T >::Scratch( uint32_t capacity )
 {
 	AE_STATIC_ASSERT( alignof(T) <= _ScratchBuffer::kScratchAlignment );
-	ae::_ScratchBuffer* globalScratch = &ae::_Globals::Get()->scratchBuffer;
-	const uint32_t bytes = globalScratch->GetScratchBytes( count * sizeof(T) );
+	ae::_ScratchBuffer* scratchBuffer = &ae::_ThreadLocals::Get()->scratchBuffer;
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( capacity * sizeof(T) );
 	
-	m_size = count;
-	m_data = (T*)( globalScratch->data + globalScratch->offset );
+	m_capacity = capacity;
+	m_data = (T*)( scratchBuffer->data + scratchBuffer->offset );
 	AE_DEBUG_ASSERT( ( (intptr_t)m_data % ae::_ScratchBuffer::kScratchAlignment ) == 0 );
-	m_prevOffsetCheck = globalScratch->offset;
-	globalScratch->offset += bytes;
-	AE_ASSERT_MSG( globalScratch->offset <= globalScratch->size, "Global scratch buffer size exceeded: # bytes / (# bytes). The global max can be set with AE_MAX_SCRATCH_BYTES_CONFIG.", globalScratch->offset, globalScratch->size );
+	m_prevOffsetCheck = scratchBuffer->offset;
+	scratchBuffer->offset += bytes;
+	AE_ASSERT_MSG( scratchBuffer->offset <= scratchBuffer->capacity, "Scratch buffer capacity exceeded: # bytes / (# bytes). The per-thread max can be set with AE_MAX_SCRATCH_BYTES_CONFIG.", scratchBuffer->offset, scratchBuffer->capacity );
 	
 #if _AE_DEBUG_
-	memset( m_data, 0xCD, m_size * sizeof(T) );
+	memset( m_data, 0xCD, m_capacity * sizeof(T) );
 	// Guard
-	uint8_t* guard = (uint8_t*)m_data + m_size * sizeof(T);
+	uint8_t* guard = (uint8_t*)m_data + m_capacity * sizeof(T);
 	const intptr_t guardLength = ( (uint8_t*)m_data + bytes ) - guard;
 	for( uint32_t i = 0; i < guardLength; i++ ) { guard[ i ] = 0xBD; }
 #endif
 	if( !std::is_trivially_constructible< T >::value )
 	{
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			new ( &m_data[ i ] ) T();
 		}
@@ -7746,12 +7945,12 @@ Scratch< T >::Scratch( uint32_t count )
 template< typename T >
 Scratch< T >::~Scratch()
 {
-	ae::_ScratchBuffer* scratchBuffer = &ae::_Globals::Get()->scratchBuffer;
+	ae::_ScratchBuffer* scratchBuffer = &ae::_ThreadLocals::Get()->scratchBuffer;
 	
-	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_size * sizeof(T) );
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_capacity * sizeof(T) );
 #if _AE_DEBUG_
 	// Guard
-	const uint8_t* guard = (uint8_t*)m_data + m_size * sizeof(T);
+	const uint8_t* guard = (uint8_t*)m_data + m_capacity * sizeof(T);
 	const intptr_t guardLength = ( (uint8_t*)m_data + bytes ) - guard;
 	for( uint32_t i = 0; i < guardLength; i++ ) { AE_ASSERT_MSG( guard[ i ] == 0xBD, "Scratch buffer guard has been overwritten" ); }
 #endif
@@ -7759,7 +7958,7 @@ Scratch< T >::~Scratch()
 	
 	if( !std::is_trivially_constructible< T >::value )
 	{
-		for( int32_t i = m_size - 1; i >= 0; i-- )
+		for( int32_t i = m_capacity - 1; i >= 0; i-- )
 		{
 			m_data[ i ].~T();
 		}
@@ -7778,7 +7977,7 @@ T* Scratch< T >::Data()
 template< typename T >
 uint32_t Scratch< T >::Length() const
 {
-	return m_size;
+	return m_capacity;
 }
 
 template< typename T >
@@ -7796,14 +7995,14 @@ const T& Scratch< T >::operator[] ( int32_t index ) const
 template< typename T >
 T& Scratch< T >::GetSafe( int32_t index )
 {
-	AE_ASSERT( index < (int32_t)m_size );
+	AE_ASSERT( index < (int32_t)m_capacity );
 	return m_data[ index ];
 }
 
 template< typename T >
 const T& Scratch< T >::GetSafe( int32_t index ) const
 {
-	AE_ASSERT( index < (int32_t)m_size );
+	AE_ASSERT( index < (int32_t)m_capacity );
 	return m_data[ index ];
 }
 
@@ -8895,50 +9094,50 @@ inline void Int3::SetXZ( Int2 xz ) { x = xz.x; z = xz.y; }
 //------------------------------------------------------------------------------
 // clang-format off
 // Grayscale
-inline Color Color::White() { static Color c = Color::SRGB8( 255, 255, 255 ); return c; }
-inline Color Color::Gray() { static Color c = Color::SRGB8( 127, 127, 127 ); return c; }
-inline Color Color::Black() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
+inline Color Color::White() { static const Color c = Color::SRGB8( 255, 255, 255 ); return c; }
+inline Color Color::Gray() { static const Color c = Color::SRGB8( 127, 127, 127 ); return c; }
+inline Color Color::Black() { static const Color c = Color::SRGB8( 0, 0, 0 ); return c; }
 // Rainbow
-inline Color Color::Red() { static Color c = Color::SRGB8( 255, 0, 0 ); return c; }
-inline Color Color::Orange() { static Color c = Color::SRGB8( 255, 127, 0 ); return c; }
-inline Color Color::Yellow() { static Color c = Color::SRGB8( 255, 255, 0 ); return c; }
-inline Color Color::Green() { static Color c = Color::SRGB8( 0, 255, 0 ); return c; }
-inline Color Color::Blue() { static Color c = Color::SRGB8( 0, 0, 255 ); return c; }
-inline Color Color::Indigo() { static Color c = Color::SRGB8( 75, 0, 130 ); return c; }
-inline Color Color::Violet() { static Color c = Color::SRGB8( 148, 0, 211 ); return c; }
+inline Color Color::Red() { static const Color c = Color::SRGB8( 255, 0, 0 ); return c; }
+inline Color Color::Orange() { static const Color c = Color::SRGB8( 255, 127, 0 ); return c; }
+inline Color Color::Yellow() { static const Color c = Color::SRGB8( 255, 255, 0 ); return c; }
+inline Color Color::Green() { static const Color c = Color::SRGB8( 0, 255, 0 ); return c; }
+inline Color Color::Blue() { static const Color c = Color::SRGB8( 0, 0, 255 ); return c; }
+inline Color Color::Indigo() { static const Color c = Color::SRGB8( 75, 0, 130 ); return c; }
+inline Color Color::Violet() { static const Color c = Color::SRGB8( 148, 0, 211 ); return c; }
 // Other
-inline Color Color::Cyan() { static Color c = Color( 0.0f, 1.0f, 1.0f ); return c; }
-inline Color Color::Magenta() { static Color c = Color( 1.0f, 0.0f, 1.0f ); return c; }
+inline Color Color::Cyan() { static const Color c = Color( 0.0f, 1.0f, 1.0f ); return c; }
+inline Color Color::Magenta() { static const Color c = Color( 1.0f, 0.0f, 1.0f ); return c; }
 // aether
-inline Color Color::AetherDarkRed() { static Color c = Color::SRGB8( 175, 65, 90 ); return c; }
-inline Color Color::AetherRed() { static Color c = Color::SRGB8( 240, 75, 90 ); return c; }
-inline Color Color::AetherOrange() { static Color c = Color::SRGB8( 255, 150, 60 ); return c; }
-inline Color Color::AetherYellow() { static Color c = Color::SRGB8( 250, 205, 100 ); return c; }
-inline Color Color::AetherGreen() { static Color c = Color::SRGB8( 180, 240, 80 ); return c; }
-inline Color Color::AetherTeal() { static Color c = Color::SRGB8( 90, 195, 185 ); return c; }
-inline Color Color::AetherBlue() { static Color c = Color::SRGB8( 70, 120, 225 ); return c; }
-inline Color Color::AetherPurple() { static Color c = Color::SRGB8( 120, 90, 195 ); return c; }
-inline Color Color::AetherWhite() { static Color c = Color::SRGB8( 235, 230, 215 ); return c; }
-inline Color Color::AetherGray() { static Color c = Color::SRGB8( 145, 135, 130 ); return c; }
-inline Color Color::AetherDarkGray() { static Color c = Color::SRGB8( 105, 105, 100 ); return c; }
-inline Color Color::AetherBlack() { static Color c = Color::SRGB8( 45, 45, 45 ); return c; }
+inline Color Color::AetherDarkRed() { static const Color c = Color::SRGB8( 175, 65, 90 ); return c; }
+inline Color Color::AetherRed() { static const Color c = Color::SRGB8( 240, 75, 90 ); return c; }
+inline Color Color::AetherOrange() { static const Color c = Color::SRGB8( 255, 150, 60 ); return c; }
+inline Color Color::AetherYellow() { static const Color c = Color::SRGB8( 250, 205, 100 ); return c; }
+inline Color Color::AetherGreen() { static const Color c = Color::SRGB8( 180, 240, 80 ); return c; }
+inline Color Color::AetherTeal() { static const Color c = Color::SRGB8( 90, 195, 185 ); return c; }
+inline Color Color::AetherBlue() { static const Color c = Color::SRGB8( 70, 120, 225 ); return c; }
+inline Color Color::AetherPurple() { static const Color c = Color::SRGB8( 120, 90, 195 ); return c; }
+inline Color Color::AetherWhite() { static const Color c = Color::SRGB8( 235, 230, 215 ); return c; }
+inline Color Color::AetherGray() { static const Color c = Color::SRGB8( 145, 135, 130 ); return c; }
+inline Color Color::AetherDarkGray() { static const Color c = Color::SRGB8( 105, 105, 100 ); return c; }
+inline Color Color::AetherBlack() { static const Color c = Color::SRGB8( 45, 45, 45 ); return c; }
 // Pico
-inline Color Color::PicoBlack() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
-inline Color Color::PicoDarkBlue() { static Color c = Color::SRGB8( 29, 43, 83 ); return c; }
-inline Color Color::PicoDarkPurple() { static Color c = Color::SRGB8( 126, 37, 83 ); return c; }
-inline Color Color::PicoDarkGreen() { static Color c = Color::SRGB8( 0, 135, 81 ); return c; }
-inline Color Color::PicoBrown() { static Color c = Color::SRGB8( 171, 82, 54 ); return c; }
-inline Color Color::PicoDarkGray() { static Color c = Color::SRGB8( 95, 87, 79 ); return c; }
-inline Color Color::PicoLightGray() { static Color c = Color::SRGB8( 194, 195, 199 ); return c; }
-inline Color Color::PicoWhite() { static Color c = Color::SRGB8( 255, 241, 232 ); return c; }
-inline Color Color::PicoRed() { static Color c = Color::SRGB8( 255, 0, 77 ); return c; }
-inline Color Color::PicoOrange() { static Color c = Color::SRGB8( 255, 163, 0 ); return c; }
-inline Color Color::PicoYellow() { static Color c = Color::SRGB8( 255, 236, 39 ); return c; }
-inline Color Color::PicoGreen() { static Color c = Color::SRGB8( 0, 228, 54 ); return c; }
-inline Color Color::PicoBlue() { static Color c = Color::SRGB8( 41, 173, 255 ); return c; }
-inline Color Color::PicoIndigo() { static Color c = Color::SRGB8( 131, 118, 156 ); return c; }
-inline Color Color::PicoPink() { static Color c = Color::SRGB8( 255, 119, 168 ); return c; }
-inline Color Color::PicoPeach() { static Color c = Color::SRGB8( 255, 204, 170 ); return c; }
+inline Color Color::PicoBlack() { static const Color c = Color::SRGB8( 0, 0, 0 ); return c; }
+inline Color Color::PicoDarkBlue() { static const Color c = Color::SRGB8( 29, 43, 83 ); return c; }
+inline Color Color::PicoDarkPurple() { static const Color c = Color::SRGB8( 126, 37, 83 ); return c; }
+inline Color Color::PicoDarkGreen() { static const Color c = Color::SRGB8( 0, 135, 81 ); return c; }
+inline Color Color::PicoBrown() { static const Color c = Color::SRGB8( 171, 82, 54 ); return c; }
+inline Color Color::PicoDarkGray() { static const Color c = Color::SRGB8( 95, 87, 79 ); return c; }
+inline Color Color::PicoLightGray() { static const Color c = Color::SRGB8( 194, 195, 199 ); return c; }
+inline Color Color::PicoWhite() { static const Color c = Color::SRGB8( 255, 241, 232 ); return c; }
+inline Color Color::PicoRed() { static const Color c = Color::SRGB8( 255, 0, 77 ); return c; }
+inline Color Color::PicoOrange() { static const Color c = Color::SRGB8( 255, 163, 0 ); return c; }
+inline Color Color::PicoYellow() { static const Color c = Color::SRGB8( 255, 236, 39 ); return c; }
+inline Color Color::PicoGreen() { static const Color c = Color::SRGB8( 0, 228, 54 ); return c; }
+inline Color Color::PicoBlue() { static const Color c = Color::SRGB8( 41, 173, 255 ); return c; }
+inline Color Color::PicoIndigo() { static const Color c = Color::SRGB8( 131, 118, 156 ); return c; }
+inline Color Color::PicoPink() { static const Color c = Color::SRGB8( 255, 119, 168 ); return c; }
+inline Color Color::PicoPeach() { static const Color c = Color::SRGB8( 255, 204, 170 ); return c; }
 // clang-format on
 
 //------------------------------------------------------------------------------
@@ -9853,7 +10052,7 @@ uint32_t Str< N >::Length() const
 }
 
 template< uint32_t N >
-uint32_t Str< N >::Size() const
+uint32_t Str< N >::Capacity() const
 {
 	return MaxLength();
 }
@@ -10372,7 +10571,7 @@ Array< T, N >::Array()
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 	
 	m_length = 0;
-	m_size = N;
+	m_capacity = N;
 	m_array = (T*)&m_storage;
 }
 
@@ -10382,7 +10581,7 @@ Array< T, N >::Array( const T& value, uint32_t length )
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 	
 	m_length = length;
-	m_size = N;
+	m_capacity = N;
 	m_array = (T*)&m_storage;
 	for( uint32_t i = 0; i < length; i++ )
 	{
@@ -10397,7 +10596,7 @@ Array< T, N >::Array( std::initializer_list< T > initList )
 	AE_ASSERT_MSG( N >= initList.size(), "Initializer list is longer than max length (# >= #)", N, initList.size() );
 	
 	m_length = (uint32_t)initList.size();
-	m_size = N;
+	m_capacity = N;
 	m_array = (T*)&m_storage;
 	uint32_t i = 0;
 	for( const T& value : initList )
@@ -10410,7 +10609,7 @@ Array< T, N >::Array( std::initializer_list< T > initList )
 template< typename T, uint32_t N >
 Array< T, N >::Array( ae::Tag tag ) :
 	m_length( 0 ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_array( nullptr ),
 	m_tag( tag )
 {
@@ -10419,20 +10618,20 @@ Array< T, N >::Array( ae::Tag tag ) :
 }
 
 template< typename T, uint32_t N >
-Array< T, N >::Array( ae::Tag tag, uint32_t size ) :
+Array< T, N >::Array( ae::Tag tag, uint32_t capacity ) :
 	m_length( 0 ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_array( nullptr ),
 	m_tag( tag )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
-	Reserve( size );
+	Reserve( capacity );
 }
 
 template< typename T, uint32_t N >
 Array< T, N >::Array( ae::Tag tag, const T& value, uint32_t length ) :
 	m_length( 0 ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_array( nullptr ),
 	m_tag( tag )
 {
@@ -10444,7 +10643,7 @@ template< typename T, uint32_t N >
 Array< T, N >::Array( const Array< T, N >& other )
 {
 	m_length = 0;
-	m_size = N;
+	m_capacity = N;
 	m_array = N ? (T*)&m_storage : nullptr;
 	m_tag = other.m_tag;
 	
@@ -10466,7 +10665,7 @@ Array< T, N >::Array( Array< T, N >&& other ) noexcept
 		AE_DEBUG_ASSERT( m_tag == ae::Tag() );
 		AE_DEBUG_ASSERT( other.m_tag == ae::Tag() );
 		m_length = 0;
-		m_size = N;
+		m_capacity = N;
 		m_array = (T*)&m_storage;
 		*this = other; // Regular assignment (without std::move)
 	}
@@ -10474,11 +10673,11 @@ Array< T, N >::Array( Array< T, N >&& other ) noexcept
 	{
 		m_tag = other.m_tag;
 		m_length = other.m_length;
-		m_size = other.m_size;
+		m_capacity = other.m_capacity;
 		m_array = other.m_array;
 		
 		other.m_length = 0;
-		other.m_size = 0;
+		other.m_capacity = 0;
 		other.m_array = nullptr;
 		// @NOTE: Don't reset tag. 'other' must remain in a valid state.
 	}
@@ -10523,11 +10722,11 @@ void Array< T, N >::operator =( Array< T, N >&& other ) noexcept
 		}
 		
 		m_length = other.m_length;
-		m_size = other.m_size;
+		m_capacity = other.m_capacity;
 		m_array = other.m_array;
 		
 		other.m_length = 0;
-		other.m_size = 0;
+		other.m_capacity = 0;
 		other.m_array = nullptr;
 	}
 }
@@ -10540,7 +10739,7 @@ Array< T, N >::~Array()
 	{
 		ae::Free( m_array );
 	}
-	m_size = 0;
+	m_capacity = 0;
 	m_array = nullptr;
 }
 
@@ -10567,7 +10766,7 @@ template< typename T, uint32_t N >
 T* Array< T, N >::AppendArray( const T* values, uint32_t count )
 {
 	Reserve( m_length + count );
-	AE_DEBUG_ASSERT( m_size >= m_length + count );
+	AE_DEBUG_ASSERT( m_capacity >= m_length + count );
 	T* result = m_array + m_length;
 	for( uint32_t i = 0; i < count; i++ )
 	{
@@ -10750,54 +10949,54 @@ int32_t Array< T, N >::FindLastFn( Fn testFn ) const
 }
 
 template< typename T, uint32_t N >
-void Array< T, N >::Reserve( uint32_t _size )
+void Array< T, N >::Reserve( uint32_t _capacity )
 {
 	if( N > 0 )
 	{
 		AE_DEBUG_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
-		AE_ASSERT_MSG( N >= _size, "# >= #", N, _size );
+		AE_ASSERT_MSG( N >= _capacity, "# >= #", N, _capacity );
 		return;
 	}
-	else if( _size <= m_size )
+	else if( _capacity <= m_capacity )
 	{
 		return;
 	}
 	
 	AE_DEBUG_ASSERT( m_tag != ae::Tag() );
 	
-	constexpr uint32_t maxExponentialSize = ( 1 << 18 );
-	uint32_t size = _size;
-	if( m_size == 0 && size > 1 )
+	constexpr uint32_t maxExponentialCapacity = ( 1 << 18 );
+	uint32_t capacity = _capacity;
+	if( m_capacity == 0 && capacity > 1 )
 	{
 		// Exact amount specified, so use that
 	}
-	else if( size <= maxExponentialSize )
+	else if( capacity <= maxExponentialCapacity )
 	{
-		if( m_size == 0 )
+		if( m_capacity == 0 )
 		{
 			// Initially allocate at least 64 bytes (rounded down) of type
-			size = ae::Max( size, 64u / (uint32_t)sizeof(T) );
+			capacity = ae::Max( capacity, 64u / (uint32_t)sizeof(T) );
 		}
 		else
 		{
-			// At least double the size, to reduce the number of resizes
-			size = ae::Max( size, m_size * 2 );
+			// At least double the capacity, to reduce the number of resizes
+			capacity = ae::Max( capacity, m_capacity * 2 );
 		}
-		size = ae::NextPowerOfTwo( size );
+		capacity = ae::NextPowerOfTwo( capacity );
 	}
 	else
 	{
-		// Don't double the size or use powers of two here, as the array will
+		// Don't double the capacity or use powers of two here, as the array will
 		// become very very large. At this point the user should be manually
-		// calling reserve with the expected needed size.
-		size = ( size / maxExponentialSize + 1 ) * maxExponentialSize;
+		// calling reserve with the expected needed capacity.
+		capacity = ( capacity / maxExponentialCapacity + 1 ) * maxExponentialCapacity;
 	}
-	AE_DEBUG_ASSERT( size );
-	AE_DEBUG_ASSERT( size >= _size );
-	m_size = size;
+	AE_DEBUG_ASSERT( capacity );
+	AE_DEBUG_ASSERT( capacity >= _capacity );
+	m_capacity = capacity;
 	
 	// @TODO: Try to use realloc
-	T* arr = (T*)ae::Allocate( m_tag, m_size * sizeof(T), alignof(T) );
+	T* arr = (T*)ae::Allocate( m_tag, m_capacity * sizeof(T), alignof(T) );
 	for( uint32_t i = 0; i < m_length; i++ )
 	{
 		new ( &arr[ i ] ) T ( std::move( m_array[ i ] ) );
@@ -10864,7 +11063,7 @@ T& Array< T, N >::Last()
 template< typename Key, uint32_t N, typename Hash >
 HashMap< Key, N, Hash >::HashMap() :
 	m_entries( (Entry*)&m_storage ),
-	m_size( N ),
+	m_capacity( N ),
 	m_length( 0 )
 {
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
@@ -10874,7 +11073,7 @@ template< typename Key, uint32_t N, typename Hash >
 HashMap< Key, N, Hash >::HashMap( ae::Tag tag ) :
 	m_tag( tag ),
 	m_entries( nullptr ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_length( 0 )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
@@ -10882,28 +11081,28 @@ HashMap< Key, N, Hash >::HashMap( ae::Tag tag ) :
 }
 
 template< typename Key, uint32_t N, typename Hash >
-void HashMap< Key, N, Hash >::Reserve( uint32_t size )
+void HashMap< Key, N, Hash >::Reserve( uint32_t capacity )
 {
 	if( N )
 	{
-		AE_DEBUG_ASSERT_MSG( m_size >= size, "Static array size is fixed (# >= #)", m_size, size );
+		AE_DEBUG_ASSERT_MSG( m_capacity >= capacity, "Static array capacity is fixed (# >= #)", m_capacity, capacity );
 		return;
 	}
-	else if( m_size >= size )
+	else if( m_capacity >= capacity )
 	{
 		return;
 	}
 	
 	Entry* prevEntries = m_entries;
-	const uint32_t prevSize = m_size;
+	const uint32_t prevCapacity = m_capacity;
 	const uint32_t prevLength = m_length;
 	m_length = 0;
-	m_size = size;
+	m_capacity = capacity;
 	// @TODO: Support 'Entry' having no default constructor
-	m_entries = ae::NewArray< Entry >( m_tag, m_size );
+	m_entries = ae::NewArray< Entry >( m_tag, m_capacity );
 	if( prevEntries )
 	{
-		for( uint32_t i = 0; i < prevSize; i++ )
+		for( uint32_t i = 0; i < prevCapacity; i++ )
 		{
 			const Entry& e = prevEntries[ i ];
 			if( e.index >= 0 )
@@ -10919,7 +11118,7 @@ void HashMap< Key, N, Hash >::Reserve( uint32_t size )
 
 template< typename Key, uint32_t N, typename Hash >
 HashMap< Key, N, Hash >::HashMap( const HashMap< Key, N, Hash >& other ) :
-	m_size( N ),
+	m_capacity( N ),
 	m_length( 0 )
 {
 	if( N )
@@ -10944,15 +11143,15 @@ void HashMap< Key, N, Hash >::operator =( const HashMap< Key, N, Hash >& other )
 		return;
 	}
 	Clear();
-	Reserve( other.m_size );
-	if( m_size == other.m_size )
+	Reserve( other.m_capacity );
+	if( m_capacity == other.m_capacity )
 	{
-		std::copy_n( other.m_entries, m_size, m_entries );
+		std::copy_n( other.m_entries, m_capacity, m_entries );
 		m_length = other.m_length;
 	}
 	else
 	{
-		for( uint32_t i = 0; i < other.m_size; i++ )
+		for( uint32_t i = 0; i < other.m_capacity; i++ )
 		{
 			Entry e = other.m_entries[ i ];
 			if( e.index >= 0 )
@@ -10971,7 +11170,7 @@ HashMap< Key, N, Hash >::~HashMap()
 		ae::Delete( m_entries );
 	}
 	m_length = 0;
-	m_size = 0;
+	m_capacity = 0;
 	m_entries = nullptr;
 }
 
@@ -10982,11 +11181,11 @@ bool HashMap< Key, N, Hash >::Set( Key key, uint32_t index )
 	const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
 	if( m_length )
 	{
-		AE_DEBUG_ASSERT( m_size );
-		const uint32_t startIdx = hash % m_size;
-		for( uint32_t i = 0; i < m_size; i++ )
+		AE_DEBUG_ASSERT( m_capacity );
+		const uint32_t startIdx = hash % m_capacity;
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
-			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			Entry* e = &m_entries[ ( i + startIdx ) % m_capacity ];
 			if( e->index < 0 )
 			{
 				break;
@@ -11005,9 +11204,9 @@ bool HashMap< Key, N, Hash >::Set( Key key, uint32_t index )
 	{
 		return false;
 	}
-	else if( !N && ( !m_size || ( m_length / (float)m_size ) > 0.8f ) )
+	else if( !N && ( !m_capacity || ( m_length / (float)m_capacity ) > 0.8f ) )
 	{
-		Reserve( m_size ? m_size * 2 : 32 );
+		Reserve( m_capacity ? m_capacity * 2 : 32 );
 	}
 	return m_Insert( key, hash, index );
 }
@@ -11021,12 +11220,12 @@ int32_t HashMap< Key, N, Hash >::Remove( Key key )
 	}
 	Entry* entry = nullptr;
 	{
-		AE_DEBUG_ASSERT( m_size );
+		AE_DEBUG_ASSERT( m_capacity );
 		const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
-		const uint32_t startIdx = hash % m_size;
-		for( uint32_t i = 0; i < m_size; i++ )
+		const uint32_t startIdx = hash % m_capacity;
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
-			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			Entry* e = &m_entries[ ( i + startIdx ) % m_capacity ];
 			if( e->index < 0 )
 			{
 				return -1;
@@ -11046,11 +11245,11 @@ int32_t HashMap< Key, N, Hash >::Remove( Key key )
 		// their hash index exactly or a gap is found.
 		const uint32_t startIndex = uint32_t( entry - m_entries );
 		uint32_t targetIndex = startIndex;
-		for( uint32_t i = 1; i < m_size; i++ )
+		for( uint32_t i = 1; i < m_capacity; i++ )
 		{
-			uint32_t fromIndex = ( i + startIndex ) % m_size;
+			uint32_t fromIndex = ( i + startIndex ) % m_capacity;
 			Entry* e = &m_entries[ fromIndex ];
-			if( e->index < 0 || ( ( e->hash % m_size ) == fromIndex ) )
+			if( e->index < 0 || ( ( e->hash % m_capacity ) == fromIndex ) )
 			{
 				break;
 			}
@@ -11070,7 +11269,7 @@ void HashMap< Key, N, Hash >::Increment( uint32_t index )
 {
 	if( m_length )
 	{
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			Entry* e = &m_entries[ i ];
 			if( e->index >= (int32_t)index )
@@ -11086,7 +11285,7 @@ void HashMap< Key, N, Hash >::Decrement( uint32_t index )
 {
 	if( m_length )
 	{
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			Entry* e = &m_entries[ i ];
 			if( e->index > (int32_t)index )
@@ -11102,12 +11301,12 @@ int32_t HashMap< Key, N, Hash >::Get( Key key ) const
 {
 	if( m_length )
 	{
-		AE_DEBUG_ASSERT( m_size );
+		AE_DEBUG_ASSERT( m_capacity );
 		const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
-		const uint32_t startIdx = hash % m_size;
-		for( uint32_t i = 0; i < m_size; i++ )
+		const uint32_t startIdx = hash % m_capacity;
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
-			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			Entry* e = &m_entries[ ( i + startIdx ) % m_capacity ];
 			if( e->index < 0 )
 			{
 				return -1;
@@ -11127,7 +11326,7 @@ void HashMap< Key, N, Hash >::Clear()
 	if( m_length )
 	{
 		m_length = 0;
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			m_entries[ i ].index = -1;
 		}
@@ -11146,10 +11345,10 @@ bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32
 	AE_DEBUG_ASSERT( index >= 0 );
 	AE_DEBUG_ASSERT( ae::GetHash< typename Hash::UInt >( key ) == hash );
 	// 'hash' is modified in loop
-	const uint32_t startIdx = ( hash % m_size );
-	for( uint32_t i = 0; i < m_size; i++ )
+	const uint32_t startIdx = ( hash % m_capacity );
+	for( uint32_t i = 0; i < m_capacity; i++ )
 	{
-		const uint32_t currentIdx = ( i + startIdx ) % m_size;
+		const uint32_t currentIdx = ( i + startIdx ) % m_capacity;
 		Entry* e = &m_entries[ currentIdx ];
 		if( e->index < 0 )
 		{
@@ -11159,9 +11358,9 @@ bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32
 			m_length++;
 			return true;
 		}
-#define mod_subtract( idx, baseIdx ) ( ( (idx) + m_size - (baseIdx) ) % m_size )
-		const uint32_t currDist = mod_subtract( currentIdx, ( e->hash % m_size ) );
-		const uint32_t dist = mod_subtract( currentIdx, ( hash % m_size ) );
+#define mod_subtract( idx, baseIdx ) ( ( (idx) + m_capacity - (baseIdx) ) % m_capacity )
+		const uint32_t currDist = mod_subtract( currentIdx, ( e->hash % m_capacity ) );
+		const uint32_t dist = mod_subtract( currentIdx, ( hash % m_capacity ) );
 #undef mod_subtract
 		if( dist > currDist )
 		{
@@ -11350,7 +11549,7 @@ template< typename K, typename V, uint32_t N, typename H, MapMode M >
 void Map< K, V, N, H, M >::Reserve( uint32_t count )
 {
 	m_pairs.Reserve( count );
-	m_hashMap.Reserve( m_pairs.Size() ); // @TODO: Should this be bigger than storage, so it's faster to do lookups?
+	m_hashMap.Reserve( m_pairs.Capacity() ); // @TODO: Should this be bigger than storage, so it's faster to do lookups?
 	AE_DEBUG_ASSERT( m_pairs.Length() == m_hashMap.Length() );
 }
 
@@ -11907,27 +12106,27 @@ uint32_t List< T >::Length() const
 template< typename T, uint32_t N >
 RingBuffer< T, N >::RingBuffer() :
 	m_first( 0 ),
-	m_size( N )
+	m_capacity( N )
 {}
 
 template< typename T, uint32_t N >
-RingBuffer< T, N >::RingBuffer( ae::Tag tag, uint32_t size ) :
+RingBuffer< T, N >::RingBuffer( ae::Tag tag, uint32_t capacity ) :
 	m_first( 0 ),
-	m_size( size ),
+	m_capacity( capacity ),
 	m_buffer( tag )
 {}
 
 template< typename T, uint32_t N >
 T& RingBuffer< T, N >::Append( const T& val )
 {
-	if( m_buffer.Length() < Size() )
+	if( m_buffer.Length() < Capacity() )
 	{
 		return m_buffer.Append( val );
 	}
 	else
 	{
-		AE_DEBUG_ASSERT( m_buffer.Length() == Size() );
-		uint32_t idx = m_first % Size();
+		AE_DEBUG_ASSERT( m_buffer.Length() == Capacity() );
+		uint32_t idx = m_first % Capacity();
 		m_buffer[ idx ] = val;
 		m_first++;
 		return m_buffer[ idx ];
@@ -11945,14 +12144,14 @@ template< typename T, uint32_t N >
 T& RingBuffer< T, N >::Get( uint32_t index )
 {
 	AE_ASSERT( index < m_buffer.Length() );
-	return m_buffer[ ( m_first + index ) % Size() ];
+	return m_buffer[ ( m_first + index ) % Capacity() ];
 }
 
 template< typename T, uint32_t N >
 const T& RingBuffer< T, N >::Get( uint32_t index ) const
 {
 	AE_ASSERT( index < m_buffer.Length() );
-	return m_buffer[ ( m_first + index ) % Size() ];
+	return m_buffer[ ( m_first + index ) % Capacity() ];
 }
 
 //------------------------------------------------------------------------------
@@ -11967,8 +12166,8 @@ FreeList< N >::FreeList() :
 }
 
 template< uint32_t N >
-FreeList< N >::FreeList( const ae::Tag& tag, uint32_t size ) :
-	m_pool( tag, Entry(), size )
+FreeList< N >::FreeList( const ae::Tag& tag, uint32_t capacity ) :
+	m_pool( tag, Entry(), capacity )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
 	FreeAll();
@@ -12270,7 +12469,7 @@ T* ObjectPool< T, N, Paged >::GetNext( T* obj )
 template< typename T, uint32_t N, bool Paged >
 bool ObjectPool< T, N, Paged >::HasFree() const
 {
-	return Length() < Size();
+	return Length() < Capacity();
 }
 
 template< typename T, uint32_t N, bool Paged >
@@ -12467,9 +12666,9 @@ OpaquePool::Iterator< T > OpaquePool::Iterator< T >::end()
 //------------------------------------------------------------------------------
 // ae::Any templated member functions
 //------------------------------------------------------------------------------
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-Any< Size, Alignment >::Any( const T& value )
+Any< Capacity, Alignment >::Any( const T& value )
 {
 	*this = value;
 }
@@ -12483,9 +12682,9 @@ template< typename... > inline constexpr bool _False = false;
 template< typename T > struct _RemovePointerConst { using Type = T; };
 template< typename U > struct _RemovePointerConst< const U* > { using Type = U*; };
 
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-void Any< Size, Alignment >::operator=( const T& value )
+void Any< Capacity, Alignment >::operator=( const T& value )
 {
 	if constexpr( !std::is_trivially_destructible_v< T > )
 	{
@@ -12495,7 +12694,7 @@ void Any< Size, Alignment >::operator=( const T& value )
 	{
 		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T must be trivially copyable" );
 	}
-	else if constexpr( sizeof( T ) > Size )
+	else if constexpr( sizeof( T ) > Capacity )
 	{
 		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T is too large to store in DocumentValue" );
 	}
@@ -12516,24 +12715,24 @@ void Any< Size, Alignment >::operator=( const T& value )
 	}
 }
 
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-T Any< Size, Alignment >::Get( const T& defaultValue ) const
+T Any< Capacity, Alignment >::Get( const T& defaultValue ) const
 {
 	const T* value = TryGet< T >();
 	return value ? *value : defaultValue;
 }
 
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-T* Any< Size, Alignment >::TryGet()
+T* Any< Capacity, Alignment >::TryGet()
 {
 	return AE_CALL_CONST_MEMBER_FUNCTION( template TryGet< T >() );
 }
 
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-const T* Any< Size, Alignment >::TryGet() const
+const T* Any< Capacity, Alignment >::TryGet() const
 {
 	const ae::TypeId returnTypeId = ae::GetTypeIdWithQualifiers< T >();
 	if( m_typeId == returnTypeId )
@@ -12552,14 +12751,14 @@ const T* Any< Size, Alignment >::TryGet() const
 	return nullptr;
 }
 
-template< uint32_t Size, uint32_t Alignment >
-uint32_t Any< Size, Alignment >::GetTypeId() const
+template< uint32_t Capacity, uint32_t Alignment >
+uint32_t Any< Capacity, Alignment >::GetTypeId() const
 {
 	return m_typeId;
 }
 
-template< uint32_t Size, uint32_t Alignment >
-Any< Size, Alignment >::operator bool() const
+template< uint32_t Capacity, uint32_t Alignment >
+Any< Capacity, Alignment >::operator bool() const
 {
 	return m_typeId != 0;
 }
@@ -12567,26 +12766,60 @@ Any< Size, Alignment >::operator bool() const
 //------------------------------------------------------------------------------
 // ae::Function templated member functions
 //------------------------------------------------------------------------------
-template< typename R, typename... Args, size_t MaxSize >
-Function< R( Args... ), MaxSize >::Function() : m_invoker( nullptr )
+template< typename R, typename... Args, size_t Capacity >
+Function< R( Args... ), Capacity >::Function() : m_invoker( nullptr )
 {
 }
-template< typename R, typename... Args, size_t MaxSize >
+template< typename R, typename... Args, size_t Capacity >
 template< typename F >
-Function< R( Args... ), MaxSize >::Function( F&& f )
+Function< R( Args... ), Capacity >::Function( F&& f )
 {
-	static_assert( sizeof( F ) <= MaxSize, "Lambda too large" );
-	static_assert( std::is_trivially_copyable< F >::value, "Lambda must be trivially copyable" );
-	memcpy( m_storage, &f, sizeof( F ) );
-	m_invoker = []( const void* ptr, Args... args ) -> R { return ( *reinterpret_cast< const F* >( ptr ) )( args... ); };
+	using FT = std::decay_t< F >;
+	static_assert( sizeof( FT ) <= Capacity, "Callable too large" );
+	static_assert( std::is_trivially_copyable< FT >::value, "Callable must be trivially copyable" );
+	FT stored = f;
+	memcpy( m_storage, &stored, sizeof( FT ) );
+	m_invoker = []( const void* ptr, Args... args ) -> R
+	{
+		return ( *reinterpret_cast< const FT* >( ptr ) )( args... );
+	};
 }
-template< typename R, typename... Args, size_t MaxSize >
-R Function< R( Args... ), MaxSize >::operator()( Args... args ) const
+template< typename R, typename... Args, size_t Capacity >
+template< typename T >
+Function< R( Args... ), Capacity >::Function( T* obj, R ( T::*mfp )( Args... ) )
 {
+	struct Bound { T* obj; R ( T::*mfp )( Args... ); };
+	static_assert( sizeof( Bound ) <= Capacity, "Bound member too large" );
+	const Bound b = { obj, mfp };
+	memcpy( m_storage, &b, sizeof( Bound ) );
+	m_invoker = []( const void* ptr, Args... args ) -> R
+	{
+		const Bound* p = reinterpret_cast< const Bound* >( ptr );
+		return ( p->obj->*p->mfp )( args... );
+	};
+}
+template< typename R, typename... Args, size_t Capacity >
+template< typename T >
+Function< R( Args... ), Capacity >::Function( const T* obj, R ( T::*mfp )( Args... ) const )
+{
+	struct Bound { const T* obj; R ( T::*mfp )( Args... ) const; };
+	static_assert( sizeof( Bound ) <= Capacity, "Bound member too large" );
+	const Bound b = { obj, mfp };
+	memcpy( m_storage, &b, sizeof( Bound ) );
+	m_invoker = []( const void* ptr, Args... args ) -> R
+	{
+		const Bound* p = reinterpret_cast< const Bound* >( ptr );
+		return ( p->obj->*p->mfp )( args... );
+	};
+}
+template< typename R, typename... Args, size_t Capacity >
+R Function< R( Args... ), Capacity >::operator()( Args... args ) const
+{
+	AE_DEBUG_ASSERT( m_invoker );
 	return m_invoker( m_storage, args... );
 }
-template< typename R, typename... Args, size_t MaxSize >
-Function< R( Args... ), MaxSize >::operator bool() const
+template< typename R, typename... Args, size_t Capacity >
+Function< R( Args... ), Capacity >::operator bool() const
 {
 	return m_invoker != nullptr;
 }
@@ -12871,7 +13104,7 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 #if _AE_DEBUG_ && ( N == 0 )
 	if( m_limit )
 	{
-		AE_ASSERT( m_nodes.Size() >= m_limit );
+		AE_ASSERT( m_nodes.Capacity() >= m_limit );
 	}
 	auto* preCheck = m_nodes.Data();
 #endif
@@ -12995,7 +13228,7 @@ template< uint32_t V, uint32_t T, uint32_t B >
 void CollisionMesh< V, T, B >::Reserve( uint32_t vertCount, uint32_t triCount, uint32_t bvhNodeCount )
 {
 	AE_DEBUG_ASSERT( m_positions.Length() == m_collisionExtras.Length() );
-	if( m_positions.Size() < vertCount || m_tris.Size() < triCount || m_bvh.GetLimit() < bvhNodeCount )
+	if( m_positions.Capacity() < vertCount || m_tris.Capacity() < triCount || m_bvh.GetLimit() < bvhNodeCount )
 	{
 		m_positions.Reserve( vertCount );
 		m_collisionExtras.Reserve( vertCount );
@@ -13300,7 +13533,7 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 					result.velocity.ZeroDirection( -triNormal );
 		
 					// @TODO: Sort. Shouldn't randomly discard hits.
-					if( result.hits.Length() < result.hits.Size() )
+					if( result.hits.Length() < result.hits.Capacity() )
 					{
 						ae::PushOutInfo::Hit& hitOut = result.hits.Append( {} );
 						hitOut.position = triHitPos;
@@ -14458,7 +14691,7 @@ public:
 	_ClassTypeT( const char* typeName )
 	{
 		_Globals* globals = _Globals::Get();
-		AE_ASSERT_MSG( globals->classTypes.Length() < globals->classTypes.Size(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->classTypes.Size() );
+		AE_ASSERT_MSG( globals->classTypes.Length() < globals->classTypes.Capacity(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->classTypes.Capacity() );
 		Init< T >( typeName );
 		globals->classTypes.Set( GetId(), this ); // @TODO: Should check for hash collision
 		globals->metaCacheSeq++;
@@ -14554,7 +14787,7 @@ struct ae::TypeT< ae::Map< K, V, N, H > > : public ae::MapType
 			if( const K* key = static_cast< const K* >( _key.Get( &GetKeyVarType() ) ) )
 			{
 				V* value = map->TryGet( *key );
-				if( !value && ( ( N == 0 ) || ( map->Length() < map->Size() ) ) )
+				if( !value && ( ( N == 0 ) || ( map->Length() < map->Capacity() ) ) )
 				{
 					value = &map->Set( *key, {} );
 				}
@@ -14867,7 +15100,7 @@ T ae::EnumType::GetValueByIndex( int32_t index ) const
 template< typename T >
 void ae::EnumType::m_AppendValue( const char* name, T value )
 {
-	AE_ASSERT_MSG( m_enumValueToName.Length() < m_enumValueToName.Size(), "Set/increase AE_MAX_META_ENUM_VALUES_CONFIG (Currently: #)", m_enumValueToName.Size() );
+	AE_ASSERT_MSG( m_enumValueToName.Length() < m_enumValueToName.Capacity(), "Set/increase AE_MAX_META_ENUM_VALUES_CONFIG (Currently: #)", m_enumValueToName.Capacity() );
 	const uint64_t storedValue = uint64_t( value );
 	m_enumValueToName.Set( storedValue, name );
 	m_enumNameToValue.Set( name, storedValue );
@@ -15213,6 +15446,7 @@ T* ae::Cast( C* obj )
 	#endif
 #elif _AE_APPLE_
 	#define GL_SILENCE_DEPRECATION
+	#define GLES_SILENCE_DEPRECATION
 #endif
 
 //------------------------------------------------------------------------------
@@ -15242,10 +15476,13 @@ T* ae::Cast( C* obj )
 		#pragma comment (lib, "Winmm.lib")
 		#pragma comment (lib, "Ws2_32.lib")
 		#pragma comment (lib, "XInput.lib")
-		#pragma comment (lib, "OpenGL32.lib")
-	#endif
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 0
+		#if AE_ENABLE_OPENGL
+			#pragma comment (lib, "opengl32.lib")
+			#pragma comment (lib, "glu32.lib")
+		#endif
+	#endif // _AE_MSVC_
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 0
 	#endif
 	#ifdef RGB
 		#undef RGB
@@ -15257,7 +15494,19 @@ T* ae::Cast( C* obj )
 	#include <dlfcn.h>
 	#include <mach-o/dyld.h>
 	#include <sys/stat.h>
-	#ifdef AE_USE_MODULES
+	#if _AE_IOS_
+		#import <Foundation/Foundation.h>
+		#import <UIKit/UIKit.h>
+		#import <QuartzCore/QuartzCore.h>
+		#import <OpenGLES/EAGL.h>
+		#import <OpenGLES/ES3/gl.h>
+		#include <GameController/GameController.h>
+		// @TODO:
+		// <OpenGLES/ES3/glext.h> is NOT imported here on purpose. It defines
+		// GL_BGR / GL_BGRA which clash with `const auto GL_BGR = GL_RGB;` later
+		// in this header. The Window::m_Initialize iOS branch only needs symbols
+		// from <OpenGLES/ES3/gl.h>.
+	#elif defined(AE_USE_MODULES)
 		@import AppKit;
 		@import Carbon;
 		@import Cocoa;
@@ -15266,33 +15515,26 @@ T* ae::Cast( C* obj )
 		@import OpenAL;
 		@import GameController;
 	#else
-		#if _AE_IOS_
-		#import <Foundation/Foundation.h>
-		#else
 		#include <Cocoa/Cocoa.h>
 		#include <Carbon/Carbon.h>
-		#endif
 		#include <GameController/GameController.h>
 	#endif
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 1
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 1
 	#endif
 #elif _AE_LINUX_
 	#include <unistd.h>
 	#include <pwd.h>
 	#include <limits.h>
 	#include <sys/stat.h>
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 0
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 0
 	#endif
 #elif _AE_EMSCRIPTEN_
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 1
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 1
 	#endif
 #endif
-#include <inttypes.h>
-#include <thread>
-#include <random>
 // Socket
 #if _AE_WINDOWS_
 	// Be caeful with include case-sensitivity here for MinGW/cross-compiling
@@ -15304,6 +15546,13 @@ T* ae::Cast( C* obj )
 	typedef char _ae_sock_buff_t;
 	#define _ae_sock_poll WSAPoll
 	#define _ae_ioctl ioctlsocket
+#elif _AE_WASM_
+	typedef uint16_t _ae_sa_family_t;
+	typedef int _ae_sock_err_t;
+	struct _ae_poll_fd_t { int fd; short events; short revents; };
+	typedef uint8_t _ae_sock_buff_t;
+	inline int _ae_sock_poll( _ae_poll_fd_t*, unsigned int, int ) { return -1; }
+	inline int _ae_ioctl( int, unsigned long, ... ) { return -1; }
 #else
 	#include <netdb.h>
 	#include <netinet/in.h>
@@ -15320,7 +15569,7 @@ T* ae::Cast( C* obj )
 	#define _ae_sock_poll poll
 	#define _ae_ioctl ioctl
 #endif
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	#if _AE_APPLE_
 		#include <OpenAL/al.h>
 		#include <OpenAL/alc.h>
@@ -15336,6 +15585,20 @@ T* ae::Cast( C* obj )
 	#include <arm_neon.h>
 #endif
 
+#if AE_ENABLE_OPENGL && _AE_WINDOWS_
+	// Forward declarations so ae::Window::m_Initialize (defined earlier in the
+	// translation unit than the unified GL function pointer table) can name
+	// these. Storage and the rest of the WGL/GL surface live near the X-macro
+	// further down.
+	#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+	#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+	#define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+	#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+	#define WGL_CONTEXT_FLAGS_ARB 0x2094
+	#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
+	extern HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList );
+#endif
+
 namespace ae {
 
 //------------------------------------------------------------------------------
@@ -15345,16 +15608,14 @@ ae::_Globals::~_Globals()
 {
 	AE_ASSERT( !enumTypes.Length() );
 	AE_ASSERT( !classTypes.Length() );
-	AE_ASSERT( !scratchBuffer.offset );
 }
 
 //------------------------------------------------------------------------------
 // Internal ae::_ScratchBuffer storage
 //------------------------------------------------------------------------------
-_ScratchBuffer::_ScratchBuffer( uint32_t size ) : size( size )
+_ScratchBuffer::_ScratchBuffer( uint32_t capacity ) : offset( 0 ), capacity( capacity )
 {
-	offset = 0;
-	data = new uint8_t[ size ]; // @TODO: Maybe this shouldn't use new/delete?
+	data = new uint8_t[ capacity ]; // @TODO: Maybe this shouldn't use new/delete?
 	AE_ASSERT( (intptr_t)data % kScratchAlignment == 0 );
 }
 _ScratchBuffer::~_ScratchBuffer()
@@ -15384,6 +15645,26 @@ ae::_Globals* ae::_Globals::Get()
 //------------------------------------------------------------------------------
 // Internal ae::_ThreadLocals functions
 //------------------------------------------------------------------------------
+ae::_ThreadLocals::_ThreadLocals() :
+	scratchBuffer( ae::Scratch< uint8_t >::kScratchCapacity )
+{
+	std::random_device randomDevice;
+	const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+	const uint64_t threadSeed = std::hash< std::thread::id >{}( std::this_thread::get_id() );
+	std::seed_seq seed
+	{
+		randomDevice(),
+		randomDevice(),
+		randomDevice(),
+		randomDevice(),
+		static_cast< uint32_t >( timeSeed ),
+		static_cast< uint32_t >( timeSeed >> 32 ),
+		static_cast< uint32_t >( threadSeed ),
+		static_cast< uint32_t >( threadSeed >> 32 ),
+	};
+	uuidRandom.seed( seed );
+}
+
 ae::_ThreadLocals* ae::_ThreadLocals::Get()
 {
 	static thread_local ae::_ThreadLocals s_threadLocals;
@@ -15397,7 +15678,7 @@ uint32_t GetPID()
 {
 #if _AE_WINDOWS_
 	return GetCurrentProcessId();
-#elif _AE_EMSCRIPTEN_
+#elif _AE_EMSCRIPTEN_ || _AE_WASM_
 	return 0;
 #else
 	return getpid();
@@ -15406,7 +15687,11 @@ uint32_t GetPID()
 
 uint32_t GetMaxConcurrentThreads()
 {
+#if _AE_WASM_
+	return 1; // @TODO: Detect threads at runtime (SharedArrayBuffer requires COOP/COEP cross-origin isolation, etc.)
+#else
 	return std::thread::hardware_concurrency();
+#endif
 }
 
 #if _AE_APPLE_
@@ -15453,12 +15738,13 @@ EM_JS( float, _ae_performance_now, (),
 double GetTime()
 {
 #if _AE_WINDOWS_
-	static LARGE_INTEGER counterFrequency = { 0 };
-	if( !counterFrequency.QuadPart )
+	static const LARGE_INTEGER counterFrequency = []()
 	{
-		bool success = QueryPerformanceFrequency( &counterFrequency ) != 0;
+		LARGE_INTEGER result = { 0 };
+		bool success = QueryPerformanceFrequency( &result ) != 0;
 		AE_ASSERT( success );
-	}
+		return result;
+	}();
 
 	LARGE_INTEGER performanceCount = { 0 };
 	bool success = QueryPerformanceCounter( &performanceCount ) != 0;
@@ -15466,6 +15752,10 @@ double GetTime()
 	return performanceCount.QuadPart / (double)counterFrequency.QuadPart;
 #elif _AE_EMSCRIPTEN_
 	return _ae_performance_now() / 1000.0f;
+#elif _AE_WASM_
+	struct timespec ts;
+	clock_gettime( CLOCK_MONOTONIC, &ts );
+	return ts.tv_sec + ts.tv_nsec * 1e-9;
 #else
 	return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::high_resolution_clock::now().time_since_epoch() ).count() / 1000000.0;
 #endif
@@ -16059,13 +16349,10 @@ Quaternion Matrix4::GetRotation() const
 
 Vec3 Matrix4::GetScale() const
 {
-	Vec3 scale(
-		Vec3( &data[ 0 ] ).Length(),
-		Vec3( &data[ 4 ] ).Length(),
-		Vec3( &data[ 8 ] ).Length()
-	);
-	if( Determinant() < 0.0f ) { scale.z = -scale.z; }
-	return scale;
+	const float sx = Vec3( &data[ 0 ] ).Length();
+	const float sy = Vec3( &data[ 4 ] ).Length();
+	const float sz = Vec3( &data[ 8 ] ).Length();
+	return Vec3( sx, sy, ( Determinant() < 0.0f ) ? -sz : sz );
 }
 
 float Matrix4::Determinant() const
@@ -16304,9 +16591,9 @@ ae::Vec3 Matrix4::TransformPoint3x4( ae::Vec3 v ) const
 ae::Vec3 Matrix4::TransformVector3x4( ae::Vec3 v ) const
 {
 	return Vec3(
-		v.x * data[ 0 ] + v.y * data[ 1 ] + v.z * data[ 2 ],
-		v.x * data[ 4 ] + v.y * data[ 5 ] + v.z * data[ 6 ],
-		v.x * data[ 8 ] + v.y * data[ 9 ] + v.z * data[ 10 ] );
+		v.x * data[ 0 ] + v.y * data[ 4 ] + v.z * data[ 8 ],
+		v.x * data[ 1 ] + v.y * data[ 5 ] + v.z * data[ 9 ],
+		v.x * data[ 2 ] + v.y * data[ 6 ] + v.z * data[ 10 ] );
 }
 
 bool Matrix4::IsNAN() const
@@ -17817,12 +18104,12 @@ ae::Vec3 Triangle::ClosestPoint( ae::Vec3 p ) const
 //------------------------------------------------------------------------------
 const char* LogLevelNames[] =
 {
-	"FATAL",
-	"ERROR",
-	"WARN ",
-	"INFO ",
-	"DEBUG",
-	"TRACE",
+	"fatal",
+	"error",
+	"warn",
+	"info",
+	"debug",
+	"trace",
 };
 
 //------------------------------------------------------------------------------
@@ -17883,7 +18170,8 @@ void _LogFormat( std::ostream& os, ae::LogSeverity severity, const char* filePat
 	{
 		os << LogLevelColors[ (uint32_t)severity ];
 	}
-	os << LogLevelNames[ (uint32_t)severity ];
+	const char* levelName = LogLevelNames[ (uint32_t)severity ];
+	os << " [" << levelName << ( strlen( levelName ) < 5 ? "]  " : "] " );
 #if AE_ENABLE_SOURCE_INFO
 	if( _ae_logColors )
 	{
@@ -17911,7 +18199,7 @@ void _LogImpl( ae::LogSeverity severity, const char* filePath, uint32_t line, co
 {
 	std::stringstream os;
 	_LogFormat( os, severity, filePath, line, tags, tagCount, message );
-	static bool s_logStdOut = !ae::IsDebuggerAttached();
+	static const bool s_logStdOut = !ae::IsDebuggerAttached();
 	if( s_logStdOut )
 	{
 		printf( os.str().c_str() ); // std out
@@ -18173,8 +18461,8 @@ void TimeStep::SetDt( float sec )
 
 void TimeStep::Tick()
 {
-#if _AE_EMSCRIPTEN_
-	// Frame rate of emscripten builds is controlled by the browser
+#if _AE_EMSCRIPTEN_ || _AE_WASM_
+	// Frame rate of emscripten/WASM builds is controlled externally
 	const bool allowSleep = false;
 #else
 	const bool allowSleep = ( m_timeStep > 0.0 );
@@ -18240,14 +18528,12 @@ ae::UUID ae::UUID::Generate()
 	// 12 bits: rand_a (sub-millisecond precision/randomness)
 	// 2 bits: variant (10)
 	// 62 bits: rand_b
-	std::random_device rd;
-	std::mt19937_64 gen( rd() );
-	std::uniform_int_distribution< uint64_t > dis;
+	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
 	const auto now = std::chrono::system_clock::now();
 	const uint64_t ms = std::chrono::duration_cast< std::chrono::milliseconds >( now.time_since_epoch() ).count();
 	const uint64_t ms48 = ( ms & 0x0000FFFFFFFFFFFFULL );
-	const uint16_t ra = static_cast< uint16_t >( dis( gen ) & 0x0FFFULL ); // 12-bit rand_a
-	const uint64_t rb = ( dis( gen ) & 0x3FFFFFFFFFFFFFFFULL ); // 62-bit rand_b
+	const uint16_t ra = static_cast< uint16_t >( threadLocals->uuidRandom() & 0x0FFFULL ); // 12-bit rand_a
+	const uint64_t rb = ( threadLocals->uuidRandom() & 0x3FFFFFFFFFFFFFFFULL ); // 62-bit rand_b
 	// High 64 bits: [timestamp_ms(48)] [version(4)] [rand_a(12)] — big-endian byte order
 	r.data[ 0 ] = static_cast< uint8_t >( ( ms48 >> 40 ) & 0xFF );
 	r.data[ 1 ] = static_cast< uint8_t >( ( ms48 >> 32 ) & 0xFF );
@@ -18332,13 +18618,13 @@ template<> uint64_t GetHash64( const ae::Color& v ) { return ae::Hash64().HashTy
 //------------------------------------------------------------------------------
 #define _AE_POOL_ELEMENT( _arr, _idx ) ( (uint8_t*)_arr + (intptr_t)_idx * m_objectSize )
 
-OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t size, bool paged ) :
-	m_firstPage( tag, size )
+OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t capacity, bool paged ) :
+	m_firstPage( tag, capacity )
 {
 	AE_ASSERT( tag != ae::Tag() );
-	AE_ASSERT( size > 0 );
+	AE_ASSERT( capacity > 0 );
 	m_tag = tag;
-	m_pageSize = size;
+	m_pageCapacity = capacity;
 	m_paged = paged;
 	m_objectSize = objectSize;
 	m_objectAlignment = objectAlignment;
@@ -18360,13 +18646,13 @@ void* OpaquePool::Allocate()
 		{
 			AE_DEBUG_ASSERT( m_firstPage.freeList.Length() == 0 );
 			page = &m_firstPage;
-			page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
+			page->objects = ae::Allocate( m_tag, m_pageCapacity * m_objectSize, m_objectAlignment );
 			m_pages.Append( page->node );
 		}
 		else if( m_paged )
 		{
-			page = ae::New< Page >( m_tag, m_tag, m_pageSize );
-			page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
+			page = ae::New< Page >( m_tag, m_tag, m_pageCapacity );
+			page->objects = ae::Allocate( m_tag, m_pageCapacity * m_objectSize, m_objectAlignment );
 			m_pages.Append( page->node );
 		}
 	}
@@ -18394,7 +18680,7 @@ void OpaquePool::Free( void* obj )
 	while( page )
 	{
 		index = (int32_t)( ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize );
-		bool found = ( 0 <= index && index < (int32_t)m_pageSize );
+		bool found = ( 0 <= index && index < (int32_t)m_pageCapacity );
 		if( found )
 		{
 			break;
@@ -18429,7 +18715,7 @@ void OpaquePool::Free( void* obj )
 		return;
 	}
 #if _AE_DEBUG_
-	AE_FAIL_MSG( "Object '#' not found in pool '#:#:#:#'", obj, m_objectSize, m_objectAlignment, m_pageSize, m_paged );
+	AE_FAIL_MSG( "Object '#' not found in pool '#:#:#:#'", obj, m_objectSize, m_objectAlignment, m_pageCapacity, m_paged );
 #endif
 }
 
@@ -18457,7 +18743,7 @@ void OpaquePool::FreeAll()
 
 bool OpaquePool::HasFree() const
 {
-	return Length() < Size();
+	return Length() < Capacity();
 }
 
 const void* OpaquePool::m_GetFirst() const
@@ -18483,7 +18769,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj, uint32_t 
 		page = m_pages.FindFn( [&]( const Page* page )
 		{
 			const uint8_t* pageStart = reinterpret_cast< const uint8_t* >( page->objects );
-			const uint8_t* pageEnd = pageStart + m_pageSize * m_objectSize;
+			const uint8_t* pageEnd = pageStart + m_pageCapacity * m_objectSize;
 			return ( pageStart <= pageObj ) && ( pageObj < pageEnd );
 		} );
 	}
@@ -18492,7 +18778,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj, uint32_t 
 		AE_DEBUG_ASSERT( m_length > 0 );
 		AE_DEBUG_ASSERT( page->freeList.Length() );
 		const int32_t index = (int32_t)( ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize );
-		const bool found = ( 0 <= index && index < (int32_t)m_pageSize );
+		const bool found = ( 0 <= index && index < (int32_t)m_pageCapacity );
 		if( found )
 		{
 			AE_DEBUG_ASSERT( _AE_POOL_ELEMENT( page->objects, index ) == obj );
@@ -18509,7 +18795,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj, uint32_t 
 			// Given object is last element of previous page so return the first element on next page
 			AE_DEBUG_ASSERT( page->freeList.Length() > 0 );
 			const int32_t next = page->freeList.GetFirst();
-			AE_DEBUG_ASSERT( 0 <= next && next < (int32_t)m_pageSize );
+			AE_DEBUG_ASSERT( 0 <= next && next < (int32_t)m_pageCapacity );
 			return _AE_POOL_ELEMENT( page->objects, next );
 		}
 	}
@@ -19081,6 +19367,14 @@ Rect Rect::FromPoints( ae::Vec2 p0, ae::Vec2 p1 )
 	return rect;
 }
 
+Rect Rect::FromPoints( float x0, float y0, float x1, float y1 )
+{
+	Rect rect;
+	rect.ExpandPoint( ae::Vec2( x0, y0 ) );
+	rect.ExpandPoint( ae::Vec2( x1, y1 ) );
+	return rect;
+}
+
 bool Rect::Contains( Vec2 pos ) const
 {
 	return ( m_min.x <= pos.x && pos.x <= m_max.x ) && ( m_min.y <= pos.y && pos.y <= m_max.y );
@@ -19531,7 +19825,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	if( _aeWindow->input )
 	{
 		NSPoint mouseScreenPos = [NSEvent mouseLocation];
-		_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+		_aeWindow->input->m_SetMousePos( ae::Vec2( mouseScreenPos.x, mouseScreenPos.y ) );
 	}
 }
 - (void)windowDidMove:(NSNotification *)notification
@@ -19547,7 +19841,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	if( _aeWindow->input )
 	{
 		NSPoint mouseScreenPos = [NSEvent mouseLocation];
-		_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+		_aeWindow->input->m_SetMousePos( ae::Vec2( mouseScreenPos.x, mouseScreenPos.y ) );
 	}
 }
 - (void)windowDidBecomeKey:(NSNotification *)notification
@@ -19563,6 +19857,276 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 @end
 namespace ae {
 #endif
+
+//------------------------------------------------------------------------------
+// ae::_Application (internal)
+//------------------------------------------------------------------------------
+// Internal: holds an ae::Application()'s callbacks and owns the platform main
+// loop. Constructed by ae::Application(); not intended to be used directly
+// outside of aether.
+class _Application
+{
+public:
+	AppInitializeFn Initialize;
+	AppUpdateFn Update;
+	AppTerminateFn Terminate;
+	int32_t Run( int32_t argc, char* argv[] );
+};
+
+//------------------------------------------------------------------------------
+// ae::Application Objective-C aeApplicationDelegate class (iOS)
+//------------------------------------------------------------------------------
+#if _AE_IOS_
+} // ae end
+@interface aeEAGLView : UIView
+{
+	NSMapTable< UITouch*, NSNumber* >* _touchIds;
+}
+@end
+@implementation aeEAGLView
++ (Class)layerClass
+{
+	return [CAEAGLLayer class];
+}
+- (instancetype)initWithFrame:(CGRect)frame
+{
+	self = [super initWithFrame:frame];
+	if( self )
+	{
+		CAEAGLLayer* layer = (CAEAGLLayer*)self.layer;
+		layer.opaque = YES;
+		layer.contentsScale = [UIScreen mainScreen].scale;
+		// SRGBA8 matches macOS's NSOpenGLPFAColorSize=24 default backing: the
+		// framebuffer auto-applies linear→sRGB on fragment write, so SRGB
+		// textures and linear shading round-trip correctly to display. The
+		// drawable is fully overwritten by GraphicsDevice::Present each frame.
+		layer.drawableProperties = @{
+			kEAGLDrawablePropertyColorFormat : kEAGLColorFormatSRGBA8,
+		};
+		self.multipleTouchEnabled = YES;
+		_touchIds = [NSMapTable weakToStrongObjectsMapTable];
+	}
+	return self;
+}
+- (ae::Vec2)aePosForTouch:(UITouch*)t
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	const CGPoint p = [t locationInView:self];
+	const float height = ( input && input->m_window ) ? (float)input->m_window->GetHeight() : (float)self.bounds.size.height;
+	return ae::Vec2( (float)p.x, height - (float)p.y );
+}
+- (ae::Touch*)aeFindTouchById:(uint32_t)id
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return nullptr; }
+	const auto matchFn = [&]( ae::Touch* t ){ return t->id == id; };
+	int32_t idx = input->m_newTouches.FindFn( matchFn );
+	if( idx >= 0 ) { return input->m_newTouches[ idx ]; }
+	idx = input->m_touches.FindFn( matchFn );
+	if( idx >= 0 ) { return input->m_touches[ idx ]; }
+	return nullptr;
+}
+- (void)touchesBegan:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		if( input->m_newTouches.Full() ) { break; }
+		ae::Touch* touch = input->m_touchPool.New();
+		if( !touch ) { break; }
+		input->m_touchIndex++;
+		if( input->m_touchIndex == 0 ) { input->m_touchIndex = 1; }
+		touch->id = input->m_touchIndex;
+		touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+		input->m_newTouches.Append( touch );
+		[_touchIds setObject:@(touch->id) forKey:uiTouch];
+	}
+}
+- (void)touchesMoved:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch && !touch->ended )
+		{
+			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+		}
+	}
+}
+- (void)touchesEnded:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch )
+		{
+			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+			touch->ended = true;
+		}
+		[_touchIds removeObjectForKey:uiTouch];
+	}
+}
+- (void)touchesCancelled:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch ) { touch->ended = true; }
+		[_touchIds removeObjectForKey:uiTouch];
+	}
+}
+@end
+
+@interface aeViewController : UIViewController
+@property ( nonatomic, strong ) aeEAGLView* glView;
+@end
+@implementation aeViewController
+- (void)loadView
+{
+	self.glView = [[aeEAGLView alloc] initWithFrame:[UIScreen mainScreen].bounds];
+	self.view = self.glView;
+}
+- (void)viewDidLoad
+{
+	[super viewDidLoad];
+	[self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
+}
+- (void)viewDidLayoutSubviews
+{
+	[super viewDidLayoutSubviews];
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input || !input->m_window )
+	{
+		return;
+	}
+	ae::Window* window = input->m_window;
+	CAEAGLLayer* eaglLayer = (CAEAGLLayer*)self.glView.layer;
+	const CGSize sizePoints = eaglLayer.bounds.size;
+	const float scale = (float)eaglLayer.contentsScale;
+#if AE_ENABLE_OPENGL
+	if( window->m_context && window->m_iosColorRenderbuffer )
+	{
+		EAGLContext* eaglContext = (__bridge EAGLContext*)window->m_context;
+		[ EAGLContext setCurrentContext:eaglContext ];
+		glBindRenderbuffer( GL_RENDERBUFFER, window->m_iosColorRenderbuffer );
+		GLint currentWidth = 0;
+		GLint currentHeight = 0;
+		glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &currentWidth );
+		glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &currentHeight );
+		const GLint targetWidth = (GLint)( sizePoints.width * scale );
+		const GLint targetHeight = (GLint)( sizePoints.height * scale );
+		if( currentWidth != targetWidth || currentHeight != targetHeight )
+		{
+			const bool storageOk = [ eaglContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:eaglLayer ];
+			AE_ASSERT_MSG( storageOk, "renderbufferStorage:fromDrawable: failed on resize" );
+		}
+	}
+#endif
+	window->m_UpdateSize( (int32_t)sizePoints.width, (int32_t)sizePoints.height, scale );
+}
+- (BOOL)prefersStatusBarHidden
+{
+	return YES; // Hide battery and time etc
+}
+- (UIRectEdge)preferredScreenEdgesDeferringSystemGestures {
+	return UIRectEdgeAll; // Prevent system gestures from interfering with edge input
+}
+- (BOOL)prefersHomeIndicatorAutoHidden {
+	return NO; // Must be NO for the '...DeferringSystemGestures' to work
+}
+@end
+
+@interface aeApplicationDelegate : UIResponder < UIApplicationDelegate >
+@property ( nonatomic, strong ) UIWindow* window;
+@property ( nonatomic, strong ) aeViewController* viewController;
+@property ( nonatomic, strong ) CADisplayLink* displayLink;
+@end
+@implementation aeApplicationDelegate
+- (BOOL)application:(UIApplication*)app didFinishLaunchingWithOptions:(NSDictionary*)opts
+{
+	self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+	self.viewController = [[aeViewController alloc] init];
+	self.window.rootViewController = self.viewController;
+	[self.window makeKeyAndVisible];
+	[self.viewController.view layoutIfNeeded];
+	// Provide the CAEAGLLayer so Window::Initialize() can attach its
+	// renderbuffer, then run the app's Initialize callback.
+	ae::_Globals::Get()->eaglLayer = (__bridge void*)self.viewController.glView.layer;
+	ae::_Globals::Get()->application->Initialize();
+	self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick: )];
+	[self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
+	return YES;
+}
+- (void)tick:(CADisplayLink*)link
+{
+	if( !ae::_Globals::Get()->application->Update() )
+	{
+		[link invalidate];
+		const int32_t termResult = ae::_Globals::Get()->application->Terminate();
+		exit( termResult );
+	}
+}
+@end
+namespace ae {
+#endif
+
+//------------------------------------------------------------------------------
+// ae::_Application member functions
+//------------------------------------------------------------------------------
+int32_t _Application::Run( int32_t argc, char* argv[] )
+{
+#if _AE_IOS_
+	ae::_Globals::Get()->application = this;
+	@autoreleasepool
+	{
+		return UIApplicationMain( argc, argv, nil, @"aeApplicationDelegate" );
+	}
+#else
+	(void)argc;
+	(void)argv;
+	Initialize();
+#	if _AE_EMSCRIPTEN_
+		emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
+#	else
+		while( Update() ) {}
+#	endif
+	return Terminate();
+#endif
+}
+
+//------------------------------------------------------------------------------
+// ae::Application
+//------------------------------------------------------------------------------
+int32_t Application( int32_t argc, char* argv[],
+	const AppInitializeFn& initialize,
+	const AppUpdateFn& update,
+	const AppTerminateFn& terminate )
+{
+	_Application app;
+	app.Initialize = initialize;
+	app.Update = update;
+	app.Terminate = terminate;
+	return app.Run( argc, argv );
+}
+
+uint32_t _ae_GetCurrentFramebuffer();
 
 //------------------------------------------------------------------------------
 // ae::Screen functions
@@ -19658,11 +20222,13 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 	m_height = height;
 	m_fullScreen = false;
 
+#if !_AE_IOS_
 	// Center window on primary screen
 	const ae::Array< ae::Screen, 16 > screens = ae::GetScreens();
 	AE_ASSERT( screens.Length() > 0 );
 	m_pos = ( screens[ 0 ].size - ae::Int2( width, height ) ) / 2;
 	m_pos += screens[ 0 ].position;
+#endif
 
 	m_Initialize( rememberPosition );
 
@@ -19825,6 +20391,33 @@ void Window::m_Initialize( bool rememberPosition )
 		AE_FAIL_MSG( "Could not set window pixel format. Error: #", GetLastError() );
 	}
 
+#if AE_ENABLE_OPENGL
+	HGLRC dummyCtx = wglCreateContext( hdc );
+	AE_ASSERT_MSG( dummyCtx, "Failed to create dummy OpenGL Rendering Context" );
+	wglMakeCurrent( hdc, dummyCtx );
+
+	int attribs[] =
+	{
+		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion(),
+		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion(),
+		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+		0
+	};
+	wglCreateContextAttribsARB = (decltype( wglCreateContextAttribsARB ))wglGetProcAddress( "wglCreateContextAttribsARB" );
+	AE_ASSERT_MSG( wglCreateContextAttribsARB, "Failed to load wglCreateContextAttribsARB" );
+	HGLRC ctx = wglCreateContextAttribsARB( hdc, 0, attribs );
+	AE_ASSERT_MSG( ctx, "Failed to create extended OpenGL Rendering Context" );
+
+	wglMakeCurrent( nullptr, nullptr );
+	wglDeleteContext( dummyCtx );
+	if( !wglMakeCurrent( hdc, ctx ) )
+	{
+		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+	}
+	m_context = ctx;
+#endif
+
 	// Finish window setup
 	ShowWindow( hwnd, SW_SHOW );
 	SetForegroundWindow( hwnd ); // Slightly Higher Priority
@@ -19861,6 +20454,7 @@ void Window::m_Initialize( bool rememberPosition )
 		backing:NSBackingStoreBuffered
 		defer:YES
 	];
+	[nsWindow setRestorable:NO];
 	nsWindow.delegate = windowDelegate;
 	[nsWindow setColorSpace:[NSColorSpace sRGBColorSpace]];
 	this->window = nsWindow;
@@ -19873,14 +20467,15 @@ void Window::m_Initialize( bool rememberPosition )
 		[nsWindow setFrame:frame display:YES];
 		frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
 	}
+	const NSRect viewFrame = NSMakeRect( 0.0, 0.0, frame.size.width, frame.size.height );
 	
 #if AE_ENABLE_OPENGL
 	NSOpenGLPixelFormatAttribute openglProfile;
-	if( ae::GLMajorVersion >= 4 )
+	if( ae::GLMajorVersion() >= 4 )
 	{
 		openglProfile = NSOpenGLProfileVersion4_1Core;
 	}
-	else if( ae::GLMajorVersion >= 3 )
+	else if( ae::GLMajorVersion() >= 3 )
 	{
 		openglProfile = NSOpenGLProfileVersion3_2Core;
 	}
@@ -19905,16 +20500,17 @@ void Window::m_Initialize( bool rememberPosition )
 	NSOpenGLPixelFormat* nsPixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:nsPixelAttribs];
 	AE_ASSERT_MSG( nsPixelFormat, "Could not determine a valid pixel format" );
 	
-	NSOpenGLView* glView = [[NSOpenGLView alloc] initWithFrame:frame pixelFormat:nsPixelFormat];
+	NSOpenGLView* glView = [[NSOpenGLView alloc] initWithFrame:viewFrame pixelFormat:nsPixelFormat];
 	AE_ASSERT_MSG( glView, "Could not create view with specified pixel format" );
 	[glView setWantsBestResolutionOpenGLSurface:true]; // @TODO: Retina. Does this do anything?
 	[glView.openGLContext makeCurrentContext];
+	m_context = glView.openGLContext;
 	
 	[nsPixelFormat release];
 	[nsWindow setContentView:glView];
 	[nsWindow makeFirstResponder:glView];
 #else
-	NSView* view = [[NSView alloc] initWithFrame:frame];
+	NSView* view = [[NSView alloc] initWithFrame:viewFrame];
 	[nsWindow setContentView:view];
 	[nsWindow makeFirstResponder:nsWindow];
 #endif
@@ -19940,18 +20536,170 @@ void Window::m_Initialize( bool rememberPosition )
 	// as a console app.
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #elif _AE_EMSCRIPTEN_
+#if AE_ENABLE_OPENGL
+	EmscriptenWebGLContextAttributes attrs;
+	emscripten_webgl_init_context_attributes( &attrs );
+	attrs.alpha = 0;
+	attrs.majorVersion = ae::GLMajorVersion();
+	attrs.minorVersion = ae::GLMinorVersion();
+	m_context = emscripten_webgl_create_context( "canvas", &attrs );
+	AE_ASSERT( m_context > 0 );
+	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
+	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+#endif
 	_aeEmscriptenGetCanvasInfo( &m_width, &m_height, &m_scaleFactor );
 	if( m_width == 300 && m_height == 150 )
 	{
 		AE_WARN( "Canvas size was not configured. Defaulting to WxH 100\%." );
 		m_fixCanvasStyle = true;
 	}
+#elif _AE_IOS_
+#if AE_ENABLE_OPENGL
+	EAGLContext* eaglContext = [ [ EAGLContext alloc ] initWithAPI:kEAGLRenderingAPIOpenGLES3 ];
+	AE_ASSERT_MSG( eaglContext, "Failed to create EAGLContext (OpenGL ES 3)" );
+	const bool madeCurrent = [ EAGLContext setCurrentContext:eaglContext ];
+	AE_ASSERT_MSG( madeCurrent, "Failed to make EAGLContext current" );
+	m_context = (__bridge_retained void*)eaglContext;
+
+	// aeApplicationDelegate sets eaglLayer before calling Application::Initialize().
+	void* eaglLayerPtr = ae::_Globals::Get()->eaglLayer;
+	for( int i = 0; i < 100 && !eaglLayerPtr; i++ )
+	{
+		[ NSThread sleepForTimeInterval:0.01 ];
+		eaglLayerPtr = ae::_Globals::Get()->eaglLayer;
+	}
+	AE_ASSERT_MSG( eaglLayerPtr, "ae::_Globals::eaglLayer not set (aeApplicationDelegate did not run)" );
+	CAEAGLLayer* eaglLayer = (__bridge CAEAGLLayer*)eaglLayerPtr;
+
+	GLuint colorRb = 0;
+	glGenRenderbuffers( 1, &colorRb );
+	glBindRenderbuffer( GL_RENDERBUFFER, colorRb );
+	const bool storageOk = [ eaglContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:eaglLayer ];
+	AE_ASSERT_MSG( storageOk, "renderbufferStorage:fromDrawable: failed" );
+
+	GLint drawableWidth = 0;
+	GLint drawableHeight = 0;
+	glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &drawableWidth );
+	glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &drawableHeight );
+
+	GLuint fbo = 0;
+	glGenFramebuffers( 1, &fbo );
+	glBindFramebuffer( GL_FRAMEBUFFER, fbo );
+	glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, colorRb );
+	const GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	AE_ASSERT_MSG( fboStatus == GL_FRAMEBUFFER_COMPLETE, "Default FBO incomplete: 0x#x", (uint32_t)fboStatus );
+	glBindRenderbuffer( GL_RENDERBUFFER, colorRb );
+
+	m_iosColorRenderbuffer = colorRb;
+	m_defaultFramebuffer = fbo;
+
+	glViewport( 0, 0, drawableWidth, drawableHeight );
+
+	m_scaleFactor = (float)eaglLayer.contentsScale;
+	m_width = (int32_t)eaglLayer.bounds.size.width;
+	m_height = (int32_t)eaglLayer.bounds.size.height;
+#else
+	{
+		UIScreen* const screen = [ UIScreen mainScreen ];
+		const CGRect bounds = screen.bounds;
+		m_width = (int32_t)bounds.size.width;
+		m_height = (int32_t)bounds.size.height;
+		m_scaleFactor = (float)screen.scale;
+	}
+#endif
+#endif
+#if AE_ENABLE_OPENGL
+	m_defaultFramebuffer = _ae_GetCurrentFramebuffer();
+	m_UpdateBackBuffer();
 #endif
 }
 
 void Window::Terminate()
 {
-	// @TODO
+	if( m_backBuffer )
+	{
+		ae::Delete( m_backBuffer );
+		m_backBuffer = nullptr;
+	}
+}
+
+void Window::ActivateContext()
+{
+#if AE_ENABLE_OPENGL
+#if _AE_WINDOWS_
+	if( window && m_context )
+	{
+		HDC hdc = GetDC( (HWND)window );
+		AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+		if( !wglMakeCurrent( hdc, (HGLRC)m_context ) )
+		{
+			AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+		}
+	}
+#elif _AE_OSX_
+	if( m_context )
+	{
+		[(NSOpenGLContext*)m_context makeCurrentContext];
+	}
+#elif _AE_IOS_
+	if( m_context )
+	{
+		[ EAGLContext setCurrentContext:(__bridge EAGLContext*)m_context ];
+	}
+#elif _AE_EMSCRIPTEN_
+	if( m_context )
+	{
+		EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
+		AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+	}
+#endif
+#endif
+}
+
+void Window::BindBackBuffer()
+{
+	ActivateContext();
+#if AE_ENABLE_OPENGL
+	m_UpdateBackBuffer();
+	AE_ASSERT( m_backBuffer );
+	m_backBuffer->Activate();
+#endif
+}
+
+void Window::Present()
+{
+#if AE_ENABLE_OPENGL
+#if _AE_OSX_
+	if( m_context )
+	{
+		[(NSOpenGLContext*)m_context flushBuffer];
+	}
+#elif _AE_IOS_
+	if( m_context && m_iosColorRenderbuffer )
+	{
+		glBindRenderbuffer( GL_RENDERBUFFER, m_iosColorRenderbuffer );
+		[(__bridge EAGLContext*)m_context presentRenderbuffer:GL_RENDERBUFFER];
+	}
+#elif _AE_WINDOWS_
+	if( window )
+	{
+		HDC hdc = GetDC( (HWND)window );
+		AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+		SwapBuffers( hdc );
+	}
+#endif
+#endif
+}
+
+void Window::m_UpdateBackBuffer()
+{
+#if AE_ENABLE_OPENGL
+	if( !m_backBuffer )
+	{
+		m_backBuffer = ae::New< RenderTarget >( AE_ALLOC_TAG_RENDER );
+	}
+	m_backBuffer->m_Initialize( GetDrawWidth(), GetDrawHeight(), m_defaultFramebuffer );
+#endif
 }
 
 int32_t Window::GetWidth() const
@@ -19962,6 +20710,27 @@ int32_t Window::GetWidth() const
 int32_t Window::GetHeight() const
 {
 	return m_height;
+}
+
+uint32_t Window::GetDrawWidth() const
+{
+	return (uint32_t)( m_width * m_scaleFactor );
+}
+
+uint32_t Window::GetDrawHeight() const
+{
+	return (uint32_t)( m_height * m_scaleFactor );
+}
+
+ae::Rect Window::GetSafeArea() const
+{
+#if _AE_EMSCRIPTEN_
+	EM_ASM( {
+		console.log( window.innerWidth, window.innerHeight );
+		console.log( window.visualViewport );
+	} );
+#endif
+	return ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( m_width, m_height ) );
 }
 
 void Window::SetTitle( const char* title )
@@ -20225,109 +20994,88 @@ namespace ae {
 // ae::Input member functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
-void _aeEmscriptenTryNewFrame( Input* input )
-{
-	if( input->newFrame_HACK )
-	{
-		memcpy( input->m_keysPrev, input->m_keys, sizeof(input->m_keys) );
-		input->mousePrev = input->mouse;
-		input->mouse.movement = ae::Int2( 0 );
-		input->mouse.scroll = ae::Vec2( 0.0f );
-		input->mouse.scrollMomentum = ae::Vec2( 0.0f );
-		input->m_touchesPrev = input->m_touches;
-		for( ae::Touch& touch : input->m_touches )
-		{
-			touch.movement = ae::Int2( 0 );
-		}
-		input->newFrame_HACK = false;
-	}
-}
-
 EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
-	static ae::Key s_keyMap[ 255 ];
-	static bool s_first = true;
-	// First time this function is called only
-	if( s_first )
+	static const std::array< ae::Key, 255 > s_keyMap = []()
 	{
-		s_first = false;
-		memset( s_keyMap, 0, sizeof( s_keyMap ) );
-		s_keyMap[ 8 ] = ae::Key::Backspace;
-		s_keyMap[ 9 ] = ae::Key::Tab;
-		s_keyMap[ 13 ] = ae::Key::Enter;
-		s_keyMap[ 16 ] = ae::Key::LeftShift;
-		s_keyMap[ 17 ] = ae::Key::LeftControl;
-		s_keyMap[ 18 ] = ae::Key::LeftAlt;
-		s_keyMap[ 19 ] = ae::Key::Pause;
-		s_keyMap[ 20 ] = ae::Key::CapsLock;
-		s_keyMap[ 27 ] = ae::Key::Escape;
-		s_keyMap[ 32 ] = ae::Key::Space;
-		s_keyMap[ 33 ] = ae::Key::PageUp;
-		s_keyMap[ 34 ] = ae::Key::PageDown;
-		s_keyMap[ 35 ] = ae::Key::End;
-		s_keyMap[ 36 ] = ae::Key::Home;
-		s_keyMap[ 37 ] = ae::Key::Left;
-		s_keyMap[ 38 ] = ae::Key::Up;
-		s_keyMap[ 39 ] = ae::Key::Right;
-		s_keyMap[ 40 ] = ae::Key::Down;
-		s_keyMap[ 45 ] = ae::Key::Insert;
-		s_keyMap[ 46 ] = ae::Key::Delete;
-		s_keyMap[ 48 ] = ae::Key::Num0;
-		s_keyMap[ 49 ] = ae::Key::Num1;
-		s_keyMap[ 50 ] = ae::Key::Num2;
-		s_keyMap[ 51 ] = ae::Key::Num3;
-		s_keyMap[ 52 ] = ae::Key::Num4;
-		s_keyMap[ 53 ] = ae::Key::Num5;
-		s_keyMap[ 54 ] = ae::Key::Num6;
-		s_keyMap[ 55 ] = ae::Key::Num7;
-		s_keyMap[ 56 ] = ae::Key::Num8;
-		s_keyMap[ 57 ] = ae::Key::Num9;
+		std::array< ae::Key, 255 > keyMap{};
+		keyMap[ 8 ] = ae::Key::Backspace;
+		keyMap[ 9 ] = ae::Key::Tab;
+		keyMap[ 13 ] = ae::Key::Enter;
+		keyMap[ 16 ] = ae::Key::LeftShift;
+		keyMap[ 17 ] = ae::Key::LeftControl;
+		keyMap[ 18 ] = ae::Key::LeftAlt;
+		keyMap[ 19 ] = ae::Key::Pause;
+		keyMap[ 20 ] = ae::Key::CapsLock;
+		keyMap[ 27 ] = ae::Key::Escape;
+		keyMap[ 32 ] = ae::Key::Space;
+		keyMap[ 33 ] = ae::Key::PageUp;
+		keyMap[ 34 ] = ae::Key::PageDown;
+		keyMap[ 35 ] = ae::Key::End;
+		keyMap[ 36 ] = ae::Key::Home;
+		keyMap[ 37 ] = ae::Key::Left;
+		keyMap[ 38 ] = ae::Key::Up;
+		keyMap[ 39 ] = ae::Key::Right;
+		keyMap[ 40 ] = ae::Key::Down;
+		keyMap[ 45 ] = ae::Key::Insert;
+		keyMap[ 46 ] = ae::Key::Delete;
+		keyMap[ 48 ] = ae::Key::Num0;
+		keyMap[ 49 ] = ae::Key::Num1;
+		keyMap[ 50 ] = ae::Key::Num2;
+		keyMap[ 51 ] = ae::Key::Num3;
+		keyMap[ 52 ] = ae::Key::Num4;
+		keyMap[ 53 ] = ae::Key::Num5;
+		keyMap[ 54 ] = ae::Key::Num6;
+		keyMap[ 55 ] = ae::Key::Num7;
+		keyMap[ 56 ] = ae::Key::Num8;
+		keyMap[ 57 ] = ae::Key::Num9;
 		for( uint32_t i = 0; i < 26; i++ )
 		{
-			s_keyMap[ 65 + i ] = (ae::Key)((int)ae::Key::A + i);
+			keyMap[ 65 + i ] = (ae::Key)((int)ae::Key::A + i);
 		}
-		s_keyMap[ 91 ] = ae::Key::LeftSuper;
-		s_keyMap[ 92 ] = ae::Key::RightSuper;
-		s_keyMap[ 96 ] = ae::Key::NumPad0;
-		s_keyMap[ 97 ] = ae::Key::NumPad1;
-		s_keyMap[ 98 ] = ae::Key::NumPad2;
-		s_keyMap[ 99 ] = ae::Key::NumPad3;
-		s_keyMap[ 100 ] = ae::Key::NumPad4;
-		s_keyMap[ 101 ] = ae::Key::NumPad5;
-		s_keyMap[ 102 ] = ae::Key::NumPad6;
-		s_keyMap[ 103 ] = ae::Key::NumPad7;
-		s_keyMap[ 104 ] = ae::Key::NumPad8;
-		s_keyMap[ 105 ] = ae::Key::NumPad9;
-		s_keyMap[ 106 ] = ae::Key::NumPadMultiply;
-		s_keyMap[ 107 ] = ae::Key::NumPadPlus;
-		s_keyMap[ 109 ] = ae::Key::NumPadMinus;
-		s_keyMap[ 110 ] = ae::Key::NumPadPeriod;
-		s_keyMap[ 111 ] = ae::Key::NumPadDivide;
+		keyMap[ 91 ] = ae::Key::LeftSuper;
+		keyMap[ 92 ] = ae::Key::RightSuper;
+		keyMap[ 96 ] = ae::Key::NumPad0;
+		keyMap[ 97 ] = ae::Key::NumPad1;
+		keyMap[ 98 ] = ae::Key::NumPad2;
+		keyMap[ 99 ] = ae::Key::NumPad3;
+		keyMap[ 100 ] = ae::Key::NumPad4;
+		keyMap[ 101 ] = ae::Key::NumPad5;
+		keyMap[ 102 ] = ae::Key::NumPad6;
+		keyMap[ 103 ] = ae::Key::NumPad7;
+		keyMap[ 104 ] = ae::Key::NumPad8;
+		keyMap[ 105 ] = ae::Key::NumPad9;
+		keyMap[ 106 ] = ae::Key::NumPadMultiply;
+		keyMap[ 107 ] = ae::Key::NumPadPlus;
+		keyMap[ 109 ] = ae::Key::NumPadMinus;
+		keyMap[ 110 ] = ae::Key::NumPadPeriod;
+		keyMap[ 111 ] = ae::Key::NumPadDivide;
 		for( uint32_t i = 0; i < 12; i++ )
 		{
-			s_keyMap[ 112 + i ] = (ae::Key)((int)ae::Key::F1 + i);
+			keyMap[ 112 + i ] = (ae::Key)((int)ae::Key::F1 + i);
 		}
-		s_keyMap[ 144 ] = ae::Key::NumLock;
-		s_keyMap[ 145 ] = ae::Key::ScrollLock;
-		s_keyMap[ 186 ] = ae::Key::Semicolon;
-		s_keyMap[ 187 ] = ae::Key::Equals;
-		s_keyMap[ 188 ] = ae::Key::Comma;
-		s_keyMap[ 189 ] = ae::Key::Minus;
-		s_keyMap[ 190 ] = ae::Key::Period;
-		s_keyMap[ 191 ] = ae::Key::Slash;
-		s_keyMap[ 192 ] = ae::Key::Tilde;
-		s_keyMap[ 219 ] = ae::Key::LeftBracket;
-		s_keyMap[ 220 ] = ae::Key::Backslash;
-		s_keyMap[ 221 ] = ae::Key::RightBracket;
-		s_keyMap[ 222 ] = ae::Key::Apostrophe;
-	}
+		keyMap[ 144 ] = ae::Key::NumLock;
+		keyMap[ 145 ] = ae::Key::ScrollLock;
+		keyMap[ 186 ] = ae::Key::Semicolon;
+		keyMap[ 187 ] = ae::Key::Equals;
+		keyMap[ 188 ] = ae::Key::Comma;
+		keyMap[ 189 ] = ae::Key::Minus;
+		keyMap[ 190 ] = ae::Key::Period;
+		keyMap[ 191 ] = ae::Key::Slash;
+		keyMap[ 192 ] = ae::Key::Tilde;
+		keyMap[ 219 ] = ae::Key::LeftBracket;
+		keyMap[ 220 ] = ae::Key::Backslash;
+		keyMap[ 221 ] = ae::Key::RightBracket;
+		keyMap[ 222 ] = ae::Key::Apostrophe;
+		return keyMap;
+	}();
 
 	// Start key handling
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 
-	if( keyEvent->which < countof(s_keyMap) && (int)s_keyMap[ keyEvent->which ] )
+	if( keyEvent->which < s_keyMap.size() && (int)s_keyMap[ keyEvent->which ] )
 	{
 		bool pressed = ( EMSCRIPTEN_EVENT_KEYUP != eventType );
 		input->m_keys[ (int)s_keyMap[ keyEvent->which ] ] = pressed;
@@ -20343,7 +21091,7 @@ EM_BOOL _aeEmscriptenHandleWheel( int eventType, const EmscriptenWheelEvent* whe
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 	// DOM_DELTA_PIXEL (0) is the trackpad path; DOM_DELTA_LINE (1) is the mouse wheel path.
 	// DOM_DELTA_PAGE (2) is not handled — too coarse for camera/UI input.
 	if( wheelEvent->deltaMode != DOM_DELTA_PAGE )
@@ -20372,14 +21120,35 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 	
 	const ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY );
-	input->m_SetMousePos( pos.FloorCopy(), ae::Int2( mouseEvent->movementX, -mouseEvent->movementY ) );
+	input->m_SetMousePos( pos, ae::Vec2( mouseEvent->movementX, -mouseEvent->movementY ) );
 	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
 	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
 	input->mouse.middleButton = ( mouseEvent->buttons & 4 );
-	
+
+	// Process pending pointer lock request synchronously (required by Safari)
+	if( input->m_pendingPointerLock > 0 )
+	{
+		input->m_pendingPointerLock = 0;
+		const ae::Vec2 localCenter( input->m_window->GetWidth() / 2.0f, input->m_window->GetHeight() / 2.0f );
+		input->m_WarpCursor( localCenter );
+		input->m_mousePosSet = false;
+		input->m_capturedMousePos = ae::Optional< ae::Vec2 >( pos );
+		emscripten_request_pointerlock( "canvas", true );
+	}
+	else if( input->m_pendingPointerLock < 0 )
+	{
+		input->m_pendingPointerLock = 0;
+		if( const ae::Vec2* p = input->m_capturedMousePos.TryGet() )
+		{
+			input->m_WarpCursor( *p );
+			input->mouse.position = *p;
+		}
+		emscripten_exit_pointerlock();
+	}
+
 	return true;
 }
 
@@ -20395,59 +21164,61 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 
+	const double now = ae::GetTime();
 	for( uint32_t i = 0; i < touchEvent->numTouches; i++ )
 	{
 		const EmscriptenTouchPoint* emTouch = &touchEvent->touches[ i ];
-		if( emTouch->isChanged )
+		if( !emTouch->isChanged ) { continue; }
+		ae::Vec2 pos( (float)emTouch->targetX, (float)emTouch->targetY );
+		pos.y = input->m_window->GetHeight() - pos.y;
+		const uint32_t id = (uint32_t)emTouch->identifier;
+		const auto matchFn = [&]( ae::Touch* t ){ return t->id == id; };
+		ae::Touch* touch = nullptr;
+		int32_t idx = input->m_newTouches.FindFn( matchFn );
+		if( idx >= 0 ) { touch = input->m_newTouches[ idx ]; }
+		else
 		{
-			ae::Int2 pos( emTouch->targetX, emTouch->targetY );
-			pos.y = input->m_window->GetHeight() - pos.y;
-			switch( eventType )
+			idx = input->m_touches.FindFn( matchFn );
+			if( idx >= 0 ) { touch = input->m_touches[ idx ]; }
+		}
+		switch( eventType )
+		{
+			case EMSCRIPTEN_EVENT_TOUCHSTART:
 			{
-				case EMSCRIPTEN_EVENT_TOUCHSTART:
-				{
-					if( input->m_touches.Length() < input->m_touches.Size() )
-					{
-						ae::Touch* touch = &input->m_touches.Append( {} );
-						touch->id = emTouch->identifier;
-						touch->startPosition = pos;
-						touch->position = pos;
-					}
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHEND:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHCANCEL:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
-					if( prevTouchIdx >= 0 ) { input->m_touchesPrev.Remove( prevTouchIdx ); }
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHMOVE:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 )
-					{
-						input->m_touches[ touchIdx ].position = pos;
-						if( prevTouchIdx >= 0 )
-						{
-							input->m_touches[ touchIdx ].movement += pos - input->m_touchesPrev[ prevTouchIdx ].position;
-						}
-					}
-					break;
-				}
-				default:
-					break;
+				if( touch ) { break; } // Already known
+				if( input->m_newTouches.Full() ) { break; }
+				touch = input->m_touchPool.New();
+				if( !touch ) { break; }
+				touch->id = id;
+				touch->_AppendSample( now, pos );
+				input->m_newTouches.Append( touch );
+				break;
 			}
+			case EMSCRIPTEN_EVENT_TOUCHEND:
+			{
+				if( !touch ) { break; }
+				touch->_AppendSample( now, pos );
+				touch->ended = true;
+				break;
+			}
+			case EMSCRIPTEN_EVENT_TOUCHCANCEL:
+			{
+				if( !touch ) { break; }
+				touch->ended = true;
+				break;
+			}
+			case EMSCRIPTEN_EVENT_TOUCHMOVE:
+			{
+				if( touch && !touch->ended )
+				{
+					touch->_AppendSample( now, pos );
+				}
+				break;
+			}
+			default:
+				break;
 		}
 	}
 
@@ -20479,6 +21250,7 @@ void Input::Initialize( Window* window )
 	{
 		window->input = this;
 	}
+	ae::_Globals::Get()->input = this;
 	memset( m_keys, 0, sizeof(m_keys) );
 	memset( m_keysPrev, 0, sizeof(m_keysPrev) );
 
@@ -20505,7 +21277,7 @@ void Input::Initialize( Window* window )
 	emscripten_set_focus_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_blur_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
-	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleLockChange );
+	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, true, &_aeEmscriptenHandleLockChange );
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -20526,29 +21298,41 @@ void Input::Initialize( Window* window )
 }
 
 void Input::Terminate()
-{}
+{
+	if( ae::_Globals::Get()->input == this )
+	{
+		ae::_Globals::Get()->input = nullptr;
+	}
+}
+
+void Input::m_TryNewFrame()
+{
+	if( m_pendingNewFrame )
+	{
+		memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
+		mousePrev = mouse;
+		mouse.movement = ae::Vec2( 0.0f );
+		mouse.scroll = ae::Vec2( 0.0f );
+		mouse.scrollMomentum = ae::Vec2( 0.0f );
+		// Discard touches that ended before they were adopted via PumpTouches().
+		// Per the staged API contract, ended touches are never returned.
+		for( int32_t i = (int32_t)m_newTouches.Length() - 1; i >= 0; i-- )
+		{
+			if( m_newTouches[ i ]->ended )
+			{
+				m_touchPool.Delete( m_newTouches[ i ] );
+				m_newTouches.Remove( i );
+			}
+		}
+		m_pendingNewFrame = false;
+	}
+}
 
 void Input::Pump()
 {
 	m_timeStep.Tick();
-#if _AE_EMSCRIPTEN_
-	_aeEmscriptenTryNewFrame( this );
-	newFrame_HACK = true;
-#else
-	// Clear keys each frame and then check for presses below
-	// Emscripten doesn't do this because it uses a callback to set m_keys
-	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-	memset( m_keys, 0, sizeof(m_keys) );
-	mousePrev = mouse;
-	mouse.movement = ae::Int2( 0 );
-	mouse.scroll = ae::Vec2( 0.0f );
-	mouse.scrollMomentum = ae::Vec2( 0.0f );
-	m_touchesPrev = m_touches;
-	for( ae::Touch& touch : m_touches )
-	{
-		touch.movement = ae::Int2( 0 );
-	}
-#endif
+	m_TryNewFrame();
+	m_pendingNewFrame = true;
 	m_textInput = ""; // Clear last frames text input
 
 	// Handle system events
@@ -20637,8 +21421,8 @@ void Input::Pump()
 		{
 			if( ScreenToClient( (HWND)m_window->window, &mouseWindowPt ) )
 			{
-				ae::RectInt windowRect = ae::RectInt::FromPointAndSize( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
-				ae::Int2 localMouse( mouseWindowPt.x, m_window->GetHeight() - mouseWindowPt.y );
+				const ae::Rect windowRect = ae::Rect::FromPoints( 0.0f, 0.0f, m_window->GetWidth(), m_window->GetHeight() );
+				const ae::Vec2 localMouse( mouseWindowPt.x, m_window->GetHeight() - mouseWindowPt.y );
 				if( windowRect.Contains( localMouse ) )
 				{
 					m_SetMousePos( localMouse );
@@ -20666,13 +21450,13 @@ void Input::Pump()
 			}
 			
 			// Cursor
-			const ae::RectInt windowRect = ae::RectInt::FromPointAndSize(
-				0,
-				0,
+			const ae::Rect windowRect = ae::Rect::FromPoints(
+				0.0f,
+				0.0f,
 				m_window->GetWidth(),
-				m_window->GetHeight() - 4 );
+				m_window->GetHeight() - 4.0f );
 			const NSPoint cursorScreenPos = [NSEvent mouseLocation];
-			const ae::Int2 cursorLocalPos = ae::Int2( cursorScreenPos.x, cursorScreenPos.y ) - m_window->GetPosition();
+			const ae::Vec2 cursorLocalPos = ae::Vec2( cursorScreenPos.x, cursorScreenPos.y ) - m_window->GetPosition();
 			const bool cursorWithinWindow = windowRect.Contains( cursorLocalPos );
 			if( cursorWithinWindow )
 			{
@@ -20807,12 +21591,11 @@ void Input::Pump()
 	// Mouse capture
 	if( m_captureMouse )
 	{
-		mouse.movement = ae::Int2( 0 );
+		mouse.movement = ae::Vec2( 0.0f );
 		if( m_window )
 		{
-			// Calculate center in case the window height is an odd number
-			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-			m_SetCursorPos( localCenter );
+			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
+			m_WarpCursor( localCenter );
 			// Mouse pos is previously set elsewhere, so when the mouse position is set
 			// to the window center the movement vector needs to be reversed.
 			m_SetMousePos( localCenter );
@@ -21397,39 +22180,38 @@ void Input::SetMouseCaptured( bool enable )
 	
 	if( enable != m_captureMouse )
 	{
+#if _AE_EMSCRIPTEN_
+		m_pendingPointerLock = enable ? 1 : -1;
+#else
 		if( enable )
 		{
 			// Remember original cursor position
-			m_capturedMousePos = m_mousePosSet ? mouse.position : ae::Int2( INT_MAX );
+			m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( mouse.position ) : ae::Optional< ae::Vec2 >();
 #if _AE_WINDOWS_
 			ShowCursor( FALSE );
 #elif _AE_OSX_
 			CGDisplayHideCursor( kCGDirectMainDisplay );
-#elif _AE_EMSCRIPTEN_
-			emscripten_request_pointerlock( "canvas", true );
 #endif
-			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-			m_SetCursorPos( localCenter );
+			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
+			m_WarpCursor( localCenter );
 			m_mousePosSet = false;
 		}
 		else
 		{
 			// Restore original cursor position
-			if( m_capturedMousePos != ae::Int2( INT_MAX ) )
+			if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
 			{
-				m_SetCursorPos( m_capturedMousePos );
-				mouse.position = m_capturedMousePos;
+				m_WarpCursor( *pos );
+				mouse.position = *pos;
 			}
 #if _AE_WINDOWS_
 			ShowCursor( TRUE );
 #elif _AE_OSX_
 			CGDisplayShowCursor( kCGDirectMainDisplay );
-#elif _AE_EMSCRIPTEN_
-			emscripten_exit_pointerlock();
 #endif
 		}
-		
 		m_captureMouse = enable;
+#endif
 	}
 }
 
@@ -21473,58 +22255,96 @@ bool Input::GetPrev( ae::Key key ) const
 	return m_keysPrev[ static_cast< int >( key ) ];
 }
 
-const ae::Touch* Input::GetTouchById( uint32_t id ) const
+ae::Vec2 Touch::Position() const
 {
-	const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	return ( touchIdx >= 0 ) ? &m_touches[ touchIdx ] : nullptr;
-}
-
-const ae::Touch* Input::GetFinishedTouchById( uint32_t id ) const
-{
-	const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	const int32_t prevTouchIdx = m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	return ( touchIdx < 0 && prevTouchIdx >= 0 ) ? &m_touchesPrev[ prevTouchIdx ] : nullptr;
-}
-
-ae::TouchArray Input::GetNewTouches() const
-{
-	ae::TouchArray result;
-	for( const ae::Touch& touch : m_touches )
+	if( samples.Length() )
 	{
-		const int32_t prevTouchIdx = m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == touch.id; } );
-		if( prevTouchIdx < 0 )
-		{
-			result.Append( touch );
-		}
+		return samples[ samples.Length() - 1 ].position; // Last sample
 	}
+	else
+	{
+		AE_DEBUG_FAIL_MSG( "Touch has no samples" );
+		return ae::Vec2( 0.0f );
+	}
+}
+
+ae::Vec2 Touch::StartPosition() const
+{
+	if( samples.Length() )
+	{
+		return samples[ 0 ].position; // First sample
+	}
+	else
+	{
+		AE_DEBUG_FAIL_MSG( "Touch has no samples" );
+		return ae::Vec2( 0.0f );
+	}
+}
+
+ae::Vec2 Touch::StartDelta() const
+{
+	return Position() - StartPosition();
+}
+
+double Touch::Lifetime() const
+{
+	if( samples.Length() < 2 )
+	{
+		return 0.0;
+	}
+	return samples[ samples.Length() - 1 ].time - samples[ 0 ].time;
+}
+
+void Touch::_AppendSample( double time, ae::Vec2 position )
+{
+	if( samples.Full() )
+	{
+		// Visvalingam: drop the interior sample with the smallest triangle area
+		// against its immediate neighbors. Endpoints (start and most recent)
+		// are preserved.
+		int32_t dropIdx = 1;
+		float minArea = ae::MaxValue< float >();
+		for( uint32_t i = 1; i + 1 < samples.Length(); i++ )
+		{
+			const ae::Vec2 a = samples[ i - 1 ].position;
+			const ae::Vec2 b = samples[ i ].position;
+			const ae::Vec2 c = samples[ i + 1 ].position;
+			const float cross = ( b.x - a.x ) * ( c.y - a.y ) - ( b.y - a.y ) * ( c.x - a.x );
+			const float area = ae::Abs( cross );
+			if( area < minArea )
+			{
+				minArea = area;
+				dropIdx = (int32_t)i;
+			}
+		}
+		samples.Remove( dropIdx );
+	}
+	samples.Append( { time, position } );
+}
+
+const ae::Touch* Input::PumpTouches()
+{
+	if( !m_newTouches.Length() || m_touches.Full() )
+	{
+		return nullptr;
+	}
+	ae::Touch* result = m_newTouches[ 0 ];
+	m_newTouches.Remove( 0 );
+	m_touches.Append( result );
 	return result;
 }
 
-ae::TouchArray Input::GetFinishedTouches() const
+void Input::ReleaseTouch( const ae::Touch* touch )
 {
-	ae::TouchArray result;
-	for( const ae::Touch& touch : m_touchesPrev )
+	const int32_t idx = m_touches.Find( touch );
+	if( idx >= 0 )
 	{
-		const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == touch.id; } );
-		if( touchIdx < 0 )
-		{
-			result.Append( touch );
-		}
+		m_touches.Remove( idx );
+		m_touchPool.Delete( const_cast< ae::Touch* >( touch ) );
 	}
-	return result;
 }
 
-const ae::TouchArray& Input::GetTouches() const
-{
-	return m_touches;
-}
-
-const ae::TouchArray& Input::GetPreviousTouches() const
-{
-	return m_touchesPrev;
-}
-
-void Input::m_SetMousePos( ae::Int2 pos )
+void Input::m_SetMousePos( ae::Vec2 pos )
 {
 	AE_ASSERT( m_window );
 	if( m_mousePosSet )
@@ -21535,7 +22355,7 @@ void Input::m_SetMousePos( ae::Int2 pos )
 	m_mousePosSet = true;
 }
 
-void Input::m_SetMousePos( ae::Int2 pos, ae::Int2 movement )
+void Input::m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement )
 {
 	AE_ASSERT( m_window );
 	mouse.movement += movement;
@@ -21543,11 +22363,13 @@ void Input::m_SetMousePos( ae::Int2 pos, ae::Int2 movement )
 	m_mousePosSet = true;
 }
 
-void Input::m_SetCursorPos( ae::Int2 pos )
+void Input::m_WarpCursor( ae::Vec2 pos )
 {
 #if _AE_WINDOWS_
 	{
-		POINT centerPt = { pos.x, m_window->GetHeight() - pos.y };
+		// SetCursorPos takes integer screen pixels, so round to the nearest
+		const ae::Int2 px = pos.NearestCopy();
+		POINT centerPt = { px.x, m_window->GetHeight() - px.y };
 		if( ClientToScreen( (HWND)m_window->window, &centerPt ) )
 		{
 			SetCursorPos( centerPt.x, centerPt.y );
@@ -21785,6 +22607,15 @@ void _ae_GetCurrentWorkingDir( Str256* outDir )
 	url[ 0 ] = 0;
 	EM_ASM( { stringToUTF8(window.location.href, $0, 256) }, url );
 	*outDir = ae::FileSystem::GetDirectoryFromPath( url );
+}
+#elif _AE_WASM_
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+	return false;
+}
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+	return false;
 }
 #endif
 
@@ -22646,7 +23477,7 @@ const char* FileSystem::GetFileNameFromPath( const char* filePath )
 	}
 }
 
-const char* FileSystem::GetFileExtFromPath( const char* filePath, bool includeDot )
+const char* FileSystem::GetFileExtensionFromPath( const char* filePath, bool includeDot )
 {
 	// Find first dot after last separator
 	const char* fileName = GetFileNameFromPath( filePath );
@@ -22661,6 +23492,60 @@ const char* FileSystem::GetFileExtFromPath( const char* filePath, bool includeDo
 		uint32_t len = (uint32_t)strlen( fileName );
 		return fileName + len;
 	}
+}
+
+static char _ToLowerASCII( char c )
+{
+	if( c >= 'A' && c <= 'Z' )
+	{
+		return c + ( 'a' - 'A' );
+	}
+	return c;
+}
+
+static bool _StringsEqualASCII( const char* a, const char* b )
+{
+	while( a[ 0 ] && b[ 0 ] )
+	{
+		if( _ToLowerASCII( a[ 0 ] ) != _ToLowerASCII( b[ 0 ] ) )
+		{
+			return false;
+		}
+		a++;
+		b++;
+	}
+	return a[ 0 ] == b[ 0 ]; // Null / string length equivalency check
+}
+
+bool FileSystem::HasExtension( const char* filePath, const char* extension, bool caseSensitive )
+{
+	if( !filePath || !filePath[ 0 ] || !extension || !extension[ 0 ] )
+	{
+		return false;
+	}
+	if( IsDirectory( filePath ) )
+	{
+		return false;
+	}
+	if( extension[ 0 ] == '.' )
+	{
+		extension++;
+	}
+	if( !extension[ 0 ] )
+	{
+		return false;
+	}
+
+	const char* fileExt = GetFileExtensionFromPath( filePath, false );
+	if( !fileExt[ 0 ] )
+	{
+		return false;
+	}
+	if( caseSensitive )
+	{
+		return strcmp( fileExt, extension ) == 0;
+	}
+	return _StringsEqualASCII( fileExt, extension );
 }
 
 std::pair< const char*, const char* > FileSystem::TraversePath( const char* filePath )
@@ -23179,6 +24064,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 //------------------------------------------------------------------------------
 // ae::Socket and ae::ListenerSocket helpers
 //------------------------------------------------------------------------------
+#if !_AE_WASM_
 uint32_t _winsockCount = 0;
 bool _WinsockInit()
 {
@@ -23950,197 +24836,383 @@ uint32_t ListenerSocket::GetConnectionCount() const
 	return m_connections.Length();
 }
 
+#endif // !_AE_WASM_
+
 }  // ae end
+
+//------------------------------------------------------------------------------
+// OpenGL start
+//------------------------------------------------------------------------------
+// clang-format off
+// _ae_GLProfileEnum returns an int enum (0=none, 1=core, 2=es, 3=compatibility)
+// rather than a string so the value crosses the WASM<->host ABI cleanly. The
+// public ae::GLProfile() below maps it back to a string on the local side.
+enum _ae_GLProfileEnum
+{
+	_AE_GLProfile_None = 0,
+	_AE_GLProfile_Core = 1,
+	_AE_GLProfile_ES = 2
+};
+#if !AE_ENABLE_OPENGL
+	int32_t _ae_GLMajorVersion() { return 0; }
+	int32_t _ae_GLMinorVersion() { return 0; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_None; }
+#elif _AE_IOS_ || _AE_EMSCRIPTEN_
+	int32_t _ae_GLMajorVersion() { return 3; }
+	int32_t _ae_GLMinorVersion() { return 0; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_ES; }
+#elif _AE_WASM_
+	// Instead of defining values here, the WASM host must provide these function implementations
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLMajorVersion();
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLMinorVersion();
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLProfileEnum();
+#else
+	int32_t _ae_GLMajorVersion() { return 4; }
+	int32_t _ae_GLMinorVersion() { return 1; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_Core; }
+#endif
+
+//------------------------------------------------------------------------------
+// OpenGL includes / declarations
+//------------------------------------------------------------------------------
+#if AE_ENABLE_OPENGL
+#	ifndef AE_GL_DEBUG_MODE
+#		define AE_GL_DEBUG_MODE 0
+#	endif
+
+#	if AE_OPENGL_CUSTOM_HEADER
+#		include AE_OPENGL_CUSTOM_HEADER
+#	elif _AE_EMSCRIPTEN_
+#		include <GLES3/gl3.h>
+#	elif _AE_LINUX_
+#		define GL_GLEXT_PROTOTYPES 1
+#		include <GL/glcorearb.h>
+#	elif _AE_IOS_
+#		include <OpenGLES/ES3/gl.h>
+#	elif _AE_APPLE_
+#		include <OpenGL/glext.h>
+#		include <OpenGL/gl3.h>
+#		include <OpenGL/gl3ext.h>
+#	else
+		// Define minimal GL types and constants for platforms without headers
+		typedef uint32_t GLenum;
+		typedef uint32_t GLbitfield;
+		typedef uint32_t GLuint;
+		typedef int32_t  GLint;
+		typedef int32_t  GLsizei;
+		typedef float    GLfloat;
+		typedef double   GLdouble;
+		typedef uint8_t  GLboolean;
+		typedef char GLchar;
+		typedef uint8_t GLubyte;
+		typedef void GLvoid;
+		typedef intptr_t GLsizeiptr;
+		typedef intptr_t GLintptr;
+
+#		define GL_TRUE  1
+#		define GL_FALSE 0
+
+#		ifndef WGL_CONTEXT_MAJOR_VERSION_ARB
+#			define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+#			define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+#			define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+#			define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+#			define WGL_CONTEXT_FLAGS_ARB 0x2094
+#			define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
+#		endif
+
+		// GL primitives
+#		define GL_POINTS                           0x0000
+#		define GL_LINES                            0x0001
+#		define GL_LINE_STRIP                       0x0003
+#		define GL_TRIANGLES                        0x0004
+#		define GL_TRIANGLE_STRIP                   0x0005
+
+		// GL data types
+#		define GL_BYTE                             0x1400
+#		define GL_UNSIGNED_BYTE                    0x1401
+#		define GL_SHORT                            0x1402
+#		define GL_UNSIGNED_SHORT                   0x1403
+#		define GL_INT                              0x1404
+#		define GL_UNSIGNED_INT                     0x1405
+#		define GL_FLOAT                            0x1406
+
+		// GL depth functions
+#		define GL_LESS                             0x0201
+#		define GL_EQUAL                            0x0202
+#		define GL_LEQUAL                           0x0203
+#		define GL_GREATER                          0x0204
+#		define GL_GEQUAL                           0x0206
+#		define GL_ALWAYS                           0x0207
+
+		// GL blend factors
+#		define GL_ZERO                             0x0000
+#		define GL_ONE                              0x0001
+#		define GL_SRC_ALPHA                        0x0302
+#		define GL_ONE_MINUS_SRC_ALPHA              0x0303
+#		define GL_DST_ALPHA                        0x0304
+#		define GL_ONE_MINUS_DST_ALPHA              0x0305
+
+		// GL state / caps
+#		define GL_CULL_FACE                        0x0B44
+#		define GL_DEPTH_TEST                       0x0B71
+#		define GL_BLEND                            0x0BE2
+#		define GL_SCISSOR_TEST                     0x0C11
+#		define GL_UNPACK_ALIGNMENT                 0x0CF5
+#		define GL_MAX_TEXTURE_SIZE                 0x0D33
+#		define GL_VIEWPORT                         0x0BA2
+
+		// GL winding / face
+#		define GL_CW                               0x0900
+#		define GL_CCW                              0x0901
+#		define GL_FRONT                            0x0404
+#		define GL_BACK                             0x0405
+#		define GL_FRONT_AND_BACK                   0x0408
+#		define GL_LINE                             0x1B01
+#		define GL_FILL                             0x1B02
+
+		// GL clear bits
+#		define GL_DEPTH_BUFFER_BIT                 0x00000100
+#		define GL_STENCIL_BUFFER_BIT               0x00000400
+#		define GL_COLOR_BUFFER_BIT                 0x00004000
+
+		// GL textures
+#		define GL_TEXTURE_2D                       0x0DE1
+#		define GL_TEXTURE_CUBE_MAP                 0x8513
+#		define GL_TEXTURE_CUBE_MAP_POSITIVE_X      0x8515
+#		define GL_TEXTURE_MIN_FILTER               0x2801
+#		define GL_TEXTURE_MAG_FILTER               0x2800
+#		define GL_TEXTURE_WRAP_S                   0x2802
+#		define GL_TEXTURE_WRAP_T                   0x2803
+#		define GL_NEAREST                          0x2600
+#		define GL_LINEAR                           0x2601
+#		define GL_NEAREST_MIPMAP_NEAREST           0x2700
+#		define GL_LINEAR_MIPMAP_LINEAR             0x2703
+#		define GL_REPEAT                           0x2901
+
+		// GL formats
+#		define GL_RED                              0x1903
+#		define GL_RG                               0x8227
+#		define GL_RGB                              0x1907
+#		define GL_RGBA                             0x1908
+#		define GL_RG8                              0x822B
+#		define GL_RG16F                            0x822F
+#		define GL_RG32F                            0x8230
+#		define GL_RGB8                             0x8051
+#		define GL_RGBA8                            0x8058
+#		define GL_DEPTH_COMPONENT                  0x1902
+
+		// GL buffers / usage
+#		define GL_STREAM_DRAW                      0x88E0
+
+		// GL_VERSION_1_2
+#		define GL_TEXTURE_3D                     0x806F
+#		define GL_BGR                            0x80E0
+#		define GL_BGRA                           0x80E1
+#		define GL_CLAMP_TO_EDGE                  0x812F
+		// GL_VERSION_1_3
+#		define GL_TEXTURE0                       0x84C0
+		// GL_VERSION_1_4
+#		define GL_DEPTH_COMPONENT16              0x81A5
+		// GL_VERSION_1_5
+#		define GL_ARRAY_BUFFER                   0x8892
+#		define GL_ELEMENT_ARRAY_BUFFER           0x8893
+#		define GL_STATIC_DRAW                    0x88E4
+#		define GL_DYNAMIC_DRAW                   0x88E8
+		// GL_VERSION_2_0
+#		define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
+#		define GL_FRAGMENT_SHADER                0x8B30
+#		define GL_VERTEX_SHADER                  0x8B31
+#		define GL_FLOAT_VEC2                     0x8B50
+#		define GL_FLOAT_VEC3                     0x8B51
+#		define GL_FLOAT_VEC4                     0x8B52
+#		define GL_FLOAT_MAT4                     0x8B5C
+#		define GL_SAMPLER_2D                     0x8B5E
+#		define GL_SAMPLER_3D                     0x8B5F
+#		define GL_COMPILE_STATUS                 0x8B81
+#		define GL_LINK_STATUS                    0x8B82
+#		define GL_INFO_LOG_LENGTH                0x8B84
+#		define GL_ACTIVE_UNIFORMS                0x8B86
+#		define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
+#		define GL_ACTIVE_ATTRIBUTES              0x8B89
+#		define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
+		// GL_VERSION_2_1
+#		define GL_SRGB8                          0x8C41
+#		define GL_SRGB8_ALPHA8                   0x8C43
+		// GL_VERSION_3_0
+#		define GL_RGBA32F                        0x8814
+#		define GL_RGB32F                         0x8815
+#		define GL_RGBA16F                        0x881A
+#		define GL_RGB16F                         0x881B
+#		define GL_DEPTH_COMPONENT32F             0x8CAC
+#		define GL_FRAMEBUFFER_UNDEFINED          0x8219
+#		define GL_FRAMEBUFFER_BINDING            0x8CA6
+#		define GL_READ_FRAMEBUFFER               0x8CA8
+#		define GL_DRAW_FRAMEBUFFER               0x8CA9
+#		define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#		define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
+#		define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+#		define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
+#		define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
+#		define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
+#		define GL_COLOR_ATTACHMENT0              0x8CE0
+#		define GL_DEPTH_ATTACHMENT               0x8D00
+#		define GL_FRAMEBUFFER                    0x8D40
+#		define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
+#		define GL_FRAMEBUFFER_SRGB               0x8DB9
+#		define GL_HALF_FLOAT                     0x140B
+#		define GL_R8                             0x8229
+#		define GL_R16F                           0x822D
+#		define GL_R32F                           0x822E
+#		define GL_R16UI                          0x8234
+		// GL_VERSION_3_2
+#		define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
+		// GL_VERSION_4_3
+		typedef void ( *GLDEBUGPROC )( GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam );
+#		define GL_DEBUG_SEVERITY_HIGH            0x9146
+#		define GL_DEBUG_SEVERITY_MEDIUM          0x9147
+#		define GL_DEBUG_SEVERITY_LOW             0x9148
+#	endif
+
+#	define _AE_EACH_GL_FUNC \
+		_AE_GL_FUNC( void,   glClear,                   ( GLbitfield mask ) ) \
+		_AE_GL_FUNC( void,   glClearColor,              ( GLfloat r, GLfloat g, GLfloat b, GLfloat a ) ) \
+		_AE_GL_FUNC( void,   glClearDepthf,             ( GLfloat depth ) ) \
+		_AE_GL_FUNC( void,   glViewport,                ( GLint x, GLint y, GLsizei width, GLsizei height ) ) \
+		_AE_GL_FUNC( void,   glEnable,                  ( GLenum cap ) ) \
+		_AE_GL_FUNC( void,   glDisable,                 ( GLenum cap ) ) \
+		_AE_GL_FUNC( void,   glDepthMask,               ( GLboolean flag ) ) \
+		_AE_GL_FUNC( void,   glDepthFunc,               ( GLenum func ) ) \
+		_AE_GL_FUNC( void,   glBlendFunc,               ( GLenum sfactor, GLenum dfactor ) ) \
+		_AE_GL_FUNC( void,   glFrontFace,               ( GLenum mode ) ) \
+		_AE_GL_FUNC( void,   glGetIntegerv,             ( GLenum pname, GLint* data ) ) \
+		_AE_GL_FUNC( void,   glPixelStorei,             ( GLenum pname, GLint param ) ) \
+		_AE_GL_FUNC( GLenum, glGetError,                () ) \
+		_AE_GL_FUNC( void,   glBindTexture,             ( GLenum target, GLuint texture ) ) \
+		_AE_GL_FUNC( void,   glGenTextures,             ( GLsizei n, GLuint* textures ) ) \
+		_AE_GL_FUNC( void,   glDeleteTextures,          ( GLsizei n, const GLuint* textures ) ) \
+		_AE_GL_FUNC( void,   glTexParameteri,           ( GLenum target, GLenum pname, GLint param ) ) \
+		_AE_GL_FUNC( void,   glDrawArrays,              ( GLenum mode, GLint first, GLsizei count ) ) \
+		_AE_GL_FUNC( void,   glDrawElements,            ( GLenum mode, GLsizei count, GLenum type, const void* indices ) ) \
+		_AE_GL_FUNC( void,   glPolygonMode,             ( GLenum face, GLenum mode ) ) \
+		_AE_GL_FUNC( GLuint, glCreateProgram,           () ) \
+		_AE_GL_FUNC( void,   glAttachShader,            ( GLuint program, GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glLinkProgram,             ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glGetProgramiv,            ( GLuint program, GLenum pname, GLint* params ) ) \
+		_AE_GL_FUNC( void,   glGetProgramInfoLog,       ( GLuint program, GLsizei bufSize, GLsizei* length, GLchar* infoLog ) ) \
+		_AE_GL_FUNC( void,   glGetActiveAttrib,         ( GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name ) ) \
+		_AE_GL_FUNC( GLint,  glGetAttribLocation,       ( GLuint program, const GLchar* name ) ) \
+		_AE_GL_FUNC( void,   glGetActiveUniform,        ( GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name ) ) \
+		_AE_GL_FUNC( GLint,  glGetUniformLocation,      ( GLuint program, const GLchar* name ) ) \
+		_AE_GL_FUNC( void,   glDeleteShader,            ( GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glDeleteProgram,           ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glUseProgram,              ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glBlendFuncSeparate,       ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) ) \
+		_AE_GL_FUNC( GLuint, glCreateShader,            ( GLenum type ) ) \
+		_AE_GL_FUNC( void,   glShaderSource,            ( GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length ) ) \
+		_AE_GL_FUNC( void,   glCompileShader,           ( GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glGetShaderiv,             ( GLuint shader, GLenum pname, GLint* params ) ) \
+		_AE_GL_FUNC( void,   glGetShaderInfoLog,        ( GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* infoLog ) ) \
+		_AE_GL_FUNC( void,   glActiveTexture,           ( GLenum texture ) ) \
+		_AE_GL_FUNC( void,   glUniform1i,               ( GLint location, GLint v0 ) ) \
+		_AE_GL_FUNC( void,   glUniform1fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform2fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform3fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform4fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniformMatrix4fv,        ( GLint location, GLsizei count, GLboolean transpose, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glGenerateMipmap,          ( GLenum target ) ) \
+		_AE_GL_FUNC( void,   glBindFramebuffer,         ( GLenum target, GLuint framebuffer ) ) \
+		_AE_GL_FUNC( void,   glFramebufferTexture2D,    ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) ) \
+		_AE_GL_FUNC( void,   glGenFramebuffers,         ( GLsizei n, GLuint* framebuffers ) ) \
+		_AE_GL_FUNC( void,   glDeleteFramebuffers,      ( GLsizei n, const GLuint* framebuffers ) ) \
+		_AE_GL_FUNC( GLenum, glCheckFramebufferStatus,  ( GLenum target ) ) \
+		_AE_GL_FUNC( void,   glDrawBuffers,             ( GLsizei n, const GLenum* bufs ) ) \
+		_AE_GL_FUNC( void,   glTextureBarrierNV,        () ) \
+		_AE_GL_FUNC( void,   glGenVertexArrays,         ( GLsizei n, GLuint* arrays ) ) \
+		_AE_GL_FUNC( void,   glBindVertexArray,         ( GLuint array ) ) \
+		_AE_GL_FUNC( void,   glDeleteVertexArrays,      ( GLsizei n, const GLuint* arrays ) ) \
+		_AE_GL_FUNC( void,   glDeleteBuffers,           ( GLsizei n, const GLuint* buffers ) ) \
+		_AE_GL_FUNC( void,   glBindBuffer,              ( GLenum target, GLuint buffer ) ) \
+		_AE_GL_FUNC( void,   glGenBuffers,              ( GLsizei n, GLuint* buffers ) ) \
+		_AE_GL_FUNC( void,   glBufferData,              ( GLenum target, GLsizeiptr size, const void* data, GLenum usage ) ) \
+		_AE_GL_FUNC( void,   glBufferSubData,           ( GLenum target, GLintptr offset, GLsizeiptr size, const void* data ) ) \
+		_AE_GL_FUNC( void,   glEnableVertexAttribArray, ( GLuint index ) ) \
+		_AE_GL_FUNC( void,   glVertexAttribPointer,     ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer ) ) \
+		_AE_GL_FUNC( void,   glVertexAttribDivisor,     ( GLuint index, GLuint divisor ) ) \
+		_AE_GL_FUNC( void,   glDrawElementsInstanced,   ( GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount ) ) \
+		_AE_GL_FUNC( void,   glDrawArraysInstanced,     ( GLenum mode, GLint first, GLsizei count, GLsizei instancecount ) ) \
+		_AE_GL_FUNC( void,   glTexImage2D,              ( GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels ) ) \
+		_AE_GL_FUNC( void,   glTexSubImage2D,           ( GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels ) ) \
+		_AE_GL_FUNC( void,   glTexStorage2D,            ( GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height ) ) \
+		_AE_GL_FUNC( void,   glDebugMessageCallback,    ( GLDEBUGPROC callback, const void* userParam ) )
+
+#	if _AE_WINDOWS_
+
+		// WGL extensions
+		HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList ) = nullptr;
+		bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
+		int ( *wglGetSwapIntervalEXT ) () = nullptr;
+#		define _AE_GL_FUNC( ret, name, params ) ret ( *name ) params = nullptr;
+		_AE_EACH_GL_FUNC
+#		undef _AE_GL_FUNC
+
+#	elif _AE_WASM_
+
+#		ifdef AE_GL_IMPORT
+#			define _AE_GL_IMPORT_ATTRIBUTE __attribute__(( AE_GL_IMPORT ))
+#		else
+#			define _AE_GL_IMPORT_ATTRIBUTE
+#		endif
+#		define _AE_GL_FUNC( ret, name, params ) _AE_GL_IMPORT_ATTRIBUTE __attribute__(( import_name( #name ) )) extern ret name params;
+		_AE_EACH_GL_FUNC
+#		undef _AE_GL_FUNC
+#		undef _AE_GL_IMPORT_ATTRIBUTE
+
+#	else
+		// Native macOS/Linux: system GL headers provide all declarations.
+#	endif
+
+#	undef _AE_EACH_GL_FUNC
+#endif // AE_ENABLE_OPENGL
 
 #if AE_ENABLE_OPENGL
-//------------------------------------------------------------------------------
-// OpenGL includes
-//------------------------------------------------------------------------------
-#if _AE_WINDOWS_
-	#pragma comment (lib, "opengl32.lib")
-	#pragma comment (lib, "glu32.lib")
-	#include <GL/gl.h>
-	#include <GL/glu.h>
-#elif _AE_EMSCRIPTEN_
-	#include <GLES3/gl3.h>
-#elif _AE_LINUX_
-	#define GL_GLEXT_PROTOTYPES 1
-	#include <GL/glcorearb.h>
-#elif _AE_IOS_
-	#include <OpenGLES/ES3/gl.h>
-#else
-	#include <OpenGL/glext.h>
-	#include <OpenGL/gl3.h>
-	#include <OpenGL/gl3ext.h>
-#endif
 
-namespace ae
-{
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	int32_t GLMajorVersion = 3;
-	int32_t GLMinorVersion = 0;
-#else
-	int32_t GLMajorVersion = 4;
-	int32_t GLMinorVersion = 1;
-#endif
-bool ReverseZ = false;
-}  // ae end
+#	if _AE_EMSCRIPTEN_ || _AE_IOS_ || _AE_WASM_ || _AE_WINDOWS_
+#		define glClearDepth glClearDepthf
+#	endif
 
-#ifndef AE_GL_DEBUG_MODE
-	#define AE_GL_DEBUG_MODE 0
-#endif
-
-#if _AE_WINDOWS_
-// OpenGL function pointers
-typedef char GLchar;
-typedef intptr_t GLsizeiptr;
-typedef intptr_t GLintptr;
-
-#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
-#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
-#define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
-#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
-#define WGL_CONTEXT_FLAGS_ARB 0x2094
-#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
-
-// GL_VERSION_1_2
-#define GL_TEXTURE_3D                     0x806F
-#define GL_BGR                            0x80E0
-#define GL_BGRA                           0x80E1
-#define GL_CLAMP_TO_EDGE                  0x812F
-// GL_VERSION_1_3
-#define GL_TEXTURE0                       0x84C0
-// GL_VERSION_1_4
-#define GL_DEPTH_COMPONENT16              0x81A5
-// GL_VERSION_1_5
-#define GL_ARRAY_BUFFER                   0x8892
-#define GL_ELEMENT_ARRAY_BUFFER           0x8893
-#define GL_STATIC_DRAW                    0x88E4
-#define GL_DYNAMIC_DRAW                   0x88E8
-// GL_VERSION_2_0
-#define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
-#define GL_FRAGMENT_SHADER                0x8B30
-#define GL_VERTEX_SHADER                  0x8B31
-#define GL_FLOAT_VEC2                     0x8B50
-#define GL_FLOAT_VEC3                     0x8B51
-#define GL_FLOAT_VEC4                     0x8B52
-#define GL_FLOAT_MAT4                     0x8B5C
-#define GL_SAMPLER_2D                     0x8B5E
-#define GL_SAMPLER_3D                     0x8B5F
-#define GL_COMPILE_STATUS                 0x8B81
-#define GL_LINK_STATUS                    0x8B82
-#define GL_INFO_LOG_LENGTH                0x8B84
-#define GL_ACTIVE_UNIFORMS                0x8B86
-#define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
-#define GL_ACTIVE_ATTRIBUTES              0x8B89
-#define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
-// GL_VERSION_2_1
-#define GL_SRGB8                          0x8C41
-#define GL_SRGB8_ALPHA8                   0x8C43
-// GL_VERSION_3_0
-#define GL_RGBA32F                        0x8814
-#define GL_RGB32F                         0x8815
-#define GL_RGBA16F                        0x881A
-#define GL_RGB16F                         0x881B
-#define GL_DEPTH_COMPONENT32F             0x8CAC
-#define GL_FRAMEBUFFER_UNDEFINED          0x8219
-#define GL_FRAMEBUFFER_BINDING            0x8CA6
-#define GL_READ_FRAMEBUFFER               0x8CA8
-#define GL_DRAW_FRAMEBUFFER               0x8CA9
-#define GL_FRAMEBUFFER_COMPLETE           0x8CD5
-#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
-#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
-#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
-#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
-#define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
-#define GL_COLOR_ATTACHMENT0              0x8CE0
-#define GL_DEPTH_ATTACHMENT               0x8D00
-#define GL_FRAMEBUFFER                    0x8D40
-#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
-#define GL_FRAMEBUFFER_SRGB               0x8DB9
-#define GL_HALF_FLOAT                     0x140B
-#define GL_R8                             0x8229
-#define GL_R16F                           0x822D
-#define GL_R32F                           0x822E
-#define GL_R16UI                          0x8234
-// GL_VERSION_3_2
-#define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
-// GL_VERSION_4_3
-typedef void ( *GLDEBUGPROC )(GLenum source,GLenum type,GLuint id,GLenum severity,GLsizei length,const GLchar *message,const void *userParam);
-#define GL_DEBUG_SEVERITY_HIGH            0x9146
-#define GL_DEBUG_SEVERITY_MEDIUM          0x9147
-#define GL_DEBUG_SEVERITY_LOW             0x9148
-// WGL extensions
-HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList ) = nullptr;
-bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
-int ( *wglGetSwapIntervalEXT ) () = nullptr;
-// OpenGL Shader Functions
-GLuint ( *glCreateProgram ) () = nullptr;
-void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
-void ( *glLinkProgram ) ( GLuint program ) = nullptr;
-void ( *glGetProgramiv ) ( GLuint program, GLenum pname, GLint *params ) = nullptr;
-void ( *glGetProgramInfoLog ) ( GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
-void ( *glGetActiveAttrib ) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name ) = nullptr;
-GLint (*glGetAttribLocation) ( GLuint program, const GLchar *name ) = nullptr;
-void (*glGetActiveUniform) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name );
-GLint (*glGetUniformLocation) ( GLuint program, const GLchar *name ) = nullptr;
-void (*glDeleteShader) ( GLuint shader ) = nullptr;
-void ( *glDeleteProgram) ( GLuint program ) = nullptr;
-void ( *glUseProgram) ( GLuint program ) = nullptr;
-void ( *glBlendFuncSeparate ) ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) = nullptr;
-GLuint( *glCreateShader) ( GLenum type ) = nullptr;
-void (*glShaderSource) ( GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length ) = nullptr;
-void (*glCompileShader)( GLuint shader ) = nullptr;
-void ( *glGetShaderiv)( GLuint shader, GLenum pname, GLint *params );
-void ( *glGetShaderInfoLog)( GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
-void ( *glActiveTexture) ( GLenum texture ) = nullptr;
-void ( *glUniform1i ) ( GLint location, GLint v0 ) = nullptr;
-void ( *glUniform1fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform2fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform3fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform4fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniformMatrix4fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
-// OpenGL Texture Functions
-void ( *glGenerateMipmap ) ( GLenum target ) = nullptr;
-void ( *glBindFramebuffer ) ( GLenum target, GLuint framebuffer ) = nullptr;
-void ( *glFramebufferTexture2D ) ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) = nullptr;
-void ( *glGenFramebuffers ) ( GLsizei n, GLuint *framebuffers ) = nullptr;
-void ( *glDeleteFramebuffers ) ( GLsizei n, const GLuint *framebuffers ) = nullptr;
-GLenum ( *glCheckFramebufferStatus ) ( GLenum target ) = nullptr;
-void ( *glDrawBuffers ) ( GLsizei n, const GLenum *bufs ) = nullptr;
-void ( *glTextureBarrierNV ) () = nullptr;
-// OpenGL Vertex Functions
-void ( *glGenVertexArrays ) (GLsizei n, GLuint *arrays ) = nullptr;
-void ( *glBindVertexArray ) ( GLuint array ) = nullptr;
-void ( *glDeleteVertexArrays ) ( GLsizei n, const GLuint *arrays ) = nullptr;
-void ( *glDeleteBuffers ) ( GLsizei n, const GLuint *buffers ) = nullptr;
-void ( *glBindBuffer ) ( GLenum target, GLuint buffer ) = nullptr;
-void ( *glGenBuffers ) ( GLsizei n, GLuint *buffers ) = nullptr;
-void ( *glBufferData ) ( GLenum target, GLsizeiptr size, const void *data, GLenum usage ) = nullptr;
-void ( *glBufferSubData ) ( GLenum target, GLintptr offset, GLsizeiptr size, const void *data ) = nullptr;
-void ( *glEnableVertexAttribArray ) ( GLuint index ) = nullptr;
-void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer ) = nullptr;
-void ( *glVertexAttribDivisor )( GLuint index, GLuint divisor ) = nullptr;
-void ( *glDrawElementsInstanced )( GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount ) = nullptr;
-void ( *glDrawArraysInstanced )( GLenum mode, GLint first, GLsizei count, GLsizei instancecount ) = nullptr;
-// Debug functions
-void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void* userParam ) = nullptr;
-#endif
-
-#if _AE_EMSCRIPTEN_ || _AE_IOS_
-#define glClearDepth glClearDepthf
-#endif
-
-// Helpers
-// clang-format off
-#if _AE_DEBUG_
-	#define AE_CHECK_GL_ERROR() do { if( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while( 0 )
-#else
-	#define AE_CHECK_GL_ERROR() do {} while( 0 )
-#endif
+#	if _AE_DEBUG_
+		#define AE_CHECK_GL_ERROR() do { if( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while( 0 )
+	#else
+		#define AE_CHECK_GL_ERROR() do {} while( 0 )
+#	endif
 // clang-format on
 
 namespace ae {
+
+int32_t GLMajorVersion() { return _ae_GLMajorVersion(); }
+int32_t GLMinorVersion() { return _ae_GLMinorVersion(); }
+const char* GLProfile()
+{
+	switch( _ae_GLProfileEnum() )
+	{
+		case _AE_GLProfile_Core: return "core";
+		case _AE_GLProfile_ES: return "es";
+		default: return "";
+	}
+}
+bool ReverseZ = false;
+
+uint32_t _ae_GetCurrentFramebuffer()
+{
+#if AE_ENABLE_OPENGL
+	GLint framebuffer = 0;
+	glGetIntegerv( GL_FRAMEBUFFER_BINDING, &framebuffer );
+	return (uint32_t)framebuffer;
+#else
+	return 0;
+#endif
+}
 
 int32_t _GLGetTypeCount( uint32_t glType )
 {
@@ -24320,7 +25392,7 @@ void UniformList::Set( const char* name, float value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 1;
 	uniform.value.data[ 0 ] = value;
@@ -24332,7 +25404,7 @@ void UniformList::Set( const char* name, Vec2 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 2;
 	uniform.value.data[ 0 ] = value.x;
@@ -24345,7 +25417,7 @@ void UniformList::Set( const char* name, Vec3 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 3;
 	uniform.value.data[ 0 ] = value.x;
@@ -24359,7 +25431,7 @@ void UniformList::Set( const char* name, Vec4 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 4;
 	uniform.value.data[ 0 ] = value.x;
@@ -24374,7 +25446,7 @@ void UniformList::Set( const char* name, const Matrix4& value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 16;
 	uniform.value = value;
@@ -24388,7 +25460,7 @@ void UniformList::Set( const char* name, const Texture* tex )
 	AE_ASSERT( name[ 0 ] );
 	AE_ASSERT_MSG( tex, "Texture uniform value '#' is invalid", name );
 	AE_ASSERT_MSG( tex->GetTexture(), "Texture uniform value '#' is invalid", name );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.sampler = tex->GetTexture();
 	uniform.target = tex->GetTarget();
@@ -24405,8 +25477,25 @@ const UniformList::Value* UniformList::Get( const char* name ) const
 //------------------------------------------------------------------------------
 // ae::Shader member functions
 //------------------------------------------------------------------------------
-ae::Hash32 s_shaderHash;
-ae::Hash32 s_uniformHash;
+} // ae end
+#if _AE_WASM_
+
+AE_WASM_IMPORT( ae ) void _ae_SetShaderHash( uint32_t hash );
+AE_WASM_IMPORT( ae ) void _ae_SetUniformHash( uint32_t hash );
+AE_WASM_IMPORT( ae ) uint32_t _ae_GetShaderHash();
+AE_WASM_IMPORT( ae ) uint32_t _ae_GetUniformHash();
+
+#else
+
+static uint32_t s_shaderHash;
+static uint32_t s_uniformHash;
+void _ae_SetShaderHash( uint32_t hash ) { s_shaderHash = hash; }
+void _ae_SetUniformHash( uint32_t hash ) { s_uniformHash = hash; }
+uint32_t _ae_GetShaderHash() { return s_shaderHash; }
+uint32_t _ae_GetUniformHash() { return s_uniformHash; }
+
+#endif
+namespace ae {
 
 Shader::~Shader()
 {
@@ -24423,10 +25512,7 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 	m_vertexShader = m_LoadShader( vertexStr, Type::Vertex, defines, defineCount );
 	m_fragmentShader = m_LoadShader( fragStr, Type::Fragment, defines, defineCount );
 
-	if( !m_vertexShader || !m_fragmentShader )
-	{
-		AE_FAIL();
-	}
+	AE_ASSERT_MSG( m_vertexShader && m_fragmentShader, "Shader compilation failed: v:# f:#", vertexStr, fragStr );
 
 	glAttachShader( m_program, m_vertexShader );
 	glAttachShader( m_program, m_fragmentShader );
@@ -24558,10 +25644,10 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 	shaderHash.HashType( m_depthTest );
 	shaderHash.HashType( m_culling );
 	shaderHash.HashType( m_wireframe );
-	bool shaderDirty = ( s_shaderHash != shaderHash );
+	const bool shaderDirty = ( _ae_GetShaderHash() != shaderHash.Get() );
 	if( shaderDirty )
 	{
-		s_shaderHash = shaderHash;
+		_ae_SetShaderHash( shaderHash.Get() );
 		
 		AE_CHECK_GL_ERROR();
 
@@ -24615,7 +25701,7 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 		}
 
 		// Wireframe
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_ || _AE_WASM_
 		AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on this platform" );
 #else
 		glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
@@ -24626,11 +25712,11 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 	}
 	
 	// Always update uniforms after a shader change
-	if( !shaderDirty && s_uniformHash == uniforms.GetHash() )
+	if( !shaderDirty && _ae_GetUniformHash() == uniforms.GetHash().Get() )
 	{
 		return;
 	}
-	s_uniformHash = uniforms.GetHash();
+	_ae_SetUniformHash( uniforms.GetHash().Get() );
 	
 	// Set shader uniforms
 	bool missingUniforms = false;
@@ -24724,23 +25810,17 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
 	// Version
 	ae::Str32 glVersionStr = "#version ";
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
-#else
-	glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
-#endif
-	glVersionStr += "\n";
+	glVersionStr += ae::Str16::Format( "##0 #\n", ae::GLMajorVersion(), ae::GLMinorVersion(), ae::GLProfile() );
 	if( glVersionStr.Length() )
 	{
 		shaderSource.Append( glVersionStr.c_str() );
 	}
 
-	// Precision
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	shaderSource.Append( "precision highp float;\n" );
-#else
-	// No default precision specified
-#endif
+	// GLES requires explicit precision qualifiers in fragment shaders
+	if( _ae_GLProfileEnum() == _AE_GLProfile_ES )
+	{
+		shaderSource.Append( "precision highp float;\n" );
+	}
 
 	// Input/output
 //	#if _AE_EMSCRIPTEN_
@@ -25709,7 +26789,14 @@ void Texture2D::Initialize( const TextureParams& params )
 	m_height = params.height;
 	glBindTexture( GetTarget(), GetTexture() );
 
-	const bool mipmapsEnabled = _AE_EMSCRIPTEN_ ? false : params.autoGenerateMipmaps;
+#if _AE_IOS_
+	// GLES3.0: SRGB8 (3-channel) is filterable but not color-renderable, so
+	// glGenerateMipmap returns GL_INVALID_OPERATION. SRGB8_ALPHA8 is fine.
+	const bool formatSupportsAutoMipmaps = ( params.format != Format::RGB8_SRGB );
+#else
+	const bool formatSupportsAutoMipmaps = true;
+#endif
+	const bool mipmapsEnabled = !_AE_EMSCRIPTEN_ && params.autoGenerateMipmaps && formatSupportsAutoMipmaps;
 	if( mipmapsEnabled )
 	{
 		glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
@@ -25921,7 +27008,9 @@ void Texture2D::Initialize( const TextureParams& params )
 	
 	// Handle vertical flip and/or BGR conversion if needed
 	const bool needsFlip = !params.bottomToTopData; // UV 0,0 corresponds to the bottom-left corner in OpenGL
-#if _AE_EMSCRIPTEN_
+#if _AE_EMSCRIPTEN_ || _AE_IOS_
+	// GLES has no GL_BGR/GL_BGRA — those are aliased to GL_RGB/GL_RGBA above,
+	// so the bytes must be swizzled in software before upload.
 	const bool needsBGRConversion = ( params.bgrData && components >= 3 );
 #else
 	const bool needsBGRConversion = false;
@@ -26012,6 +27101,7 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 	Terminate();
 
 	AE_ASSERT( m_fbo == 0 );
+	m_externalFramebuffer = false;
 
 	if( width * height == 0 )
 	{
@@ -26030,15 +27120,31 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 	AE_CHECK_GL_ERROR();
 }
 
+void RenderTarget::m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer )
+{
+	if( m_externalFramebuffer && m_width == width && m_height == height && m_fbo == framebuffer )
+	{
+		return;
+	}
+
+	Terminate();
+
+	m_width = width;
+	m_height = height;
+	m_fbo = framebuffer;
+	m_externalFramebuffer = true;
+}
+
 void RenderTarget::Terminate()
 {
-	if( m_fbo )
+	if( m_fbo && !m_externalFramebuffer )
 	{
 		// With WebGL it seems to matter that the framebuffer is deleted
 		// first so it's not referencing its textures.
 		glDeleteFramebuffers( 1, (uint32_t*)&m_fbo );
-		m_fbo = 0;
 	}
+	m_fbo = 0;
+	m_externalFramebuffer = false;
 	
 	for( uint32_t i = 0; i < m_targets.Length(); i++ )
 	{
@@ -26054,6 +27160,7 @@ void RenderTarget::Terminate()
 
 void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 {
+	AE_ASSERT_MSG( !m_externalFramebuffer, "Cannot add textures to an externally owned ae::RenderTarget" );
 	AE_ASSERT( m_targets.Length() < _kMaxFrameBufferAttachments );
 	if( m_width * m_height == 0 )
 	{
@@ -26081,6 +27188,7 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 
 void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 {
+	AE_ASSERT_MSG( !m_externalFramebuffer, "Cannot add depth to an externally owned ae::RenderTarget" );
 	AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
 	if( m_width * m_height == 0 )
 	{
@@ -26104,6 +27212,14 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 void RenderTarget::Activate()
 {
 	AE_ASSERT_MSG( GetWidth() && GetHeight(), "ae::RenderTarget is not initialized" );
+	if( m_externalFramebuffer )
+	{
+		glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+		glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+		glViewport( 0, 0, GetWidth(), GetHeight() );
+		AE_CHECK_GL_ERROR();
+		return;
+	}
 	AE_ASSERT_MSG( m_targets.Length() || m_depth.GetTexture(), "ae::RenderTarget is not complete. Call AddTexture() and/or AddDepth() before Activate()." );
 	AE_CHECK_GL_ERROR();
 	
@@ -26270,6 +27386,11 @@ GraphicsDevice::~GraphicsDevice()
 	#define LOAD_OPENGL_FN( _glfn )\
 		_glfn = (decltype(_glfn))wglGetProcAddress( #_glfn );\
 		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
+	// wglGetProcAddress returns null for GL 1.1 entries on Microsoft's ICD;
+	// those live in opengl32.dll and must be resolved with GetProcAddress.
+	#define LOAD_OPENGL11_FN( _glfn )\
+		_glfn = (decltype(_glfn))GetProcAddress( opengl32Module, #_glfn );\
+		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
 #endif
 
 void GraphicsDevice::Initialize( class Window* window )
@@ -26286,61 +27407,41 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT( !window->graphicsDevice );
 	window->graphicsDevice = this;
 
-#if !_AE_EMSCRIPTEN_
+#if !_AE_EMSCRIPTEN_ && !_AE_IOS_
 	AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
 #endif
 
+	window->ActivateContext();
+	m_context = window->m_context;
+	AE_ASSERT( m_context );
+
 #if _AE_WINDOWS_
 	uint32_t glFnLoadFailed = 0;
-	// Create OpenGL context
-	HWND hWnd = (HWND)m_window->window;
-	AE_ASSERT_MSG( hWnd, "ae::Window must be initialized" );
-	HDC hdc = GetDC( hWnd );
-	AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
-
-	HGLRC dummyCtx = wglCreateContext( hdc );
-	AE_ASSERT_MSG( dummyCtx, "Failed to create dummy OpenGL Rendering Context" );
-	wglMakeCurrent( hdc, dummyCtx );
-	
-	int attribs[] = 
-	{
-		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion,
-		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion,
-		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
-		0
-	};
-	LOAD_OPENGL_FN( wglCreateContextAttribsARB );
-	HGLRC ctx = wglCreateContextAttribsARB( hdc, 0, attribs );
-	AE_ASSERT_MSG( ctx, "Failed to create extended OpenGL Rendering Context" );
-
-	wglMakeCurrent( nullptr, nullptr );
-	wglDeleteContext( dummyCtx );
-	wglMakeCurrent( hdc, ctx );
-	
-	AE_ASSERT_MSG( ctx, "Failed to create the OpenGL Rendering Context" );
-	if( !wglMakeCurrent( hdc, ctx ) )
-	{
-		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
-	}
-	m_context = ctx;
-#elif _AE_OSX_ 
-	m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
-#elif _AE_EMSCRIPTEN_
-	EmscriptenWebGLContextAttributes attrs;
-	emscripten_webgl_init_context_attributes( &attrs );
-	attrs.alpha = 0;
-	attrs.majorVersion = ae::GLMajorVersion;
-	attrs.minorVersion = ae::GLMinorVersion;
-	m_context = emscripten_webgl_create_context( "canvas", &attrs );
-	AE_ASSERT( m_context > 0 );
-	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
-	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
 #endif
 	
 	AE_CHECK_GL_ERROR();
 
 #if _AE_WINDOWS_
+	const HMODULE opengl32Module = LoadLibraryA( "opengl32.dll" );
+	AE_ASSERT_MSG( opengl32Module, "Failed to load opengl32.dll" );
+	// GL 1.1 entries — resolved against opengl32.dll, not wglGetProcAddress.
+	LOAD_OPENGL11_FN( glClear );
+	LOAD_OPENGL11_FN( glClearColor );
+	LOAD_OPENGL11_FN( glViewport );
+	LOAD_OPENGL11_FN( glEnable );
+	LOAD_OPENGL11_FN( glDisable );
+	LOAD_OPENGL11_FN( glGetIntegerv );
+	LOAD_OPENGL11_FN( glGetError );
+	LOAD_OPENGL11_FN( glGenTextures );
+	LOAD_OPENGL11_FN( glBindTexture );
+	LOAD_OPENGL11_FN( glDeleteTextures );
+	LOAD_OPENGL11_FN( glTexParameteri );
+	LOAD_OPENGL11_FN( glTexImage2D );
+	LOAD_OPENGL11_FN( glTexSubImage2D );
+	LOAD_OPENGL11_FN( glDrawArrays );
+	LOAD_OPENGL11_FN( glDrawElements );
+	LOAD_OPENGL11_FN( glPolygonMode );
+	// WGL extensions and GL 2.0+ entries.
 	LOAD_OPENGL_FN( wglSwapIntervalEXT );
 	LOAD_OPENGL_FN( wglGetSwapIntervalEXT );
 	// Shader functions
@@ -26407,9 +27508,6 @@ void GraphicsDevice::Initialize( class Window* window )
 	glDebugMessageCallback( ae::OpenGLDebugCallback, nullptr );
 #endif
 
-	glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
-	AE_CHECK_GL_ERROR();
-	
 	// Initialize shared RenderTarget resources
 	struct Vertex
 	{
@@ -26432,19 +27530,19 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_CHECK_GL_ERROR();
 
 	// @NOTE: GL_FRAMEBUFFER_SRGB is not completely reliable on every platform (web, wide color
-	// display targets, etc), mostly because of limited control over the backbuffer format.
-	// On web its not possible to specify the backbuffer format, but browsers typically expect SRGB anyway.
+	// display targets, etc), mostly because of limited control over the back buffer format.
+	// On web its not possible to specify the back buffer format, but browsers typically expect SRGB anyway.
 	// On OpenGLES GL_FRAMEBUFFER_SRGB is always enabled.
 	// Because of all of this it's easiest to convert to SRGB manually on non-OpenGLES platforms.
 	const char* vertexStr = R"(
 		AE_UNIFORM_HIGHP mat4 u_localToNdc;
-		AE_IN_HIGHP vec3 a_position;
 		AE_IN_HIGHP vec2 a_uv;
 		AE_OUT_HIGHP vec2 v_uv;
 		void main()
 		{
 			v_uv = a_uv;
-			gl_Position = u_localToNdc * vec4( a_position, 1.0 );
+			vec2 localPos = a_uv - vec2( 0.5 );
+			gl_Position = u_localToNdc * vec4( localPos, 0.0, 1.0 );
 		})";
 	const char* fragStr = R"(
 		uniform sampler2D u_tex;
@@ -26509,10 +27607,10 @@ void GraphicsDevice::Activate()
 {
 	AE_ASSERT( m_window );
 	AE_ASSERT( m_context );
+	m_window->ActivateContext();
 
-	const float scaleFactor = m_window->GetScaleFactor();
-	const int32_t contentWidth = m_window->GetWidth() * scaleFactor;
-	const int32_t contentHeight = m_window->GetHeight() * scaleFactor;
+	const int32_t contentWidth = m_window->GetDrawWidth();
+	const int32_t contentHeight = m_window->GetDrawHeight();
 	if( contentWidth != m_canvas.GetWidth() || contentHeight != m_canvas.GetHeight() )
 	{
 #if _AE_EMSCRIPTEN_
@@ -26528,7 +27626,7 @@ void GraphicsDevice::Activate()
 		{
 			// @NOTE: The window size is the 'real' size of the canvas dom, which
 			// is determined by the web page. This function sets the emscripten
-			// managed backbuffer size.
+			// managed back buffer size.
 			if( m_window->GetLoggingEnabled() ) { AE_INFO( "resize #x#", contentWidth, contentHeight ); }
 			emscripten_set_canvas_element_size( "canvas", contentWidth, contentHeight );
 			m_HandleResize( contentWidth, contentHeight );
@@ -26563,46 +27661,31 @@ void GraphicsDevice::Present()
 
 	AE_ASSERT( m_context );
 	AE_CHECK_GL_ERROR();
-
-#if _AE_EMSCRIPTEN_
-	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
-	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
-#endif
-	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-	glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() );
+	m_window->BindBackBuffer();
 
 	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
 	glClearDepth( 1.0f );
 
 	glDepthMask( GL_TRUE );
 
+	glDisable( GL_SCISSOR_TEST );
 	glDisable( GL_DEPTH_TEST );
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	AE_CHECK_GL_ERROR();
 	
-	// @NOTE: Conversion to srgb is only needed for the backbuffer. The rest of the pipeline should be implemented as linear.
+	// @NOTE: Conversion to srgb is only needed for the back buffer. The rest of the pipeline should be implemented as linear.
 #if _AE_IOS_
 	// SRGB conversion is automatic on ios/OpenGLES because GL_FRAMEBUFFER_SRGB is always on
 	m_rgbToSrgb = false;
 #else
-	// Currently all platforms expect the backbuffer contents to be in sRGB space
+	// Currently all platforms expect the back buffer contents to be in sRGB space
 	m_rgbToSrgb = true;
 #endif
 	m_canvas.Render2D( 0, ae::Rect::FromCenterAndSize( ae::Vec2( 0.0f ), ae::Vec2( 2.0f ) ), 0.5f );
 	m_rgbToSrgb = false;
 	
 	AE_CHECK_GL_ERROR();
-
-	// Swap Buffers
-#if _AE_OSX_
-	[(NSOpenGLContext*)m_context flushBuffer];
-#elif _AE_WINDOWS_
-	AE_ASSERT( m_window );
-	HWND hWnd = (HWND)m_window->window;
-	AE_ASSERT( hWnd );
-	HDC hdc = GetDC( hWnd );
-	SwapBuffers( hdc );
-#endif
+	m_window->Present();
 }
 
 float GraphicsDevice::GetAspectRatio() const
@@ -26627,8 +27710,8 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 	m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
 	
 	// Force refresh uniforms for new canvas
-	s_shaderHash = ae::Hash32();
-	s_uniformHash = ae::Hash32();
+	_ae_SetShaderHash( ae::Hash32().Get() );
+	_ae_SetUniformHash( ae::Hash32().Get() );
 }
 
 //------------------------------------------------------------------------------
@@ -27582,8 +28665,6 @@ void SpriteRenderer::Clear()
 #else // !AE_ENABLE_OPENGL
 namespace ae
 {
-int32_t GLMajorVersion = 0;
-int32_t GLMinorVersion = 0;
 bool ReverseZ = false;
 
 //------------------------------------------------------------------------------
@@ -27674,6 +28755,7 @@ void Texture2D::Terminate() {}
 //------------------------------------------------------------------------------
 RenderTarget::~RenderTarget() {}
 void RenderTarget::Initialize( uint32_t width, uint32_t height ) {}
+void RenderTarget::m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer ) {}
 void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap ) {}
 void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap ) {}
 void RenderTarget::Terminate() {}
@@ -28458,9 +29540,9 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 	{
 		return;
 	}
-	constexpr uint32_t hitsSize = decltype(next->hits)::Size();
+	constexpr uint32_t hitsCapacity = decltype(next->hits)::Capacity();
 	uint32_t accumHitCount = 0;
-	Hit accumHits[ hitsSize * 2 ];
+	Hit accumHits[ hitsCapacity * 2 ];
 	
 	for( uint32_t i = 0; i < next->hits.Length(); i++ )
 	{
@@ -28475,7 +29557,7 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 	std::sort( accumHits, accumHits + accumHitCount, []( const Hit& h0, const Hit& h1 ){ return h0.distance < h1.distance; } );
 	
 	next->hits.Clear();
-	accumHitCount = ae::Min( accumHitCount, params.maxHits, hitsSize );
+	accumHitCount = ae::Min( accumHitCount, params.maxHits, hitsCapacity );
 	for( uint32_t i = 0; i < accumHitCount; i++ )
 	{
 		next->hits.Append( accumHits[ i ] );
@@ -28574,7 +29656,7 @@ void PushOutInfo::Accumulate( const PushOutParams& params, const PushOutInfo& pr
 	auto&& nHits = next->hits;
 	for( auto&& hit : prev.hits )
 	{
-		if( nHits.Length() < nHits.Size() )
+		if( nHits.Length() < nHits.Capacity() )
 		{
 			nHits.Append( hit );
 		}
@@ -28718,9 +29800,9 @@ void Skeleton::Initialize( const Skeleton* otherPose )
 const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::Matrix4& parentToChild )
 {
 	Bone* parent = const_cast< Bone* >( _parent );
-	AE_ASSERT_MSG( m_bones.Size(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
+	AE_ASSERT_MSG( m_bones.Capacity(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
 	AE_ASSERT_MSG( m_bones.begin() <= parent && parent < m_bones.end(), "ae::Bones must have a parent from the same ae::Skeleton" );
-	if( !parent || m_bones.Length() == m_bones.Size() )
+	if( !parent || m_bones.Length() == m_bones.Capacity() )
 	{
 		return nullptr;
 	}
@@ -29656,7 +30738,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 //------------------------------------------------------------------------------
 void _CheckALError()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	const char* errStr = "UNKNOWN_ERROR";
 	switch( alGetError() )
 	{
@@ -29675,7 +30757,7 @@ void _CheckALError()
 
 void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* bufferOut, float* lengthOut )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	struct ChunkHeader
 	{
 		char chunkId[ 4 ];
@@ -29812,7 +30894,7 @@ Audio::Channel::Channel()
 //------------------------------------------------------------------------------
 void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels, uint32_t maxAudioDatas )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	ALCdevice* device = alcOpenDevice( nullptr );
 	AE_ASSERT( device );
 	ALCcontext* ctx = alcCreateContext( device, nullptr );
@@ -29874,7 +30956,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 
 void Audio::Terminate()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_musicChannels.Length(); i++ )
 	{
 		Channel* channel = &m_musicChannels[ i ];
@@ -29912,7 +30994,7 @@ void Audio::Terminate()
 
 void Audio::SetVolume( float volume )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	volume = ae::Clip01( volume );
 	alListenerf( AL_GAIN, volume );
 #endif
@@ -29920,7 +31002,7 @@ void Audio::SetVolume( float volume )
 
 void Audio::SetMusicVolume( float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel >= m_musicChannels.Length() )
 	{
 		return;
@@ -29933,7 +31015,7 @@ void Audio::SetMusicVolume( float volume, uint32_t channel )
 
 void Audio::SetSfxLoopVolume( float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel >= m_sfxLoopChannels.Length() )
 	{
 		return;
@@ -29946,7 +31028,7 @@ void Audio::SetSfxLoopVolume( float volume, uint32_t channel )
 
 void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	AE_ASSERT( audioFile );
 	if( channel >= m_musicChannels.Length() )
 	{
@@ -29978,7 +31060,7 @@ void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channe
 
 void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	ALint state;
 	AE_ASSERT( audioFile );
 
@@ -30036,7 +31118,7 @@ void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority 
 
 void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	AE_ASSERT( audioFile );
 	if( channel >= m_sfxLoopChannels.Length() )
 	{
@@ -30070,7 +31152,7 @@ void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t chan
 
 void Audio::StopMusic( uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel < m_musicChannels.Length() )
 	{
 		alSourceStop( m_musicChannels[ channel ].source );
@@ -30081,7 +31163,7 @@ void Audio::StopMusic( uint32_t channel )
 
 void Audio::StopSfxLoop( uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel < m_sfxLoopChannels.Length() )
 	{
 		alSourceStop( m_sfxLoopChannels[ channel ].source );
@@ -30092,7 +31174,7 @@ void Audio::StopSfxLoop( uint32_t channel )
 
 void Audio::StopAllSfx()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxChannels[ i ].source );
@@ -30103,7 +31185,7 @@ void Audio::StopAllSfx()
 
 void Audio::StopAllSfxLoops()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_sfxLoopChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxLoopChannels[ i ].source );
@@ -30130,7 +31212,7 @@ uint32_t Audio::GetSfxLoopChannelCount() const
 // @TODO: Should return a string with current state of audio channels
 void Audio::Log()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		ALint state = 0;
@@ -30191,7 +31273,7 @@ BinaryStream::BinaryStream( Array< uint8_t >* array )
 	{
 		m_extArray = array;
 		m_offset = m_extArray->Length();
-		m_length = m_extArray->Size();
+		m_length = m_extArray->Capacity();
 		m_isValid = true;
 	}
 }
@@ -30405,7 +31487,7 @@ void BinaryStream::SerializeRaw( void* data, uint32_t length )
 			AE_ASSERT( m_extArray );
 			m_extArray->AppendArray( (uint8_t*)data, length );
 			m_offset = m_extArray->Length();
-			m_length = m_extArray->Size();
+			m_length = m_extArray->Capacity();
 		}
 	}
 }
@@ -32687,7 +33769,7 @@ const char* ae::ClassType::GetParentTypeName() const { return m_parent.c_str(); 
 
 void ae::ClassType::m_AddVar( const ae::ClassVar* var )
 {
-	AE_ASSERT_MSG( m_vars.Length() < m_vars.Size(), "Set/increase AE_MAX_META_VARS_CONFIG (Currently: #)", m_vars.Size() );
+	AE_ASSERT_MSG( m_vars.Length() < m_vars.Capacity(), "Set/increase AE_MAX_META_VARS_CONFIG (Currently: #)", m_vars.Capacity() );
 	m_vars.Append( var );
 	std::sort( m_vars.begin(), m_vars.end(), []( const ae::ClassVar* a, const ae::ClassVar* b )
 	{
@@ -32702,7 +33784,7 @@ ae::TypeId ae::ClassType::GetBaseVarTypeId() const { return ae::GetTypeIdWithout
 //------------------------------------------------------------------------------
 void ae::AttributeList::m_Add( Attribute* attribute )
 {
-	AE_ASSERT_MSG( m_attributes.Length() < m_attributes.Size(), "Set/increase AE_MAX_META_ATTRIBUTES_CONFIG (Currently: #)", m_attributes.Size() );
+	AE_ASSERT_MSG( m_attributes.Length() < m_attributes.Capacity(), "Set/increase AE_MAX_META_ATTRIBUTES_CONFIG (Currently: #)", m_attributes.Capacity() );
 	
 	m_attributes.Append( attribute );
 	std::stable_sort( m_attributes.begin(), m_attributes.end(), []( const ae::Attribute* a, const ae::Attribute* b )

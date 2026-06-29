@@ -28,24 +28,36 @@
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_LOG( "Initialize" );
 	ae::FileSystem fs;
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::Audio audio;
 	ae::TimeStep timeStep;
-	fs.Initialize( "data", "ae", "audio" );
-	window.Initialize( 800, 600, false, true, true );
-	window.SetTitle( "audio" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	audio.Initialize( 1, 3, 0, 2 );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
+	const ae::File* musicFile = nullptr;
+	const ae::File* sfxFile = nullptr;
+	const ae::AudioData* music = nullptr;
+	const ae::AudioData* sfx = nullptr;
+	bool musicPlaying = false;
+	float musicTime = 0.0f;
+	float hitFade = 0.0f;
 
-	auto LoadAudio = [&fs, &audio]( const ae::File*& file, const ae::AudioData*& audioData )
+	auto Initialize = [&]()
+	{
+		AE_LOG( "Initialize" );
+		fs.Initialize( "data", "ae", "audio" );
+		window.Initialize( 800, 600, false, true, true );
+		window.SetTitle( "audio" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		audio.Initialize( 1, 3, 0, 2 );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		musicFile = fs.Read( ae::FileSystem::Root::Data, "music.wav", 5.0f );
+		sfxFile = fs.Read( ae::FileSystem::Root::Data, "sound.wav", 5.0f );
+	};
+	auto LoadAudio = [&]( const ae::File*& file, const ae::AudioData*& audioData )
 	{
 		if( file && file->GetStatus() != ae::File::Status::Pending )
 		{
@@ -55,16 +67,7 @@ int main()
 			file = nullptr;
 		}
 	};
-	const ae::File* musicFile = fs.Read( ae::FileSystem::Root::Data, "music.wav", 5.0f );
-	const ae::File* sfxFile = fs.Read( ae::FileSystem::Root::Data, "sound.wav", 5.0f );
-	const ae::AudioData* music = nullptr;
-	const ae::AudioData* sfx = nullptr;
-
-	bool musicPlaying = false;
-	float musicTime = 0.0f;
-	float hitFade = 0.0f;
-
-	auto Update = [&]()
+	auto Update = [&]() -> bool
 	{
 		// Update
 		input.Pump();
@@ -78,7 +81,7 @@ int main()
 		{
 			hitFade = ae::Max( 0.0f, hitFade - timeStep.GetDt() / 0.2f );
 		}
-		
+
 		// Input
 		if( ( !input.mouse.rightButton && input.mousePrev.rightButton )
 			|| ( !input.Get( ae::Key::Space ) && input.GetPrev( ae::Key::Space ) )
@@ -125,17 +128,15 @@ int main()
 		timeStep.Tick();
 		return !input.quit;
 	};
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	AE_LOG( "Terminate" );
-	audio.Terminate();
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-	fs.DestroyAll();
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_LOG( "Terminate" );
+		audio.Terminate();
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		fs.DestroyAll();
+		return 0;
+	};
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

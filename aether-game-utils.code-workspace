@@ -1,0 +1,402 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"extensions": {
+		"recommendations": [
+			"llvm-vs-code-extensions.lldb-dap",
+			"ms-vscode.cmake-tools",
+			"ms-vscode.cpptools"
+		]
+	},
+	"settings": {
+		"clangd.arguments": [
+			// @TODO: Should have a consistent path for all build types, maybe symlinked
+			"--compile-commands-dir=${workspaceFolder}/build_vscode",
+		],
+		"cmake.useCMakePresets": "always",
+		"cmake.copyCompileCommands": "${workspaceFolder}/build_vscode/compile_commands.json",
+		"explorer.excludeGitIgnore": true,
+		"files.associations": {
+			"**/aether.h": "objective-cpp"
+		},
+		"lldb-dap.executable-path": "/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-dap"
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "Emscripten: Start Web Server",
+				"type": "shell",
+				"command": "python3 -m http.server 58000",
+				"isBackground": true,
+				"runOptions": {
+					"instanceLimit": 1
+				},
+				"problemMatcher": {
+					"pattern": {
+						"regexp": ".",
+						"file": 1,
+						"location": 2,
+						"message": 3
+					},
+					"background": {
+						"activeOnStart": true,
+						"beginsPattern": ".",
+						"endsPattern": "Serving HTTP on .* port ([0-9]+)"
+					}
+				},
+				"presentation": {
+					"panel": "dedicated",
+					"reveal": "always"
+				},
+				"icon": {
+					"id": "globe"
+				}
+			},
+			{
+				"label": "Emscripten: Configure",
+				"type": "shell",
+				"command": "cmake",
+				"args": [
+					"--preset",
+					"emscripten"
+				],
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [
+					"$msCompile"
+				],
+				"presentation": {
+					"reveal": "silent"
+				},
+				"icon": {
+					"id": "gear"
+				}
+			},
+			{
+				"label": "Emscripten: Build Test",
+				"type": "shell",
+				"command": "cmake",
+				"args": [
+					"--build",
+					"${workspaceFolder}/build_em",
+					"--config",
+					"RelWithDebInfo",
+					"--target",
+					"test"
+				],
+				"dependsOn": "Emscripten: Configure",
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [
+					"$msCompile"
+				],
+				"presentation": {
+					"reveal": "silent"
+				},
+				"icon": {
+					"id": "tools"
+				}
+			},
+			{
+				"label": "Emscripten: Build",
+				"type": "shell",
+				"command": "cmake",
+				"args": [
+					"--build",
+					"${workspaceFolder}/build_em",
+					"--config",
+					"RelWithDebInfo",
+					"--target",
+					"${command:cmake.buildTargetName}"
+				],
+				"dependsOn": "Emscripten: Configure",
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [
+					"$msCompile"
+				],
+				"presentation": {
+					"reveal": "silent"
+				},
+				"icon": {
+					"id": "tools"
+				}
+			},
+			{
+				"label": "Emscripten: Build & Serve",
+				"dependsOn": [
+					"Emscripten: Build",
+					"Emscripten: Start Web Server"
+				],
+				"dependsOrder": "parallel",
+				"icon": {
+					"id": "play"
+				},
+				"problemMatcher": [
+					"$msCompile"
+				]
+			},
+			{
+				"label": "iOS: Console",
+				"type": "shell",
+				"command": "touch /tmp/aether-ios-console.log && echo '==> iOS: Console ready (tailing /tmp/aether-ios-console.log)' && exec tail -F /tmp/aether-ios-console.log",
+				"isBackground": true,
+				"problemMatcher": {
+					"pattern": {
+						"regexp": ".",
+						"file": 1,
+						"location": 2,
+						"message": 3
+					},
+					"background": {
+						"activeOnStart": true,
+						"beginsPattern": "NEVER_MATCHES_qweRtY12345",
+						"endsPattern": "iOS: Console ready"
+					}
+				},
+				"runOptions": {
+					"instanceLimit": 1
+				},
+				"presentation": {
+					"reveal": "always",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": false
+				},
+				"icon": {
+					"id": "device-mobile"
+				}
+			},
+			{
+				"label": "iOS: Clean",
+				"type": "shell",
+				"command": "rm",
+				"args": [
+					"-rf",
+					"${workspaceFolder}/build_ios"
+				],
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [],
+				"presentation": {
+					"reveal": "never",
+					"revealProblems": "never",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "trash"
+				}
+			},
+			{
+				"label": "iOS: Configure",
+				"type": "shell",
+				"command": "python3",
+				"args": [
+					"${workspaceFolder}/scripts/ios_configure.py"
+				],
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [],
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "gear"
+				}
+			},
+			{
+				"label": "iOS: Build",
+				"type": "shell",
+				"command": "python3",
+				"args": [
+					"${workspaceFolder}/scripts/ios_build.py",
+					"${command:cmake.buildTargetName}",
+					"RelWithDebInfo"
+				],
+				"dependsOn": "iOS: Configure",
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [
+					"$msCompile"
+				],
+				"group": "build",
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "tools"
+				}
+			},
+			{
+				"label": "iOS: Install",
+				"type": "shell",
+				"command": "${workspaceFolder}/scripts/ios-install.sh",
+				"args": [
+					"${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app"
+				],
+				"dependsOn": "iOS: Build",
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [],
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "device-mobile"
+				}
+			},
+			{
+				"label": "iOS: Launch",
+				"type": "shell",
+				"command": "${workspaceFolder}/scripts/ios-launch.sh",
+				"args": [
+					"--console",
+					"${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app"
+				],
+				"dependsOn": "iOS: Install",
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [],
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "play"
+				}
+			},
+			{
+				"label": "iOS: Launch (Paused)",
+				"type": "shell",
+				"command": "${workspaceFolder}/scripts/ios-launch.sh",
+				"args": [
+					"--start-paused",
+					"--console",
+					"${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app"
+				],
+				"dependsOn": [
+					"iOS: Install",
+					"iOS: Console"
+				],
+				"dependsOrder": "parallel",
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [],
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "debug-pause"
+				}
+			},
+			{
+				"label": "iOS: Stop All",
+				"type": "shell",
+				"command": "${workspaceFolder}/scripts/ios-stop.sh",
+				"args": [
+					"--all"
+				],
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": [],
+				"presentation": {
+					"reveal": "silent",
+					"panel": "dedicated",
+					"focus": false,
+					"clear": true
+				},
+				"icon": {
+					"id": "debug-stop"
+				}
+			}
+		]
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Emscripten: Test",
+				"type": "node",
+				"request": "launch",
+				"program": "${workspaceFolder}/build_em/test/RelWithDebInfo/test.js",
+				"cwd": "${workspaceFolder}/build_em",
+				"preLaunchTask": "Emscripten: Build Test"
+			},
+			{
+				"name": "Emscripten: 18_SmallEngine",
+				"type": "chrome",
+				"request": "launch",
+				"url": "http://localhost:58000/build_em/examples/18_SmallEngine/RelWithDebInfo/",
+				"preLaunchTask": "Emscripten: Build" // & Serve
+			},
+			{
+				"name": "Launch Browser & Debug WASM",
+				"type": "chrome",
+				"request": "launch",
+				"url": "http://localhost:58000/build_em/examples/18_SmallEngine/RelWithDebInfo",
+				"webRoot": "${workspaceFolder}",
+				"sourceMaps": true
+			},
+			{
+				"name": "iOS: Debug Launch",
+				"type": "lldb-dap",
+				"request": "attach",
+				"debugAdapterExecutable": "${workspaceFolder}/scripts/lldb-dap.sh",
+				"program": "${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app/${command:cmake.getLaunchTargetName}",
+				"initCommands": [
+					"settings set target.preload-symbols false",
+					"process handle SIGSTOP -s true -n true"
+				],
+				"attachCommands": [
+					"device process attach --name \"${command:cmake.getLaunchTargetName}\""
+				],
+				"preLaunchTask": "iOS: Launch (Paused)"
+			},
+			{
+				"name": "iOS: Debug Attach",
+				"type": "lldb-dap",
+				"request": "attach",
+				"debugAdapterExecutable": "${workspaceFolder}/scripts/lldb-dap.sh",
+				"program": "${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app/${command:cmake.getLaunchTargetName}",
+				"initCommands": [
+					"settings set target.preload-symbols false",
+					"settings set symbols.enable-external-lookup false"
+				],
+				"attachCommands": [
+					"device process attach --name \"${command:cmake.getLaunchTargetName}\""
+				],
+				"timeout": 600
+			}
+		]
+	}
+}

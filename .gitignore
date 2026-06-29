@@ -37,9 +37,13 @@
 # Build directories
 build
 build_*
+__pycache__
 
 # System
 .DS_Store
 deps/dawn
 .vscode/settings.json
 .cache
+
+# Per-developer iOS overrides (device UDID, Apple team ID); see scripts/config.env.example
+scripts/config.env

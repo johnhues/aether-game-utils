@@ -28,24 +28,27 @@
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-  // Init
-  AE_LOG( "Initialize" );
   Game game;
-  game.Initialize();
-  AetherClient* client = AetherClient_New( ae::UUID::Generate(), "127.0.0.1", 3500 );
+  AetherClient* client = nullptr;
   ae::NetObjectClient netObjectClient;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
   double nextSend = 0.0;
 
-  // Update
-  while( !game.input.quit )
+  auto Initialize = [&]()
+  {
+    AE_LOG( "Initialize" );
+    game.Initialize();
+    client = AetherClient_New( ae::UUID::Generate(), "127.0.0.1", 3500 );
+  };
+
+  auto Update = [&]() -> bool
   {
     double time = ae::GetTime();
     game.input.Pump();
     game.window.SetTitle( client->IsConnected() ? "Spaceships Client (Connected)" : "Spaceships Client (Connecting...)" );
-    
+
     //--------------------------------------------------------------------------
     // Net update
     //--------------------------------------------------------------------------
@@ -82,7 +85,7 @@ int main()
       obj->netObject = netObject;
       obj->Serialize( &readStream );
     }
-    
+
     //------------------------------------------------------------------------------
     // Game Update
     //------------------------------------------------------------------------------
@@ -104,7 +107,7 @@ int main()
     }
     // Remove objects that no longer have replication data
     gameObjects.RemoveAllFn( []( const GameObject& o ) { return !o.netObject; } );
-    
+
     //------------------------------------------------------------------------------
     // Send input to server
     //------------------------------------------------------------------------------
@@ -133,12 +136,18 @@ int main()
     // Render
     //------------------------------------------------------------------------------
     game.Render( ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 10.0f * game.render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
-  }
 
-  AE_LOG( "Terminate" );
-  AetherClient_Delete( client );
-  client = nullptr;
-  game.Terminate();
+    return !game.input.quit;
+  };
 
-  return 0;
+  auto Terminate = [&]() -> int32_t
+  {
+    AE_LOG( "Terminate" );
+    AetherClient_Delete( client );
+    client = nullptr;
+    game.Terminate();
+    return 0;
+  };
+
+  return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

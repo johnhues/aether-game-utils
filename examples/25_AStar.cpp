@@ -106,20 +106,16 @@ void BuildGraph( ae::Array< AStarNode >& nodes, ae::Array< const AStarNode* >& g
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	// Setup
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::DebugLines debugLines = TAG_EXAMPLE;
 	ae::TimeStep timeStep;
-	window.Initialize( 1280, 1280, false, true, true );
-	window.SetTitle( "A*: Press arrow keys to move, space to randomize." );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	debugLines.Initialize( 2048 );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
+	float startTheta = 0.0f;
+	ae::Array< AStarNode > nodes = TAG_EXAMPLE;
+	ae::Array< const AStarNode* > goals = TAG_EXAMPLE;
 	auto DrawLine = [&]( const ae::Vec3& a, const ae::Vec3& b, const ae::Color& color )
 	{
 		ae::Vec3 dir = ( b - a );
@@ -127,12 +123,17 @@ int main()
 		debugLines.AddLine( a + dir * kNodeRadius, a + dir * ( dist - kNodeRadius ), color );
 	};
 
-	// State
-	float startTheta = 0.0f;
-	ae::Array< AStarNode > nodes = TAG_EXAMPLE;
-	ae::Array< const AStarNode* > goals = TAG_EXAMPLE;
+	auto Initialize = [&]()
+	{
+		window.Initialize( 1280, 1280, false, true, true );
+		window.SetTitle( "A*: Press arrow keys to move, space to randomize." );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		debugLines.Initialize( 2048 );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		BuildGraph( nodes, goals );
+	};
 
-	BuildGraph( nodes, goals );
 	auto Update = [&]() -> bool
 	{
 		// Input
@@ -198,14 +199,14 @@ int main()
 		debugLines.Render( worldToNDC );
 		render.Present();
 		timeStep.Tick();
-		
+
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		return 0;
+	};
+
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

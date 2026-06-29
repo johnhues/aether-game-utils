@@ -39,7 +39,7 @@ extern const char* kMeshFragShader;
 extern const char* kSpriteVertShader;
 extern const char* kSpriteFragShader;
 bool LoadObj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut );
-void LoadTarga( const char* fileName, const ae::FileSystem* fs, ae::Texture2D* tex );
+void LoadTarga( const ae::File* file, ae::Texture2D* tex );
 
 //------------------------------------------------------------------------------
 // SmallEngineEditorPlugin
@@ -86,9 +86,8 @@ bool SmallEngine::Initialize( int argc, char* argv[] )
 	spriteRenderer.Initialize( 2, 2000 );
 
 	// @TODO: Move to Game.cpp
-	LoadTarga( "level.tga", &fs, &defaultTexture );
-	LoadTarga( "font.tga", &fs, &fontTexture );
-	font.SetGlyphsASCIISpriteSheet( fontTexture.GetWidth(), fontTexture.GetHeight(), 8, 8, ' ', '~', ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ) );
+	m_levelTextureFile = fs.Read( ae::FileSystem::Root::Data, "level.tga", 2.5f );
+	// m_fontTextureFile = fs.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
 	meshShader.Initialize( kMeshVertShader, kMeshFragShader, nullptr, 0 );
 	meshShader.SetDepthTest( true );
 	meshShader.SetDepthWrite( true );
@@ -103,65 +102,133 @@ bool SmallEngine::Initialize( int argc, char* argv[] )
 	return true;
 }
 
-void SmallEngine::Run()
+int32_t SmallEngine::Terminate()
 {
-	while( !input.quit )
+	spriteRenderer.Terminate();
+	debugLines.Terminate();
+	gfx.Terminate();
+	input.Terminate();
+	window.Terminate();
+	fs.DestroyAll();
+	return 0;
+}
+
+bool SmallEngine::Update()
+{
+	input.Pump();
+	editor.Update();
+
+	// Async resource loading for web
+	if( m_levelTextureFile && m_levelTextureFile->GetStatus() == ae::File::Status::Success )
 	{
-		// Update
-		input.Pump();
-		editor.Update();
-		if( input.GetMousePressLeft() ) { input.SetMouseCaptured( true ); }
-		if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetMouseCaptured( window.GetFullScreen() ); }
-		if( input.GetPress( ae::Key::Escape ) ) { input.SetMouseCaptured( false ); window.SetFullScreen( false ); }
-		if( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) ) { editor.Launch(); }
-		registry.CallFn< Component >( [&]( Component* component )
-		{
-			if( !component->initialized )
-			{
-				component->Initialize( this );
-				component->initialized = true;
-			}
-		} );
-		registry.CallFn< Component >( [&]( Component* c ){ c->Update( this ); } );
-		
-		worldToView = ae::Matrix4::WorldToView( cameraPos, cameraDir, ae::Vec3( 0.0f, 0.0f, 1.0f ) );
-		viewToProj = ae::Matrix4::ViewToProjection( 1.1f, gfx.GetAspectRatio(), 0.1f, 500.0f );
-		worldToProj = viewToProj * worldToView;
-		uiToNdc = ae::Matrix4::Scaling( 0.5f / gfx.GetAspectRatio(), 0.5f, 1.0f );
-		
-		gfx.Activate();
-		gfx.Clear( skyColor );
-		registry.CallFn< Component >( [&]( Component* c ){ c->Render( this ); } );
-		debugLines.Render( worldToProj );
-		
-		ae::UniformList groupUniforms[ 2 ];
-		groupUniforms[ 0 ].Set( "u_tex", &fontTexture );
-		groupUniforms[ 0 ].Set( "u_uiToNdc", uiToNdc );
-		groupUniforms[ 1 ].Set( "u_uiToNdc", uiToNdc );
-		spriteRenderer.SetParams( 0, &spriteFontShader, groupUniforms[ 0 ] );
-		spriteRenderer.SetParams( 1, &spriteFadeShader, groupUniforms[ 1 ] );
-		spriteRenderer.Render();
-		
-		gfx.Present();
-		timeStep.Tick();
+		LoadTarga( m_levelTextureFile, &defaultTexture );
+		m_levelTextureFile = nullptr;
 	}
+	// if( m_fontTextureFile && m_fontTextureFile->GetStatus() == ae::File::Status::Success )
+	// {
+	// 	LoadTarga( m_fontTextureFile, &fontTexture );
+	// 	if( fontTexture.GetWidth() > 0 && fontTexture.GetHeight() > 0 )
+	// 	{
+	// 		font.SetGlyphsASCIISpriteSheet( fontTexture.GetWidth(), fontTexture.GetHeight(), 8, 8, ' ', '~', ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ) );
+	// 		m_texturesInitialized = true;
+	// 	}
+	// 	m_fontTextureFile = nullptr;
+	// }
+
+	// Process async mesh file loads
+	for( uint32_t i = 0; i < meshResources.Length(); i++ )
+	{
+		MeshResource* resource = meshResources.GetValue( i );
+		if( resource && resource->status == MeshResource::Loading && resource->file )
+		{
+			if( resource->file->GetStatus() == ae::File::Status::Success && resource->file->GetLength() > 0 )
+			{
+				ae::OBJLoader objFile = TAG_SMALL_ENGINE;
+				objFile.Load( { resource->file->GetData(), resource->file->GetLength() } );
+				if( objFile.vertices.Length() )
+				{
+					resource->vertexData.Initialize(
+						sizeof(*objFile.vertices.Data()), sizeof(*objFile.indices.Data()),
+						objFile.vertices.Length(), objFile.indices.Length(),
+						ae::Vertex::Primitive::Triangle,
+						ae::Vertex::Usage::Static, ae::Vertex::Usage::Static
+					);
+					resource->vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, position ) );
+					resource->vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, normal ) );
+					resource->vertexData.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, texture ) );
+					resource->vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, color ) );
+					resource->vertexData.UploadVertices( 0, objFile.vertices.Data(), objFile.vertices.Length() );
+					resource->vertexData.UploadIndices( 0, objFile.indices.Data(), objFile.indices.Length() );
+					objFile.InitializeCollisionMesh( &resource->collision );
+				}
+				resource->status = MeshResource::Loaded;
+			}
+			else if( resource->file->GetStatus() != ae::File::Status::Pending )
+			{
+				resource->status = MeshResource::Loaded;
+			}
+		}
+	}
+
+	if( input.GetMousePressLeft() ) { input.SetMouseCaptured( true ); }
+	if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetMouseCaptured( window.GetFullScreen() ); }
+	if( input.GetPress( ae::Key::Escape ) ) { input.SetMouseCaptured( false ); window.SetFullScreen( false ); }
+	if( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) ) { editor.Launch(); }
+	registry.CallFn< Component >( [&]( Component* component )
+	{
+		if( !component->initialized )
+		{
+			component->Initialize( this );
+			component->initialized = true;
+		}
+	} );
+	registry.CallFn< Component >( [&]( Component* c ){ c->Update( this ); } );
+	
+	worldToView = ae::Matrix4::WorldToView( cameraPos, cameraDir, ae::Vec3( 0.0f, 0.0f, 1.0f ) );
+	viewToProj = ae::Matrix4::ViewToProjection( 1.1f, gfx.GetAspectRatio(), 0.1f, 500.0f );
+	worldToProj = viewToProj * worldToView;
+	uiToNdc = ae::Matrix4::Scaling( 0.5f / gfx.GetAspectRatio(), 0.5f, 1.0f );
+	
+	gfx.Activate();
+	gfx.Clear( skyColor );
+	registry.CallFn< Component >( [&]( Component* c ){ c->Render( this ); } );
+	debugLines.Render( worldToProj );
+	
+	// if( fontTexture.GetTexture() )
+	// {
+	// 	ae::UniformList groupUniforms[ 2 ];
+	// 	groupUniforms[ 0 ].Set( "u_tex", &fontTexture );
+	// 	groupUniforms[ 0 ].Set( "u_uiToNdc", uiToNdc );
+	// 	groupUniforms[ 1 ].Set( "u_uiToNdc", uiToNdc );
+	// 	spriteRenderer.SetParams( 0, &spriteFontShader, groupUniforms[ 0 ] );
+	// 	spriteRenderer.SetParams( 1, &spriteFadeShader, groupUniforms[ 1 ] );
+	// 	spriteRenderer.Render();
+	// }
+	
+	gfx.Present();
+	timeStep.Tick();
+	return !input.quit;
 }
 
 const SmallEngine::MeshResource* SmallEngine::GetMeshResource( const char* name )
 {
 	const int32_t idx = meshResources.GetIndex( name );
+	MeshResource* resource = nullptr;
 	if( idx >= 0 )
 	{
-		return meshResources.GetValue( idx );
+		resource = meshResources.GetValue( idx );
 	}
-	MeshResource* newResource = ae::New< MeshResource >( TAG_SMALL_ENGINE );
-	if( LoadObj( name, &fs, &newResource->vertexData, &newResource->collision, nullptr ) )
+	else
 	{
-		meshResources.Set( name, newResource );
-		return newResource;
+		resource = ae::New< MeshResource >( TAG_SMALL_ENGINE );
+		meshResources.Set( name, resource );
 	}
-	ae::Delete( newResource );
-	return nullptr;
+	if( resource && resource->status == MeshResource::Pending )
+	{
+		resource->status = MeshResource::Loading;
+		resource->file = fs.Read( ae::FileSystem::Root::Data, name, 2.5f );
+	}
+	return resource;
 }
 
 void SmallEngine::GetUniforms( ae::UniformList* uniformList )
@@ -421,18 +488,11 @@ bool LoadObj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* 
 	return true;
 }
 
-void LoadTarga( const char* fileName, const ae::FileSystem* fs, ae::Texture2D* tex )
+void LoadTarga( const ae::File* file, ae::Texture2D* tex )
 {
 	ae::TargaFile tgaFile = TAG_SMALL_ENGINE;
-	const uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
-	ae::Scratch< uint8_t > fileBuffer( fileSize );
-	fs->Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileBuffer.Length() );
-	tgaFile.Load( fileBuffer.Data(), fileBuffer.Length() );
+	tgaFile.Load( file->GetData(), file->GetLength() );
 	tgaFile.textureParams.filter = ae::Texture::Filter::Nearest;
-	AE_INFO( "first [#,#,#]",
-		(uint32_t)((uint8_t*)tgaFile.textureParams.data)[ 0 ],
-		(uint32_t)((uint8_t*)tgaFile.textureParams.data)[ 1 ],
-		(uint32_t)((uint8_t*)tgaFile.textureParams.data)[ 2 ] );
 	tex->Initialize( tgaFile.textureParams );
 }
 

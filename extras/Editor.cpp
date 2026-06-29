@@ -25,16 +25,46 @@
 //------------------------------------------------------------------------------
 #include "ae/Editor.h"
 #include "ae/Entity.h"
-// @TODO: Remove ImGui dependencies
-#include "ae/aeImGui.h"
-#include "ImGuizmo.h"
 // @TODO: Remove rapidjson dependency
-#include "imgui.h"
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/error/error.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
+
+//------------------------------------------------------------------------------
+// Registration
+//------------------------------------------------------------------------------
+AE_REGISTER_NAMESPACECLASS( (ae, EditorTypeAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorRequiredAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorVisibilityAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorDisplayNameAttribute) );
+
+//------------------------------------------------------------------------------
+// ae::EditorMesh member functions
+//------------------------------------------------------------------------------
+ae::EditorMesh::EditorMesh( const ae::Tag& tag ) :
+	verts( tag ),
+	indices( tag )
+{}
+
+void ae::EditorMesh::Load( const ae::OBJLoader& file )
+{
+	verts.Clear();
+	indices.Clear();
+	verts.Reserve( file.vertices.Length() );
+	indices.Reserve( file.indices.Length() );
+	for( const auto& vert : file.vertices )
+	{
+		verts.Append( vert.position.GetXYZ() );
+	}
+	for( auto index : file.indices )
+	{
+		indices.Append( index );
+	}
+}
+
+#if !_AE_WASM_
 
 #if _AE_WINDOWS_
 	#pragma warning( disable : 4018 ) // signed/unsigned mismatch
@@ -42,10 +72,10 @@
 	#pragma warning( disable : 4267 ) // conversion from 'size_t' to 'uint32_t'
 #endif
 
-AE_REGISTER_NAMESPACECLASS( (ae, EditorTypeAttribute) );
-AE_REGISTER_NAMESPACECLASS( (ae, EditorRequiredAttribute) );
-AE_REGISTER_NAMESPACECLASS( (ae, EditorVisibilityAttribute) );
-AE_REGISTER_NAMESPACECLASS( (ae, EditorDisplayNameAttribute) );
+// @TODO: Remove ImGui dependencies
+#include "ae/aeImGui.h"
+#include "ImGuizmo.h"
+#include "imgui.h"
 
 namespace ae {
 
@@ -955,7 +985,7 @@ void EditorProgram::Run()
 
 		input.Pump();
 		ui.NewFrame( &render, &input, GetDt() );
-		const ImGuiID mainDockSpace = ImGui::DockSpaceOverViewport( ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode );
+		const ImGuiID mainDockSpace = ImGui::DockSpaceOverViewport( 0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode );
 		static bool s_once = true;
 		if( s_once )
 		{
@@ -1076,30 +1106,6 @@ bool EditorProgram::MakeWritable( const char* path ) const
 	SendPluginEvent( plugins, event );
 	
 	return fileSystem.IsWritable( absolutePath.c_str() );
-}
-
-//------------------------------------------------------------------------------
-// ae::EditorMesh member functions
-//------------------------------------------------------------------------------
-ae::EditorMesh::EditorMesh( const ae::Tag& tag ) :
-	verts( tag ),
-	indices( tag )
-{}
-
-void ae::EditorMesh::Load( const ae::OBJLoader& file )
-{
-	verts.Clear();
-	indices.Clear();
-	verts.Reserve( file.vertices.Length() );
-	indices.Reserve( file.indices.Length() );
-	for( const auto& vert : file.vertices )
-	{
-		verts.Append( vert.position.GetXYZ() );
-	}
-	for( auto index : file.indices )
-	{
-		indices.Append( index );
-	}
 }
 
 //------------------------------------------------------------------------------
@@ -2583,8 +2589,8 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 			const ImVec2 selectMin = ImVec2( ae::Min( m_boxSelectStart->x, mousePos.x ), ae::Min( m_boxSelectStart->y, mousePos.y ) );
 			const ImVec2 selectMax = ImVec2( ae::Max( m_boxSelectStart->x, mousePos.x ), ae::Max( m_boxSelectStart->y, mousePos.y ) );
 			const ae::Vec3 fColor = m_selectionColor.GetLinearRGB() * 255.0f;
-			ImGui::GetBackgroundDrawList()->AddRect( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 255 ), 1.0f, ImDrawCornerFlags_All, 1.5f );
-			ImGui::GetBackgroundDrawList()->AddRectFilled( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 100 ), 1.0f, ImDrawCornerFlags_All );
+			ImGui::GetBackgroundDrawList()->AddRect( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 255 ), 1.0f, ImDrawFlags_RoundCornersAll, 1.5f );
+			ImGui::GetBackgroundDrawList()->AddRectFilled( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 100 ), 1.0f, ImDrawFlags_RoundCornersAll );
 		}
 	}
 	
@@ -5001,7 +5007,7 @@ ae::Array< const ae::ClassVar*, 8 > GetTypeVarsByName( const ae::ClassType* type
 {
 	ae::Array< const ae::ClassVar*, 8 > vars;
 	const ae::ClassType* currentType = type;
-	while( currentType && vars.Length() < vars.Size() )
+	while( currentType && vars.Length() < vars.Capacity() )
 	{
 		if( const ae::ClassVar* var = currentType->GetVarByName( name, false ) )
 		{
@@ -5169,3 +5175,4 @@ void Editor::m_Fork()
 }
 
 } // End ae namespace
+#endif // !_AE_WASM_
