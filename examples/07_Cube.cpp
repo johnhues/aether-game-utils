@@ -103,6 +103,7 @@ int main( int argc, char* argv[] )
 		vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
 		vertexData.UploadVertices( 0, kCubeVerts, countof( kCubeVerts ) );
 		vertexData.UploadIndices( 0, kCubeIndices, countof( kCubeIndices ) );
+		return true;
 	};
 	auto Update = [&]() -> bool
 	{

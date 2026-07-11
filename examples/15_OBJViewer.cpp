@@ -123,6 +123,7 @@ int main( int argc, char* argv[] )
 		file = fs.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
 		AE_INFO( "Start loading '#'", file->GetURL() );
 		AE_INFO( "Run" );
+		return true;
 	};
 	auto Update = [&]()
 	{

@@ -308,6 +308,7 @@ int main( int argc, char* argv[] )
 		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 500.0f ) );
 		shader.Initialize( kVertShader, kFragShader );
 		ResetTransform();
+		return true;
 	};
 
 	auto Update = [&]() -> bool

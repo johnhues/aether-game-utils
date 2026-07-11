@@ -3485,14 +3485,14 @@ ae::Array< ae::Screen, 16 > GetScreens();
 int main( int argc, char* argv[] )
 {
 	// ...
-	auto init = [] {};
+	auto init = []() { return true; };
 	auto update = []() { return true; };
 	auto terminate = []() { return 0; };
 	return ae::Application( argc, argv, init, update, terminate );
 }
 #endif
 //------------------------------------------------------------------------------
-using AppInitializeFn = ae::Function< void(), 256 >;
+using AppInitializeFn = ae::Function< bool(), 256 >;
 using AppUpdateFn = ae::Function< bool(), 256 >;
 using AppTerminateFn = ae::Function< int32_t(), 256 >;
 //! Call this function to drive a program's lifecycle identically on platforms
@@ -3502,12 +3502,16 @@ using AppTerminateFn = ae::Function< int32_t(), 256 >;
 //! \param argc Forward from main()
 //! \param argv Forward from main()
 //! \param initialize Called once at startup. This is a good place to initialize
-//! an ae::Window, ae::GraphicsDevice, and ae::Input combo.
+//! an ae::Window, ae::GraphicsDevice, and ae::Input combo. The given function
+//! should return true if initialization succeeds, and should return false if
+//! \p update calls should be skipped and \p terminate should be called immediately.
 //! \param update Called each frame. Return false from your given function to
 //! quit the application. Note that this is called by the system on platforms
 //! where the system owns the main loop (like iOS and web).
-//! \param terminate Called once at termination, except on platforms where the
-//! system owns the main loop (like iOS and web), Terminate may never be called.
+//! \param terminate For platforms where the program controls its life-cycle
+//! (desktop operating systems): Called once at termination, whether or not the
+//! \p initialize succeeded. On platforms where the system owns the main
+//! loop (iOS and web): Terminate may never be called.
 //! \return The return value of \p terminate
 int32_t Application(
 	int32_t argc,
@@ -20346,7 +20350,11 @@ public:
 	// Provide the CAEAGLLayer so Window::Initialize() can attach its
 	// renderbuffer, then run the app's Initialize callback.
 	ae::_Globals::Get()->eaglLayer = (__bridge void*)self.viewController.glView.layer;
-	ae::_Globals::Get()->application->Initialize();
+	if( !ae::_Globals::Get()->application->Initialize() )
+	{
+		const int32_t termResult = ae::_Globals::Get()->application->Terminate();
+		exit( termResult );
+	}
 	self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick: )];
 	[self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
 	return YES;
@@ -20378,7 +20386,10 @@ int32_t _Application::Run( int32_t argc, char* argv[] )
 #else
 	(void)argc;
 	(void)argv;
-	Initialize();
+	if( !Initialize() )
+	{
+		return Terminate();
+	}
 #	if _AE_EMSCRIPTEN_
 		emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
 #	else

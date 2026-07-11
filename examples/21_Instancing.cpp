@@ -138,6 +138,7 @@ int main( int argc, char* argv[] )
 		instanceData.UploadData( 0, offsets, kMaxInstances );
 
 		AE_INFO( "Run" );
+		return true;
 	};
 
 	auto Update = [&]() -> bool

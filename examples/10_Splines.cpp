@@ -108,6 +108,7 @@ int main( int argc, char* argv[] )
       targa.Load( fileBuffer.Data(), fileBuffer.Length() );
       tex.Initialize( targa.textureParams );
     }
+    return true;
   };
   auto Update = [&]() -> bool
   {

@@ -51,6 +51,7 @@ int main( int argc, char* argv[] )
 		timeStep.SetTimeStep( 1.0f / 60.0f );
 		debug.Initialize( 16384 );
 		AE_INFO( "Run" );
+		return true;
 	};
 	auto Update = [&]() -> bool
 	{

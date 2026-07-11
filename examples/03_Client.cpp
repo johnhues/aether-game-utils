@@ -46,6 +46,7 @@ int main( int argc, char* argv[] )
 		render.Initialize( &window );
 		input.Initialize( &window );
 		timeStep.SetTimeStep( 1.0f / 60.0f );
+		return true;
 	};
 
 	auto Update = [&]() -> bool

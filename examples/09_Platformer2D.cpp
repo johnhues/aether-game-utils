@@ -291,7 +291,7 @@ struct Game
 	HotSpotWorld world;
 	Player player;
 
-	void Initialize()
+	bool Initialize()
 	{
 		AE_LOG( "Initialize" );
 		window.Initialize( 800, 600, false, true, true );
@@ -316,6 +316,7 @@ struct Game
 		world.LoadTiles( kMapData, kMapWidth, kMapHeight, true );
 		
 		player.Initialize( &world, ae::Vec2( 2.0f, 2.0f ) );
+		return true;
 	}
 
 	bool Tick()

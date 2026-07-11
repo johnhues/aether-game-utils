@@ -143,6 +143,7 @@ int main( int argc, char* argv[] )
 		target.AddTexture( ae::Texture::Filter::Nearest, ae::Texture::Wrap::Clamp );
 
 		AE_INFO( "Run" );
+		return true;
 	};
 
 	auto Update = [&]() -> bool

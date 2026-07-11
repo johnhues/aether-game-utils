@@ -273,19 +273,21 @@ int main( int argc, char* argv[] )
 	SmallEngine engine;
 	auto initialize = [ & ]()
 	{
-		if( engine.Initialize( argc, argv ) )
+		if( !engine.Initialize( argc, argv ) )
 		{
-			engine.meshResources.Set( "bunny.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
-			engine.meshResources.Set( "tall_tree.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
-			engine.meshResources.Set( "BlobCube.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
-
-			ae::Str256 levelPath;
-			if( engine.fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
-			{
-				ae::FileSystem::AppendToPath( &levelPath, "example.level" );
-				engine.editor.QueueRead( levelPath.c_str() );
-			}
+			return false;
 		}
+		engine.meshResources.Set( "bunny.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
+		engine.meshResources.Set( "tall_tree.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
+		engine.meshResources.Set( "BlobCube.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
+
+		ae::Str256 levelPath;
+		if( engine.fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
+		{
+			ae::FileSystem::AppendToPath( &levelPath, "example.level" );
+			engine.editor.QueueRead( levelPath.c_str() );
+		}
+		return true;
 	};
 	auto update = [ & ]() { return engine.Update(); };
 	auto terminate = [ & ]() { return engine.Terminate(); };

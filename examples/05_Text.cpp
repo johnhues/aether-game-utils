@@ -94,6 +94,7 @@ int main( int argc, char* argv[] )
 		fontShader.SetBlending( true );
 		fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
 		input.SetText( "Try typing.\nCopy and paste should also work.\nResizing the window will rearrange the text.\n" );
+		return true;
 	};
 	auto Update = [&]() -> bool
 	{

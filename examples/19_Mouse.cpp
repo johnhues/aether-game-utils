@@ -392,6 +392,7 @@ int main( int argc, char* argv[] )
 	auto Initialize = [&]()
 	{
 		program.Initialize();
+		return true;
 	};
 	auto Update = [&]() -> bool
 	{

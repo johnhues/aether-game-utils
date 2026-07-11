@@ -89,6 +89,7 @@ int main( int argc, char* argv[] )
 		vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
 		vertexData.UploadVertices( 0, kTriangleVerts, countof( kTriangleVerts ) );
 		vertexData.UploadIndices( 0, kTriangleIndices, countof( kTriangleIndices ) );
+		return true;
 	};
 	auto Update = [ & ]() -> bool
 	{
