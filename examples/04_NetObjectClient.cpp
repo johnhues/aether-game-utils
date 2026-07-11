@@ -41,6 +41,7 @@ int main( int argc, char* argv[] )
     AE_LOG( "Initialize" );
     game.Initialize();
     client = AetherClient_New( ae::UUID::Generate(), "127.0.0.1", 3500 );
+    return true;
   };
 
   auto Update = [&]() -> bool

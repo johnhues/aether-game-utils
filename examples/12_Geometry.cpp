@@ -121,6 +121,7 @@ int main( int argc, char* argv[] )
 		AE_INFO( "Loading '#'", objFile->GetURL() );
 		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 		AE_INFO( "Run" );
+		return true;
 	};
 
 	// AABB and OBB test state

@@ -91,6 +91,7 @@ int main( int argc, char* argv[] )
 		spriteShader.SetBlending( true );
 		file = fileSystem.Read( ae::FileSystem::Root::Data, "circle.tga", 2.5f );
 		AE_INFO( "Load texture '#'...", file ? file->GetURL() : "null" );
+		return true;
 	};
 	auto Update = [&]() -> bool
 	{

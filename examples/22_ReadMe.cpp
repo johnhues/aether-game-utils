@@ -47,6 +47,7 @@ int main( int argc, char* argv[] )
 
 		player.sphere.radius = 0.7f;
 		player.sphere.center = ae::Vec3( 0.0f, player.sphere.radius, 0.0f );
+		return true;
 	};
 
 	auto Update = [&]() -> bool

@@ -132,6 +132,7 @@ int main( int argc, char* argv[] )
 		debugLines.Initialize( 2048 );
 		timeStep.SetTimeStep( 1.0f / 60.0f );
 		BuildGraph( nodes, goals );
+		return true;
 	};
 
 	auto Update = [&]() -> bool

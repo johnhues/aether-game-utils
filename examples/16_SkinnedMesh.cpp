@@ -137,14 +137,14 @@ int main( int argc, char* argv[] )
 			if( !fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() ) )
 			{
 				AE_ERR( "Error reading fbx file: '#'", fileName );
-				return;
+				return true;
 			}
 
 			ae::FbxLoader fbxLoader = TAG_ALL;
 			if( !fbxLoader.Initialize( fileData.Data(), fileData.Length() ) )
 			{
 				AE_ERR( "Error parsing fbx file: '#'", fileName );
-				return;
+				return true;
 			}
 
 			ae::FbxLoaderParams params;
@@ -163,12 +163,13 @@ int main( int argc, char* argv[] )
 			if( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
 			{
 				AE_ERR( "Error loading fbx file data: '#'", fileName );
-				return;
+				return true;
 			}
 		}
 		anim.loop = true;
 
 		AE_INFO( "Run" );
+		return true;
 	};
 
 	auto Update = [&]() -> bool
