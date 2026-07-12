@@ -158,7 +158,10 @@ struct SpecialMemberVar
 	const char* name;
 	bool ( *SetObjectValue )( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var );
 };
-#define AE_SET_OBJECT_VALUE( _value ) []( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) { return var->SetObjectValue( component, _value ); }
+#define AE_SET_OBJECT_VALUE( _value )\
+	[]( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) {\
+		const ae::BasicType* type = var->GetOuterVarType().AsVarType< ae::BasicType >();\
+		return type ? type->SetVarData( ae::DataPointer( var, component ), _value ) : false; }
 const SpecialMemberVar kSpecialMemberVars[] = {
 	{ ae::BasicType::Matrix4, JSON_TRANSFORM_NAME, AE_SET_OBJECT_VALUE( transform ) },
 	{ ae::BasicType::Vec3, JSON_POSITION_NAME, AE_SET_OBJECT_VALUE( transform.GetTranslation() ) },
@@ -168,11 +171,41 @@ const SpecialMemberVar kSpecialMemberVars[] = {
 #undef AE_SET_OBJECT_VALUE
 const SpecialMemberVar* GetSpecialMemberVar( const ae::ClassVar* var )
 {
+	const ae::BasicType* type = var->GetOuterVarType().AsVarType< ae::BasicType >();
+	if( !type )
+	{
+		return nullptr;
+	}
 	for( const auto& specialVar : kSpecialMemberVars )
 	{
-		if( var->GetType() == specialVar.type && strcmp( var->GetName(), specialVar.name ) == 0 )
+		if( type->GetType() == specialVar.type && strcmp( var->GetName(), specialVar.name ) == 0 )
 		{
 			return &specialVar;
+		}
+	}
+	return nullptr;
+}
+
+static const ae::ClassType* GetVarClassType( const ae::ClassVar* var )
+{
+	const ae::Type* varType = &var->GetOuterVarType();
+	while( varType )
+	{
+		if( const ae::ClassType* classType = varType->AsVarType< ae::ClassType >() )
+		{
+			return classType;
+		}
+		else if( const ae::ObjectPointerType* pointerType = varType->AsVarType< ae::ObjectPointerType >() )
+		{
+			varType = &pointerType->GetInnerVarType();
+		}
+		else if( const ae::ArrayType* arrayType = varType->AsVarType< ae::ArrayType >() )
+		{
+			varType = &arrayType->GetInnerVarType();
+		}
+		else
+		{
+			varType = nullptr;
 		}
 	}
 	return nullptr;
@@ -191,7 +224,7 @@ std::string SpecialMemberVar::ToString( const ae::Matrix4& transform ) const
 // Helpers
 //------------------------------------------------------------------------------
 void GetComponentTypeRequirements( const ae::ClassType* type, ae::Array< const ae::ClassType* >* prereqs );
-void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component );
+// void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component );
 void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry );
 void JsonToDoc( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::DocumentValue* docObjects );
 void ComponentToJson( const ae::ClassType* type, const ae::DocumentValue* compDoc, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
@@ -595,17 +628,7 @@ public:
 	EditorPluginArray& plugins;
 
 	const EditorParams params;
-	
-	// Serialization
-	class Serializer : public ae::ClassVar::Serializer
-	{
-	public:
-		Serializer( EditorProgram* program ) : program( program ) { ae::ClassVar::SetSerializer( this ); }
-		std::string ObjectPointerToString( const ae::Object* obj ) const override;
-		bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const override;
-		EditorProgram* program = nullptr;
-	} serializer = this;
-	
+
 private:
 	const ae::Tag m_tag;
 	float m_dt;
@@ -1363,7 +1386,10 @@ void Editor::Update()
 							{
 								if( const ae::ClassVar* var = type->GetVarByName( varName.c_str(), true ) )
 								{
-									var->SetObjectValueFromString( component, varValue.c_str() );
+									if( const ae::BasicType* basicType = var->GetOuterVarType().AsVarType< ae::BasicType >() )
+									{
+										basicType->SetVarDataFromString( ae::DataPointer( var, component ), varValue.c_str() );
+									}
 								}
 							}
 						}
@@ -2434,7 +2460,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 				uint32_t matchCount = 0;
 				const ae::ClassType* lastMatchType = nullptr;
 				
-				const ae::ClassType* refType = m_selectRef.componentVar->GetSubType();
+				const ae::ClassType* refType = GetVarClassType( m_selectRef.componentVar );
 				const EditorServerObject* hoverObj = GetObjectSafe( hoverEntity );
 				const uint32_t componentTypeCount = ae::GetClassTypeCount();
 				for( uint32_t i = 0; i < componentTypeCount; i++ )
@@ -2600,7 +2626,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 	}
 	if( ImGui::BeginPopup( "ref_select_popup" ) )
 	{
-		const ae::ClassType* refType = m_selectRef.componentVar->GetSubType();
+		const ae::ClassType* refType = GetVarClassType( m_selectRef.componentVar );
 		ImGui::Text( "Select %s", refType->GetName() );
 		ImGui::Separator();
 		const uint32_t typeCount = ae::GetClassTypeCount();
@@ -2902,7 +2928,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 		std::sort( std::begin( commands ), std::end( commands ),
 			[]( const Command& a, const Command& b )
 			{
-				constexpr uint32_t maxModifiers = decltype(a.modifiers)::Size();
+				constexpr uint32_t maxModifiers = decltype(a.modifiers)::Capacity();
 				const uint32_t aModifierCount = a.ignoreModifiers ? ( maxModifiers + 1 ) : (uint32_t)a.modifiers.Length();
 				const uint32_t bModifierCount = b.ignoreModifiers ? ( maxModifiers + 1 ) : (uint32_t)b.modifiers.Length();
 				return aModifierCount > bModifierCount; // Check commands with more keys first to handle potential conflicts
@@ -3748,7 +3774,7 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 void EditorServer::BroadcastVarChange( const ae::ClassVar* var, ae::Entity entity, ae::TypeId typeId, const ae::DocumentValue* componentDoc )
 {
 	// @TODO: Broadcast array element changes
-	if( !componentDoc || var->IsArray() )
+	if( !componentDoc || var->GetOuterVarType().AsVarType< ae::ArrayType >() )
 	{
 		return;
 	}
@@ -4403,7 +4429,7 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::DocumentValue* docValu
 
 	bool changed = false;
 	ImGui::PushID( var->GetName() );
-	if( var->IsArray() )
+	if( const ae::ArrayType* arrayType = var->GetOuterVarType().AsVarType< ae::ArrayType >() )
 	{
 		const uint32_t arrayLength = varDocValue->ArrayLength();
 		ImGui::Text( "%s", var->GetName() );
@@ -4416,9 +4442,9 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::DocumentValue* docValu
 			ImGui::PopID();
 		}
 		ImGui::EndChild();
-		if( !var->IsArrayFixedLength() )
+		if( !arrayType->IsFixedLength() )
 		{
-			const bool arrayMaxLength = ( arrayLength >= var->GetArrayMaxLength() );
+			const bool arrayMaxLength = ( arrayLength >= arrayType->GetMaxLength() );
 			ImGui::BeginDisabled( arrayMaxLength );
 			if( ImGui::Button( "Add" ) )
 			{
@@ -4447,60 +4473,67 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::DocumentValue* docValu
 bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::DocumentValue* varDocValue, const ae::ClassVar* var, int32_t idx )
 {
 	const ae::Str64 varName = ( idx < 0 ) ? var->GetName() : ae::Str64::Format( "#", idx );
-	switch( var->GetType() )
+	const ae::Type* varType = &var->GetOuterVarType();
+	if( const ae::ArrayType* arrayType = varType->AsVarType< ae::ArrayType >() )
 	{
-		case ae::BasicType::Enum:
-		{
-			const char* currentStr = varDocValue->StringGet();
-			const auto result = aeImGui_Enum( var->GetEnumType(), varName.c_str(), currentStr );
-			if( result != currentStr )
-			{
-				varDocValue->StringSet( result.c_str() );
-				return true;
-			}
-			return false;
-		}
-		case ae::BasicType::Bool:
-		{
-			bool b = ae::FromString( varDocValue->StringGet(), false );
-			if( ImGui::Checkbox( varName.c_str(), &b ) )
-			{
-				varDocValue->StringSet( ae::ToString( b ).c_str() );
-				return true;
-			}
-			return false;
-		}
-		case ae::BasicType::Float:
-		{
-			float f = ae::FromString( varDocValue->StringGet(), 0.0f );
-			if( ImGui::InputFloat( varName.c_str(), &f ) )
-			{
-				varDocValue->StringSet( ae::ToString( f ).c_str() );
-				return true;
-			}
-			return false;
-		}
-		case ae::BasicType::String:
-		{
-			char buf[ 256 ];
-			ae::_strlcpy( buf, varDocValue->StringGet(), sizeof(buf) );
-			ImGui::Text( "%s", varName.c_str() );
-			if( ImGui::InputTextMultiline( varName.c_str(), buf, sizeof(buf), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4 ), 0 ) )
-			{
-				varDocValue->StringSet( buf );
-				return true;
-			}
-			return false;
-		}
-		case ae::BasicType::Pointer:
-		{
-			return m_ShowRefVar( program, varDocValue, var, idx );
-		}
-		// @TODO: case ae::BasicType::CustomRef
-		default:
-			ImGui::Text( "%s (Unsupported type)", var->GetName() );
-			break;
+		varType = &arrayType->GetInnerVarType();
 	}
+	if( const ae::EnumType* enumType = varType->AsVarType< ae::EnumType >() )
+	{
+		const char* currentStr = varDocValue->StringGet();
+		const auto result = aeImGui_Enum( enumType, varName.c_str(), currentStr );
+		if( result != currentStr )
+		{
+			varDocValue->StringSet( result.c_str() );
+			return true;
+		}
+		return false;
+	}
+	else if( varType->AsVarType< ae::ObjectPointerType >() )
+	{
+		return m_ShowRefVar( program, varDocValue, var, idx );
+	}
+	else if( const ae::BasicType* basicType = varType->AsVarType< ae::BasicType >() )
+	{
+		switch( basicType->GetType() )
+		{
+			case ae::BasicType::Bool:
+			{
+				bool b = ae::FromString( varDocValue->StringGet(), false );
+				if( ImGui::Checkbox( varName.c_str(), &b ) )
+				{
+					varDocValue->StringSet( ae::ToString( b ).c_str() );
+					return true;
+				}
+				return false;
+			}
+			case ae::BasicType::Float:
+			{
+				float f = ae::FromString( varDocValue->StringGet(), 0.0f );
+				if( ImGui::InputFloat( varName.c_str(), &f ) )
+				{
+					varDocValue->StringSet( ae::ToString( f ).c_str() );
+					return true;
+				}
+				return false;
+			}
+			case ae::BasicType::String:
+			{
+				char buf[ 256 ];
+				ae::_strlcpy( buf, varDocValue->StringGet(), sizeof(buf) );
+				ImGui::Text( "%s", varName.c_str() );
+				if( ImGui::InputTextMultiline( varName.c_str(), buf, sizeof(buf), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4 ), 0 ) )
+				{
+					varDocValue->StringSet( buf );
+					return true;
+				}
+				return false;
+			}
+			default:
+				break;
+		}
+	}
+	ImGui::Text( "%s (Unsupported type)", var->GetName() );
 	return false;
 }
 
@@ -4512,7 +4545,7 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::DocumentValue* varD
 	{
 		ImGui::Text( "%s", var->GetName() );
 	}
-	const ae::ClassType* refType = var->GetSubType();
+	const ae::ClassType* refType = GetVarClassType( var );
 	AE_ASSERT( refType );
 	if( m_selectRef.enabled
 		&& m_selectRef.varDocValue == varDocValue
@@ -4561,17 +4594,6 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::DocumentValue* varD
 	}
 	return false;
 }
-
-std::string EditorProgram::Serializer::ObjectPointerToString( const ae::Object* obj ) const
-{
-	return "NULL";
-};
-
-bool EditorProgram::Serializer::StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const
-{
-	*objOut = nullptr;
-	return true;
-};
 
 //------------------------------------------------------------------------------
 // EditorPicking functions
@@ -4759,7 +4781,45 @@ void GetComponentTypeRequirements( const ae::ClassType* type, ae::Array< const a
 	fn( fn, type );
 }
 
-void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component )
+void JsonToVar( const rapidjson::Value& jsonVar, ae::DataPointer data, const ae::StringToObjectPointerFn& pointerFromStringFn )
+{
+	if( const ae::ArrayType* arrayType = data.GetVarType().AsVarType< ae::ArrayType >() )
+	{
+		if( !jsonVar.IsArray() )
+		{
+			return;
+		}
+		const auto& jsonVarArray = jsonVar.GetArray();
+		const uint32_t arrayLen = arrayType->Resize( data, jsonVarArray.Size() );
+		AE_ASSERT( arrayLen <= jsonVarArray.Size() );
+		const ae::Type* innerType = &arrayType->GetInnerVarType();
+		for( uint32_t j = 0; j < arrayLen; j++ )
+		{
+			const auto& jsonElement = jsonVarArray[ j ];
+			const ae::DataPointer elementData = arrayType->GetElement( data, j );
+			JsonToVar( jsonElement, elementData, pointerFromStringFn );
+		}
+	}
+	else if( !jsonVar.IsString() )
+	{
+		return;
+	}
+	// @TODO: Handle patching references
+	else if( const ae::BasicType* basicType = data.GetVarType().AsVarType< ae::BasicType >() )
+	{
+		basicType->SetVarDataFromString( data, jsonVar.GetString() );
+	}
+	else if( const ae::EnumType* enumType = data.GetVarType().AsVarType< ae::EnumType >() )
+	{
+		enumType->SetVarDataFromString( data, jsonVar.GetString() );
+	}
+	else if( const ae::ObjectPointerType* pointerType = data.GetVarType().AsVarType< ae::ObjectPointerType >() )
+	{
+		pointerType->FromString( data, jsonVar.GetString(), pointerFromStringFn );
+	}
+}
+
+void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component, const ae::StringToObjectPointerFn& pointerFromStringFn )
 {
 	const ae::ClassType* type = ae::GetClassTypeFromObject( component );
 	const uint32_t varCount = type->GetVarCount( true );
@@ -4776,27 +4836,30 @@ void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& json
 			continue;
 		}
 		const auto& jsonVar = jsonComponent[ var->GetName() ];
-		if( var->IsArray() && jsonVar.IsArray() )
-		{
-			const auto& jsonVarArray = jsonVar.GetArray();
-			const uint32_t arrayLen = var->SetArrayLength( component, jsonVarArray.Size() );
-			AE_ASSERT( arrayLen <= jsonVarArray.Size() );
-			for( uint32_t j = 0; j < arrayLen; j++ )
-			{
-				const auto& jsonElement = jsonVarArray[ j ];
-				var->SetObjectValueFromString( component, jsonElement.GetString(), j );
-			}
-		}
-		// @TODO: Handle patching references
-		else if( !jsonVar.IsObject() && !jsonVar.IsArray() )
-		{
-			var->SetObjectValueFromString( component, jsonVar.GetString() );
-		}
+		JsonToVar( jsonVar, ae::DataPointer( var, component ), pointerFromStringFn );
 	}
 }
 
 void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry )
 {
+	const ae::StringToObjectPointerFn pointerFromStringFn = [&]( const char* str ) -> ae::Optional< ae::Object* >
+	{
+		ae::Entity jsonEntity = 0;
+		char typeName[ 64 ];
+		typeName[ 0 ] = 0;
+		if( strcmp( str, "NULL" ) == 0 )
+		{
+			return nullptr;
+		}
+		else if( sscanf( str, "%u %63s", &jsonEntity, typeName ) == 2 )
+		{
+			if( ae::Component* component = registry->TryGetComponent( jsonEntity, ae::GetClassTypeByName( typeName ) ) )
+			{
+				return component;
+			}
+		}
+		return {};
+	};
 	// Serialize all components (second phase to handle references)
 	for( const auto& jsonObject : jsonObjects.GetArray() )
 	{
@@ -4815,7 +4878,7 @@ void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const r
 				continue;
 			}
 			ae::Component* component = &registry->GetComponent( entity, type );
-			ae::JsonToComponent( transform, componentIter.value, component );
+			ae::JsonToComponent( transform, componentIter.value, component, pointerFromStringFn );
 		}
 	}
 }
@@ -4854,7 +4917,7 @@ void JsonToDoc( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidj
 				}
 				if( !componentIter.value.HasMember( var->GetName() ) ) { continue; }
 				const auto& jsonVar = componentIter.value[ var->GetName() ];
-				if( var->IsArray() && jsonVar.IsArray() )
+				if( var->GetOuterVarType().AsVarType< ae::ArrayType >() && jsonVar.IsArray() )
 				{
 					varDoc->ArrayClear();
 					for( const auto& jsonElement : jsonVar.GetArray() )
@@ -4871,45 +4934,78 @@ void JsonToDoc( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidj
 	}
 }
 
-void ComponentToJson( const ae::ClassType* type, const ae::DocumentValue* compDoc, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent )
+void ComponentToJson( const ae::ClassType* type, const ae::DocumentValue* docComponent, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent )
 {
 	AE_ASSERT( jsonComponent->IsObject() );
 	const uint32_t varCount = type->GetVarCount( true );
 	for( uint32_t i = 0; i < varCount; i++ )
 	{
-		const ae::ClassVar* var = type->GetVarByIndex( i, true );
-		if( GetSpecialMemberVar( var ) )
+		const ae::ClassVar* classVar = type->GetVarByIndex( i, true );
+		if( GetSpecialMemberVar( classVar ) )
 		{
 			continue;
 		}
-		const auto varName = rapidjson::StringRef( var->GetName() );
-		const ae::DocumentValue* varDoc = compDoc->ObjectTryGet( var->GetName() );
-		if( !varDoc )
+		const auto varName = rapidjson::StringRef( classVar->GetName() );
+		const ae::DocumentValue* docVar = docComponent->ObjectTryGet( classVar->GetName() );
+		if( !docVar )
 		{
 			continue;
 		}
-		else if( !var->IsArray() )
-		{
-			const char* value = varDoc->StringGet();
-			rapidjson::Value jsonValue( rapidjson::kStringType );
-			if( defaultComponent && ( var->GetObjectValueAsString( defaultComponent ) == value ) )
-			{
-				continue;
-			}
-			jsonValue.SetString( value, allocator );
-			jsonComponent->AddMember( varName, jsonValue, allocator );
-		}
-		else if( varDoc->ArrayLength() )
+		else if( docVar->IsArray() )
 		{
 			rapidjson::Value jsonArray( rapidjson::kArrayType );
-			jsonArray.Reserve( varDoc->ArrayLength(), allocator );
-			for( uint32_t j = 0; j < varDoc->ArrayLength(); j++ )
+			jsonArray.Reserve( docVar->ArrayLength(), allocator );
+			for( uint32_t j = 0; j < docVar->ArrayLength(); j++ )
 			{
 				rapidjson::Value jsonValue( rapidjson::kStringType );
-				jsonValue.SetString( varDoc->ArrayGet( j ).StringGet(), allocator );
+				jsonValue.SetString( docVar->ArrayGet( j ).StringGet(), allocator );
 				jsonArray.PushBack( jsonValue, allocator );
 			}
 			jsonComponent->AddMember( varName, jsonArray, allocator );
+		}
+		else if( docVar->IsString() ) // @TODO: Handle nested structs/classes
+		{
+			const char* value = docVar->StringGet();
+			rapidjson::Value jsonValue( rapidjson::kStringType );
+			if( defaultComponent )
+			{
+				const ae::Type& varType = classVar->GetOuterVarType();
+				std::string defaultValue;
+				ae::ConstDataPointer defaultVarPointer( classVar, defaultComponent );
+				if( const ae::BasicType* basicType = varType.AsVarType< ae::BasicType >() )
+				{
+					defaultValue = basicType->GetVarDataAsString( defaultVarPointer );
+				}
+				else if( const ae::EnumType* enumType = varType.AsVarType< ae::EnumType >() )
+				{
+					defaultValue = enumType->GetVarDataAsString( defaultVarPointer );
+				}
+				else if( const ae::ObjectPointerType* pointerType = varType.AsVarType< ae::ObjectPointerType >() )
+				{
+					const auto fn = []( const ae::Object* obj ) -> std::string
+					{
+						if( !obj )
+						{
+							return "NULL";
+						}
+						const ae::Component* component = ae::Cast< ae::Component >( obj );
+						if( !component )
+						{
+							return ""; // Error
+						}
+						const ae::ClassType* componentType = ae::GetClassTypeFromObject( component );
+						return ae::Str128::Format( "# #", component->GetEntity(), componentType->GetName() ).c_str();
+					};
+					defaultValue = pointerType->ToString( defaultVarPointer, fn );
+				}
+
+				if( defaultValue == value )
+				{
+					continue;
+				}
+			}
+			jsonValue.SetString( value, allocator );
+			jsonComponent->AddMember( varName, jsonValue, allocator );
 		}
 	}
 }
