@@ -7045,13 +7045,13 @@ public:
 	//! Returns a pointer to the inner value of \p pointer, unless given null.
 	template< typename T > T*const* Get( ae::ConstDataPointer pointer ) const;
 
-	// //! Parses \p value as a reference to an object and writes the result to
-	// //! \p pointer, returning true on success. The encoding of \p value should
-	// //! match the encoding used by ObjectPointerToStringFn.
+	//! Parses \p value as a reference to an object and writes the result to
+	//! \p pointer, returning true on success. The encoding of \p value should
+	//! match the encoding used by ObjectPointerToStringFn.
 	bool FromString( ae::DataPointer pointer, const char* value, const StringToObjectPointerFn& fn ) const;
-	// //! Returns a string representation of the object pointer at \p pointer, or
-	// //! an empty string if \p pointer is null. The encoding of the returned
-	// //! string should match the encoding expected by StringToObjectPointerFn.
+	//! Returns a string representation of the object pointer at \p pointer, or
+	//! an empty string if \p pointer is null. The encoding of the returned
+	//! string should match the encoding expected by StringToObjectPointerFn.
 	std::string ToString( ae::ConstDataPointer pointer, const ObjectPointerToStringFn& fn ) const;
 
 	// Internal
@@ -7236,6 +7236,7 @@ public:
 		virtual bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const = 0;
 	};
 	static void SetSerializer( const ae::ClassVar::Serializer* serializer );
+	static const ae::ClassVar::Serializer* m_GetSerializer();
 	std::string GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
 	bool SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx = -1 ) const;
 	template< typename T > bool GetObjectValue( const ae::Object* obj, T* valueOut, int32_t arrayIdx = -1 ) const;
@@ -33479,6 +33480,13 @@ void ae::ClassVar::SetSerializer( const ae::ClassVar::Serializer* serializer )
 	_Globals::Get()->varSerializer = serializer;
 }
 
+const ae::ClassVar::Serializer* ae::ClassVar::m_GetSerializer()
+{
+	const ae::ClassVar::Serializer* serializer = _Globals::Get()->varSerializer;
+	AE_ASSERT( serializer );
+	return serializer;
+}
+
 std::string ae::ClassVar::GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx ) const
 {
 	if( !obj )
@@ -33515,9 +33523,7 @@ std::string ae::ClassVar::GetObjectValueAsString( const ae::Object* obj, int32_t
 		{
 			const ObjectPointerToStringFn fn = []( const ae::Object* obj ) -> std::string
 			{
-				const ae::ClassVar::Serializer* serializer = _Globals::Get()->varSerializer;
-				AE_ASSERT( serializer );
-				return serializer->ObjectPointerToString( obj );
+				return m_GetSerializer()->ObjectPointerToString( obj );
 			};
 			return pointerVarType->ToString( varData, fn );
 		}
@@ -33567,10 +33573,8 @@ bool ae::ClassVar::SetObjectValueFromString( ae::Object* obj, const char* value,
 		{
 			const StringToObjectPointerFn fn = []( const char* pointerVal ) -> ae::Optional< ae::Object* >
 			{
-				const ae::ClassVar::Serializer* serializer = _Globals::Get()->varSerializer;
-				AE_ASSERT( serializer );
 				ae::Object* obj = nullptr;
-				if( serializer->StringToObjectPointer( pointerVal, &obj ) )
+				if( m_GetSerializer()->StringToObjectPointer( pointerVal, &obj ) )
 				{
 					return obj;
 				}
