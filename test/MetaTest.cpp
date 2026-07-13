@@ -1715,6 +1715,7 @@ TEST_CASE( "PointerType can read and write pointer values via DataPointer", "[ae
 	RefTesterA objA;
 	RefTesterA objA2;
 	RefTesterB objB;
+	RefTesterB objB2;
 
 	const ae::ClassType* typeRefTesterA = ae::GetClassType< RefTesterA >();
 	const ae::ClassType* typeRefTesterB = ae::GetClassType< RefTesterB >();
@@ -1729,8 +1730,8 @@ TEST_CASE( "PointerType can read and write pointer values via DataPointer", "[ae
 	REQUIRE( varRef );
 
 	// Pointer vars expose PointerType as outer var type
-	const ae::PointerType* refAType = varRefA->GetOuterVarType().AsVarType< ae::PointerType >();
-	const ae::PointerType* refType  = varRef->GetOuterVarType().AsVarType< ae::PointerType >();
+	const ae::ObjectPointerType* refAType = varRefA->GetOuterVarType().AsVarType< ae::ObjectPointerType >();
+	const ae::ObjectPointerType* refType  = varRef->GetOuterVarType().AsVarType< ae::ObjectPointerType >();
 	REQUIRE( refAType );
 	REQUIRE( refType );
 
@@ -1776,6 +1777,123 @@ TEST_CASE( "PointerType can read and write pointer values via DataPointer", "[ae
 
 	// Get<T> returns null when T does not match the inner pointer type
 	REQUIRE( refAType->Get< RefTesterB >( ptrRefA ) == nullptr );
+
+	// Set fails when the value's type is incompatible with the exact inner
+	// pointer type ( RefTesterA ); pointer value is left unchanged
+	REQUIRE( !refAType->Set( ptrRefA, &objB ) );
+	REQUIRE( objA.refA == &objA2 );
+
+	// refType's inner type is the RefTester base class, so the shared
+	// ( de-virtualized ) Set() impl must accept any RefTester subtype
+	REQUIRE( refType->Set( ptrRef, &objA ) );
+	REQUIRE( objB.ref == &objA );
+	REQUIRE( refType->Set( ptrRef, &objB2 ) );
+	REQUIRE( objB.ref == &objB2 );
+	REQUIRE( refType->Set( ptrRef, nullptr ) );
+	REQUIRE( objB.ref == nullptr );
+}
+
+TEST_CASE( "ObjectPointerType::FromString applies StringToObjectPointerFn Optional<Object*> semantics", "[aeMeta]" )
+{
+	RefTesterA objA;
+	RefTesterA objA2;
+	RefTesterB objB;
+
+	const ae::ClassType* typeRefTesterA = ae::GetClassType< RefTesterA >();
+	REQUIRE( typeRefTesterA );
+	const ae::ClassVar* varRefA = typeRefTesterA->GetVarByName( "refA", false );
+	REQUIRE( varRefA );
+	const ae::ObjectPointerType* refAType = varRefA->GetOuterVarType().AsVarType< ae::ObjectPointerType >();
+	REQUIRE( refAType );
+
+	ae::DataPointer ptrRefA( varRefA, &objA );
+
+	// fn returning a valid, type-compatible object sets the pointer
+	ae::StringToObjectPointerFn resolve = [ &objA2 ]( const char* str ) -> ae::Optional< ae::Object* >
+	{
+		return ( str && strcmp( str, "known" ) == 0 ) ? ae::Optional< ae::Object* >( (ae::Object*)&objA2 ) : ae::Optional< ae::Object* >();
+	};
+	REQUIRE( refAType->FromString( ptrRefA, "known", resolve ) );
+	REQUIRE( objA.refA == &objA2 );
+
+	// fn returning an Optional containing nullptr explicitly clears the pointer
+	ae::StringToObjectPointerFn resolveNull = []( const char* ) -> ae::Optional< ae::Object* >
+	{
+		return ae::Optional< ae::Object* >( (ae::Object*)nullptr );
+	};
+	REQUIRE( refAType->FromString( ptrRefA, "null", resolveNull ) );
+	REQUIRE( objA.refA == nullptr );
+
+	// fn returning an empty Optional ( lookup/parse failure ) fails and
+	// leaves the pointer unchanged
+	REQUIRE( refAType->FromString( ptrRefA, "known", resolve ) );
+	REQUIRE( objA.refA == &objA2 );
+	REQUIRE( !refAType->FromString( ptrRefA, "unknown", resolve ) );
+	REQUIRE( objA.refA == &objA2 );
+
+	// fn resolving to a type-incompatible object fails and leaves the
+	// pointer unchanged
+	ae::StringToObjectPointerFn resolveWrongType = [ &objB ]( const char* ) -> ae::Optional< ae::Object* >
+	{
+		return ae::Optional< ae::Object* >( (ae::Object*)&objB );
+	};
+	REQUIRE( !refAType->FromString( ptrRefA, "known", resolveWrongType ) );
+	REQUIRE( objA.refA == &objA2 );
+
+	// An unset ( empty ) fn always fails
+	REQUIRE( !refAType->FromString( ptrRefA, "known", ae::StringToObjectPointerFn() ) );
+	REQUIRE( objA.refA == &objA2 );
+
+	// ae::Function callbacks also bind to const member functions
+	struct Resolver
+	{
+		ae::Object* target = nullptr;
+		ae::Optional< ae::Object* > Resolve( const char* str ) const
+		{
+			return ( str && strcmp( str, "member" ) == 0 ) ? ae::Optional< ae::Object* >( target ) : ae::Optional< ae::Object* >();
+		}
+	};
+	const Resolver resolver = { &objA2 };
+	ae::StringToObjectPointerFn memberResolve( &resolver, &Resolver::Resolve );
+	REQUIRE( refAType->FromString( ptrRefA, "member", memberResolve ) );
+	REQUIRE( objA.refA == &objA2 );
+}
+
+TEST_CASE( "ObjectPointerType::ToString invokes ObjectPointerToStringFn, including for null pointers", "[aeMeta]" )
+{
+	RefTesterA objA;
+	RefTesterA objA2;
+
+	const ae::ClassType* typeRefTesterA = ae::GetClassType< RefTesterA >();
+	REQUIRE( typeRefTesterA );
+	const ae::ClassVar* varRefA = typeRefTesterA->GetVarByName( "refA", false );
+	REQUIRE( varRefA );
+	const ae::ObjectPointerType* refAType = varRefA->GetOuterVarType().AsVarType< ae::ObjectPointerType >();
+	REQUIRE( refAType );
+
+	ae::DataPointer ptrRefA( varRefA, &objA );
+	ae::ConstDataPointer constPtrRefA( ptrRefA );
+
+	// fn is invoked with the current pointer value, including when null
+	ae::ObjectPointerToStringFn format = []( const ae::Object* obj ) -> std::string
+	{
+		return obj ? "obj" : "null";
+	};
+	REQUIRE( refAType->ToString( constPtrRefA, format ) == "null" );
+	REQUIRE( refAType->Set( ptrRefA, &objA2 ) );
+	REQUIRE( refAType->ToString( constPtrRefA, format ) == "obj" );
+
+	// An unset ( empty ) fn returns an empty string
+	REQUIRE( refAType->ToString( constPtrRefA, ae::ObjectPointerToStringFn() ) == "" );
+
+	// ae::Function callbacks also bind to const member functions
+	struct Formatter
+	{
+		std::string Format( const ae::Object* obj ) const { return obj ? "member:obj" : "member:null"; }
+	};
+	const Formatter formatter;
+	ae::ObjectPointerToStringFn memberFormat( &formatter, &Formatter::Format );
+	REQUIRE( refAType->ToString( constPtrRefA, memberFormat ) == "member:obj" );
 }
 
 TEST_CASE( "MapType can read and write map values via DataPointer", "[aeMeta]" )

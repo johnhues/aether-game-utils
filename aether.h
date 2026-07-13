@@ -6825,20 +6825,26 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::ObjectPointerToStringFn
-//! Used with ae::PointerType to convert object pointers to strings, most
-//! useful when serializing references to game objects to json etc. Should be
-//! implemented with an encoding that matches ae::StringToObjectPointerFn.
+//! Used with ae::ObjectPointerType to convert object pointers to strings, most useful
+//! when serializing references to game objects to json etc. Should be
+//! implemented with an encoding that matches ae::StringToObjectPointerFn. Note
+//! that "null" object references should be a distinct pattern like 'NULL' or
+//! '0' so that the ae::ObjectPointerToStringFn can fail properly on bad
+//! formatting.
 //------------------------------------------------------------------------------
-using ObjectPointerToStringFn = std::string ( * )( const void* userData, const ae::Object* obj );
+using ObjectPointerToStringFn = ae::Function< std::string( const ae::Object* obj ), 64 >;
 
 //------------------------------------------------------------------------------
 // ae::StringToObjectPointerFn
-//! Used with ae::PointerType to convert strings to object pointers, most
-//! useful when serializing game objects from json etc. Should be implemented
-//! with a lookup into the game object system. The encoding of the given string
-//! should match ae::ObjectPointerToStringFn.
+//! Used with ae::ObjectPointerType to convert strings to object pointers, most useful
+//! when serializing game objects from json etc. Should be implemented with a
+//! lookup into the game object system. The encoding of the given string should
+//! match ae::ObjectPointerToStringFn. Note that a nullptr should be returned
+//! when a reference to a "null" object is serialized, only return an empty
+//! optional type when an error occurs: bad string formatting, type mismatch, a
+//! failed reference lookup etc.
 //------------------------------------------------------------------------------
-using StringToObjectPointerFn = bool ( * )( const void* userData, const char* pointerVal, ae::Object** objOut );
+using StringToObjectPointerFn = ae::Function< ae::Optional< ae::Object* >( const char* str ), 64 >;
 
 //------------------------------------------------------------------------------
 // ae::Type
@@ -6946,6 +6952,7 @@ public:
 	//--------------------------------------------------------------------------
 	//! Returns the registered enum member name for \p value, or an empty string
 	//! if \p value does not exactly match a registered enum member.
+	// TODO: Should return a char*, and bitfields should have a separate API
 	template< typename T > std::string GetNameByValue( T value ) const;
 	//! Returns a value through \p valueOut for the registered enum member named
 	//! in \p str. \p str can be either the full name of the enum member or a
@@ -7017,9 +7024,11 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::PointerType
+// ae::ObjectPointerType
+// @TODO: Move this. It's too specialized for ae::Object to be part of the core
+// meta system API.
 //------------------------------------------------------------------------------
-class PointerType : public ae::Type
+class ObjectPointerType : public ae::Type
 {
 public:
 	//! Returns the type pointed to by this type
@@ -7030,20 +7039,20 @@ public:
 	//! referenced value is separate from the const-ness of the pointer.
 	ae::DataPointer Dereference( ae::ConstDataPointer pointer ) const;
 	//! Writes \p value to the given \p pointer, returning true on success.
-	virtual bool Set( ae::DataPointer pointer, ae::Object* value ) const = 0;
+	bool Set( ae::DataPointer pointer, ae::Object* value ) const;
 	//! Returns a pointer to the inner value of \p pointer, unless given null.
 	template< typename T > T** Get( ae::DataPointer pointer ) const;
 	//! Returns a pointer to the inner value of \p pointer, unless given null.
 	template< typename T > T*const* Get( ae::ConstDataPointer pointer ) const;
 
-	//! Parses \p value as a reference to an object and writes the result to
-	//! \p pointer, returning true on success. The encoding of \p value should
-	//! match the encoding used by ObjectPointerToStringFn.
-	virtual bool FromString( ae::DataPointer pointer, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
-	//! Returns a string representation of the object pointer at \p pointer, or
-	//! an empty string if \p pointer is null. The encoding of the returned
-	//! string should match the encoding expected by StringToObjectPointerFn.
-	virtual std::string ToString( ae::ConstDataPointer pointer, ObjectPointerToStringFn fn, const void* userData ) const = 0;
+	// //! Parses \p value as a reference to an object and writes the result to
+	// //! \p pointer, returning true on success. The encoding of \p value should
+	// //! match the encoding used by ObjectPointerToStringFn.
+	bool FromString( ae::DataPointer pointer, const char* value, const StringToObjectPointerFn& fn ) const;
+	// //! Returns a string representation of the object pointer at \p pointer, or
+	// //! an empty string if \p pointer is null. The encoding of the returned
+	// //! string should match the encoding expected by StringToObjectPointerFn.
+	std::string ToString( ae::ConstDataPointer pointer, const ObjectPointerToStringFn& fn ) const;
 
 	// Internal
 	ae::TypeId GetBaseVarTypeId() const override;
@@ -7183,8 +7192,8 @@ public:
 	uint32_t GetOffset() const;
 	//! Returns the class type that this member variable belongs too.
 	const ae::ClassType& GetClassType() const;
-	//! Returns the 'outermost' type of this var, eg. if this is an array of ints
-	//! the outer type would be ArrayType
+	//! Returns the 'outermost' type of this var, eg. if this is an array of
+	//! integers the outer type would be ArrayType
 	const ae::Type& GetOuterVarType() const;
 
 	//--------------------------------------------------------------------------
@@ -7258,7 +7267,7 @@ public:
 		while( iter )
 		{
 			if( const T* innerType = iter->AsVarType< T >() ) { return innerType; }
-			else if( const ae::PointerType* pointerVarType = iter->AsVarType< ae::PointerType >() ) { iter = &pointerVarType->GetInnerVarType(); }
+			else if( const ae::ObjectPointerType* pointerVarType = iter->AsVarType< ae::ObjectPointerType >() ) { iter = &pointerVarType->GetInnerVarType(); }
 			else if( const ae::ArrayType* arrayVarType = iter->AsVarType< ae::ArrayType >() ) { iter = &arrayVarType->GetInnerVarType(); }
 			else { iter = nullptr; }
 		}
@@ -12854,6 +12863,7 @@ template< typename F >
 Function< R( Args... ), Capacity >::Function( F&& f )
 {
 	using FT = std::decay_t< F >;
+	static_assert( std::is_invocable_r_v< R, const FT&, Args... >, "Callable does not match ae::Function signature R( Args... )" );
 	static_assert( sizeof( FT ) <= Capacity, "Callable too large" );
 	static_assert( std::is_trivially_copyable< FT >::value, "Callable must be trivially copyable" );
 	FT stored = f;
@@ -12868,6 +12878,7 @@ template< typename T >
 Function< R( Args... ), Capacity >::Function( T* obj, R ( T::*mfp )( Args... ) )
 {
 	struct Bound { T* obj; R ( T::*mfp )( Args... ); };
+	static_assert( std::is_invocable_r_v< R, decltype( mfp ), T*, Args... >, "Member function does not match ae::Function signature R( Args... )" );
 	static_assert( sizeof( Bound ) <= Capacity, "Bound member too large" );
 	const Bound b = { obj, mfp };
 	memcpy( m_storage, &b, sizeof( Bound ) );
@@ -12882,6 +12893,7 @@ template< typename T >
 Function< R( Args... ), Capacity >::Function( const T* obj, R ( T::*mfp )( Args... ) const )
 {
 	struct Bound { const T* obj; R ( T::*mfp )( Args... ) const; };
+	static_assert( std::is_invocable_r_v< R, decltype( mfp ), const T*, Args... >, "Member function does not match ae::Function signature R( Args... )" );
 	static_assert( sizeof( Bound ) <= Capacity, "Bound member too large" );
 	const Bound b = { obj, mfp };
 	memcpy( m_storage, &b, sizeof( Bound ) );
@@ -14619,10 +14631,10 @@ _ae_DefineBasicVarType( ae::UUID, UUID );
 namespace ae {
 
 //------------------------------------------------------------------------------
-// ae::PointerType templated member functions
+// ae::ObjectPointerType templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
-T** ae::PointerType::Get( ae::DataPointer varData ) const
+T** ObjectPointerType::Get( ae::DataPointer varData ) const
 {
 	static_assert( std::is_base_of_v< ae::Object, T >, "T must be derived from ae::Object" );
 	if( GetInnerVarType().GetExactVarTypeId() == ae::GetTypeIdWithQualifiers< T >() )
@@ -14633,7 +14645,7 @@ T** ae::PointerType::Get( ae::DataPointer varData ) const
 }
 
 template< typename T >
-T*const* ae::PointerType::Get( ae::ConstDataPointer varData ) const
+T*const* ObjectPointerType::Get( ae::ConstDataPointer varData ) const
 {
 	static_assert( std::is_base_of_v< ae::Object, T >, "T must be derived from ae::Object" );
 	if( GetInnerVarType().GetExactVarTypeId() == ae::GetTypeIdWithQualifiers< T >() )
@@ -14643,87 +14655,28 @@ T*const* ae::PointerType::Get( ae::ConstDataPointer varData ) const
 	return nullptr;
 }
 
+//------------------------------------------------------------------------------
+// ae::ObjectPointerType specializations
+//------------------------------------------------------------------------------
 template< typename T >
-struct TypeT< T* > : public ae::PointerType
+struct TypeT< T* > : public ae::ObjectPointerType
 {
-	static_assert( std::is_base_of< ae::Object, T >::value, "T must be derived from ae::Object" );
-
 	const ae::Type& GetInnerVarType() const override { return *ae::TypeT< T >::Get(); }
 	static ae::Type* Get() { static ae::TypeT< T* > s_type; return &s_type; }
 	ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< T* >(); }
-
-	bool Set( ae::DataPointer _varData, ae::Object* value ) const override
-	{
-		if( T** varData = static_cast< T** >( _varData.Get( this ) ) )
-		{
-			if( !value )
-			{
-				*varData = nullptr;
-				return true;
-			}
-			else
-			{
-				const ae::ClassType* varType = GetClassType< T >();
-				const ae::ClassType* valueType = ae::GetClassTypeFromObject( value );
-				if( varType && valueType && valueType->IsType( varType ) )
-				{
-					*varData = static_cast< T* >( value );
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-
-	bool FromString( ae::DataPointer _varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override
-	{
-		if( T** varData = static_cast< T** >( _varData.Get( this ) ) )
-		{
-			ae::Object* obj = nullptr;
-			if( fn && fn( userData, value, &obj ) )
-			{
-				if( !obj )
-				{
-					// When fn return true and null, clear pointer value
-					*varData = nullptr;
-					return true;
-				}
-				const ae::ClassType* varType = GetClassType< T >();
-				const ae::ClassType* valueType = ae::GetClassTypeFromObject( obj );
-				if( varType && valueType && valueType->IsType( varType ) )
-				{
-					*varData = static_cast< T* >( obj );
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-
-	std::string ToString( ae::ConstDataPointer _varData, ObjectPointerToStringFn fn, const void* userData ) const override
-	{
-		if( fn )
-		{
-			// @TODO: Type compatibility checks
-			if( T* const* varData = static_cast< T* const* >( _varData.Get( this ) ) )
-			{
-				return fn( userData, *varData );
-			}
-		}
-		return "";
-	}
 };
+
 template<>
-struct TypeT< std::nullptr_t > : public ae::PointerType
+struct TypeT< std::nullptr_t > : public ae::ObjectPointerType
 {
 	const ae::Type& GetInnerVarType() const override { AE_FAIL(); return *Get(); } // @TODO: Must return something, add Void type
 	static ae::Type* Get() { static ae::TypeT< std::nullptr_t > s_type; return &s_type; }
 	ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< std::nullptr_t >(); }
-	bool Set( ae::DataPointer varData, ae::Object* value ) const override { AE_FAIL(); return false; }
-	bool FromString( ae::DataPointer varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override { AE_FAIL(); return false; }
-	std::string ToString( ae::ConstDataPointer varData, ObjectPointerToStringFn fn, const void* userData ) const override { AE_FAIL(); return ""; }
 };
 
+//------------------------------------------------------------------------------
+// ae::DynamicArrayVarType partial specialization
+//------------------------------------------------------------------------------
 template< typename T, uint32_t N >
 class DynamicArrayVarType : public ae::ArrayType
 {
@@ -15591,7 +15544,7 @@ bool ae::ClassVar::SetObjectValue( ae::Object* obj, const T& value, int32_t arra
 		}
 		else if constexpr( std::is_pointer_v< T > || std::is_null_pointer_v< T > )
 		{
-			const ae::PointerType* pointerVarType = varType->AsVarType< ae::PointerType >();
+			const ae::ObjectPointerType* pointerVarType = varType->AsVarType< ae::ObjectPointerType >();
 			return pointerVarType ? pointerVarType->Set( varData, (ae::Object*)value ) : false;
 		}
 	}
@@ -33558,15 +33511,15 @@ std::string ae::ClassVar::GetObjectValueAsString( const ae::Object* obj, int32_t
 		{
 			return enumVarType->GetVarDataAsString( varData );
 		}
-		else if( const ae::PointerType* pointerVarType = varType->AsVarType< ae::PointerType >() )
+		else if( const ae::ObjectPointerType* pointerVarType = varType->AsVarType< ae::ObjectPointerType >() )
 		{
-			ObjectPointerToStringFn fn = []( const void* userData, const ae::Object* obj ) -> std::string
+			const ObjectPointerToStringFn fn = []( const ae::Object* obj ) -> std::string
 			{
-				const ae::ClassVar::Serializer* serializer = (const ae::ClassVar::Serializer*)userData;
+				const ae::ClassVar::Serializer* serializer = _Globals::Get()->varSerializer;
 				AE_ASSERT( serializer );
 				return serializer->ObjectPointerToString( obj );
 			};
-			return pointerVarType->ToString( varData, fn, _Globals::Get()->varSerializer );
+			return pointerVarType->ToString( varData, fn );
 		}
 	}
 	return "";
@@ -33610,15 +33563,20 @@ bool ae::ClassVar::SetObjectValueFromString( ae::Object* obj, const char* value,
 		{
 			return enumVarType->SetVarDataFromString( varData, value );
 		}
-		else if( const ae::PointerType* pointerVarType = varType->AsVarType< ae::PointerType >() )
+		else if( const ae::ObjectPointerType* pointerVarType = varType->AsVarType< ae::ObjectPointerType >() )
 		{
-			StringToObjectPointerFn fn = []( const void* userData, const char* pointerVal, ae::Object** objOut ) -> bool
+			const StringToObjectPointerFn fn = []( const char* pointerVal ) -> ae::Optional< ae::Object* >
 			{
-				const ae::ClassVar::Serializer* serializer = (const ae::ClassVar::Serializer*)userData;
+				const ae::ClassVar::Serializer* serializer = _Globals::Get()->varSerializer;
 				AE_ASSERT( serializer );
-				return serializer->StringToObjectPointer( pointerVal, objOut );
+				ae::Object* obj = nullptr;
+				if( serializer->StringToObjectPointer( pointerVal, &obj ) )
+				{
+					return obj;
+				}
+				return {};
 			};
-			return pointerVarType->FromString( varData, value, fn, _Globals::Get()->varSerializer );
+			return pointerVarType->FromString( varData, value, fn );
 		}
 	}
 	return false;
@@ -33758,7 +33716,7 @@ ae::BasicType::Type ae::ClassVar::GetType() const
 	{
 		return ae::BasicType::Enum;
 	}
-	else if( const ae::PointerType* pointerType = m_HACK_FindInnerVarType< ae::PointerType >() )
+	else if( const ae::ObjectPointerType* pointerType = m_HACK_FindInnerVarType< ae::ObjectPointerType >() )
 	{
 		return pointerType->GetBasicType();
 	}
@@ -34262,9 +34220,9 @@ bool ae::EnumType::SetVarDataFromString( ae::DataPointer _varData, const char* v
 ae::TypeId ae::EnumType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< EnumType >(); }
 
 //------------------------------------------------------------------------------
-// ae::PointerType
+// ae::ObjectPointerType member functions
 //------------------------------------------------------------------------------
-ae::DataPointer ae::PointerType::Dereference( ae::ConstDataPointer varData ) const
+ae::DataPointer ae::ObjectPointerType::Dereference( ae::ConstDataPointer varData ) const
 {
 	if( void*const* data = static_cast< void*const* >( varData.Get( this ) ) )
 	{
@@ -34273,7 +34231,69 @@ ae::DataPointer ae::PointerType::Dereference( ae::ConstDataPointer varData ) con
 	return {};
 }
 
-ae::TypeId ae::PointerType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< PointerType >(); }
+bool ae::ObjectPointerType::Set( ae::DataPointer _varData, ae::Object* value ) const
+{
+	if( ae::Object** varData = static_cast< ae::Object** >( _varData.Get( this ) ) )
+	{
+		if( !value )
+		{
+			*varData = nullptr;
+			return true;
+		}
+		else
+		{
+			const ae::ClassType* varType = GetInnerVarType().AsVarType< ae::ClassType >();
+			const ae::ClassType* valueType = ae::GetClassTypeFromObject( value );
+			if( varType && valueType && valueType->IsType( varType ) )
+			{
+				*varData = value;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool ae::ObjectPointerType::FromString( ae::DataPointer _varData, const char* value, const StringToObjectPointerFn& fn ) const
+{
+	if( ae::Object** varData = static_cast< ae::Object** >( _varData.Get( this ) ) )
+	{
+		ae::Optional< ae::Object* > result = fn ? fn( value ) : ae::Optional< ae::Object* >();
+		if( result.TryGet() )
+		{
+			ae::Object* obj = result.Get( nullptr );
+			if( !obj )
+			{
+				// When fn return true and null, clear pointer value
+				*varData = nullptr;
+				return true;
+			}
+			const ae::ClassType* varType = GetInnerVarType().AsVarType< ae::ClassType >();
+			const ae::ClassType* valueType = ae::GetClassTypeFromObject( obj );
+			if( varType && valueType && valueType->IsType( varType ) )
+			{
+				*varData = obj;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+std::string ae::ObjectPointerType::ToString( ae::ConstDataPointer _varData, const ObjectPointerToStringFn& fn ) const
+{
+	if( fn )
+	{
+		// @TODO: Type compatibility checks
+		if( ae::Object* const* varData = static_cast< ae::Object* const* >( _varData.Get( this ) ) )
+		{
+			return fn( *varData );
+		}
+	}
+	return "";
+}
+
+ae::TypeId ae::ObjectPointerType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< ObjectPointerType >(); }
 
 //------------------------------------------------------------------------------
 // ae::OptionalType member functions
