@@ -218,3 +218,4 @@ AE_REGISTER_CLASS_VAR( RefTesterA, refB ); // @NOTE: RefTesterB is registered af
 
 AE_REGISTER_CLASS( RefTesterB );
 AE_REGISTER_CLASS_VAR( RefTesterB, ref );
+AE_REGISTER_CLASS_VAR( RefTesterB, refArray );

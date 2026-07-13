@@ -402,6 +402,7 @@ class RefTesterB : public ae::Inheritor< RefTester, RefTesterB >
 {
 public:
 	class RefTester* ref = nullptr;
+	ae::Array< class RefTester*, 3 > refArray;
 };
 
 // RefTesterManager
