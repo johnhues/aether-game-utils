@@ -30,6 +30,10 @@
 // 2) To make sure aeMeta registered types are available outside of the module
 // they were registered in.
 
+AE_REGISTER_CLASS( CustomBaseType );
+AE_REGISTER_CLASS( CustomBaseTypeTest );
+AE_REGISTER_CLASS_VAR( CustomBaseTypeTest, testInt );
+
 //------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
