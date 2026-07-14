@@ -44,14 +44,14 @@ using AnyPtr = ae::Any< sizeof( void* ), alignof( void* ) >;
 TEST_CASE( "ae::Any default construction is empty", "[ae::Any]" )
 {
 	const AnySmall a;
-	REQUIRE( a.GetTypeId() == ae::TypeId() );
+	REQUIRE( !a );
 	REQUIRE( a.TryGet< int32_t >() == nullptr );
 }
 
 TEST_CASE( "ae::Any construct from value", "[ae::Any]" )
 {
 	const AnySmall a( (int32_t)42 );
-	REQUIRE( a.GetTypeId() == ae::GetTypeIdWithQualifiers< int32_t >() );
+	REQUIRE( a );
 	REQUIRE( a.TryGet< int32_t >() != nullptr );
 	REQUIRE( *a.TryGet< int32_t >() == 42 );
 }
@@ -139,7 +139,7 @@ TEST_CASE( "ae::Any store and retrieve null pointer", "[ae::Any]" )
 {
 	AnyTestPod* null = nullptr;
 	AnyPtr a( null );
-	REQUIRE( a.GetTypeId() == ae::GetTypeIdWithQualifiers< AnyTestPod* >() );
+	REQUIRE( a );
 	REQUIRE( a.TryGet< AnyTestPod* >() != nullptr );  // pointer to the stored null
 	REQUIRE( *a.TryGet< AnyTestPod* >() == nullptr ); // stored value is null
 }
@@ -152,8 +152,40 @@ TEST_CASE( "ae::Any pointer type mismatch returns nullptr", "[ae::Any]" )
 	REQUIRE( a.TryGet< int32_t* >() == nullptr );
 }
 
+TEST_CASE( "ae::Any Get pointer returns stored pointer on match", "[ae::Any]" )
+{
+	AnyTestPod pod{ 1, 2 };
+	AnyPtr a( &pod );
+	REQUIRE( a.Get< AnyTestPod* >( nullptr ) == &pod );
+}
+
+TEST_CASE( "ae::Any Get pointer returns default on type mismatch", "[ae::Any]" )
+{
+	AnyTestPod pod{ 3, 4 };
+	AnyPtr a( &pod );
+	float other = 0;
+	REQUIRE( a.Get< float* >( nullptr ) == nullptr );
+	REQUIRE( a.Get< float* >( &other ) == &other );
+}
+
+TEST_CASE( "ae::Any Get const pointer from non-const pointer", "[ae::Any]" )
+{
+	AnyTestPod pod{ 5, 6 };
+	AnyPtr a( &pod );
+	REQUIRE( a.Get< const AnyTestPod* >( nullptr ) == &pod );
+}
+
+TEST_CASE( "ae::Any Get non-const pointer from const pointer returns default", "[ae::Any]" )
+{
+	const AnyTestPod pod{ 7, 8 };
+	AnyPtr a( &pod );
+	AnyTestPod other{};
+	REQUIRE( a.Get< AnyTestPod* >( nullptr ) == nullptr );
+	REQUIRE( a.Get< AnyTestPod* >( &other ) == &other );
+}
+
 //------------------------------------------------------------------------------
-// ae::BinaryStream user data tests
+// ae::BinaryStream user data tests (uses ae::Any internally)
 //------------------------------------------------------------------------------
 TEST_CASE( "ae::BinaryStream GetUserData returns nullptr by default", "[ae::BinaryStream][UserData]" )
 {
@@ -220,3 +252,46 @@ TEST_CASE( "ae::BinaryStream SetUserData overwrites previous", "[ae::BinaryStrea
 	REQUIRE( stream.GetUserData< AnyTestPod >() == nullptr );
 	REQUIRE( stream.GetUserData< int32_t >() == &value );
 }
+
+//------------------------------------------------------------------------------
+// ae::Any const value type tests
+//------------------------------------------------------------------------------
+TEST_CASE( "ae::Any TryGet<const T> succeeds when T is stored", "[ae::Any]" )
+{
+	AnySmall a( (int32_t)7 );
+	REQUIRE( a.TryGet< const int32_t >() != nullptr );
+	REQUIRE( *a.TryGet< const int32_t >() == 7 );
+}
+
+TEST_CASE( "ae::Any TryGet<T> succeeds when T is stored (const value source)", "[ae::Any]" )
+{
+	const int32_t v = 7;
+	AnySmall a( v );
+	REQUIRE( a.TryGet< int32_t >() != nullptr );
+	REQUIRE( *a.TryGet< int32_t >() == 7 );
+}
+
+TEST_CASE( "ae::Any TryGet<const T> does not widen across types", "[ae::Any]" )
+{
+	AnySmall a( (int32_t)7 );
+	REQUIRE( a.TryGet< const float >() == nullptr );
+}
+
+//------------------------------------------------------------------------------
+// ae::Any unregistered pointer const-widening regression
+//------------------------------------------------------------------------------
+TEST_CASE( "ae::Any store int32_t* retrieve as const int32_t*", "[ae::Any]" )
+{
+	int32_t v = 5;
+	AnyPtr a( &v );
+	REQUIRE( a.TryGet< const int32_t* >() != nullptr );
+	REQUIRE( *a.TryGet< const int32_t* >() == &v );
+}
+
+TEST_CASE( "ae::Any store const int32_t* cannot remove const with retrieval as int32_t*", "[ae::Any]" )
+{
+	const int32_t v = 5;
+	AnyPtr a( &v );
+	REQUIRE( a.TryGet< int32_t* >() == nullptr );
+}
+

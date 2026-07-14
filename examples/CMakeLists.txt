@@ -334,7 +334,10 @@ if(AE_LOADERS_OFBX)
 endif()
 
 # Small Engine
-if(AE_DEPRECATED)
+# Disabled on AE_BASE_TYPE: extras/Editor.cpp still calls ae::ClassVar::SetObjectValue()/
+# SetObjectValueFromString(), which this branch deleted outright (not gated by AE_DEPRECATED
+# anymore). Re-enable once Editor.cpp is migrated off the removed API.
+if(FALSE)
 	ae_add_bundle("Small Engine"
 		TARGET_NAME "18_SmallEngine"
 		BUNDLE_ID "io.aether.SmallEngine"
