@@ -5294,41 +5294,47 @@ class Skeleton
 {
 public:
 	Skeleton( const ae::Tag& tag ) : m_bones( tag ) {}
+	//! Resets the skeleton to a single identity "root" bone and reserves storage
+	//! for \p maxBones bones (including the root) in one allocation. This capacity
+	//! is fixed; subsequent ae::Skeleton::AddBone() calls never reallocate, so
+	//! ae::Bone pointers stay stable. Must be called before ae::Skeleton::AddBone().
 	void Initialize( uint32_t maxBones );
+	//! Resets this skeleton to a copy of \p otherPose, reserving storage for and
+	//! duplicating its bone hierarchy and transforms in one allocation.
 	void Initialize( const Skeleton* otherPose );
+	//! Adds a bone named \p name as a child of \p parent, placed at \p parentToChild
+	//! relative to the parent. \p parent must belong to this skeleton. Draws from
+	//! the capacity reserved by ae::Skeleton::Initialize() and never reallocates, so
+	//! existing ae::Bone pointers stay valid. Returns the new bone, or null if that
+	//! capacity is exhausted or \p parent is null.
 	const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& parentToChild );
+	//! Sets the parent-relative transform of each of the \p count \p targets, then
+	//! recomputes the model-space transforms of the whole skeleton. Each target
+	//! must belong to this skeleton.
 	void SetLocalTransforms( const Bone** targets, const ae::Matrix4* parentToChildTransforms, uint32_t count );
+	//! Sets the parent-relative transform of a single \p target. See
+	//! ae::Skeleton::SetLocalTransforms().
 	void SetLocalTransform( const Bone* target, const ae::Matrix4& parentToChild );
+	//! Sets the model-space transform of \p target, deriving its parent-relative
+	//! transform, then recomputes the model-space transforms of all following bones.
 	void SetTransform( const Bone* target, const ae::Matrix4& boneToModel );
-	
+
+	//! Returns the root bone, always present after ae::Skeleton::Initialize().
 	const Bone* GetRoot() const;
+	//! Returns the bone named \p name, or null if none matches.
 	const Bone* GetBoneByName( const char* name ) const;
+	//! Returns the bone at \p index. Bones are ordered so a bone always precedes
+	//! its children.
 	const Bone* GetBoneByIndex( uint32_t index ) const;
+	//! Returns the contiguous bone array, ordered parent-before-child. Use with
+	//! ae::Skeleton::GetBoneCount().
 	const Bone* GetBones() const;
+	//! Returns the total number of bones, including the root.
 	uint32_t GetBoneCount() const;
 	
 private:
 	Skeleton( const Skeleton& ) = delete;
 	ae::Array< ae::Bone > m_bones;
-};
-
-//------------------------------------------------------------------------------
-// ae::IKConstraints struct
-//------------------------------------------------------------------------------
-struct IKConstraints
-{
-	//! The axis that points towards the next bone. A specific/prominent
-	//! industry auto-rigger will inconsistently orient bones so that the
-	//! negative x axis points towards the next bone for "Right" bones and
-	//! the positive x axis points towards the next bone for all center and
-	//! Left bones.
-	ae::Axis twistAxis = ae::Axis::NegativeX;
-	//! The axis that corresponds to the 'vertical' rotation limits y component.
-	//! The implicitly specified tertiary axis corresponds to the horizontal
-	//! rotation limits x component.
-	ae::Axis bendAxis = ae::Axis::Z;
-	// @TODO
-	ae::Axis horizontalAxis = ae::Axis::Y;
 };
 
 //------------------------------------------------------------------------------
@@ -5347,12 +5353,17 @@ struct IKDistanceConstraint
 //------------------------------------------------------------------------------
 struct IKRotationConstraint
 {
-	//! The half-range of motion of this joint in radians. @TODO: Array element
-	//! details. @TODO: Should support no limits.
+	//! The half-range of motion of this joint in radians, per quadrant of the
+	//! joint's bind-pose limit basis (see ae::IK::GetLimitBasis()). Elements
+	//! are ordered { +x, +y, -x, -y }, where x and y are the two limit basis
+	//! axes perpendicular to the bind-pose bone direction. Enable IK debug
+	//! lines to visualize the basis and limit ellipse when authoring these.
+	//! @TODO: Should support no limits.
 	float rotationLimits[ 4 ] = { 1.25f, 1.25f, 1.25f, 1.25f };
 	//! The amount in radians that this joint is allowed to twist around the
-	//! primary axis in either direction. Lower limit is negative, upper limit
-	//! is positive. Zero is no twist. @TODO: Should support no limits.
+	//! bone direction in either direction, relative to the bind pose. Lower
+	//! limit is negative, upper limit is positive. Zero is no twist.
+	//! @TODO: Should support no limits.
 	float twistLimits[ 2 ] = { -ae::QuarterPi, ae::QuarterPi };
 };
 
@@ -5362,6 +5373,18 @@ struct IKRotationConstraint
 struct IK
 {
 	IK( ae::Tag tag );
+	//! Runs \p iterationCount full FABRIK passes (one reverse pass from the
+	//! extents to \p rootBoneIndex, then one forward pass back out) and writes
+	//! the solved pose to \p poseOut. Each iteration moves effectors closer to
+	//! their targets; effector error is non-increasing with more iterations
+	//! (up to interaction between constraints). The solve starts from \p pose,
+	//! so starting from the bind pose each tick (stateless) or from last
+	//! tick's result (warm start) is caller policy. The output pose maintains
+	//! bind-pose bone lengths and satisfies rotation limits enforced during
+	//! the forward pass; distance constraints and unreachable targets are
+	//! approached across iterations rather than guaranteed exactly. Bones
+	//! outside the subtree rooted at \p rootBoneIndex are passed through to
+	//! \p poseOut unchanged.
 	void Run( uint32_t iterationCount, ae::Skeleton* poseOut );
 
 	const ae::Tag tag;
@@ -5388,30 +5411,19 @@ struct IK
 
 	// @TODO: Cleaup IK helpers
 	static ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 p );
-	static ae::Vec3 GetAxisVector( ae::Axis axis, bool negative = true );
-	ae::Vec3 ClipJoint( float bindBoneLength, ae::Vec3 j0Pos, ae::Quaternion j0Ori, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, const ae::IKRotationConstraint& j1RotationConstraints, ae::Color debugColor );
-
-	static float GetAxis( ae::Axis axis, const ae::Vec3 v )
-	{
-		switch( axis )
-		{
-			case ae::Axis::X: return v.x;
-			case ae::Axis::Y: return v.y;
-			case ae::Axis::Z: return v.z;
-			case ae::Axis::NegativeX: return -v.x;
-			case ae::Axis::NegativeY: return -v.y;
-			case ae::Axis::NegativeZ: return -v.z;
-			default: return 0.0f;
-		}
-	}
-
-	static ae::Vec3 Build3D( ae::Axis horizontalAxis, ae::Axis bendAxis, ae::Axis twistAxis, float horizontalVal, float verticalVal, float primaryVal, bool negative = true )
-	{
-		ae::Vec3 result = GetAxisVector( horizontalAxis, negative ) * horizontalVal;
-		result += GetAxisVector( bendAxis, negative ) * verticalVal;
-		result += GetAxisVector( twistAxis, negative ) * primaryVal;
-		return result;
-	}
+	//! Returns the deterministic orthonormal basis perpendicular to \p primary
+	//! that ae::IKRotationConstraint rotation limits are expressed in.
+	//! \p primary is the bind-pose bone direction in the parent's local frame.
+	static void GetLimitBasis( ae::Vec3 primary, ae::Vec3* basisXOut, ae::Vec3* basisYOut );
+	//! Returns a rotation that aligns \p localPrimary with \p worldDir, while
+	//! keeping \p localSecondary as close as possible to \p worldUpHint.
+	static ae::Quaternion LookAlongAxis( ae::Vec3 localPrimary, ae::Vec3 localSecondary, ae::Vec3 worldDir, ae::Vec3 worldUpHint );
+	//! Clips \p j1Pos to the rotational limits of the joint at \p j0Pos, and
+	//! returns the world space offset that satisfies the constraint. The local
+	//! frame ( \p primary, \p basisX, \p basisY ) is the joint's bind-pose bone
+	//! direction and limit basis (see GetLimitBasis()), expressed in the same
+	//! frame that \p j0Ori maps to world space.
+	ae::Vec3 ClipJoint( float bindBoneLength, ae::Vec3 j0Pos, ae::Quaternion j0Ori, ae::Vec3 primary, ae::Vec3 basisX, ae::Vec3 basisY, ae::Vec3 j1Pos, const ae::IKRotationConstraint& j1RotationConstraint, ae::Color debugColor );
 };
 
 //------------------------------------------------------------------------------
@@ -28199,53 +28211,67 @@ ae::Vec2 IK::GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::V
 	return ae::Vec2( copysignf( a * tx, p[ 0 ] ), copysignf( b * ty, p[ 1 ] ) );
 }
 
-ae::Vec3 IK::GetAxisVector( ae::Axis axis, bool negative )
+void IK::GetLimitBasis( ae::Vec3 primary, ae::Vec3* basisXOut, ae::Vec3* basisYOut )
 {
-	if( negative )
+	primary.SafeNormalize();
+	const float x = ae::Abs( primary.x );
+	const float y = ae::Abs( primary.y );
+	const float z = ae::Abs( primary.z );
+	// Start from the world axis least parallel to the bone direction so the
+	// basis is stable under small changes to the bind pose
+	const ae::Vec3 pick = ( x < y )
+		? ( ( x < z ) ? ae::Vec3( 1, 0, 0 ) : ae::Vec3( 0, 0, 1 ) )
+		: ( ( y < z ) ? ae::Vec3( 0, 1, 0 ) : ae::Vec3( 0, 0, 1 ) );
+	const ae::Vec3 basisX = ( pick - primary * pick.Dot( primary ) ).SafeNormalizeCopy();
+	const ae::Vec3 basisY = primary.Cross( basisX );
+	if( basisXOut )
 	{
-		switch( axis )
-		{
-			case ae::Axis::X: return ae::Vec3( 1, 0, 0 );
-			case ae::Axis::Y: return ae::Vec3( 0, 1, 0 );
-			case ae::Axis::Z: return ae::Vec3( 0, 0, 1 );
-			case ae::Axis::NegativeX: return ae::Vec3( -1, 0, 0 );
-			case ae::Axis::NegativeY: return ae::Vec3( 0, -1, 0 );
-			case ae::Axis::NegativeZ: return ae::Vec3( 0, 0, -1 );
-			default: return ae::Vec3( 0.0f );
-		}
+		*basisXOut = basisX;
 	}
-	else
+	if( basisYOut )
 	{
-		switch( axis )
-		{
-			case ae::Axis::X:
-			case ae::Axis::NegativeX:
-				return ae::Vec3( 1, 0, 0 );
-			case ae::Axis::Y:
-			case ae::Axis::NegativeY:
-				return ae::Vec3( 0, 1, 0 );
-			case ae::Axis::Z:
-			case ae::Axis::NegativeZ:
-				return ae::Vec3( 0, 0, 1 );
-			default:
-				return ae::Vec3( 0.0f );
-		}
+		*basisYOut = basisY;
 	}
+}
+
+ae::Quaternion IK::LookAlongAxis( ae::Vec3 localPrimary, ae::Vec3 localSecondary, ae::Vec3 worldDir, ae::Vec3 worldUpHint )
+{
+	if( worldDir.SafeNormalize() < 0.0001f )
+	{
+		return ae::Quaternion::Identity(); // No direction to align to
+	}
+	// Align localPrimary with worldDir. When they are antiparallel the arc
+	// axis is ambiguous, but the ambiguity is exactly a twist around worldDir,
+	// which the twist correction below re-fixes against the up hint.
+	const ae::Quaternion q0 = localPrimary.RotationTo( worldDir );
+	// Find where localSecondary ended up after q0
+	const ae::Vec3 rotatedSecondary = q0.Rotate( localSecondary );
+	// Project worldUpHint perpendicular to worldDir (to keep the primary axis aligned)
+	const ae::Vec3 upPerp = worldUpHint - worldDir * worldUpHint.Dot( worldDir );
+	if( upPerp.Length() < 0.0001f )
+	{
+		return q0; // The hint carries no twist information
+	}
+	// Signed twist angle around worldDir from rotatedSecondary to upPerp.
+	// Unlike a shortest-arc rotation, atan2 stays stable when the two are
+	// nearly antiparallel, where the arc axis would flip frame to frame.
+	const ae::Vec3 upPerpDir = upPerp.NormalizeCopy();
+	const float twistAngle = ae::Atan2( worldDir.Dot( rotatedSecondary.Cross( upPerpDir ) ), rotatedSecondary.Dot( upPerpDir ) );
+	return ae::Quaternion( worldDir, twistAngle ) * q0;
 }
 
 ae::Vec3 IK::ClipJoint(
 	float bindBoneLength,
 	ae::Vec3 j0Pos, // Parent
-	ae::Quaternion j0Ori, // Parent
+	ae::Quaternion j0Ori, // Parent reference orientation
+	ae::Vec3 primary, // Bind-pose bone direction in the reference frame
+	ae::Vec3 basisX, // Limit ellipse basis in the reference frame
+	ae::Vec3 basisY, // Limit ellipse basis in the reference frame
 	ae::Vec3 j1Pos, // Child
-	const ae::IKConstraints& j1Constraints, // Child
-	const ae::IKRotationConstraint& j1RotationConstraints,
+	const ae::IKRotationConstraint& j1RotationConstraint,
 	ae::Color debugColor )
 {
-	const ae::Axis ha = j1Constraints.horizontalAxis;
-	const ae::Axis va = j1Constraints.bendAxis;
-	const ae::Axis pa = j1Constraints.twistAxis;
-	const float (&j0AngleLimits)[ 4 ] = j1RotationConstraints.rotationLimits;
+	const float (&j0AngleLimits)[ 4 ] = j1RotationConstraint.rotationLimits;
 	const float clipLen = debugLines ? ( bindBoneLength * debugJointScale ) : bindBoneLength;
 	const float q[ 4 ] =
 	{
@@ -28254,15 +28280,18 @@ ae::Vec3 IK::ClipJoint(
 		clipLen * ae::Tan( -ae::Clip( j0AngleLimits[ 2 ], 0.01f, ae::HalfPi - 0.01f ) ),
 		clipLen * ae::Tan( -ae::Clip( j0AngleLimits[ 3 ], 0.01f, ae::HalfPi - 0.01f ) )
 	};
-	
+	auto build = [primary, basisX, basisY]( float x, float y, float p )
+	{
+		return basisX * x + basisY * y + primary * p;
+	};
+
 	// (f) the joint position p2 is relocated to a new position, p2^, which is
 	// the nearest point on that composite ellipsoidal shape from p2, ensuring
 	// that the new joint position p02 will be within the allowed rotational range
 	const ae::Vec2 unclipped = [&]()
 	{
-		const ae::Vec3 axis = Build3D( ha, va, pa, 0, 0, 1 );
-		const ae::Vec3 bonePos = axis * clipLen;
-		const ae::Plane ellipsePlane = ae::Plane( bonePos, axis );
+		const ae::Vec3 bonePos = primary * clipLen;
+		const ae::Plane ellipsePlane = ae::Plane( bonePos, primary );
 		const ae::Vec3 joint = j0Ori.GetInverse().Rotate( j1Pos - j0Pos );
 		float t;
 		ae::Vec3 p;
@@ -28271,7 +28300,7 @@ ae::Vec3 IK::ClipJoint(
 			p = ellipsePlane.GetClosestPoint( joint );
 			p = bonePos + ( p - bonePos ).SafeNormalizeCopy() * ae::Max( q[ 0 ], q[ 1 ], q[ 2 ], q[ 3 ] );
 		}
-		return ae::Vec2( GetAxis( ha, p ), GetAxis( va, p ) );
+		return ae::Vec2( p.Dot( basisX ), p.Dot( basisY ) );
 	}();
 	const ae::Vec2 quadrantEllipseSize = [q, unclipped]()
 	{
@@ -28284,46 +28313,44 @@ ae::Vec3 IK::ClipJoint(
 	const ae::Vec2 ellipseEdge = GetNearestPointOnEllipse( quadrantEllipseSize, ae::Vec2( 0.0f ), unclipped );
 	const ae::Vec2 posClipped = ( unclipped.LengthSquared() > ellipseEdge.LengthSquared() ) ? ellipseEdge : unclipped;
 	// (g) move p2^ to p2', to conserve bone length
-	const ae::Vec3 resultLocal = Build3D( ha, va, pa, posClipped.x, posClipped.y, clipLen ).NormalizeCopy() * bindBoneLength;
+	const ae::Vec3 resultLocal = build( posClipped.x, posClipped.y, clipLen ).NormalizeCopy() * bindBoneLength;
 	// Returns the offset to the child or parent bone so that the constraints are satisfied
 	const ae::Vec3 resultWorldOffset = ( j0Pos + j0Ori.Rotate( resultLocal ) ) - j1Pos;
 
 	if( debugLines )
 	{
-		// debugLines->AddSphere( j0Pos, bindBoneLength, debugColor, 16 ); // Bone length debug
-		auto t = [&]( ae::Vec3 p )
-		{
-			return debugModelToWorld.TransformPoint3x4( p );
-		};
 		const ae::Matrix4 j0 = ae::Matrix4::Translation( j0Pos ) * j0Ori.GetTransformMatrix();
 		const ae::Matrix4 tj0 = debugModelToWorld * j0;
-		const ae::Vec3 unclippedWorld = ( tj0 * ae::Vec4( Build3D( ha, va, pa, unclipped.x, unclipped.y, clipLen ), 1 ) ).GetXYZ();
-		const ae::Vec3 unclippedWorldClipped = ( tj0 * ae::Vec4( Build3D( ha, va, pa, posClipped.x, posClipped.y, clipLen ), 1 ) ).GetXYZ();
+		const ae::Vec3 unclippedWorld = ( tj0 * ae::Vec4( build( unclipped.x, unclipped.y, clipLen ), 1 ) ).GetXYZ();
+		const ae::Vec3 unclippedWorldClipped = ( tj0 * ae::Vec4( build( posClipped.x, posClipped.y, clipLen ), 1 ) ).GetXYZ();
 		debugLines->AddSphere( unclippedWorld, debugJointScale * 0.025f, debugColor, 4 );
 		debugLines->AddSphere( unclippedWorldClipped, debugJointScale * 0.025f, debugColor, 4 );
 		debugLines->AddLine( unclippedWorld, unclippedWorldClipped, debugColor );
-		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, q[ 0 ], 0, clipLen ) ), debugColor );
-		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, 0, q[ 1 ], clipLen ) ), debugColor );
-		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, q[ 2 ], 0, clipLen ) ), debugColor );
-		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, 0, q[ 3 ], clipLen ) ), debugColor );
+		// Limit basis, for authoring ae::IKRotationConstraint::rotationLimits.
+		// +x in red, +y in green, matching quadrant order { +x, +y, -x, -y }
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( basisX * clipLen * 0.5f ), ae::Color::Red() );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( basisY * clipLen * 0.5f ), ae::Color::Green() );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( build( q[ 0 ], 0, clipLen ) ), debugColor );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( build( 0, q[ 1 ], clipLen ) ), debugColor );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( build( q[ 2 ], 0, clipLen ) ), debugColor );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( build( 0, q[ 3 ], clipLen ) ), debugColor );
 		for( uint32_t i = 0; i < 8; i++ )
 		{
-			const ae::Vec3 q0 = Build3D( ha, va, pa, q[ 0 ], q[ 1 ], 1 ); // +x +y
-			const ae::Vec3 q1 = Build3D( ha, va, pa, q[ 2 ], q[ 1 ], 1 ); // -x +y
-			const ae::Vec3 q2 = Build3D( ha, va, pa, q[ 2 ], q[ 3 ], 1 ); // -x -y
-			const ae::Vec3 q3 = Build3D( ha, va, pa, q[ 0 ], q[ 3 ], 1 ); // +x -y
 			const float step = ( ae::HalfPi / 8 );
 			const float angle = i * step;
-			const ae::Vec3 l0 = Build3D( ha, va, pa, ae::Cos( angle ), ae::Sin( angle ), clipLen, false );
-			const ae::Vec3 l1 = Build3D( ha, va, pa, ae::Cos( angle + step ), ae::Sin( angle + step ), clipLen, false );
-			const ae::Vec4 p0 = tj0 * ae::Vec4( l0 * q0, 1.0f );
-			const ae::Vec4 p1 = tj0 * ae::Vec4( l1 * q0, 1.0f );
-			const ae::Vec4 p2 = tj0 * ae::Vec4( l0 * q1, 1.0f );
-			const ae::Vec4 p3 = tj0 * ae::Vec4( l1 * q1, 1.0f );
-			const ae::Vec4 p4 = tj0 * ae::Vec4( l0 * q2, 1.0f );
-			const ae::Vec4 p5 = tj0 * ae::Vec4( l1 * q2, 1.0f );
-			const ae::Vec4 p6 = tj0 * ae::Vec4( l0 * q3, 1.0f );
-			const ae::Vec4 p7 = tj0 * ae::Vec4( l1 * q3, 1.0f );
+			const float c0 = ae::Cos( angle );
+			const float s0 = ae::Sin( angle );
+			const float c1 = ae::Cos( angle + step );
+			const float s1 = ae::Sin( angle + step );
+			// One arc segment per quadrant ellipse: { +x +y, -x +y, -x -y, +x -y }
+			const ae::Vec4 p0 = tj0 * ae::Vec4( build( c0 * q[ 0 ], s0 * q[ 1 ], clipLen ), 1.0f );
+			const ae::Vec4 p1 = tj0 * ae::Vec4( build( c1 * q[ 0 ], s1 * q[ 1 ], clipLen ), 1.0f );
+			const ae::Vec4 p2 = tj0 * ae::Vec4( build( c0 * q[ 2 ], s0 * q[ 1 ], clipLen ), 1.0f );
+			const ae::Vec4 p3 = tj0 * ae::Vec4( build( c1 * q[ 2 ], s1 * q[ 1 ], clipLen ), 1.0f );
+			const ae::Vec4 p4 = tj0 * ae::Vec4( build( c0 * q[ 2 ], s0 * q[ 3 ], clipLen ), 1.0f );
+			const ae::Vec4 p5 = tj0 * ae::Vec4( build( c1 * q[ 2 ], s1 * q[ 3 ], clipLen ), 1.0f );
+			const ae::Vec4 p6 = tj0 * ae::Vec4( build( c0 * q[ 0 ], s0 * q[ 3 ], clipLen ), 1.0f );
+			const ae::Vec4 p7 = tj0 * ae::Vec4( build( c1 * q[ 0 ], s1 * q[ 3 ], clipLen ), 1.0f );
 			debugLines->AddLine( p0.GetXYZ(), p1.GetXYZ(), debugColor );
 			debugLines->AddLine( p2.GetXYZ(), p3.GetXYZ(), debugColor );
 			debugLines->AddLine( p4.GetXYZ(), p5.GetXYZ(), debugColor );
@@ -28372,6 +28399,12 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		ae::Quaternion boneToModelRot; // @TODO: Should this be flipped? It's inverted constantly below
 		const ae::Vec3 parentBindDir; // Direction from parent to this bone, in parent's bind-pose local frame
 		const ae::Vec3 selfBindDir;   // Direction from parent to this bone, in this bone's bind-pose local frame
+		const ae::Vec3 bindDirWorld;  // Direction from parent to this bone, in bind-pose model space
+		const ae::Quaternion bindRot; // Bind-pose boneToModel rotation
+		const ae::Quaternion bindLocalRot; // Bind-pose rotation relative to parent
+		const ae::Vec3 basisX; // Rotation limit basis, perpendicular to parentBindDir (see GetLimitBasis())
+		const ae::Vec3 basisY; // Rotation limit basis, perpendicular to parentBindDir
+		const ae::Vec3 selfBasisX; // Secondary axis perpendicular to selfBindDir, for twist-stable orientation
 		const float length; // Fixed distance between pos and parent pos
 	};
 	ae::Array< _IKBone > ikBones( tag, pose.GetBoneCount() );
@@ -28380,6 +28413,12 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		.boneToModelRot = pose.GetBoneByIndex( 0 )->boneToModel.GetRotation(),
 		.parentBindDir = ae::Vec3( 0.0 ),
 		.selfBindDir = ae::Vec3( 0.0 ),
+		.bindDirWorld = ae::Vec3( 0.0 ),
+		.bindRot = bindPose->GetBoneByIndex( 0 )->boneToModel.GetRotation(),
+		.bindLocalRot = ae::Quaternion::Identity(),
+		.basisX = ae::Vec3( 0.0 ),
+		.basisY = ae::Vec3( 0.0 ),
+		.selfBasisX = ae::Vec3( 0.0 ),
 		.length = 0.0f
 	} );
 	for( uint32_t i = 1; i < pose.GetBoneCount(); i++ )
@@ -28390,17 +28429,76 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		AE_ASSERT( currentBone->parent );
 		ae::Vec3 worldBindDir = ( bindBone->boneToModel.GetTranslation() - bindBone->parent->boneToModel.GetTranslation() );
 		const float bindLen = worldBindDir.SafeNormalize();
-		const ae::Vec3 localBindDir = bindBone->parent->boneToModel.GetRotation().GetInverse().Rotate( worldBindDir );
-		const ae::Vec3 selfBindDir = bindBone->boneToModel.GetRotation().GetInverse().Rotate( worldBindDir );
+		const ae::Quaternion parentBindRot = bindBone->parent->boneToModel.GetRotation();
+		const ae::Quaternion bindRot = bindBone->boneToModel.GetRotation();
+		const ae::Vec3 localBindDir = parentBindRot.GetInverse().Rotate( worldBindDir );
+		const ae::Vec3 selfBindDir = bindRot.GetInverse().Rotate( worldBindDir );
+		ae::Vec3 basisX, basisY, selfBasisX;
+		GetLimitBasis( localBindDir, &basisX, &basisY );
+		GetLimitBasis( selfBindDir, &selfBasisX, nullptr );
 		ikBones.Append( {
 			.modelPos = currentBone->boneToModel.GetTranslation(),
 			.boneToModelRot = currentBone->boneToModel.GetRotation(),
 			.parentBindDir = localBindDir,
 			.selfBindDir = selfBindDir,
+			.bindDirWorld = worldBindDir,
+			.bindRot = bindRot,
+			.bindLocalRot = parentBindRot.GetInverse() * bindRot,
+			.basisX = basisX,
+			.basisY = basisY,
+			.selfBasisX = selfBasisX,
 			.length = bindLen
 		} );
 	}
 	const ae::Vec3 rootBoneAnchor = ikBones[ rootBoneIndex ].modelPos;
+
+	// FABRIK cannot fold a chain that lies exactly on the line to a nearer
+	// target: every correction stays on that line and the effector never
+	// closes the remaining distance. Nudge the interior joints of any such
+	// chain off the line before iterating.
+	for( const auto& target : targets )
+	{
+		if( target.key >= pose.GetBoneCount() )
+		{
+			continue;
+		}
+		float chainLength = 0.0f;
+		const Bone* walk = pose.GetBoneByIndex( target.key );
+		while( walk && walk->index != rootBoneIndex )
+		{
+			chainLength += ikBones[ walk->index ].length;
+			walk = walk->parent;
+		}
+		if( !walk || walk->index == target.key )
+		{
+			continue; // Not below the solve root, or the root itself
+		}
+		const ae::Vec3 rootPos = ikBones[ rootBoneIndex ].modelPos;
+		ae::Vec3 lineDir = target.value - rootPos;
+		const float targetDistance = lineDir.SafeNormalize();
+		if( targetDistance < 0.0001f || targetDistance >= chainLength * 0.999f )
+		{
+			continue; // Folding isn't required to reach the target
+		}
+		bool colinear = true;
+		for( const Bone* j = pose.GetBoneByIndex( target.key ); colinear && j->index != rootBoneIndex; j = j->parent )
+		{
+			const ae::Vec3 offset = ikBones[ j->index ].modelPos - rootPos;
+			if( ( offset - lineDir * offset.Dot( lineDir ) ).Length() > chainLength * 0.0001f )
+			{
+				colinear = false;
+			}
+		}
+		if( colinear )
+		{
+			ae::Vec3 perpDir;
+			GetLimitBasis( lineDir, &perpDir, nullptr );
+			for( const Bone* j = pose.GetBoneByIndex( target.key )->parent; j->index != rootBoneIndex; j = j->parent )
+			{
+				ikBones[ j->index ].modelPos += perpDir * ( ikBones[ j->index ].length * 0.02f );
+			}
+		}
+	}
 
 	struct _IKDistanceConstraint
 	{
@@ -28500,11 +28598,37 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					// they are prioritized over target positions.
 					ApplyDistanceConstraints( poseBone, ikBone );
 				}
-				// Reorient current joint to point toward child joint
+				// Reorient current joint toward its children. The bind-pose and
+				// current directions must be built the same way so the
+				// alignment maps matching frames: when the children's bind
+				// directions oppose and cancel (a straight-through joint like
+				// a mid-spine segment, or hips with legs opposing the spine)
+				// the average carries no signal at any threshold, so such
+				// bones deterministically track their first child instead.
+				// The decision comes from the bind pose alone and cannot pop
+				// between frames. The up hint from the previous orientation
+				// preserves twist continuity instead of accumulating spin
+				// across iterations.
 				const _IKBone* ikChild = &ikBones[ poseBone->firstChild->index ];
-				const ae::Vec3 worldTargetDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
-				const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
-				ikBone->boneToModelRot *= ikChild->parentBindDir.RotationTo( localTargetDir );
+				ae::Vec3 localAlignDir = ae::Vec3( 0.0f );
+				ae::Vec3 worldAlignDir = ae::Vec3( 0.0f );
+				for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
+				{
+					localAlignDir += ikBones[ poseChild->index ].parentBindDir;
+					worldAlignDir += ( ikBones[ poseChild->index ].modelPos - ikBone->modelPos ).SafeNormalizeCopy();
+				}
+				if( localAlignDir.SafeNormalize() < 0.2f )
+				{
+					localAlignDir = ikChild->parentBindDir;
+					worldAlignDir = ( ikChild->modelPos - ikBone->modelPos );
+				}
+				if( worldAlignDir.SafeNormalize() > 0.05f ) // Keep the current orientation when transiently degenerate
+				{
+					ae::Vec3 alignBasisX;
+					GetLimitBasis( localAlignDir, &alignBasisX, nullptr );
+					const ae::Vec3 upHint = ikBone->boneToModelRot.Rotate( alignBasisX );
+					ikBone->boneToModelRot = LookAlongAxis( localAlignDir, alignBasisX, worldAlignDir, upHint );
+				}
 			}
 			else
 			{
@@ -28525,9 +28649,12 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				else if( poseBone->parent )
 				{
 					// If no orientation target, try to at least match the position target's direction from the parent joint
-					const ae::Vec3 worldTargetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos ).SafeNormalizeCopy();
-					const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
-					ikBone->boneToModelRot *= ikBone->selfBindDir.RotationTo( localTargetDir );
+					ae::Vec3 worldTargetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos );
+					if( worldTargetDir.SafeNormalize() > 0.0001f )
+					{
+						const ae::Vec3 upHint = ikBone->boneToModelRot.Rotate( ikBone->selfBasisX );
+						ikBone->boneToModelRot = LookAlongAxis( ikBone->selfBindDir, ikBone->selfBasisX, worldTargetDir, upHint );
+					}
 				}
 			}
 		};
@@ -28568,15 +28695,35 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
 				ikChild->modelPos = ikBone->modelPos + ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy() * ikChild->length;
 
+				// Clip the child to the joint's rotational limits before the
+				// parent orientation update, so the parent aligns to the
+				// constrained direction. The reference frame is the parent's
+				// bind orientation swung by the current incoming direction
+				// (grandparent to parent) -- not the parent's tracked
+				// orientation, which already points toward the child.
+				if( poseBone->parent )
+				{
+					if( const ae::IKRotationConstraint* constraint = rotationConstraints.TryGet( poseChild->index ) )
+					{
+						const ae::Vec3 gpPos = ikBones[ poseBone->parent->index ].modelPos;
+						const ae::Vec3 currentIncoming = ( ikBone->modelPos - gpPos ).SafeNormalizeCopy();
+						const ae::Quaternion refOri = ikBone->bindDirWorld.RotationTo( currentIncoming ) * ikBone->bindRot;
+						ikChild->modelPos += ClipJoint( ikChild->length, ikBone->modelPos, refOri, ikChild->parentBindDir, ikChild->basisX, ikChild->basisY, ikChild->modelPos, *constraint, ae::Color::PicoPink() );
+					}
+				}
+
 				// Reorient current joint to point toward child joint. Skip for
-				// multi-child bones: accumulating a rotation per child causes
-				// compounding spin each iteration.
+				// multi-child bones, which are oriented toward their average
+				// child direction in the reverse pass.
 				if( singleChild )
 				{
-					const ae::Vec3 worldTargetDir = ( ikChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy();
-					const ae::Vec3 localTargetDir = ikBone->boneToModelRot.GetInverse().Rotate( worldTargetDir );
-					ikBone->boneToModelRot *= ikChild->parentBindDir.RotationTo( localTargetDir );
-					ikChild->modelPos = ikBone->modelPos + ikBone->boneToModelRot.Rotate( ikChild->parentBindDir ) * ikChild->length;
+					ae::Vec3 worldTargetDir = ( ikChild->modelPos - ikBone->modelPos );
+					if( worldTargetDir.SafeNormalize() > 0.0001f )
+					{
+						const ae::Vec3 upHint = ikBone->boneToModelRot.Rotate( ikChild->basisX );
+						ikBone->boneToModelRot = LookAlongAxis( ikChild->parentBindDir, ikChild->basisX, worldTargetDir, upHint );
+						ikChild->modelPos = ikBone->modelPos + ikBone->boneToModelRot.Rotate( ikChild->parentBindDir ) * ikChild->length;
+					}
 				}
 
 				if( debugLines )
@@ -28591,6 +28738,39 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 			}
 		};
 		forwardIter( forwardIter, &ikBones[ rootBoneIndex ], pose.GetBoneByIndex( rootBoneIndex ) );
+
+		// Enforce twist limits top-down so each bone is clamped against its
+		// parent's final orientation for this iteration. Twist is measured as
+		// the rotation around the bone direction relative to the bind pose.
+		// auto twistIter = [&]( auto&& twistIter, _IKBone* ikBone, const Bone* poseBone ) -> void
+		// {
+		// 	const ae::IKRotationConstraint* constraint = rotationConstraints.TryGet( poseBone->index );
+		// 	if( constraint && poseBone->parent )
+		// 	{
+		// 		const _IKBone* ikParent = &ikBones[ poseBone->parent->index ];
+		// 		const ae::Quaternion ref = ikParent->boneToModelRot * ikBone->bindLocalRot;
+		// 		const ae::Quaternion delta = ref.GetInverse() * ikBone->boneToModelRot;
+		// 		ae::Quaternion twist, swing;
+		// 		delta.GetTwistSwing( ikBone->selfBindDir, &twist, &swing );
+		// 		ae::Vec3 twistAxis;
+		// 		float twistAngle;
+		// 		twist.GetAxisAngle( &twistAxis, &twistAngle );
+		// 		if( twistAxis.Dot( ikBone->selfBindDir ) < 0.0f )
+		// 		{
+		// 			twistAngle = -twistAngle;
+		// 		}
+		// 		const float clipped = ae::Clip( twistAngle, constraint->twistLimits[ 0 ], constraint->twistLimits[ 1 ] );
+		// 		if( clipped != twistAngle )
+		// 		{
+		// 			ikBone->boneToModelRot = ref * ( swing * ae::Quaternion( ikBone->selfBindDir, clipped ) );
+		// 		}
+		// 	}
+		// 	for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
+		// 	{
+		// 		twistIter( twistIter, &ikBones[ poseChild->index ], poseChild );
+		// 	}
+		// };
+		// twistIter( twistIter, &ikBones[ rootBoneIndex ], pose.GetBoneByIndex( rootBoneIndex ) );
 	}
 
 	poseOut->Initialize( &pose );

@@ -435,3 +435,15 @@ ae_add_bundle("SDF to Mesh"
 	RESOURCES "${AE_EXAMPLE_RESOURCES}"
 	LIBS "ae"
 )
+
+# IK Gallery
+ae_add_bundle("IK Gallery"
+	TARGET_NAME "30_ik_gallery"
+	BUNDLE_ID "ae.30_ik_gallery"
+	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "30_IKGallery.cpp;../test/IKTest.h;../test/IKTest.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES}"
+	LIBS "ae;ae_extras;imgui"
+)
