@@ -202,7 +202,7 @@ int main()
 		PinBone( leftFootBone );
 		// Rotation constraints
 		rotationConstraints.Set( rightArmBone->index, { .rotationLimits={ 0.23f, 0.23f, 0.23f, 0.23f } } );
-		rotationConstraints.Set( rightForearmBone->index, { .rotationLimits={ 1.5f, 0.23f, 0.23f, 1.5f } } );
+		rotationConstraints.Set( rightForearmBone->index, { .rotationLimits={ 1.3f, 0.23f, 1.2f, 1.5f } } );
 		rotationConstraints.Set( rightHandBone->index, { .rotationLimits={ 0.23f, 0.23f, 1.5f, 0.23f } } );
 		// Distance constraints
 		// Head
@@ -264,7 +264,7 @@ int main()
 	const ae::Vec3 testPrimary = testJoint0Bind.GetRotation().GetInverse().Rotate( testBindDir );
 	ae::Vec3 testBasisX, testBasisY;
 	ae::IK::GetLimitBasis( testPrimary, &testBasisX, &testBasisY );
-	auto GetSelectedTransform = [&]( bool allowTarget ) -> ae::Matrix4
+	auto GetSelectedTransform = [&]()
 	{
 		switch( selTestJoint )
 		{
@@ -273,15 +273,19 @@ int main()
 			default: break;
 		}
 		ae::Matrix4 transform = currentPose.GetBoneByIndex( selectedJointIndex )->boneToModel;
-		if( const ae::Vec3* target = allowTarget ? targets.TryGet( selectedJointIndex ) : nullptr )
+		if( const ae::Vec3* target = targets.TryGet( selectedJointIndex ) )
 		{
 			transform.SetTranslation( *target );
+		}
+		if( const ae::Quaternion* targetOrientation = targetOrientations.TryGet( selectedJointIndex ) )
+		{
+			transform.SetRotation( *targetOrientation );
 		}
 		return transform;
 	};
 	auto GetFocusPos = [&]() -> ae::Vec3
 	{
-		return GetSelectedTransform( true ).GetTranslation();
+		return GetSelectedTransform().GetTranslation();
 	};
 	
 	auto UpdateResources = [&]()
@@ -668,7 +672,7 @@ int main()
 		
 		if( gizmoOperation && camera.GetMode() == ae::DebugCamera::Mode::None )
 		{
-			ae::Matrix4 gizmoTransform = GetSelectedTransform( gizmoOperation != ImGuizmo::ROTATE );
+			ae::Matrix4 gizmoTransform = GetSelectedTransform();
 			if( ImGuizmo::Manipulate(
 				worldToView.data,
 				viewToProj.data,

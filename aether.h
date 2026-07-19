@@ -5384,9 +5384,9 @@ struct IK
 	//! (up to interaction between constraints). The solve starts from \p pose,
 	//! so starting from the bind pose each tick (stateless) or from last
 	//! tick's result (warm start) is caller policy. The output pose maintains
-	//! bind-pose bone lengths and satisfies rotation limits enforced during
-	//! the forward pass; distance constraints and unreachable targets are
-	//! approached across iterations rather than guaranteed exactly. Bones
+	//! bind-pose bone lengths and satisfies rotation and twist limits enforced
+	//! during the forward pass; distance constraints and unreachable targets
+	//! are approached across iterations rather than guaranteed exactly. Bones
 	//! outside the subtree rooted at \p rootBoneIndex are passed through to
 	//! \p poseOut unchanged.
 	void Run( uint32_t iterationCount, ae::Skeleton* poseOut );
@@ -5398,6 +5398,9 @@ struct IK
 	//! move the specified bone towards the target transform. The IK will only
 	//! consider the position of the target transform, not the orientation.
 	ae::Map< uint32_t, ae::Vec3 > targets;
+	//! Extent bone indices -> orientation targets in world space. Twist the
+	//! target demands beyond the extent's own twist limits is distributed up
+	//! the chain, with each ancestor twisting as far as its limits allow.
 	ae::Map< uint32_t, ae::Quaternion > targetOrientations;
 	//! Distance constraints between any two bones. This is useful for
 	//! preventing bones shoulder bones etc from collapsing or folding outwards.
@@ -28404,7 +28407,25 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 			const ae::Vec3 p1 = debugModelToWorld.TransformPoint3x4( target.value );
 			debugLines->AddLine( p0, p1, ae::Color::AetherRed() );
 		}
-
+		// Orientation goals as dimmed basis axes, distinct from the solved
+		// pose axes drawn at full brightness after the solve
+		for( const auto& targetOri : targetOrientations )
+		{
+			if( targetOri.key >= pose.GetBoneCount() )
+			{
+				continue;
+			}
+			const ae::Vec3* posTarget = targets.TryGet( targetOri.key );
+			const ae::Vec3 pos = posTarget ? *posTarget : pose.GetBoneByIndex( targetOri.key )->boneToModel.GetTranslation();
+			const ae::Vec3 p = debugModelToWorld.TransformPoint3x4( pos );
+			const ae::Vec3 axes[ 3 ] = { ae::Vec3( 1.0f, 0.0f, 0.0f ), ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::Vec3( 0.0f, 0.0f, 1.0f ) };
+			const ae::Color colors[ 3 ] = { ae::Color::AetherRed().ScaleRGB( 0.6f ), ae::Color::AetherGreen().ScaleRGB( 0.6f ), ae::Color::AetherBlue().ScaleRGB( 0.6f ) };
+			for( uint32_t i = 0; i < 3; i++ )
+			{
+				const ae::Vec3 axisEnd = pos + targetOri.value.Rotate( axes[ i ] * debugJointScale );
+				debugLines->AddLine( p, debugModelToWorld.TransformPoint3x4( axisEnd ), colors[ i ] );
+			}
+		}
 	}
 
 	// (a) The initial configuration of the manipulator and the target
@@ -28555,6 +28576,75 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		}
 	};
 
+	// Signed twist of 'rot' relative to 'ref' around 'axis' (given in the
+	// bone's local frame), wrapped to (-pi, pi]. GetAxisAngle() returns
+	// angles in [0, 2pi], so wrapping is required before clamping against
+	// symmetric twist limits.
+	auto GetSignedTwist = []( const ae::Quaternion& ref, const ae::Quaternion& rot, ae::Vec3 axis ) -> float
+	{
+		const ae::Quaternion delta = ref.GetInverse() * rot;
+		ae::Quaternion twist;
+		delta.GetTwistSwing( axis, &twist, nullptr );
+		ae::Vec3 twistAxis;
+		float twistAngle;
+		twist.GetAxisAngle( &twistAxis, &twistAngle );
+		if( twistAxis.Dot( axis ) < 0.0f )
+		{
+			twistAngle = -twistAngle;
+		}
+		while( twistAngle > ae::Pi )
+		{
+			twistAngle -= ae::TwoPi;
+		}
+		while( twistAngle <= -ae::Pi )
+		{
+			twistAngle += ae::TwoPi;
+		}
+		return twistAngle;
+	};
+	// Segmented arc around 'axis' at 'center', swept from angle0 to angle1
+	// starting at 'zeroDir'. Model space; density matches the ClipJoint
+	// ellipse rendering.
+	auto DebugDrawTwistArc = [&]( ae::Vec3 center, ae::Vec3 axis, ae::Vec3 zeroDir, float angle0, float angle1, float radius, ae::Color color )
+	{
+		const uint32_t segmentCount = (uint32_t)ae::Max( 1, ae::Ceil( ae::Abs( angle1 - angle0 ) / ( ae::QuarterPi / 4.0f ) ) );
+		ae::Vec3 prev = center + ae::Quaternion( axis, angle0 ).Rotate( zeroDir ) * radius;
+		for( uint32_t i = 1; i <= segmentCount; i++ )
+		{
+			const float angle = ae::Lerp( angle0, angle1, i / (float)segmentCount );
+			const ae::Vec3 next = center + ae::Quaternion( axis, angle ).Rotate( zeroDir ) * radius;
+			debugLines->AddLine( debugModelToWorld.TransformPoint3x4( prev ), debugModelToWorld.TransformPoint3x4( next ), color );
+			prev = next;
+		}
+	};
+	// Arc showing a twist change applied to 'ikBone' this iteration, drawn at
+	// the midpoint of its bone segment around the bone axis, from the twist
+	// angle before the change to the angle after. Bone positions are
+	// mid-iteration when this runs, so the arc can sit slightly off the final
+	// gauge; acceptable for debug rendering.
+	auto DebugDrawTwistDelta = [&]( const _IKBone* ikBone, uint32_t parentIndex, float preTwist, float appliedTwist, ae::Color color )
+	{
+		const _IKBone* ikParent = &ikBones[ parentIndex ];
+		ae::Vec3 axis = ikBone->modelPos - ikParent->modelPos;
+		if( axis.SafeNormalize() < 0.001f )
+		{
+			return;
+		}
+		const ae::Quaternion ref = ikParent->boneToModelRot * ikBone->bindLocalRot;
+		ae::Vec3 zeroDir = ref.Rotate( ikBone->selfBasisX );
+		zeroDir -= axis * zeroDir.Dot( axis );
+		if( zeroDir.SafeNormalize() < 0.001f )
+		{
+			return;
+		}
+		const ae::Vec3 center = ( ikBone->modelPos + ikParent->modelPos ) * 0.5f;
+		DebugDrawTwistArc( center, axis, zeroDir, preTwist, preTwist + appliedTwist, debugJointScale * 0.75f, color );
+	};
+	// Per-bone twist requested by orientation targets this iteration, averaged
+	// across targets when chains share ancestors.
+	ae::Array< float > twistRequest( tag, 0.0f, ikBones.Length() );
+	ae::Array< uint32_t > twistRequestCount( tag, 0u, ikBones.Length() );
+
 	for( uint32_t iterations = 0; iterations < iterationCount; iterations++ )
 	{
 		// In the first stage, the normal algorithm is applied starting from
@@ -28670,6 +28760,111 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		};
 		reverseIter( reverseIter, &ikBones[ rootBoneIndex ], pose.GetBoneByIndex( rootBoneIndex ) );
 
+		// Orientation targets can demand twist that the extent bone alone is
+		// not permitted to satisfy. Distribute the excess up the chain,
+		// leaf-first, with each joint taking what its twist limits allow.
+		// Twisting an ancestor also rotates its children's swing-limit
+		// ellipses, which unlocks positional solutions ClipJoint would
+		// otherwise forbid, so this runs before the forward pass. Positions
+		// are left untouched; the forward pass re-derives swing on top of the
+		// new twist through its twist-preserving up hints.
+		for( const auto& targetOri : targetOrientations )
+		{
+			const uint32_t extentIndex = targetOri.key;
+			if( extentIndex >= pose.GetBoneCount() || extentIndex == rootBoneIndex )
+			{
+				continue;
+			}
+			const Bone* extentBone = pose.GetBoneByIndex( extentIndex );
+			if( extentBone->firstChild || !extentBone->parent )
+			{
+				continue;
+			}
+			bool belowRoot = false;
+			for( const Bone* walk = extentBone->parent; walk; walk = walk->parent )
+			{
+				if( walk->index == rootBoneIndex )
+				{
+					belowRoot = true;
+					break;
+				}
+			}
+			if( !belowRoot )
+			{
+				continue;
+			}
+			const _IKBone* ikExtent = &ikBones[ extentIndex ];
+			const ae::Quaternion extentRef = ikBones[ extentBone->parent->index ].boneToModelRot * ikExtent->bindLocalRot;
+			const float theta = GetSignedTwist( extentRef, targetOri.value, ikExtent->selfBindDir );
+			float excess = 0.0f; // An unconstrained extent absorbs the full twist itself
+			if( const ae::IKRotationConstraint* constraint = rotationConstraints.TryGet( extentIndex ) )
+			{
+				excess = theta - ae::Clip( theta, constraint->twistLimits[ 0 ], constraint->twistLimits[ 1 ] );
+			}
+			for( const Bone* walk = extentBone->parent; walk && ae::Abs( excess ) > 0.001f; walk = walk->parent )
+			{
+				_IKBone* ikWalk = &ikBones[ walk->index ];
+				if( ikWalk->length < 0.0001f )
+				{
+					break; // No twist axis (skeleton root placeholder or coincident joints)
+				}
+				float take = excess;
+				if( const ae::IKRotationConstraint* constraint = rotationConstraints.TryGet( walk->index ) )
+				{
+					const ae::Quaternion walkRef = ikBones[ walk->parent->index ].boneToModelRot * ikWalk->bindLocalRot;
+					const float current = GetSignedTwist( walkRef, ikWalk->boneToModelRot, ikWalk->selfBindDir );
+					take = ae::Clip( excess, constraint->twistLimits[ 0 ] - current, constraint->twistLimits[ 1 ] - current );
+				}
+				twistRequest[ walk->index ] += take;
+				twistRequestCount[ walk->index ]++;
+				excess -= take;
+				if( walk->index == rootBoneIndex )
+				{
+					break;
+				}
+			}
+		}
+		if( targetOrientations.Length() )
+		{
+			// Apply requested twists top-down. Descendants inherit ancestor
+			// twist so each joint's measured twist changes only by its own
+			// requested amount; orientation-target extents are re-pinned to
+			// their target instead, which is what shrinks the residual.
+			// Requests from multiple targets sharing an ancestor are averaged.
+			auto applyTwist = [&]( auto&& applyTwist, _IKBone* ikBone, const Bone* poseBone, ae::Quaternion carry ) -> void
+			{
+				ikBone->boneToModelRot = carry * ikBone->boneToModelRot;
+				if( twistRequestCount[ poseBone->index ] )
+				{
+					const float applied = twistRequest[ poseBone->index ] / (float)twistRequestCount[ poseBone->index ];
+					if( debugLines && poseBone->parent && iterations == iterationCount - 1 )
+					{
+						const ae::Quaternion preRef = ikBones[ poseBone->parent->index ].boneToModelRot * ikBone->bindLocalRot;
+						const float preTwist = GetSignedTwist( preRef, ikBone->boneToModelRot, ikBone->selfBindDir );
+						DebugDrawTwistDelta( ikBone, poseBone->parent->index, preTwist, applied, ae::Color::PicoPink() );
+					}
+					const ae::Vec3 worldAxis = ikBone->boneToModelRot.Rotate( ikBone->selfBindDir );
+					const ae::Quaternion q = ae::Quaternion( worldAxis, applied );
+					ikBone->boneToModelRot = q * ikBone->boneToModelRot;
+					carry = q * carry;
+					twistRequest[ poseBone->index ] = 0.0f;
+					twistRequestCount[ poseBone->index ] = 0;
+				}
+				if( !poseBone->firstChild )
+				{
+					if( const ae::Quaternion* extentOri = targetOrientations.TryGet( poseBone->index ) )
+					{
+						ikBone->boneToModelRot = *extentOri;
+					}
+				}
+				for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
+				{
+					applyTwist( applyTwist, &ikBones[ poseChild->index ], poseChild, carry );
+				}
+			};
+			applyTwist( applyTwist, &ikBones[ rootBoneIndex ], pose.GetBoneByIndex( rootBoneIndex ), ae::Quaternion::Identity() );
+		}
+
 		// In the second stage, the normal algorithm is applied starting now
 		// from the root and moving outwards to the sub-base. Then, the
 		// algorithm should be applied separately for each chain until the end
@@ -28707,15 +28902,18 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 
 				// Clip the child to the joint's rotational limits before the
 				// parent orientation update, so the parent aligns to the
-				// constrained direction. The reference frame is the
-				// grandparent's tracked orientation composed with the parent's
-				// bind-local rotation, swung so the parent's incoming bone
-				// direction matches the current geometry -- not the parent's
-				// tracked orientation, which already points toward the child.
-				// Hierarchical composition carries twist through the chain and
-				// under rigid pose transforms; the swing correction is a small
-				// arc between nearby directions and never degenerate at or
-				// near a valid pose.
+				// constrained direction. The reference frame is the parent's
+				// tracked orientation, swung so the parent's incoming bone
+				// direction matches the current geometry. The swing is
+				// geometry-driven (the parent's orientation only encodes the
+				// direction toward the child, which the swing correction
+				// replaces), while the twist degree of freedom follows the
+				// parent, so parent twist rotates its children's swing-limit
+				// ellipses and twist applied by the clip feedback below
+				// persists across iterations. At or near a valid pose the
+				// swing correction is a small arc and never degenerate. The
+				// parent's own twist headroom is still measured against the
+				// grandparent-composed frame, matching the twist clamp.
 				if( poseBone->parent )
 				{
 					if( const ae::IKRotationConstraint* constraint = rotationConstraints.TryGet( poseChild->index ) )
@@ -28723,8 +28921,62 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 						const ae::Vec3 gpPos = ikBones[ poseBone->parent->index ].modelPos;
 						const ae::Vec3 currentIncoming = ( ikBone->modelPos - gpPos ).SafeNormalizeCopy();
 						const ae::Quaternion hierOri = ikBones[ poseBone->parent->index ].boneToModelRot * ikBone->bindLocalRot;
-						const ae::Quaternion refOri = hierOri.Rotate( ikBone->selfBindDir ).RotationTo( currentIncoming ) * hierOri;
-						ikChild->modelPos += ClipJoint( ikChild->length, ikBone->modelPos, refOri, ikChild->parentBindDir, ikChild->basisX, ikChild->basisY, ikChild->modelPos, *constraint, ae::Color::AetherPurple() );
+						ae::Quaternion refOri = ikBone->boneToModelRot.Rotate( ikBone->selfBindDir ).RotationTo( currentIncoming ) * ikBone->boneToModelRot;
+						const ae::Vec3 desiredChildPos = ikChild->modelPos;
+						const ae::Vec3 clipOffset = ClipJoint( ikChild->length, ikBone->modelPos, refOri, ikChild->parentBindDir, ikChild->basisX, ikChild->basisY, ikChild->modelPos, *constraint, ae::Color::AetherPurple() );
+						ikChild->modelPos += clipOffset;
+						// The swing-limit ellipse is oriented by the parent's
+						// twist, so a clipped direction can be reachable if the
+						// parent twists the ellipse toward it. Rotate the cone
+						// center toward the desired direction's azimuth around
+						// the parent's bone axis, scaled by how hard the clip
+						// bit, clamped to the parent's twist headroom, and clip
+						// once more against the rotated ellipse. Both factors
+						// are continuous in the target -- the center-to-desired
+						// azimuth (unlike the clipped direction's azimuth,
+						// which jumps when the nearest ellipse point crosses a
+						// quadrant boundary) and the clip magnitude (so twist
+						// fades in as the clip starts to bite) -- keeping the
+						// solved pose free of pops as targets cross constraint
+						// boundaries. Skipped when either projection is
+						// degenerate: a cone centered on the twist axis gains
+						// nothing from twisting, and an axial desired direction
+						// carries no azimuth. Multi-child parents are skipped;
+						// conflicting twist demands from siblings would need
+						// averaging, and those bones still receive twist from
+						// orientation targets above.
+						const float clipThreshold = ikChild->length * 0.001f;
+						if( singleChild && clipOffset.LengthSquared() > clipThreshold * clipThreshold )
+						{
+							const ae::Vec3 twistAxis = ikBone->selfBindDir;
+							const ae::Vec3 desiredLocal = refOri.GetInverse().Rotate( ( desiredChildPos - ikBone->modelPos ).SafeNormalizeCopy() );
+							ae::Vec3 coneProj = ikChild->parentBindDir - twistAxis * ikChild->parentBindDir.Dot( twistAxis );
+							ae::Vec3 desiredProj = desiredLocal - twistAxis * desiredLocal.Dot( twistAxis );
+							if( coneProj.SafeNormalize() > 0.01f && desiredProj.SafeNormalize() > 0.01f )
+							{
+								const float phi = ae::Atan2( twistAxis.Dot( coneProj.Cross( desiredProj ) ), coneProj.Dot( desiredProj ) );
+								const float clipScale = ae::Clip01( clipOffset.Length() / ( ikChild->length * 0.25f ) );
+								float applied = phi * clipScale;
+								if( const ae::IKRotationConstraint* parentConstraint = rotationConstraints.TryGet( poseBone->index ) )
+								{
+									const float current = GetSignedTwist( hierOri, ikBone->boneToModelRot, twistAxis );
+									applied = ae::Clip( current + applied, parentConstraint->twistLimits[ 0 ], parentConstraint->twistLimits[ 1 ] ) - current;
+								}
+								if( ae::Abs( applied ) > 0.001f )
+								{
+									if( debugLines && iterations == iterationCount - 1 )
+									{
+										const float preTwist = GetSignedTwist( hierOri, ikBone->boneToModelRot, twistAxis );
+										DebugDrawTwistDelta( ikBone, poseBone->parent->index, preTwist, applied, ae::Color::PicoBlue() );
+									}
+									const ae::Quaternion q = ae::Quaternion( currentIncoming, applied );
+									ikBone->boneToModelRot = q * ikBone->boneToModelRot;
+									refOri = q * refOri;
+									ikChild->modelPos = desiredChildPos;
+									ikChild->modelPos += ClipJoint( ikChild->length, ikBone->modelPos, refOri, ikChild->parentBindDir, ikChild->basisX, ikChild->basisY, ikChild->modelPos, *constraint, ae::Color::AetherPurple() );
+								}
+							}
+						}
 					}
 				}
 
@@ -28759,35 +29011,29 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		// Enforce twist limits top-down so each bone is clamped against its
 		// parent's final orientation for this iteration. Twist is measured as
 		// the rotation around the bone direction relative to the bind pose.
-		// auto twistIter = [&]( auto&& twistIter, _IKBone* ikBone, const Bone* poseBone ) -> void
-		// {
-		// 	const ae::IKRotationConstraint* constraint = rotationConstraints.TryGet( poseBone->index );
-		// 	if( constraint && poseBone->parent )
-		// 	{
-		// 		const _IKBone* ikParent = &ikBones[ poseBone->parent->index ];
-		// 		const ae::Quaternion ref = ikParent->boneToModelRot * ikBone->bindLocalRot;
-		// 		const ae::Quaternion delta = ref.GetInverse() * ikBone->boneToModelRot;
-		// 		ae::Quaternion twist, swing;
-		// 		delta.GetTwistSwing( ikBone->selfBindDir, &twist, &swing );
-		// 		ae::Vec3 twistAxis;
-		// 		float twistAngle;
-		// 		twist.GetAxisAngle( &twistAxis, &twistAngle );
-		// 		if( twistAxis.Dot( ikBone->selfBindDir ) < 0.0f )
-		// 		{
-		// 			twistAngle = -twistAngle;
-		// 		}
-		// 		const float clipped = ae::Clip( twistAngle, constraint->twistLimits[ 0 ], constraint->twistLimits[ 1 ] );
-		// 		if( clipped != twistAngle )
-		// 		{
-		// 			ikBone->boneToModelRot = ref * ( swing * ae::Quaternion( ikBone->selfBindDir, clipped ) );
-		// 		}
-		// 	}
-		// 	for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
-		// 	{
-		// 		twistIter( twistIter, &ikBones[ poseChild->index ], poseChild );
-		// 	}
-		// };
-		// twistIter( twistIter, &ikBones[ rootBoneIndex ], pose.GetBoneByIndex( rootBoneIndex ) );
+		auto twistIter = [&]( auto&& twistIter, _IKBone* ikBone, const Bone* poseBone ) -> void
+		{
+			const ae::IKRotationConstraint* constraint = rotationConstraints.TryGet( poseBone->index );
+			if( constraint && poseBone->parent )
+			{
+				const _IKBone* ikParent = &ikBones[ poseBone->parent->index ];
+				const ae::Quaternion ref = ikParent->boneToModelRot * ikBone->bindLocalRot;
+				const ae::Quaternion delta = ref.GetInverse() * ikBone->boneToModelRot;
+				ae::Quaternion swing;
+				delta.GetTwistSwing( ikBone->selfBindDir, nullptr, &swing );
+				const float twistAngle = GetSignedTwist( ref, ikBone->boneToModelRot, ikBone->selfBindDir );
+				const float clipped = ae::Clip( twistAngle, constraint->twistLimits[ 0 ], constraint->twistLimits[ 1 ] );
+				if( clipped != twistAngle )
+				{
+					ikBone->boneToModelRot = ref * ( swing * ae::Quaternion( ikBone->selfBindDir, clipped ) );
+				}
+			}
+			for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
+			{
+				twistIter( twistIter, &ikBones[ poseChild->index ], poseChild );
+			}
+		};
+		twistIter( twistIter, &ikBones[ rootBoneIndex ], pose.GetBoneByIndex( rootBoneIndex ) );
 	}
 
 	poseOut->Initialize( &pose );
@@ -28815,6 +29061,41 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				ae::Color::AetherBlue()
 			);
 			debugLines->AddOBB( worldTransform, ( poseOutBone == poseOutRoot ) ? ae::Color::AetherOrange() : ae::Color::AetherYellow() );
+
+			// Twist gauge: the allowed twist range as an arc around the bone
+			// axis at the segment midpoint, a white tick at bind-zero, and a
+			// needle at the current twist (red when clamped at a limit)
+			const ae::IKRotationConstraint* constraint = rotationConstraints.TryGet( poseOutBone->index );
+			if( constraint && poseOutBone->parent )
+			{
+				const _IKBone* ikParent = &ikBones[ poseOutBone->parent->index ];
+				ae::Vec3 axis = ikBone->modelPos - ikParent->modelPos;
+				if( axis.SafeNormalize() > 0.001f )
+				{
+					const ae::Quaternion ref = ikParent->boneToModelRot * ikBone->bindLocalRot;
+					ae::Vec3 zeroDir = ref.Rotate( ikBone->selfBasisX );
+					zeroDir -= axis * zeroDir.Dot( axis );
+					if( zeroDir.SafeNormalize() > 0.001f )
+					{
+						const ae::Vec3 center = ( ikBone->modelPos + ikParent->modelPos ) * 0.5f;
+						const float radius = debugJointScale * 0.6f;
+						const float twist = GetSignedTwist( ref, ikBone->boneToModelRot, ikBone->selfBindDir );
+						DebugDrawTwistArc( center, axis, zeroDir, constraint->twistLimits[ 0 ], constraint->twistLimits[ 1 ], radius, ae::Color::AetherDarkGray() );
+						debugLines->AddLine(
+							debugModelToWorld.TransformPoint3x4( center + zeroDir * ( radius * 0.85f ) ),
+							debugModelToWorld.TransformPoint3x4( center + zeroDir * ( radius * 1.15f ) ),
+							ae::Color::AetherWhite()
+						);
+						const bool atLimit = ( twist <= constraint->twistLimits[ 0 ] + 0.001f ) || ( twist >= constraint->twistLimits[ 1 ] - 0.001f );
+						const ae::Vec3 needleDir = ae::Quaternion( axis, twist ).Rotate( zeroDir );
+						debugLines->AddLine(
+							debugModelToWorld.TransformPoint3x4( center ),
+							debugModelToWorld.TransformPoint3x4( center + needleDir * ( radius * 1.1f ) ),
+							atLimit ? ae::Color::AetherRed() : ae::Color::AetherGreen()
+						);
+					}
+				}
+			}
 		}
 		for( const Bone* poseOutChild = poseOutBone->firstChild; poseOutChild; poseOutChild = poseOutChild->nextSibling )
 		{

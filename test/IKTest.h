@@ -80,8 +80,7 @@ void IKScenarioBuild( uint32_t index, IKScenario* scenarioOut );
 //------------------------------------------------------------------------------
 //! Invariant measurements for a single solved frame. Error fields are zero
 //! when a check passes or is disabled. \p pass covers every enabled check
-//! except twist limits, which are reported separately by \p twistPass because
-//! twist enforcement is currently disabled in ae::IK::Run().
+//! except twist limits, which are reported separately by \p twistPass.
 struct IKFrameReport
 {
 	float maxBoneLengthError = 0.0f;

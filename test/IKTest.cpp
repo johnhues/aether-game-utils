@@ -245,9 +245,8 @@ IKFrameReport IKEvaluateFrame( const IKScenario& scenario, uint32_t frame, const
 		ae::IK::GetLimitBasis( primary, &basisX, &basisY );
 		const ae::Vec3 currentIncoming = ( solvedParent->boneToModel.GetTranslation() - solvedGp->boneToModel.GetTranslation() ).SafeNormalizeCopy();
 		const ae::Vec3 parentSelfBindDir = parentBindRot.GetInverse().Rotate( bindIncoming );
-		const ae::Quaternion parentBindLocalRot = bindGp->boneToModel.GetRotation().GetInverse() * parentBindRot;
-		const ae::Quaternion hierOri = solvedGp->boneToModel.GetRotation() * parentBindLocalRot;
-		const ae::Quaternion refOri = hierOri.Rotate( parentSelfBindDir ).RotationTo( currentIncoming ) * hierOri;
+		const ae::Quaternion solvedParentRot = solvedParent->boneToModel.GetRotation();
+		const ae::Quaternion refOri = solvedParentRot.Rotate( parentSelfBindDir ).RotationTo( currentIncoming ) * solvedParentRot;
 		const ae::Vec3 childDir = refOri.GetInverse().Rotate( ( solvedChild->boneToModel.GetTranslation() - solvedParent->boneToModel.GetTranslation() ).SafeNormalizeCopy() );
 		const float q[ 4 ] =
 		{
@@ -281,8 +280,7 @@ IKFrameReport IKEvaluateFrame( const IKScenario& scenario, uint32_t frame, const
 	}
 
 	// Twist limits, measured as rotation around the bone direction relative to
-	// the parent-space bind orientation. Reported separately: twist clamping
-	// is currently disabled inside ae::IK::Run().
+	// the parent-space bind orientation.
 	for( const auto& pair : scenario.rotationConstraints )
 	{
 		const uint32_t childIndex = pair.key;
@@ -623,6 +621,11 @@ void BuildRotationLimitQuadrants( IKScenario* s )
 	s->staticBones.Append( base->index );
 	s->rotationConstraints.Set( Idx( *s, "j1" ), { .rotationLimits = { 0.15f, 0.15f, 0.15f, 0.15f } } );
 	s->rotationConstraints.Set( Idx( *s, "j2" ), { .rotationLimits = { 0.2f, 0.5f, 0.35f, 0.65f } } );
+	// Joints are clipped against the parent's mid-pass orientation, so the
+	// final pose can land slightly outside the re-derived ellipse when clip
+	// feedback twists the parent afterward (~0.031 observed at 8 iterations;
+	// shrinks with more iterations as the feedback equilibrates)
+	s->rotationLimitTolerance = 0.04f;
 	s->effectorTolerance = -1.0f; // Limits intentionally prevent reaching
 	s->checkConvergenceTrend = false;
 	s->targetFn = []( const IKScenario& s, uint32_t frame, ae::Map< uint32_t, ae::Vec3 >* targets, ae::Map< uint32_t, ae::Quaternion >* )
@@ -654,6 +657,72 @@ void BuildTwistChain( IKScenario* s )
 		const float angle = ae::Sin( t * ae::Pi * 2.0f ) * 2.5f;
 		targets->Set( Idx( s, "b3" ), ae::Vec3( 0.0f, 0.0f, 1.3f ) );
 		orientations->Set( Idx( s, "b3" ), ae::Quaternion( ae::Vec3( 0.0f, 0.0f, 1.0f ), angle ) );
+	};
+}
+
+void BuildPalmsUp( IKScenario* s )
+{
+	s->name = "PalmsUp";
+	s->description = "Hand orientation target rolls past the hand's own twist limit; ancestors must absorb the excess twist within their limits";
+	s->bindPose.Initialize( 8 );
+	const ae::Bone* mount = AddBoneWorld( &s->bindPose, s->bindPose.GetRoot(), "mount", ae::Vec3( 0.0f, 0.0f, 1.0f ) );
+	const ae::Bone* upperArm = AddBoneWorld( &s->bindPose, mount, "upperArm", ae::Vec3( 0.3f, 0.0f, 1.0f ) );
+	const ae::Bone* foreArm = AddBoneWorld( &s->bindPose, upperArm, "foreArm", ae::Vec3( 0.6f, 0.0f, 0.95f ) );
+	AddBoneWorld( &s->bindPose, foreArm, "hand", ae::Vec3( 0.85f, 0.0f, 0.9f ) );
+	s->rootBoneIndex = upperArm->index;
+	s->staticBones.Append( upperArm->index );
+	s->rotationConstraints.Set( Idx( *s, "foreArm" ), { .rotationLimits = { 0.05f, 1.4f, 0.05f, 1.4f }, .twistLimits = { -0.6f, 0.6f } } );
+	s->rotationConstraints.Set( Idx( *s, "hand" ), { .twistLimits = { -0.15f, 0.15f } } );
+	s->checkConvergenceTrend = false; // Rotation limits can trade effector error between iterations
+	s->targetFn = []( const IKScenario& s, uint32_t frame, ae::Map< uint32_t, ae::Vec3 >* targets, ae::Map< uint32_t, ae::Quaternion >* orientations )
+	{
+		// Roll the hand around its own bind bone axis while holding its bind
+		// position. The +-1.0 rad sweep exceeds the hand's 0.15 twist limit but
+		// fits within the chain's combined capacity, so it is only reachable
+		// when ancestors twist.
+		const float t = Cycle01( frame, s.frameCount );
+		const float angle = ae::Sin( t * ae::Pi * 2.0f ) * 1.0f;
+		const ae::Vec3 boneDir = ( ae::Vec3( 0.85f, 0.0f, 0.9f ) - ae::Vec3( 0.6f, 0.0f, 0.95f ) ).SafeNormalizeCopy();
+		targets->Set( Idx( s, "hand" ), ae::Vec3( 0.85f, 0.0f, 0.9f ) );
+		orientations->Set( Idx( s, "hand" ), ae::Quaternion( boneDir, angle ) );
+	};
+}
+
+void BuildClipFeedbackReach( IKScenario* s )
+{
+	s->name = "ClipFeedbackReach";
+	s->description = "Target sweeps azimuthally past a joint's narrow swing quadrant; reachable only when the parent twists the limit ellipse toward it";
+	s->bindPose.Initialize( 8 );
+	const ae::Bone* mount = AddBoneWorld( &s->bindPose, s->bindPose.GetRoot(), "mount", ae::Vec3( 0.0f, 0.0f, 0.5f ) );
+	const ae::Bone* base = AddBoneWorld( &s->bindPose, mount, "base", ae::Vec3( 0.0f, 0.0f, 0.7f ) );
+	const ae::Bone* j1 = AddBoneWorld( &s->bindPose, base, "j1", ae::Vec3( 0.0f, 0.0f, 1.0f ) );
+	const ae::Bone* j2 = AddBoneWorld( &s->bindPose, j1, "j2", ae::Vec3( 0.3f, 0.0f, 1.1f ) );
+	AddBoneWorld( &s->bindPose, j2, "j3", ae::Vec3( 0.6f, 0.0f, 1.2f ) );
+	s->rootBoneIndex = base->index;
+	s->staticBones.Append( base->index );
+	// j1 is locked nearly rigid in swing but free to twist; j2 and j3 are held
+	// close to their bind directions in their parent-anchored frames. Swinging
+	// cannot move the chain azimuthally, so the target circle is only
+	// reachable when clip feedback recruits j1 twist to rotate the whole
+	// assembly around the chain axis.
+	s->rotationConstraints.Set( Idx( *s, "j1" ), { .rotationLimits = { 0.05f, 0.05f, 0.05f, 0.05f }, .twistLimits = { -1.5f, 1.5f } } );
+	s->rotationConstraints.Set( Idx( *s, "j2" ), { .rotationLimits = { 0.1f, 1.2f, 0.1f, 1.2f } } );
+	s->rotationConstraints.Set( Idx( *s, "j3" ), { .rotationLimits = { 0.4f, 0.4f, 0.4f, 0.4f } } );
+	// Joints are clipped against the parent's mid-pass orientation, so the
+	// final pose can land marginally outside the re-derived ellipse when clip
+	// feedback twists the parent afterward (~0.0201 observed)
+	s->rotationLimitTolerance = 0.03f;
+	s->effectorTolerance = 0.05f;
+	s->checkConvergenceTrend = false; // Rotation limits can trade effector error between iterations
+	s->targetFn = []( const IKScenario& s, uint32_t frame, ae::Map< uint32_t, ae::Vec3 >* targets, ae::Map< uint32_t, ae::Quaternion >* )
+	{
+		// Rotate the bind j3 position azimuthally around the vertical axis
+		// through j1. The bind geometry rigidly rotated by j1 twist reaches the
+		// target exactly, so any effector error is a failure to recruit twist.
+		const float t = Cycle01( frame, s.frameCount );
+		const float angle = ae::Sin( t * ae::Pi * 2.0f ) * 1.2f;
+		const ae::Vec2 xy = ae::Vec2( 0.6f, 0.0f ).RotateCopy( angle );
+		targets->Set( Idx( s, "j3" ), ae::Vec3( xy.x, xy.y, 1.2f ) );
 	};
 }
 
@@ -1095,6 +1164,8 @@ const BuildFn kScenarioBuilders[] =
 	BuildThreeBoneUnreachable,
 	BuildRotationLimitQuadrants,
 	BuildTwistChain,
+	BuildPalmsUp,
+	BuildClipFeedbackReach,
 	BuildMultiChildSpine,
 	BuildDistancePair,
 	BuildMidChainSteer,
@@ -1154,9 +1225,7 @@ TEST_CASE( "ik scenario invariants hold when solving from the bind pose", "[ae::
 	}
 }
 
-// Twist clamping is currently commented out inside ae::IK::Run(), so twist
-// violations are expected until it's re-enabled
-TEST_CASE( "ik twist limits are respected", "[ae::IK][!mayfail]" )
+TEST_CASE( "ik twist limits are respected", "[ae::IK]" )
 {
 	for( uint32_t i = 0; i < IKScenarioCount(); i++ )
 	{
