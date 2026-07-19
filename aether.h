@@ -813,6 +813,10 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	Vec3 AddRotationXYCopy( float rotation ) const;
 	float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
 	Vec3 RotateCopy( Vec3 axis, float angle ) const;
+	//! Returns the shortest arc rotation from this vector's direction to
+	//! \p target's direction. Inputs do not need to be normalized.
+	//! Antiparallel directions rotate half a turn around an arbitrary
+	//! perpendicular axis. Returns identity when either vector is near zero.
 	Quaternion RotationTo( Vec3 target ) const;
 	
 	Vec3 Lerp( const Vec3& end, float t ) const;
@@ -15332,10 +15336,20 @@ Vec3 Vec3::RotateCopy( Vec3 axis, float angle ) const
 
 Quaternion Vec3::RotationTo( Vec3 target ) const
 {
-	// @TODO: How does this handle a bad cross product?
-	const ae::Vec3 axis = Cross( target );
-	const float angle = target.GetAngleBetween( *this );
-	return ae::Quaternion( axis, angle );
+	ae::Vec3 from = *this;
+	if( from.SafeNormalize() < 0.0001f || target.SafeNormalize() < 0.0001f )
+	{
+		return ae::Quaternion::Identity();
+	}
+	const float d = from.Dot( target );
+	if( d < -0.9999f )
+	{
+		// Antiparallel: the arc axis is ambiguous and the cross product
+		// vanishes, so make a half turn around any perpendicular axis
+		const ae::Vec3 cardinal = ( ae::Abs( from.x ) < 0.9f ) ? ae::Vec3( 1.0f, 0.0f, 0.0f ) : ae::Vec3( 0.0f, 1.0f, 0.0f );
+		return ae::Quaternion( from.Cross( cardinal ), ae::Pi );
+	}
+	return ae::Quaternion( from.Cross( target ), ae::Acos( ae::Clip( d, -1.0f, 1.0f ) ) );
 }
 
 Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
@@ -28241,8 +28255,9 @@ ae::Quaternion IK::LookAlongAxis( ae::Vec3 localPrimary, ae::Vec3 localSecondary
 		return ae::Quaternion::Identity(); // No direction to align to
 	}
 	// Align localPrimary with worldDir. When they are antiparallel the arc
-	// axis is ambiguous, but the ambiguity is exactly a twist around worldDir,
-	// which the twist correction below re-fixes against the up hint.
+	// axis RotationTo() picks is arbitrary, but the ambiguity is exactly a
+	// twist around worldDir, which the twist correction below re-fixes
+	// against the up hint.
 	const ae::Quaternion q0 = localPrimary.RotationTo( worldDir );
 	// Find where localSecondary ended up after q0
 	const ae::Vec3 rotatedSecondary = q0.Rotate( localSecondary );
@@ -28272,7 +28287,7 @@ ae::Vec3 IK::ClipJoint(
 	ae::Color debugColor )
 {
 	const float (&j0AngleLimits)[ 4 ] = j1RotationConstraint.rotationLimits;
-	const float clipLen = debugLines ? ( bindBoneLength * debugJointScale ) : bindBoneLength;
+	const float clipLen = debugLines ? ( bindBoneLength * 0.25f ) : bindBoneLength;
 	const float q[ 4 ] =
 	{
 		clipLen * ae::Tan( ae::Clip( j0AngleLimits[ 0 ], 0.01f, ae::HalfPi - 0.01f ) ),
@@ -28328,8 +28343,8 @@ ae::Vec3 IK::ClipJoint(
 		debugLines->AddLine( unclippedWorld, unclippedWorldClipped, debugColor );
 		// Limit basis, for authoring ae::IKRotationConstraint::rotationLimits.
 		// +x in red, +y in green, matching quadrant order { +x, +y, -x, -y }
-		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( basisX * clipLen * 0.5f ), ae::Color::Red() );
-		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( basisY * clipLen * 0.5f ), ae::Color::Green() );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( basisX * clipLen * 0.5f ), ae::Color::AetherRed() );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( basisY * clipLen * 0.5f ), ae::Color::AetherGreen() );
 		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( build( q[ 0 ], 0, clipLen ) ), debugColor );
 		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( build( 0, q[ 1 ], clipLen ) ), debugColor );
 		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( build( q[ 2 ], 0, clipLen ) ), debugColor );
@@ -28387,8 +28402,9 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		{
 			const ae::Vec3 p0 = debugModelToWorld.TransformPoint3x4( pose.GetBoneByIndex( target.key )->boneToModel.GetTranslation() );
 			const ae::Vec3 p1 = debugModelToWorld.TransformPoint3x4( target.value );
-			debugLines->AddLine( p0, p1, ae::Color::Red() );
+			debugLines->AddLine( p0, p1, ae::Color::AetherRed() );
 		}
+
 	}
 
 	// (a) The initial configuration of the manipulator and the target
@@ -28399,8 +28415,6 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		ae::Quaternion boneToModelRot; // @TODO: Should this be flipped? It's inverted constantly below
 		const ae::Vec3 parentBindDir; // Direction from parent to this bone, in parent's bind-pose local frame
 		const ae::Vec3 selfBindDir;   // Direction from parent to this bone, in this bone's bind-pose local frame
-		const ae::Vec3 bindDirWorld;  // Direction from parent to this bone, in bind-pose model space
-		const ae::Quaternion bindRot; // Bind-pose boneToModel rotation
 		const ae::Quaternion bindLocalRot; // Bind-pose rotation relative to parent
 		const ae::Vec3 basisX; // Rotation limit basis, perpendicular to parentBindDir (see GetLimitBasis())
 		const ae::Vec3 basisY; // Rotation limit basis, perpendicular to parentBindDir
@@ -28413,8 +28427,6 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		.boneToModelRot = pose.GetBoneByIndex( 0 )->boneToModel.GetRotation(),
 		.parentBindDir = ae::Vec3( 0.0 ),
 		.selfBindDir = ae::Vec3( 0.0 ),
-		.bindDirWorld = ae::Vec3( 0.0 ),
-		.bindRot = bindPose->GetBoneByIndex( 0 )->boneToModel.GetRotation(),
 		.bindLocalRot = ae::Quaternion::Identity(),
 		.basisX = ae::Vec3( 0.0 ),
 		.basisY = ae::Vec3( 0.0 ),
@@ -28441,8 +28453,6 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 			.boneToModelRot = currentBone->boneToModel.GetRotation(),
 			.parentBindDir = localBindDir,
 			.selfBindDir = selfBindDir,
-			.bindDirWorld = worldBindDir,
-			.bindRot = bindRot,
 			.bindLocalRot = parentBindRot.GetInverse() * bindRot,
 			.basisX = basisX,
 			.basisY = basisY,
@@ -28577,7 +28587,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 						debugLines->AddLine(
 							debugModelToWorld.TransformPoint3x4( ikChild->modelPos ),
 							debugModelToWorld.TransformPoint3x4( ikBone->modelPos ),
-							ae::Color::Magenta()
+							ae::Color::AetherDarkGray()
 						);
 					}
 				}
@@ -28697,18 +28707,24 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 
 				// Clip the child to the joint's rotational limits before the
 				// parent orientation update, so the parent aligns to the
-				// constrained direction. The reference frame is the parent's
-				// bind orientation swung by the current incoming direction
-				// (grandparent to parent) -- not the parent's tracked
-				// orientation, which already points toward the child.
+				// constrained direction. The reference frame is the
+				// grandparent's tracked orientation composed with the parent's
+				// bind-local rotation, swung so the parent's incoming bone
+				// direction matches the current geometry -- not the parent's
+				// tracked orientation, which already points toward the child.
+				// Hierarchical composition carries twist through the chain and
+				// under rigid pose transforms; the swing correction is a small
+				// arc between nearby directions and never degenerate at or
+				// near a valid pose.
 				if( poseBone->parent )
 				{
 					if( const ae::IKRotationConstraint* constraint = rotationConstraints.TryGet( poseChild->index ) )
 					{
 						const ae::Vec3 gpPos = ikBones[ poseBone->parent->index ].modelPos;
 						const ae::Vec3 currentIncoming = ( ikBone->modelPos - gpPos ).SafeNormalizeCopy();
-						const ae::Quaternion refOri = ikBone->bindDirWorld.RotationTo( currentIncoming ) * ikBone->bindRot;
-						ikChild->modelPos += ClipJoint( ikChild->length, ikBone->modelPos, refOri, ikChild->parentBindDir, ikChild->basisX, ikChild->basisY, ikChild->modelPos, *constraint, ae::Color::PicoPink() );
+						const ae::Quaternion hierOri = ikBones[ poseBone->parent->index ].boneToModelRot * ikBone->bindLocalRot;
+						const ae::Quaternion refOri = hierOri.Rotate( ikBone->selfBindDir ).RotationTo( currentIncoming ) * hierOri;
+						ikChild->modelPos += ClipJoint( ikChild->length, ikBone->modelPos, refOri, ikChild->parentBindDir, ikChild->basisX, ikChild->basisY, ikChild->modelPos, *constraint, ae::Color::AetherPurple() );
 					}
 				}
 
@@ -28728,10 +28744,11 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 
 				if( debugLines )
 				{
+					const bool isFinalIteration = ( iterations == iterationCount - 1 );
 					debugLines->AddLine(
 						debugModelToWorld.TransformPoint3x4( ikChild->modelPos ),
 						debugModelToWorld.TransformPoint3x4( ikBone->modelPos ),
-						ae::Color::PicoPink()
+						isFinalIteration ? ae::Color::AetherWhite() : ae::Color::AetherDarkGray()
 					);
 				}
 				forwardIter( forwardIter, ikChild, poseChild );
@@ -28785,19 +28802,19 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 			debugLines->AddLine(
 				worldTransform.GetTranslation(),
 				worldTransform.GetTranslation() + worldTransform.GetAxis( 0 ),
-				ae::Color::Red()
+				ae::Color::AetherRed()
 			);
 			debugLines->AddLine(
 				worldTransform.GetTranslation(),
 				worldTransform.GetTranslation() + worldTransform.GetAxis( 1 ),
-				ae::Color::Green()
+				ae::Color::AetherGreen()
 			);
 			debugLines->AddLine(
 				worldTransform.GetTranslation(),
 				worldTransform.GetTranslation() + worldTransform.GetAxis( 2 ),
-				ae::Color::Blue()
+				ae::Color::AetherBlue()
 			);
-			debugLines->AddOBB( worldTransform, ( poseOutBone == poseOutRoot ) ? ae::Color::Orange() : ae::Color::Yellow() );
+			debugLines->AddOBB( worldTransform, ( poseOutBone == poseOutRoot ) ? ae::Color::AetherOrange() : ae::Color::AetherYellow() );
 		}
 		for( const Bone* poseOutChild = poseOutBone->firstChild; poseOutChild; poseOutChild = poseOutChild->nextSibling )
 		{
@@ -28805,6 +28822,30 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		}
 	};
 	finalizeOutPose( finalizeOutPose, &ikBones[ poseOutRoot->index ], poseOutRoot );
+
+	if( debugLines )
+	{
+		for( const _IKDistanceConstraint& constraint : tempDistanceConstraints )
+		{
+			const ae::Vec3 modelPos0 = ikBones[ constraint.idx0 ].modelPos;
+			const ae::Vec3 modelPos1 = ikBones[ constraint.idx1 ].modelPos;
+			ae::Vec3 dir = modelPos1 - modelPos0;
+			const float distance = dir.SafeNormalize();
+			ae::Color color = ae::Color::AetherGreen();
+			const float slack = ( constraint.maxLength - constraint.minLength ) * 0.05f;
+			if( distance <= constraint.minLength + slack )
+			{
+				color = ae::Color::AetherRed(); // Compressed against the constraint
+			}
+			else if( distance >= constraint.maxLength - slack )
+			{
+				color = ae::Color::AetherOrange(); // Stretched against the constraint
+			}
+			const ae::Vec3 p0 = debugModelToWorld.TransformPoint3x4( modelPos0 );
+			const ae::Vec3 p1 = debugModelToWorld.TransformPoint3x4( modelPos1 );
+			debugLines->AddLine( p0, p1, color );
+		}
+	}
 }
 
 //------------------------------------------------------------------------------

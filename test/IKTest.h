@@ -43,6 +43,11 @@ struct IKScenario
 	ae::Str256 description;
 	uint32_t frameCount = 240;
 	uint32_t rootBoneIndex = 1;
+	//! Rigid model transform applied to the input pose root when a solve
+	//! starts from the bind pose, the way a game poses a character in the
+	//! world while ae::IK::bindPose stays in model space. Targets returned by
+	//! targetFn must be in this transformed space.
+	ae::Matrix4 inputTransform = ae::Matrix4::Identity();
 	ae::Skeleton bindPose;
 	ae::Map< uint32_t, ae::IKRotationConstraint > rotationConstraints;
 	ae::Array< ae::IKDistanceConstraint > distanceConstraints;

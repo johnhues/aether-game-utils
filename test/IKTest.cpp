@@ -98,6 +98,12 @@ void GetSubtreeMask( const ae::Skeleton& pose, uint32_t rootBoneIndex, ae::Array
 	markIter( markIter, pose.GetBoneByIndex( rootBoneIndex ) );
 }
 
+void ApplyInputTransform( const IKScenario& scenario, ae::Skeleton* poseOut )
+{
+	const ae::Bone* root = poseOut->GetRoot();
+	poseOut->SetTransform( root, scenario.inputTransform * root->boneToModel );
+}
+
 void SolveFrame( const ae::Tag& tag, const IKScenario& scenario, uint32_t frame, uint32_t iterationCount, const ae::Skeleton& inputPose, ae::Skeleton* solvedOut, ae::DebugLines* debugLines, const ae::Matrix4& debugModelToWorld, float debugJointScale )
 {
 	ae::Map< uint32_t, ae::Vec3 > targets = tag;
@@ -238,7 +244,10 @@ IKFrameReport IKEvaluateFrame( const IKScenario& scenario, uint32_t frame, const
 		ae::Vec3 basisX, basisY;
 		ae::IK::GetLimitBasis( primary, &basisX, &basisY );
 		const ae::Vec3 currentIncoming = ( solvedParent->boneToModel.GetTranslation() - solvedGp->boneToModel.GetTranslation() ).SafeNormalizeCopy();
-		const ae::Quaternion refOri = bindIncoming.RotationTo( currentIncoming ) * parentBindRot;
+		const ae::Vec3 parentSelfBindDir = parentBindRot.GetInverse().Rotate( bindIncoming );
+		const ae::Quaternion parentBindLocalRot = bindGp->boneToModel.GetRotation().GetInverse() * parentBindRot;
+		const ae::Quaternion hierOri = solvedGp->boneToModel.GetRotation() * parentBindLocalRot;
+		const ae::Quaternion refOri = hierOri.Rotate( parentSelfBindDir ).RotationTo( currentIncoming ) * hierOri;
 		const ae::Vec3 childDir = refOri.GetInverse().Rotate( ( solvedChild->boneToModel.GetTranslation() - solvedParent->boneToModel.GetTranslation() ).SafeNormalizeCopy() );
 		const float q[ 4 ] =
 		{
@@ -474,8 +483,9 @@ void IKScenarioRunner::Reset()
 		return; // Not built yet; call Reset() again after IKScenarioBuild()
 	}
 	m_inputPose.Initialize( &m_scenario->bindPose );
-	m_solvedPose.Initialize( &m_scenario->bindPose );
-	m_prevSolvedPose.Initialize( &m_scenario->bindPose );
+	ApplyInputTransform( *m_scenario, &m_inputPose );
+	m_solvedPose.Initialize( &m_inputPose );
+	m_prevSolvedPose.Initialize( &m_inputPose );
 }
 
 IKFrameReport IKScenarioRunner::Step( uint32_t frame, uint32_t iterationCount, IKStartMode startMode, ae::DebugLines* debugLines, const ae::Matrix4& debugModelToWorld, float debugJointScale )
@@ -488,6 +498,7 @@ IKFrameReport IKScenarioRunner::Step( uint32_t frame, uint32_t iterationCount, I
 	if( startMode == IKStartMode::FromBind || !m_hasSolved )
 	{
 		m_inputPose.Initialize( &m_scenario->bindPose );
+		ApplyInputTransform( *m_scenario, &m_inputPose );
 	}
 	else
 	{
@@ -512,6 +523,7 @@ void ResetScenario( IKScenario* s )
 	s->description = "";
 	s->frameCount = defaults.frameCount;
 	s->rootBoneIndex = defaults.rootBoneIndex;
+	s->inputTransform = defaults.inputTransform;
 	s->rotationConstraints.Clear();
 	s->distanceConstraints.Clear();
 	s->targetFn = nullptr;
@@ -840,6 +852,41 @@ void BuildHumanoid( IKScenario* s )
 	};
 }
 
+void BuildBindPoseFixedPoint( IKScenario* s )
+{
+	BuildHumanoid( s );
+	s->name = "BindPoseFixedPoint";
+	s->description = "Humanoid rigidly rotated in the world with effectors pinned at their bind positions; a satisfied pose must be a fixed point of the solve";
+	// The same root transform as examples/17_IK.cpp: flips the clavicle
+	// incoming directions to antiparallel with their bind-space directions,
+	// which breaks any constraint frame derived by a minimal arc between
+	// bind-space and posed-space directions
+	s->inputTransform = ae::Matrix4::RotationY( ae::Pi ) * ae::Matrix4::RotationX( ae::Pi * -0.5f );
+	// The 17_IK right arm limits; at bind every joint sits inside its ellipse
+	s->rotationConstraints.Set( Idx( *s, "armR" ), { .rotationLimits = { 0.23f, 0.23f, 0.23f, 0.23f } } );
+	s->rotationConstraints.Set( Idx( *s, "foreArmR" ), { .rotationLimits = { 1.5f, 0.23f, 0.23f, 1.5f } } );
+	s->rotationConstraints.Set( Idx( *s, "handR" ), { .rotationLimits = { 0.23f, 0.23f, 1.5f, 0.23f } } );
+	s->frameCount = 8;
+	s->effectorTolerance = 0.01f;
+	s->distanceConstraintTolerance = 0.05f;
+	for( uint32_t i = 1; i < s->bindPose.GetBoneCount(); i++ )
+	{
+		s->staticBones.Append( i );
+	}
+	s->targetFn = []( const IKScenario& s, uint32_t frame, ae::Map< uint32_t, ae::Vec3 >* targets, ae::Map< uint32_t, ae::Quaternion >* )
+	{
+		const auto pin = [ &s, targets ]( const char* name )
+		{
+			const uint32_t idx = Idx( s, name );
+			targets->Set( idx, s.inputTransform.TransformPoint3x4( s.bindPose.GetBoneByIndex( idx )->boneToModel.GetTranslation() ) );
+		};
+		pin( "handL" );
+		pin( "handR" );
+		pin( "footL" );
+		pin( "footR" );
+	};
+}
+
 void BuildQuadruped( IKScenario* s )
 {
 	s->name = "Quadruped";
@@ -1053,6 +1100,7 @@ const BuildFn kScenarioBuilders[] =
 	BuildMidChainSteer,
 	BuildMirroredLimits,
 	BuildHumanoid,
+	BuildBindPoseFixedPoint,
 	BuildQuadruped,
 	BuildBird,
 	BuildSpider,
@@ -1145,6 +1193,7 @@ TEST_CASE( "ik effector error is non-increasing with iteration count", "[ae::IK]
 		{
 			ae::Skeleton input = kIKTestTag;
 			input.Initialize( &scenario.bindPose );
+			input.SetTransform( input.GetRoot(), scenario.inputTransform * input.GetRoot()->boneToModel );
 			for( uint32_t frame = 0; frame < scenario.frameCount; frame += 16 )
 			{
 				ae::Str256 message;

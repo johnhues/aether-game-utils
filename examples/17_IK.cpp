@@ -242,7 +242,7 @@ int main()
 	bool fromBindPose = true;
 	bool drawIK = false;
 	int32_t iterCount = 5;
-	float ikJointScale = 0.1f;
+	float ikJointScale = 0.025f;
 	bool demoWindow = false;
 	enum class TestJointId
 	{
