@@ -144,3 +144,64 @@ TEST_CASE( "Replace extension", "[ae::FileSystem]" )
 		require( ae::FileSystem::TraversePath( "" ), "" );
 	}
 }
+
+TEST_CASE( "Has extension", "[ae::FileSystem]" )
+{
+	SECTION( "Basic extension" )
+	{
+		REQUIRE( ae::FileSystem::HasExtension( "a.txt", "txt" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "a.txt", "png" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "a", "txt" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "a.", "" ) );
+	}
+
+	SECTION( "Leading dot in extension" )
+	{
+		REQUIRE( ae::FileSystem::HasExtension( "a.txt", ".txt" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "a.txt", "..txt" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "a.txt", "." ) );
+	}
+
+	SECTION( "Case sensitivity" )
+	{
+		REQUIRE( ae::FileSystem::HasExtension( "a.TXT", "txt" ) );
+		REQUIRE( ae::FileSystem::HasExtension( "a.TXT", ".txt" ) );
+		REQUIRE( ae::FileSystem::HasExtension( "a.TXT", "TXT", true ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "a.TXT", "txt", true ) );
+	}
+
+	SECTION( "Multi-segment extension" )
+	{
+		REQUIRE( ae::FileSystem::HasExtension( "a.tar.gz", "tar.gz" ) );
+		REQUIRE( ae::FileSystem::HasExtension( "a.tar.gz", ".tar.gz" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "a.tar.gz", "gz" ) );
+	}
+
+	SECTION( "Empty internal segments" )
+	{
+		REQUIRE( ae::FileSystem::HasExtension( "a.tar..gz", "tar..gz" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "a.tar..gz", "tar.gz" ) );
+	}
+
+	SECTION( "Dotfiles" )
+	{
+		REQUIRE( ae::FileSystem::HasExtension( ".gitignore", "gitignore" ) );
+		REQUIRE( ae::FileSystem::HasExtension( "dir/.profile", ".profile" ) );
+	}
+
+	SECTION( "Path separators and directories" )
+	{
+		REQUIRE( !ae::FileSystem::HasExtension( "folder.name/file", "name/file" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "folder.name/file", "file" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "folder/file/", "file" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "folder/file\\", "file" ) );
+	}
+
+	SECTION( "Null and empty inputs" )
+	{
+		REQUIRE( !ae::FileSystem::HasExtension( "", "txt" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( nullptr, "txt" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "a.txt", "" ) );
+		REQUIRE( !ae::FileSystem::HasExtension( "a.txt", nullptr ) );
+	}
+}

@@ -73,9 +73,8 @@ const char* kFragShader = R"(
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_INFO( "Initialize" );
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
@@ -83,45 +82,49 @@ int main()
 	ae::Shader shader;
 	ae::Shader shadowShader;
 	ae::FileSystem fs;
-	
+
 	ae::VertexBuffer vertexData;
 	ae::AABB aabb;
 	ae::DebugCamera camera = ae::Axis::Y;
 	ae::DebugLines debugLines = kObjAllocTag;
-	
-	window.Initialize( 800, 600, false, true, true );
-	window.SetTitle( "OBJ Viewer" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-	fs.Initialize( DATA_DIR, "ae", "obj_viewer" );
-	camera.SetDistanceLimits( 0.25f, 10.0f );
-	debugLines.Initialize( 1024 );
-	
-	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
-	shader.SetDepthTest( true );
-	shader.SetDepthWrite( true );
-	shader.SetBlending( true );
-	shader.SetCulling( ae::Culling::CounterclockwiseFront );
-	
-	const char* defines[] { "#define FLAT_COLOR" };
-	shadowShader.Initialize( kVertShader, kFragShader, defines, countof(defines) );
-	shadowShader.SetDepthTest( true );
-	shadowShader.SetDepthWrite( true );
-	shadowShader.SetBlending( true );
-	shadowShader.SetCulling( ae::Culling::CounterclockwiseFront );
-
-	ae::Str256 dataDir;
-	fs.GetRootDir( ae::FileSystem::Root::Data, &dataDir );
-	AE_INFO( "data dir: '#'", dataDir );
-	
-	const ae::File* file = fs.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
-	AE_INFO( "Start loading '#'", file->GetURL() );
-
+	const ae::File* file = nullptr;
 	float spin = 0.0f;
 	float spinVelocity = 0.0f;
 
-	AE_INFO( "Run" );
+	auto Initialize = [&]()
+	{
+		AE_INFO( "Initialize" );
+		window.Initialize( 800, 600, false, true, true );
+		window.SetTitle( "OBJ Viewer" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		fs.Initialize( DATA_DIR, "ae", "obj_viewer" );
+		camera.SetDistanceLimits( 0.25f, 10.0f );
+		debugLines.Initialize( 1024 );
+
+		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
+		shader.SetDepthTest( true );
+		shader.SetDepthWrite( true );
+		shader.SetBlending( true );
+		shader.SetCulling( ae::Culling::CounterclockwiseFront );
+
+		const char* defines[] { "#define FLAT_COLOR" };
+		shadowShader.Initialize( kVertShader, kFragShader, defines, countof(defines) );
+		shadowShader.SetDepthTest( true );
+		shadowShader.SetDepthWrite( true );
+		shadowShader.SetBlending( true );
+		shadowShader.SetCulling( ae::Culling::CounterclockwiseFront );
+
+		ae::Str256 dataDir;
+		fs.GetRootDir( ae::FileSystem::Root::Data, &dataDir );
+		AE_INFO( "data dir: '#'", dataDir );
+
+		file = fs.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
+		AE_INFO( "Start loading '#'", file->GetURL() );
+		AE_INFO( "Run" );
+		return true;
+	};
 	auto Update = [&]()
 	{
 		input.Pump();
@@ -207,16 +210,13 @@ int main()
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	AE_INFO( "Terminate" );
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_INFO( "Terminate" );
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

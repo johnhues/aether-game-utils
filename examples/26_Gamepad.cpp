@@ -33,23 +33,27 @@ const ae::Tag TAG_EXAMPLE = "example";
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_INFO( "Initialize" );
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::DebugLines debug = TAG_EXAMPLE;
-	window.Initialize( 640, 640, false, true, true );
-	window.SetTitle( "Gamepad" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-	debug.Initialize( 16384 );
-	
-	AE_INFO( "Run" );
-	auto Update = [&]()
+
+	auto Initialize = [&]()
+	{
+		AE_INFO( "Initialize" );
+		window.Initialize( 640, 640, false, true, true );
+		window.SetTitle( "Gamepad" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		debug.Initialize( 16384 );
+		AE_INFO( "Run" );
+		return true;
+	};
+	auto Update = [&]() -> bool
 	{
 		input.Pump();
 		render.Activate();
@@ -126,15 +130,13 @@ int main()
 		timeStep.Tick();
 		return !input.quit;
 	};
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() );
-#endif
-
-	AE_INFO( "Terminate" );
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_INFO( "Terminate" );
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

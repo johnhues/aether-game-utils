@@ -428,7 +428,7 @@ int main()
 			const char* jointNames[] = { "None", "Target", "Test 0", "Test 1" };
 			ImGui::ListBox( "Test Joints", (int*)&selTestJoint, jointNames, countof(jointNames), 4 );
 
-			if( ImGui::ListBoxHeader( "Joints" ) )
+			if( ImGui::BeginListBox( "Joints" ) )
 			{
 				for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 				{
@@ -440,7 +440,7 @@ int main()
 					}
 					ImGui::PopID();
 				}
-				ImGui::ListBoxFooter();
+				ImGui::EndListBox();
 			}
 			if( selTestJoint == TestJointId::None )
 			{
@@ -643,31 +643,27 @@ int main()
 			const ae::Vec4 ndcPos = ae::Vec4( input.mouse.position.x / (float)window.GetWidth() * 2.0f - 1.0f, input.mouse.position.y / (float)window.GetHeight() * 2.0f - 1.0f, 0.0f, 1.0f );
 			ae::Vec4 worldPos = projToWorld * ndcPos;
 			worldPos /= worldPos.w;
-			const ae::Vec3 cameraPos = camera.GetPosition();
-			const ae::Vec3 cameraDir = ( worldPos.GetXYZ() - cameraPos ).SafeNormalizeCopy();
-			for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+			const ae::Vec3 rayOrigin = camera.GetPosition();
+			const ae::Vec3 rayDir = ( worldPos.GetXYZ() - rayOrigin ).SafeNormalizeCopy();
+			const ae::Plane plane( ae::Vec3( 0.0f ), ae::Vec3( 0, 0, 1 ) );
+			ae::Vec3 intersection;
+			if( plane.Raycast( rayOrigin, rayDir * 1000.0f, &intersection ) )
 			{
-				const ae::Bone* bone = currentPose.GetBoneByIndex( i );
-				const ae::Vec3 pos = bone->boneToModel.GetTranslation();
-				if( ae::Sphere( pos, ikJointScale * 0.5f ).IntersectRay( cameraPos, cameraDir * 1000.0f ) )
-				{
-					const bool selected = ( selectedJointIndex == i && selTestJoint == TestJointId::None );
-					const ae::Color color = selected ? ae::Color::AetherGreen() : ae::Color::AetherRed();
-					debugLines.AddCircle( pos, -cameraDir, ikJointScale * 0.5f, color, 16 );
-					if( input.mouse.leftButton && input.mousePrev.leftButton )
-					{
-						selectedJointIndex = i;
-						selTestJoint = TestJointId::None;
-					}
-					else if( input.mouse.rightButton && input.mousePrev.rightButton )
-					{
-						selectedJointIndex = i;
-						selTestJoint = TestJointId::None;
-						targets.Remove( selectedJointIndex );
-						targetOrientations.Remove( selectedJointIndex );
-					}
-				}
+				debugLines.AddCircle( intersection, -rayDir, 0.1f, ae::Color::Red(), 16 );
 			}
+
+			// @TODO: Picking
+			// for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+			// {
+			// 	const ae::Bone* bone = currentPose.GetBoneByIndex( i );
+			// 	const ae::Bone* parent = bone->parent;
+			// 	if( parent )
+			// 	{
+			// 		const ae::Vec3 pos = bone->transform.GetTranslation();
+			// 		const ae::Color color = ( ae::Line( rayOrigin, rayOrigin + rayDir ).GetDistance( pos ) < 0.3f ) ? ae::Color::PicoRed() : ae::Color::PicoBlue();
+			// 		debugLines.AddCircle( pos, -rayDir, 0.1f, color, 16 );
+			// 	}
+			// }
 		}
 		
 		if( gizmoOperation && camera.GetMode() == ae::DebugCamera::Mode::None )

@@ -1,4 +1,117 @@
 #include "ae/aeImGui.h"
+#include "imgui_impl_opengl3.h"
+
+static ImGuiKey ae_ToImGuiKey( ae::Key key )
+{
+	switch( key )
+	{
+		case ae::Key::A: return ImGuiKey_A;
+		case ae::Key::B: return ImGuiKey_B;
+		case ae::Key::C: return ImGuiKey_C;
+		case ae::Key::D: return ImGuiKey_D;
+		case ae::Key::E: return ImGuiKey_E;
+		case ae::Key::F: return ImGuiKey_F;
+		case ae::Key::G: return ImGuiKey_G;
+		case ae::Key::H: return ImGuiKey_H;
+		case ae::Key::I: return ImGuiKey_I;
+		case ae::Key::J: return ImGuiKey_J;
+		case ae::Key::K: return ImGuiKey_K;
+		case ae::Key::L: return ImGuiKey_L;
+		case ae::Key::M: return ImGuiKey_M;
+		case ae::Key::N: return ImGuiKey_N;
+		case ae::Key::O: return ImGuiKey_O;
+		case ae::Key::P: return ImGuiKey_P;
+		case ae::Key::Q: return ImGuiKey_Q;
+		case ae::Key::R: return ImGuiKey_R;
+		case ae::Key::S: return ImGuiKey_S;
+		case ae::Key::T: return ImGuiKey_T;
+		case ae::Key::U: return ImGuiKey_U;
+		case ae::Key::V: return ImGuiKey_V;
+		case ae::Key::W: return ImGuiKey_W;
+		case ae::Key::X: return ImGuiKey_X;
+		case ae::Key::Y: return ImGuiKey_Y;
+		case ae::Key::Z: return ImGuiKey_Z;
+		case ae::Key::Num0: return ImGuiKey_0;
+		case ae::Key::Num1: return ImGuiKey_1;
+		case ae::Key::Num2: return ImGuiKey_2;
+		case ae::Key::Num3: return ImGuiKey_3;
+		case ae::Key::Num4: return ImGuiKey_4;
+		case ae::Key::Num5: return ImGuiKey_5;
+		case ae::Key::Num6: return ImGuiKey_6;
+		case ae::Key::Num7: return ImGuiKey_7;
+		case ae::Key::Num8: return ImGuiKey_8;
+		case ae::Key::Num9: return ImGuiKey_9;
+		case ae::Key::Enter: return ImGuiKey_Enter;
+		case ae::Key::Escape: return ImGuiKey_Escape;
+		case ae::Key::Backspace: return ImGuiKey_Backspace;
+		case ae::Key::Tab: return ImGuiKey_Tab;
+		case ae::Key::Space: return ImGuiKey_Space;
+		case ae::Key::Minus: return ImGuiKey_Minus;
+		case ae::Key::Equals: return ImGuiKey_Equal;
+		case ae::Key::LeftBracket: return ImGuiKey_LeftBracket;
+		case ae::Key::RightBracket: return ImGuiKey_RightBracket;
+		case ae::Key::Backslash: return ImGuiKey_Backslash;
+		case ae::Key::Semicolon: return ImGuiKey_Semicolon;
+		case ae::Key::Apostrophe: return ImGuiKey_Apostrophe;
+		case ae::Key::Tilde: return ImGuiKey_GraveAccent;
+		case ae::Key::Comma: return ImGuiKey_Comma;
+		case ae::Key::Period: return ImGuiKey_Period;
+		case ae::Key::Slash: return ImGuiKey_Slash;
+		case ae::Key::CapsLock: return ImGuiKey_CapsLock;
+		case ae::Key::F1: return ImGuiKey_F1;
+		case ae::Key::F2: return ImGuiKey_F2;
+		case ae::Key::F3: return ImGuiKey_F3;
+		case ae::Key::F4: return ImGuiKey_F4;
+		case ae::Key::F5: return ImGuiKey_F5;
+		case ae::Key::F6: return ImGuiKey_F6;
+		case ae::Key::F7: return ImGuiKey_F7;
+		case ae::Key::F8: return ImGuiKey_F8;
+		case ae::Key::F9: return ImGuiKey_F9;
+		case ae::Key::F10: return ImGuiKey_F10;
+		case ae::Key::F11: return ImGuiKey_F11;
+		case ae::Key::F12: return ImGuiKey_F12;
+		case ae::Key::PrintScreen: return ImGuiKey_PrintScreen;
+		case ae::Key::ScrollLock: return ImGuiKey_ScrollLock;
+		case ae::Key::Pause: return ImGuiKey_Pause;
+		case ae::Key::Insert: return ImGuiKey_Insert;
+		case ae::Key::Home: return ImGuiKey_Home;
+		case ae::Key::PageUp: return ImGuiKey_PageUp;
+		case ae::Key::Delete: return ImGuiKey_Delete;
+		case ae::Key::End: return ImGuiKey_End;
+		case ae::Key::PageDown: return ImGuiKey_PageDown;
+		case ae::Key::Right: return ImGuiKey_RightArrow;
+		case ae::Key::Left: return ImGuiKey_LeftArrow;
+		case ae::Key::Down: return ImGuiKey_DownArrow;
+		case ae::Key::Up: return ImGuiKey_UpArrow;
+		case ae::Key::NumLock: return ImGuiKey_NumLock;
+		case ae::Key::NumPadDivide: return ImGuiKey_KeypadDivide;
+		case ae::Key::NumPadMultiply: return ImGuiKey_KeypadMultiply;
+		case ae::Key::NumPadMinus: return ImGuiKey_KeypadSubtract;
+		case ae::Key::NumPadPlus: return ImGuiKey_KeypadAdd;
+		case ae::Key::NumPadEnter: return ImGuiKey_KeypadEnter;
+		case ae::Key::NumPad0: return ImGuiKey_Keypad0;
+		case ae::Key::NumPad1: return ImGuiKey_Keypad1;
+		case ae::Key::NumPad2: return ImGuiKey_Keypad2;
+		case ae::Key::NumPad3: return ImGuiKey_Keypad3;
+		case ae::Key::NumPad4: return ImGuiKey_Keypad4;
+		case ae::Key::NumPad5: return ImGuiKey_Keypad5;
+		case ae::Key::NumPad6: return ImGuiKey_Keypad6;
+		case ae::Key::NumPad7: return ImGuiKey_Keypad7;
+		case ae::Key::NumPad8: return ImGuiKey_Keypad8;
+		case ae::Key::NumPad9: return ImGuiKey_Keypad9;
+		case ae::Key::NumPadPeriod: return ImGuiKey_KeypadDecimal;
+		case ae::Key::NumPadEquals: return ImGuiKey_KeypadEqual;
+		case ae::Key::LeftControl: return ImGuiKey_LeftCtrl;
+		case ae::Key::LeftShift: return ImGuiKey_LeftShift;
+		case ae::Key::LeftAlt: return ImGuiKey_LeftAlt;
+		case ae::Key::LeftSuper: return ImGuiKey_LeftSuper;
+		case ae::Key::RightControl: return ImGuiKey_RightCtrl;
+		case ae::Key::RightShift: return ImGuiKey_RightShift;
+		case ae::Key::RightAlt: return ImGuiKey_RightAlt;
+		case ae::Key::RightSuper: return ImGuiKey_RightSuper;
+		default: return ImGuiKey_None;
+	}
+}
 
 void aeImGui::Initialize()
 {
@@ -76,15 +189,16 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 	ae::Vec2 mousePos( input->mouse.position.x, windowHeight - input->mouse.position.y );
 	io.MousePos = ImVec2( mousePos.x, mousePos.y );
 	
-		// AE_STATIC_ASSERT( kKeyCount <= countof( io.KeysDown ) );
+	// imgui derives KeyShift/KeyCtrl/KeyAlt/KeySuper from the per-key events below
 	for( uint32_t i = 0; i < 256; i++ )
 	{
-		io.KeysDown[ i ] = input->Get( (ae::Key)i );
+		const ae::Key key = (ae::Key)i;
+		const ImGuiKey imKey = ae_ToImGuiKey( key );
+		if( imKey != ImGuiKey_None )
+		{
+			io.AddKeyEvent( imKey, input->Get( key ) );
+		}
 	}
-	io.KeyShift = input->Get( ae::Key::LeftShift ) || input->Get( ae::Key::RightShift );
-	io.KeyCtrl = input->Get( ae::Key::LeftControl ) || input->Get( ae::Key::RightControl );
-	io.KeyAlt = input->Get( ae::Key::LeftAlt ) || input->Get( ae::Key::RightAlt );
-	io.KeySuper = input->Get( ae::Key::LeftSuper ) || input->Get( ae::Key::RightSuper );
 	
 	if( !m_headless )
 	{
@@ -269,31 +383,14 @@ void aeImGui::m_Initialize()
 	{
 		ae::Str32 glVersionStr = "#version ";
 #if _AE_IOS_ || _AE_EMSCRIPTEN_
-		glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
+		glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion(), ae::GLMinorVersion() );
 #else
-		glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
+		glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion(), ae::GLMinorVersion() );
 #endif
 		ImGui_ImplOpenGL3_Init( glVersionStr.c_str() );
 	}
 
 	ImGuiIO& io = ImGui::GetIO();
-	io.KeyMap[ ImGuiKey_Tab ] = (uint32_t)ae::Key::Tab;
-	io.KeyMap[ ImGuiKey_LeftArrow ] = (uint32_t)ae::Key::Left;
-	io.KeyMap[ ImGuiKey_RightArrow ] = (uint32_t)ae::Key::Right;
-	io.KeyMap[ ImGuiKey_UpArrow ] = (uint32_t)ae::Key::Up;
-	io.KeyMap[ ImGuiKey_DownArrow ] = (uint32_t)ae::Key::Down;
-	io.KeyMap[ ImGuiKey_PageUp ] = (uint32_t)ae::Key::PageUp;
-	io.KeyMap[ ImGuiKey_PageDown ] = (uint32_t)ae::Key::PageDown;
-	io.KeyMap[ ImGuiKey_Home ] = (uint32_t)ae::Key::Home;
-	io.KeyMap[ ImGuiKey_End ] = (uint32_t)ae::Key::End;
-	io.KeyMap[ ImGuiKey_Insert ] = (uint32_t)ae::Key::Insert;
-	io.KeyMap[ ImGuiKey_Delete ] = (uint32_t)ae::Key::Delete;
-	io.KeyMap[ ImGuiKey_Backspace ] = (uint32_t)ae::Key::Backspace;
-	io.KeyMap[ ImGuiKey_Space ] = (uint32_t)ae::Key::Space;
-	io.KeyMap[ ImGuiKey_Enter ] = (uint32_t)ae::Key::Enter;
-	io.KeyMap[ ImGuiKey_Escape ] = (uint32_t)ae::Key::Escape;
-	io.KeyMap[ ImGuiKey_KeyPadEnter ] = (uint32_t)ae::Key::NumPadEnter;
-	
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.ConfigWindowsResizeFromEdges = true;
 	io.IniFilename = nullptr; // @TODO: Save layout. Currently disabled because window show states are not saved in the imgui ini file

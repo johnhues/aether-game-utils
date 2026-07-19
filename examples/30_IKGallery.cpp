@@ -57,10 +57,8 @@ struct GallerySpecimen
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_INFO( "Initialize" );
-
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
@@ -70,27 +68,7 @@ int main()
 	ae::DebugLines gridLines = TAG_ALL;
 	ae::RenderTarget viewportTarget;
 	aeImGui ui;
-
-	window.Initialize( 1280, 720, false, true, true );
-	window.SetTitle( "30_IKGallery" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-	debugLines.Initialize( 64 * 1024 );
-	debugLines.SetXRayEnabled( false );
-	gridLines.Initialize( 4096 );
-	ui.Initialize();
-
 	ae::Array< GallerySpecimen* > specimens = TAG_ALL;
-	for( uint32_t i = 0; i < IKScenarioCount(); i++ )
-	{
-		GallerySpecimen* specimen = ae::New< GallerySpecimen >( TAG_ALL, TAG_ALL );
-		IKScenarioBuild( i, &specimen->scenario );
-		specimen->runner.Reset();
-		specimen->offset = ae::Vec3( ( i % kGalleryColumns ) * kGallerySpacing, ( i / kGalleryColumns ) * -kGallerySpacing, 0.0f );
-		specimens.Append( specimen );
-	}
-
 	uint32_t frame = 0;
 	bool playing = true;
 	bool stepOnce = false;
@@ -101,8 +79,38 @@ int main()
 	bool drawConstraints = true;
 	float ikJointScale = 0.05f;
 
-	camera.Reset( specimens[ 0 ]->offset + ae::Vec3( 2.0f * ( kGalleryColumns - 1 ), -2.0f, 1.0f ) * 0.5f, ae::Vec3( 2.5f, 6.0f, 2.5f ) );
-	camera.SetDistanceLimits( 0.25f, 40.0f );
+	auto Initialize = [&]() -> bool
+	{
+		AE_INFO( "Initialize" );
+
+		window.Initialize( 1280, 720, false, true, true );
+		window.SetTitle( "30_IKGallery" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		debugLines.Initialize( 64 * 1024 );
+		debugLines.SetXRayEnabled( false );
+		gridLines.Initialize( 4096 );
+		ui.Initialize();
+
+		for( uint32_t i = 0; i < IKScenarioCount(); i++ )
+		{
+			GallerySpecimen* specimen = ae::New< GallerySpecimen >( TAG_ALL, TAG_ALL );
+			IKScenarioBuild( i, &specimen->scenario );
+			specimen->runner.Reset();
+			const uint32_t specimenColumn = i % kGalleryColumns;
+			const uint32_t specimenRow = i / kGalleryColumns;
+			specimen->offset = ae::Vec3( (float)specimenColumn * kGallerySpacing, (float)specimenRow * -kGallerySpacing, 0.0f );
+			specimens.Append( specimen );
+		}
+		AE_ASSERT( specimens.Length() );
+		selected = 0;
+		camera.Reset( specimens[ 0 ]->offset + ae::Vec3( 2.0f * ( kGalleryColumns - 1 ), -2.0f, 1.0f ) * 0.5f, ae::Vec3( 2.5f, 6.0f, 2.5f ) );
+		camera.SetDistanceLimits( 0.25f, 40.0f );
+
+		AE_INFO( "Run" );
+		return true;
+	};
 
 	auto ResetStats = [&]()
 	{
@@ -116,8 +124,7 @@ int main()
 		}
 	};
 
-	AE_INFO( "Run" );
-	auto Update = [&]()
+	auto Update = [&]() -> bool
 	{
 		const float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
 		input.Pump();
@@ -376,14 +383,16 @@ int main()
 		}
 
 		// Grid
-		for( float g = -2.0f; g <= 2.0f + ( specimens.Length() / kGalleryColumns ) * kGallerySpacing; g += 0.5f )
+		const uint32_t galleryRowCount = ( specimens.Length() + kGalleryColumns - 1 ) / kGalleryColumns;
+		const float galleryRows = (float)galleryRowCount;
+		for( float g = -2.0f; g <= 2.0f + galleryRows * kGallerySpacing; g += 0.5f )
 		{
 			const float xMax = 2.0f + ( kGalleryColumns - 1 ) * kGallerySpacing;
 			gridLines.AddLine( ae::Vec3( -2.0f, -g, 0.0f ), ae::Vec3( xMax, -g, 0.0f ), ae::Color::PicoDarkGray() );
 		}
 		for( float g = -2.0f; g <= 2.0f + ( kGalleryColumns - 1 ) * kGallerySpacing; g += 0.5f )
 		{
-			const float yMin = -( 2.0f + ( specimens.Length() / kGalleryColumns ) * kGallerySpacing );
+			const float yMin = -( 2.0f + galleryRows * kGallerySpacing );
 			gridLines.AddLine( ae::Vec3( g, yMin, 0.0f ), ae::Vec3( g, 2.0f, 0.0f ), ae::Color::PicoDarkGray() );
 		}
 
@@ -411,21 +420,19 @@ int main()
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	AE_INFO( "Terminate" );
-	for( GallerySpecimen* specimen : specimens )
+	auto Terminate = [&]() -> int32_t
 	{
-		ae::Delete( specimen );
-	}
-	specimens.Clear();
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
+		AE_INFO( "Terminate" );
+		for( GallerySpecimen* specimen : specimens )
+		{
+			ae::Delete( specimen );
+		}
+		specimens.Clear();
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
 
-	return 0;
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

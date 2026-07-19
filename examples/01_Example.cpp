@@ -28,21 +28,24 @@
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_LOG( "Initialize" );
 	ae::Window window;
 	ae::GraphicsDevice graphicsDevice;
 	ae::Input input;
 	ae::TimeStep timeStep;
-	
-	window.Initialize( 800, 600, false, true, true );
-	window.SetTitle( "example" );
-	graphicsDevice.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	auto Update = [&]()
+	auto Initialize = [&]()
+	{
+		AE_LOG( "Initialize" );
+		window.Initialize( 800, 600, false, true, true );
+		window.SetTitle( "example" );
+		graphicsDevice.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		return true;
+	};
+	auto Update = [&]() -> bool
 	{
 		input.Pump();
 		graphicsDevice.Activate();
@@ -51,16 +54,13 @@ int main()
 		timeStep.Tick();
 		return !input.quit;
 	};
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	AE_LOG( "Terminate" );
-	input.Terminate();
-	graphicsDevice.Terminate();
-	window.Terminate();
-
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_LOG( "Terminate" );
+		input.Terminate();
+		graphicsDevice.Terminate();
+		window.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

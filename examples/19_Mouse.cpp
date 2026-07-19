@@ -362,7 +362,7 @@ void Program::DrawCursor()
 
 void Program::DrawFolders()
 {
-	const ae::Vec2 currentCursorPos = ae::Vec2( m_input.mouse.position ) * m_window.GetScaleFactor();
+	const ae::Vec2 currentCursorPos = m_input.mouse.position * m_window.GetScaleFactor();
 	const ae::Vec2 dragOffset = currentCursorPos - m_dragStart;
 	for( const Folder* folder : m_currentFolder->subFolders )
 	{
@@ -386,15 +386,22 @@ void Program::DrawFolders()
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
 	Program program;
-	program.Initialize();
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* program ) { ((Program*)program)->Tick(); }, &program, 0, 1 );
-#else
-	while( program.Tick() ) {}
-#endif
-	program.Terminate();
-	return 0;
+	auto Initialize = [&]()
+	{
+		program.Initialize();
+		return true;
+	};
+	auto Update = [&]() -> bool
+	{
+		return program.Tick();
+	};
+	auto Terminate = [&]() -> int32_t
+	{
+		program.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

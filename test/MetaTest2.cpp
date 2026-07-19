@@ -30,6 +30,10 @@
 // 2) To make sure aeMeta registered types are available outside of the module
 // they were registered in.
 
+AE_REGISTER_CLASS( CustomBaseType );
+AE_REGISTER_CLASS( CustomBaseTypeTest );
+AE_REGISTER_CLASS_VAR( CustomBaseTypeTest, testInt );
+
 //------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
@@ -41,34 +45,67 @@ AE_REGISTER_ENUM_CLASS( PlayerState );
 AE_REGISTER_ENUM_CLASS( TestEnumClass );
 
 //------------------------------------------------------------------------------
+// Bit field enums
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM_CLASS( GamePadBitField );
+AE_REGISTER_ENUM_CLASS( SceneFlags );
+
+//------------------------------------------------------------------------------
+// Enum width coverage
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM_CLASS2( EnumInt8 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt8, Min );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt8, NegativeOne );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt8, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt8, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumUInt8 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt8, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt8, One );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt8, HighBit );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt8, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumInt16 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt16, Min );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt16, NegativeOne );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt16, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt16, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumUInt16 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt16, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt16, One );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt16, HighBit );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt16, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumInt32 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt32, Min );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt32, NegativeOne );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt32, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt32, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumUInt32 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt32, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt32, One );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt32, HighBit );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt32, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumInt64 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt64, Min );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt64, NegativeOne );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt64, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumInt64, Max );
+
+AE_REGISTER_ENUM_CLASS2( EnumUInt64 );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt64, Zero );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt64, One );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt64, HighBit );
+AE_REGISTER_ENUM_CLASS2_VALUE( EnumUInt64, Max );
+
+//------------------------------------------------------------------------------
 // Namespace0::Namespace1::NamespaceClass registration
 //------------------------------------------------------------------------------
 AE_FORCE_LINK_CLASS( Namespace0, Namespace1, NamespaceClass );
 AE_REGISTER_NAMESPACECLASS( (Namespace0, Namespace1, NamespaceClass) );
-
-#if AE_DEPRECATED
-AE_REGISTER_NAMESPACECLASS_PROPERTY( (Namespace0, Namespace1, NamespaceClass), someProp0 );
-
-AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp1, v0 );
-AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp1, v1 );
-
-AE_REGISTER_NAMESPACECLASS_PROPERTY( (Namespace0, Namespace1, NamespaceClass), someProp2 );
-AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp2, v0 );
-AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp2, v1 );
-AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), someProp2, v2 );
-
-AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, Namespace1, NamespaceClass), intMember );
-AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( (Namespace0, Namespace1, NamespaceClass), intMember, intProp );
-
-AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, Namespace1, NamespaceClass), boolMember );
-AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( (Namespace0, Namespace1, NamespaceClass), boolMember, boolProp );
-AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), boolMember, boolProp, val );
-
-AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, Namespace1, NamespaceClass), enumTest );
-AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop0, val0 );
-AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop1, val0 );
-AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (Namespace0, Namespace1, NamespaceClass), enumTest, prop1, val1 );
-#endif // AE_DEPRECATED
 
 AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, Namespace1, NamespaceClass), uuidMember );
 
@@ -147,9 +184,31 @@ AE_REGISTER_ENUM_CLASS2_VALUE( A::B::SomeNewEnum, Bloop );
 AE_REGISTER_ENUM_CLASS2_VALUE( A::B::SomeNewEnum, Blop );
 
 //------------------------------------------------------------------------------
-// GamePadBitField
+// OldBitFieldFlags
 //------------------------------------------------------------------------------
-AE_REGISTER_ENUM_CLASS( GamePadBitField );
+AE_REGISTER_BIT_FIELD_ENUM( OldBitFieldFlags );
+AE_REGISTER_ENUM_VALUE_NAME( OldBitFieldFlags, OldBitFieldFlags_None, None );
+AE_REGISTER_ENUM_VALUE_NAME( OldBitFieldFlags, OldBitFieldFlags_Read, Read );
+AE_REGISTER_ENUM_VALUE_NAME( OldBitFieldFlags, OldBitFieldFlags_Write, Write );
+AE_REGISTER_ENUM_VALUE_NAME( OldBitFieldFlags, OldBitFieldFlags_Execute, Execute );
+
+//------------------------------------------------------------------------------
+// OldBitFieldPrefixFlags
+//------------------------------------------------------------------------------
+AE_REGISTER_BIT_FIELD_ENUM_PREFIX( OldBitFieldPrefixFlags, kOBPF_ );
+AE_REGISTER_ENUM_VALUE( OldBitFieldPrefixFlags, kOBPF_None );
+AE_REGISTER_ENUM_VALUE( OldBitFieldPrefixFlags, kOBPF_Read );
+AE_REGISTER_ENUM_VALUE( OldBitFieldPrefixFlags, kOBPF_Write );
+AE_REGISTER_ENUM_VALUE( OldBitFieldPrefixFlags, kOBPF_Execute );
+
+//------------------------------------------------------------------------------
+// NewBitFieldFlags
+//------------------------------------------------------------------------------
+AE_REGISTER_BIT_FIELD_ENUM_CLASS2( NewBitFieldFlags );
+AE_REGISTER_ENUM_CLASS2_VALUE( NewBitFieldFlags, None );
+AE_REGISTER_ENUM_CLASS2_VALUE( NewBitFieldFlags, Read );
+AE_REGISTER_ENUM_CLASS2_VALUE( NewBitFieldFlags, Write );
+AE_REGISTER_ENUM_CLASS2_VALUE( NewBitFieldFlags, Execute );
 
 //------------------------------------------------------------------------------
 // Reference testing
@@ -163,3 +222,4 @@ AE_REGISTER_CLASS_VAR( RefTesterA, refB ); // @NOTE: RefTesterB is registered af
 
 AE_REGISTER_CLASS( RefTesterB );
 AE_REGISTER_CLASS_VAR( RefTesterB, ref );
+AE_REGISTER_CLASS_VAR( RefTesterB, refArray );

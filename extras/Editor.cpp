@@ -25,16 +25,46 @@
 //------------------------------------------------------------------------------
 #include "ae/Editor.h"
 #include "ae/Entity.h"
-// @TODO: Remove ImGui dependencies
-#include "ae/aeImGui.h"
-#include "ImGuizmo.h"
 // @TODO: Remove rapidjson dependency
-#include "imgui.h"
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/error/error.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
+
+//------------------------------------------------------------------------------
+// Registration
+//------------------------------------------------------------------------------
+AE_REGISTER_NAMESPACECLASS( (ae, EditorTypeAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorRequiredAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorVisibilityAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorDisplayNameAttribute) );
+
+//------------------------------------------------------------------------------
+// ae::EditorMesh member functions
+//------------------------------------------------------------------------------
+ae::EditorMesh::EditorMesh( const ae::Tag& tag ) :
+	verts( tag ),
+	indices( tag )
+{}
+
+void ae::EditorMesh::Load( const ae::OBJLoader& file )
+{
+	verts.Clear();
+	indices.Clear();
+	verts.Reserve( file.vertices.Length() );
+	indices.Reserve( file.indices.Length() );
+	for( const auto& vert : file.vertices )
+	{
+		verts.Append( vert.position.GetXYZ() );
+	}
+	for( auto index : file.indices )
+	{
+		indices.Append( index );
+	}
+}
+
+#if !_AE_WASM_
 
 #if _AE_WINDOWS_
 	#pragma warning( disable : 4018 ) // signed/unsigned mismatch
@@ -42,10 +72,10 @@
 	#pragma warning( disable : 4267 ) // conversion from 'size_t' to 'uint32_t'
 #endif
 
-AE_REGISTER_NAMESPACECLASS( (ae, EditorTypeAttribute) );
-AE_REGISTER_NAMESPACECLASS( (ae, EditorRequiredAttribute) );
-AE_REGISTER_NAMESPACECLASS( (ae, EditorVisibilityAttribute) );
-AE_REGISTER_NAMESPACECLASS( (ae, EditorDisplayNameAttribute) );
+// @TODO: Remove ImGui dependencies
+#include "ae/aeImGui.h"
+#include "ImGuizmo.h"
+#include "imgui.h"
 
 namespace ae {
 
@@ -863,7 +893,7 @@ void EditorProgram::Run()
 
 		input.Pump();
 		ui.NewFrame( &render, &input, GetDt() );
-		const ImGuiID mainDockSpace = ImGui::DockSpaceOverViewport( ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode );
+		const ImGuiID mainDockSpace = ImGui::DockSpaceOverViewport( 0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode );
 		static bool s_once = true;
 		if( s_once )
 		{
@@ -984,30 +1014,6 @@ bool EditorProgram::MakeWritable( const char* path ) const
 	SendPluginEvent( plugins, event );
 	
 	return fileSystem.IsWritable( absolutePath.c_str() );
-}
-
-//------------------------------------------------------------------------------
-// ae::EditorMesh member functions
-//------------------------------------------------------------------------------
-ae::EditorMesh::EditorMesh( const ae::Tag& tag ) :
-	verts( tag ),
-	indices( tag )
-{}
-
-void ae::EditorMesh::Load( const ae::OBJLoader& file )
-{
-	verts.Clear();
-	indices.Clear();
-	verts.Reserve( file.vertices.Length() );
-	indices.Reserve( file.indices.Length() );
-	for( const auto& vert : file.vertices )
-	{
-		verts.Append( vert.position.GetXYZ() );
-	}
-	for( auto index : file.indices )
-	{
-		indices.Append( index );
-	}
 }
 
 //------------------------------------------------------------------------------
@@ -1248,7 +1254,7 @@ void Editor::Update()
 				ae::Str32 varName;
 				ae::Str256 varValue;
 				rStream.SerializeUInt32( entity );
-				rStream.SerializeUInt32( typeId );
+				rStream.SerializeObject( typeId );
 				rStream.SerializeString( varName );
 				rStream.SerializeString( varValue );
 				if( rStream.IsValid() )
@@ -2301,8 +2307,8 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 			const ImVec2 selectMin = ImVec2( ae::Min( m_boxSelectStart->x, mousePos.x ), ae::Min( m_boxSelectStart->y, mousePos.y ) );
 			const ImVec2 selectMax = ImVec2( ae::Max( m_boxSelectStart->x, mousePos.x ), ae::Max( m_boxSelectStart->y, mousePos.y ) );
 			const ae::Vec3 fColor = m_selectionColor.GetLinearRGB() * 255.0f;
-			ImGui::GetBackgroundDrawList()->AddRect( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 255 ), 1.0f, ImDrawCornerFlags_All, 1.5f );
-			ImGui::GetBackgroundDrawList()->AddRectFilled( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 100 ), 1.0f, ImDrawCornerFlags_All );
+			ImGui::GetBackgroundDrawList()->AddRect( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 255 ), 1.0f, ImDrawFlags_RoundCornersAll, 1.5f );
+			ImGui::GetBackgroundDrawList()->AddRectFilled( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 100 ), 1.0f, ImDrawFlags_RoundCornersAll );
 		}
 	}
 	
@@ -3151,7 +3157,7 @@ void EditorServer::BroadcastVarChange( const ae::ClassVar* var, const ae::Compon
 	ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
 	wStream.SerializeEnum( EditorNetMsg::Modification );
 	wStream.SerializeUInt32( component->GetEntity() );
-	wStream.SerializeUInt32( ae::GetObjectTypeId( component ) );
+	wStream.SerializeObject( ae::GetObjectTypeId( component ) );
 	wStream.SerializeString( var->GetName() );
 	wStream.SerializeString( var->GetObjectValueAsString( component ).c_str() );
 	if( wStream.IsValid() )
@@ -3976,14 +3982,17 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 	const ae::Vec3 mouseRay = program->GetMouseRay();
 	const ae::Vec3 mouseRaySrc = program->camera.GetPosition();
 
-	// @TODO: Frustum culling
-
 	ae::RaycastParams raycastParams;
 	raycastParams.source = mouseRaySrc;
 	raycastParams.ray = mouseRay * kEditorViewDistance;
-	raycastParams.hitClockwise = false;
-	raycastParams.hitCounterclockwise = true;
-	// raycastParams.debug = &program->debugLines; // Debug only
+	if( program->input.Get( ae::Key::M ) )
+	{
+		raycastParams.maxHits = -1;
+	}
+	ae::CollisionMeshRaycastParams meshParams;
+	meshParams.hitClockwise = false;
+	meshParams.hitCounterclockwise = true;
+	meshParams.debug = ( program->input.Get( ae::Key::N ) || program->input.Get( ae::Key::M ) ) ? &program->debugLines : nullptr; // Debug only
 	ae::RaycastResult result;
 	for( auto& [ _, plugin ] : program->plugins )
 	{
@@ -4001,8 +4010,8 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 				continue;
 			}
 			raycastParams.userData = editorObj;
-			raycastParams.transform = instance->transform;
-			result = instance->m_mesh->collision.Raycast( raycastParams, result );
+			meshParams.transform = instance->transform;
+			result = instance->m_mesh->collision.Raycast( raycastParams, meshParams, result );
 		}
 	}
 	const uint32_t editorObjectCount = m_objects.Length();
@@ -4013,26 +4022,31 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 		{
 			float hitT = INFINITY;
 			ae::Vec3 hitPos( 0.0f );
+			ae::Vec3 normal( 0.0f );
 			const ae::Sphere sphere( editorObj->GetTransform().GetTranslation(), 0.5f );
-			if( sphere.IntersectRay( mouseRaySrc, mouseRay, &hitPos, nullptr, &hitT ) )
+			if( sphere.Raycast( raycastParams.source, raycastParams.ray, &hitPos, &normal, &hitT ) )
 			{
-				raycastParams.userData = nullptr;
-				raycastParams.transform = ae::Matrix4::Identity();
-				ae::RaycastResult sphereResult;
-				auto* hit = &sphereResult.hits.Append( {} );
-				hit->position = hitPos;
-				hit->normal = ( mouseRaySrc - hitPos ).SafeNormalizeCopy();
-				hit->distance = hitT;
-				hit->userData = editorObj;
-				ae::RaycastResult::Accumulate( raycastParams, sphereResult, &result );
+				raycastParams.userData = editorObj;
+				result = ae::Raycast( sphere, raycastParams, result );
 			}
 		}
 	}
 	if( result.hits.Length() )
 	{
+		if( meshParams.debug )
+		{
+			std::string str;
+			for( uint32_t i = 0; i < result.hits.Length(); i++ )
+			{
+				const EditorServerObject* editorObj = result.hits[ i ].userData.Get< const EditorServerObject* >();
+				str += ae::Str256::Format( "Hit # at #, object: #\n", i, result.hits[ i ].distance, editorObj ? editorObj->entity : 0 ).c_str();
+			}
+			ImGui::SetTooltip( "%s", str.c_str() );
+		}
+
 		*hitOut = result.hits[ 0 ].position;
 		*normalOut = result.hits[ 0 ].normal;
-		const EditorServerObject* editorObj = (const EditorServerObject*)result.hits[ 0 ].userData;
+		const EditorServerObject* editorObj = result.hits[ 0 ].userData.Get< const EditorServerObject* >();
 		return editorObj ? editorObj->entity : kNullEntity;
 	}
 
@@ -4344,7 +4358,7 @@ ae::Array< const ae::ClassVar*, 8 > GetTypeVarsByName( const ae::ClassType* type
 {
 	ae::Array< const ae::ClassVar*, 8 > vars;
 	const ae::ClassType* currentType = type;
-	while( currentType && vars.Length() < vars.Size() )
+	while( currentType && vars.Length() < vars.Capacity() )
 	{
 		if( const ae::ClassVar* var = currentType->GetVarByName( name, false ) )
 		{
@@ -4511,3 +4525,4 @@ void Editor::m_Fork()
 }
 
 } // End ae namespace
+#endif // !_AE_WASM_

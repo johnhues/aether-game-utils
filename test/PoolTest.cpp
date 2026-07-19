@@ -37,7 +37,7 @@ TEST_CASE( "Static indices can be allocated and deallocated", "[ae::FreeList (st
 	const uint32_t kNumElements = 10;
 	int32_t objects[ kNumElements ];
 	ae::FreeList< kNumElements > freeList;
-	REQUIRE( freeList.Size() == kNumElements );
+	REQUIRE( freeList.Capacity() == kNumElements );
 	REQUIRE( freeList.GetFirst() < 0 );
 
 	for( uint32_t i = 0; i < kNumElements; i++ )
@@ -111,7 +111,7 @@ TEST_CASE( "can allocate objects after FreeAll", "[ae::FreeList (static)]" )
 {
 	const uint32_t kNumElements = 10;
 	ae::FreeList< kNumElements > freeList;
-	REQUIRE( freeList.Size() == kNumElements );
+	REQUIRE( freeList.Capacity() == kNumElements );
 	REQUIRE( freeList.GetFirst() < 0 );
 	REQUIRE( freeList.Length() == 0 );
 
@@ -149,7 +149,7 @@ TEST_CASE( "Dynamic indices can be allocated and deallocated", "[ae::FreeList (d
 	const uint32_t kNumElements = 10;
 	int32_t objects[ kNumElements ];
 	ae::FreeList<> freeList( TAG_POOL, kNumElements );
-	REQUIRE( freeList.Size() == kNumElements );
+	REQUIRE( freeList.Capacity() == kNumElements );
 	REQUIRE( freeList.GetFirst() < 0 );
 
 	for( uint32_t i = 0; i < kNumElements; i++ )
@@ -229,7 +229,7 @@ TEST_CASE( "Objects can be allocated and deallocated", "[aeObjectPool]" )
 	const uint32_t kNumElements = 10;
 	ae::LifetimeTester* objects[ kNumElements ];
 	ae::ObjectPool< ae::LifetimeTester, kNumElements > pool;
-	REQUIRE( pool.Size() == kNumElements );
+	REQUIRE( pool.Capacity() == kNumElements );
 	REQUIRE( !pool.GetFirst() );
 
 	REQUIRE( ae::LifetimeTester::ctorCount == 0 );
@@ -273,7 +273,7 @@ TEST_CASE( "Objects can be allocated and deallocated", "[aeObjectPool]" )
 
 	SECTION( "can free objects" )
 	{
-		REQUIRE( pool.Length() == pool.Size() );
+		REQUIRE( pool.Length() == pool.Capacity() );
 		REQUIRE( pool.Length() == kNumElements );
 		for( uint32_t i = 0; i < kNumElements; i++ )
 		{
@@ -386,7 +386,7 @@ TEST_CASE( "Pages can be checked for objects", "[aeObjectPool]" )
 
 	const uint32_t kNumElements = 10;
 	ae::ObjectPool< int32_t, kNumElements > pool;
-	REQUIRE( pool.Size() == kNumElements );
+	REQUIRE( pool.Capacity() == kNumElements );
 	REQUIRE( !pool.GetFirst() );
 
 	// for( uint32_t i = 0; i < kNumElements; i++ )
@@ -406,7 +406,7 @@ TEST_CASE( "can allocate objects after clear", "[aeObjectPool]" )
 {
 	const uint32_t kNumElements = 10;
 	ae::ObjectPool< int32_t, kNumElements > pool;
-	REQUIRE( pool.Size() == kNumElements );
+	REQUIRE( pool.Capacity() == kNumElements );
 	REQUIRE( !pool.GetFirst() );
 	REQUIRE( pool.Length() == 0 );
 
@@ -635,8 +635,8 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 	const uint32_t kNumElements = 10;
 	ae::LifetimeTester* objects[ kNumElements ];
 	ae::OpaquePool pool( TAG_POOL, sizeof(ae::LifetimeTester), alignof(ae::LifetimeTester), kNumElements, false );
-	REQUIRE( pool.PageSize() == kNumElements );
-	REQUIRE( pool.Size() == kNumElements );
+	REQUIRE( pool.PageCapacity() == kNumElements );
+	REQUIRE( pool.Capacity() == kNumElements );
 	// REQUIRE( pool.Iterate< int32_t >().begin() == pool.Iterate< int32_t >().end() ); // @TODO: Catch can't convert this to a string
 	REQUIRE( pool.Length() == 0 );
 
@@ -681,7 +681,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 
 	SECTION( "can free objects" )
 	{
-		REQUIRE( pool.Length() == pool.Size() );
+		REQUIRE( pool.Length() == pool.Capacity() );
 		REQUIRE( pool.Length() == kNumElements );
 		for( uint32_t i = 0; i < kNumElements; i++ )
 		{
@@ -794,8 +794,8 @@ TEST_CASE( "aeOpaquePool Pages can be checked for objects", "[aeOpaquePool]" )
 
 	const uint32_t kNumElements = 10;
 	ae::OpaquePool pool( TAG_POOL, sizeof(int32_t), alignof(int32_t), kNumElements, false );
-	REQUIRE( pool.PageSize() == kNumElements );
-	REQUIRE( pool.Size() == kNumElements );
+	REQUIRE( pool.PageCapacity() == kNumElements );
+	REQUIRE( pool.Capacity() == kNumElements );
 	// REQUIRE( pool.Iterate< int32_t >().begin() == pool.Iterate< int32_t >().end() ); // @TODO: Catch can't convert this to a string
 	REQUIRE( pool.Length() == 0 );
 
@@ -816,8 +816,8 @@ TEST_CASE( "aeOpaquePool can allocate objects after clear", "[aeOpaquePool]" )
 {
 	const uint32_t kNumElements = 10;
 	ae::OpaquePool pool( TAG_POOL, sizeof(int32_t), alignof(int32_t), kNumElements, false );
-	REQUIRE( pool.PageSize() == kNumElements );
-	REQUIRE( pool.Size() == kNumElements );
+	REQUIRE( pool.PageCapacity() == kNumElements );
+	REQUIRE( pool.Capacity() == kNumElements );
 	// REQUIRE( pool.Iterate< int32_t >().begin() == pool.Iterate< int32_t >().end() ); // @TODO: Catch can't convert this to a string
 	REQUIRE( pool.Length() == 0 );
 
@@ -840,8 +840,8 @@ TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "
 	const uint32_t kNumElements = 10;
 	ae::LifetimeTester* objects[ kNumElements ];
 	ae::OpaquePool pool( TAG_POOL, sizeof(ae::LifetimeTester), alignof(ae::LifetimeTester), kPageSize, true );
-	REQUIRE( pool.PageSize() == kPageSize );
-	REQUIRE( pool.Size() == INT32_MAX );
+	REQUIRE( pool.PageCapacity() == kPageSize );
+	REQUIRE( pool.Capacity() == INT32_MAX );
 	// REQUIRE( pool.Iterate< ae::LifetimeTester >().begin() == pool.Iterate< ae::LifetimeTester >().end() ); // @TODO: Catch can't convert this to a string
 	REQUIRE( pool.Length() == 0 );
 
@@ -973,7 +973,7 @@ TEST_CASE( "aeOpaquePool can iterate after modification", "[aeOpaquePool]" )
 {
 	const uint32_t kPageSize = 3;
 	ae::OpaquePool pool( TAG_POOL, sizeof(ae::LifetimeTester), alignof(ae::LifetimeTester), kPageSize, true );
-	REQUIRE( pool.PageSize() == kPageSize );
+	REQUIRE( pool.PageCapacity() == kPageSize );
 	REQUIRE( pool.Length() == 0 );
 
 	for( uint32_t i = 0; i < kPageSize; i++ )

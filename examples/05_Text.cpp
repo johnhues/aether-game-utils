@@ -65,9 +65,8 @@ R"(
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_LOG( "Initialize" );
 	ae::FileSystem fileSystem;
 	ae::Window window;
 	ae::GraphicsDevice render;
@@ -77,21 +76,27 @@ int main()
 	ae::Texture2D fontTexture;
 	ae::SpriteFont font;
 	ae::Shader fontShader;
-	fileSystem.Initialize( DATA_DIR, "ae", "text_input" );
-	window.Initialize( 1280, 720, false, true, true );
-	window.SetTitle( "example" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	input.SetTextMode( true );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-	textRender.Initialize( 1, 1024 * 8 );
-	fontShader.Initialize( kVertShader, kFragShader );
-	fontShader.SetBlending( true );
-
-	const ae::File* fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
+	const ae::File* fontFile = nullptr;
 	std::string displayText;
-	input.SetText( "Try typing.\nCopy and paste should also work.\nResizing the window will rearrange the text.\n" );
-	auto Update = [&]()
+
+	auto Initialize = [&]()
+	{
+		AE_LOG( "Initialize" );
+		fileSystem.Initialize( DATA_DIR, "ae", "text_input" );
+		window.Initialize( 1280, 720, false, true, true );
+		window.SetTitle( "example" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		input.SetTextMode( true );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		textRender.Initialize( 1, 1024 * 8 );
+		fontShader.Initialize( kVertShader, kFragShader );
+		fontShader.SetBlending( true );
+		fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
+		input.SetText( "Try typing.\nCopy and paste should also work.\nResizing the window will rearrange the text.\n" );
+		return true;
+	};
+	auto Update = [&]() -> bool
 	{
 		// File loading
 		if( fontFile && fontFile->GetStatus() != ae::File::Status::Pending )
@@ -118,7 +123,7 @@ int main()
 		}
 		displayText = input.GetText();
 		displayText += '_';
-		
+
 		// Render
 		ae::Matrix4 textToNdc = ae::Matrix4::Translation( -1.0f, -1.0f, 0.0f ) * ae::Matrix4::Scaling( ae::Vec3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
 		render.Activate();
@@ -138,18 +143,16 @@ int main()
 		timeStep.Tick();
 		return !input.quit;
 	};
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	AE_LOG( "Terminate" );
-	textRender.Terminate();
-	fontTexture.Terminate();
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-	fileSystem.DestroyAll();
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_LOG( "Terminate" );
+		textRender.Terminate();
+		fontTexture.Terminate();
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		fileSystem.DestroyAll();
+		return 0;
+	};
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

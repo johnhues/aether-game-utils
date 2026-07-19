@@ -63,7 +63,7 @@ private:
 //------------------------------------------------------------------------------
 // ae::ResourceManager class
 //------------------------------------------------------------------------------
-class ResourceManager
+class ResourceManager final
 {
 public:
 	ResourceManager( const ae::Tag& tag );
@@ -137,7 +137,7 @@ bool ResourceManager::Add( ResourceId id, ae::FileSystem::Root rootDir, const ch
 	if( T* resource = (T*)m_Register( ae::GetClassType< T >(), id, rootDir, filePath ) )
 	{
 		resource->m_params = ae::New< P >( m_tag, params );
-		AE_INFO( "Queuing load '#'...", filePath );
+		AE_DEBUG( "Queuing load '#'...", filePath );
 		return true;
 	}
 	return false;

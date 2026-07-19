@@ -41,8 +41,9 @@ public:
 	ae::Vec3 velocity = ae::Vec3( 0.0f );
 	float yaw = 0.0f;
 	float pitch = 0.0f;
-	uint32_t lookTouchId = 0;
-	uint32_t moveTouchId = 0;
+	const ae::Touch* lookTouch = nullptr;
+	const ae::Touch* moveTouch = nullptr;
+	ae::Vec2 lookLastPos = ae::Vec2( 0.0f );
 };
 
 //------------------------------------------------------------------------------
@@ -113,33 +114,39 @@ void Player::Update( SmallEngine* engine )
 	engine->registry.SetEntityName( GetEntity(), "player" );
 
 	// Camera
-	const ae::Array< ae::Touch, ae::kMaxTouches > newTouches = input.GetNewTouches();
+	if( lookTouch && lookTouch->Ended() ) { input.ReleaseTouch( lookTouch ); lookTouch = nullptr; }
+	if( moveTouch && moveTouch->Ended() ) { input.ReleaseTouch( moveTouch ); moveTouch = nullptr; }
+	while( const ae::Touch* t = input.PumpTouches() )
+	{
+		const bool onLeft = ( t->StartPosition().x < window.GetWidth() / 2.0f );
+		if( !moveTouch && onLeft ) { moveTouch = t; }
+		else if( !lookTouch ) { lookTouch = t; lookLastPos = t->StartPosition(); }
+		else { input.ReleaseTouch( t ); }
+	}
 	const float displaySize = ae::Min( window.GetWidth(), window.GetHeight() );
 	const ae::Vec3 forward( cosf( yaw ) * cosf( pitch ), sinf( yaw ) * cosf( pitch ), sinf( pitch ) );
 	const ae::Vec3 right( forward.y, -forward.x, 0.0f );
-	const ae::Touch* lookTouch = input.GetTouchById( lookTouchId );
-	const ae::Touch* moveTouch = input.GetTouchById( moveTouchId );
 	if( input.GetMouseCaptured() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
-	if( !lookTouch ){ const int32_t idx = newTouches.FindFn( [&]( const ae::Touch& t ){ return moveTouch || ( t.startPosition.x >= window.GetWidth() / 2.0f ); } ); if( idx >= 0 ) { lookTouchId = newTouches[ idx ].id; } }
 	yaw -= input.gamepads[ 0 ].rightAnalog.x * 2.0f * dt;
 	pitch += input.gamepads[ 0 ].rightAnalog.y * 2.0f * dt;
 	if( lookTouch )
 	{
-		const ae::Vec2 touchDir = ae::Vec2( lookTouch->movement ) / ( displaySize * 0.35f );
+		const ae::Vec2 pos = lookTouch->Position();
+		const ae::Vec2 touchDir = ( pos - lookLastPos ) / ( displaySize * 0.35f );
+		lookLastPos = pos;
 		yaw -= touchDir.x;
 		pitch += touchDir.y;
 	}
 	pitch = ae::Clip( pitch, -1.0f, 1.0f );
 
 	// Movement input
-	if( !moveTouch ){ const int32_t idx = newTouches.FindFn( [&]( const ae::Touch& t ){ return t.startPosition.x < window.GetWidth() / 2.0f; } ); if( idx >= 0 ) { moveTouchId = newTouches[ idx ].id; } }
 	ae::Vec3 dir = ae::Vec3( 0.0f );
 	dir += ( forward * ( input.Get( ae::Key::W ) - input.Get( ae::Key::S ) ) + right * ( input.Get( ae::Key::D ) - input.Get( ae::Key::A ) ) ).SafeNormalizeCopy() * ( input.Get( ae::Key::LeftShift ) ? 0.333f : 1.0f );
-	dir += ( forward * input.gamepads[ 0 ].leftAnalog.y - right * input.gamepads[ 0 ].leftAnalog.x );
+	dir += ( forward * input.gamepads[ 0 ].leftAnalog.y + right * input.gamepads[ 0 ].leftAnalog.x );
 	if( moveTouch )
 	{
-		const ae::Vec2 touchDir = ( ae::Vec2( moveTouch->position - moveTouch->startPosition ) / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
-		dir += ( forward * touchDir.y - right * touchDir.x );
+		const ae::Vec2 touchDir = ( moveTouch->StartDelta() / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
+		dir += ( forward * touchDir.y + right * touchDir.x );
 	}
 
 	// Physics
@@ -147,7 +154,12 @@ void Player::Update( SmallEngine* engine )
 	velocity.SetXY( ae::DtSlerp( velocity.GetXY(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
 	position += velocity * dt;
 	ae::RaycastResult raycastResult;
-	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m ) { raycastResult = m->meshResource ? m->meshResource->collision.Raycast( ae::RaycastParams{ .transform = m->transform, .source = position, .ray = ae::Vec3( 0.0f, 0.0f, -0.9f ) }, raycastResult ) : raycastResult; } );
+	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m )
+	{
+		const ae::RaycastParams params = { .source = position, .ray = ae::Vec3( 0.0f, 0.0f, -0.9f ) };
+		const ae::CollisionMeshRaycastParams meshParams = { .transform = m->transform };
+		raycastResult = m->meshResource ? m->meshResource->collision.Raycast( params, meshParams, raycastResult ) : raycastResult;
+	} );
 	if( raycastResult.hits.Length() )
 	{
 		position.z = raycastResult.hits[ 0 ].position.z + 0.8f;
@@ -158,7 +170,11 @@ void Player::Update( SmallEngine* engine )
 		velocity.z -= dt * 10.0f;
 	}
 	ae::PushOutInfo pushOutInfo = { .sphere = ae::Sphere( position, 0.6f ), .velocity = velocity };
-	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m ) { pushOutInfo = m->meshResource ? m->meshResource->collision.PushOut( ae::PushOutParams{ .transform = m->transform }, pushOutInfo ) : pushOutInfo; } );
+	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m )
+	{
+		const ae::CollisionMeshPushOutParams meshParams = { .transform = m->transform };
+		pushOutInfo = m->meshResource ? m->meshResource->collision.PushOut( {}, meshParams, pushOutInfo ) : pushOutInfo;
+	} );
 	position = pushOutInfo.sphere.center;
 
 	// Update engine camera
@@ -185,7 +201,9 @@ void Mesh::Initialize( SmallEngine* engine )
 
 void Mesh::Render( SmallEngine* engine )
 {
-	if( meshResource )
+	if( meshResource &&
+		meshResource->status == SmallEngine::MeshResource::Loaded &&
+		engine->defaultTexture.GetTexture() )
 	{
 		ae::UniformList uniformList;
 		engine->GetUniforms( &uniformList );
@@ -253,15 +271,25 @@ void Dialog::Update( SmallEngine* engine )
 int main( int argc, char* argv[] )
 {
 	SmallEngine engine;
-	if( engine.Initialize( argc, argv ) )
+	auto initialize = [ & ]()
 	{
+		if( !engine.Initialize( argc, argv ) )
+		{
+			return false;
+		}
+		engine.meshResources.Set( "bunny.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
+		engine.meshResources.Set( "tall_tree.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
+		engine.meshResources.Set( "BlobCube.obj", ae::New< SmallEngine::MeshResource >( TAG_SMALL_ENGINE ) );
+
 		ae::Str256 levelPath;
 		if( engine.fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
 		{
 			ae::FileSystem::AppendToPath( &levelPath, "example.level" );
 			engine.editor.QueueRead( levelPath.c_str() );
 		}
-		engine.Run();
-	}
-	return 0;
+		return true;
+	};
+	auto update = [ & ]() { return engine.Update(); };
+	auto terminate = [ & ]() { return engine.Terminate(); };
+	return ae::Application( argc, argv, initialize, update, terminate );
 }

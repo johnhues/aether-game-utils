@@ -3,14 +3,11 @@ cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 message("") # Empty line to separate aether logs from others
 message("aether-game-utils")
 message("")
+include(CMakeDependentOption)
+string(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}" AE_IS_ROOT_PROJECT)
 
 # Configuration variables intended for external use
-# AE_LEAN_AND_MEAN mode is disabled when building aether on its own
-if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
-	option(AE_LEAN_AND_MEAN "Disables building tests and examples" OFF)
-else()
-	option(AE_LEAN_AND_MEAN "Disables building tests and examples" ON)
-endif()
+cmake_dependent_option(AE_LEAN_AND_MEAN "Disables building tests and examples. Defaults to ON when included as a subproject" ON "NOT AE_IS_ROOT_PROJECT" OFF)
 option(AE_EXTRAS "Enables experimental utilities" OFF)
 option(AE_DEPRECATED "Enables deprecated features" OFF)
 
@@ -22,12 +19,6 @@ if(NOT ${AE_LEAN_AND_MEAN})
 	if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
 		message(FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there.")
 	endif()
-
-	# Default to RelWithDebInfo when not specified for single-config generators
-	if (NOT GENERATOR_IS_MULTI_CONFIG AND (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
-		set(CMAKE_BUILD_TYPE "RelWithDebInfo")
-	endif()
-	message("Build type: ${CMAKE_BUILD_TYPE}")
 
 	# Enable generation of compile_commands.json for intellisense and clangd
 	set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -44,23 +35,50 @@ endif()
 
 # aether-game-utils project
 project(aether-game-utils LANGUAGES CXX C VERSION 1.0.0)
-
 set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(AE_NAMESPACE aether-game-utils)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 if(NOT ${AE_LEAN_AND_MEAN})
+	set(CMAKE_CXX_STANDARD 17)
+	set(CMAKE_CXX_STANDARD_REQUIRED ON)
+	Include("${AE_ROOT_DIR}/scripts/AddBundle.cmake")
+
 	if(WIN32)
 		add_definitions(-D_UNICODE -DUNICODE) # use unicode
 		add_definitions(-D_CRT_SECURE_NO_WARNINGS) # disable standard library warnings on windows
 	endif()
-	# Disable RTTI (not used in aether)
-	add_compile_options(-fno-rtti)
+	add_compile_options(-fno-rtti) # Disable RTTI (not used in aether)
+
+	message("Generator information:")
+	message("  CMAKE_GENERATOR: ${CMAKE_GENERATOR}")
+	if(CMAKE_CONFIGURATION_TYPES)
+		message("  CMAKE_BUILD_TYPE: Multi-Config")
+	else()
+		# Default to RelWithDebInfo when not specified for single-config generators
+		if((NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
+			set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+		endif()
+		message("  CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+	endif()
+	message("Compiler Information:")
+	message("  CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
+	message("  CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
+	message("  CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
+	message("  CMAKE_C_COMPILER: ${CMAKE_C_COMPILER}")
+	message("  CMAKE_C_COMPILER_ID: ${CMAKE_C_COMPILER_ID}")
+	message("  CMAKE_C_COMPILER_VERSION: ${CMAKE_C_COMPILER_VERSION}")
 endif()
-Include("${AE_ROOT_DIR}/AddBundle.cmake")
+
+# Platform classification
+if(IOS OR EMSCRIPTEN OR ANDROID)
+	set(_ae_desktop_default OFF)
+else()
+	set(_ae_desktop_default ON)
+endif()
+option(AE_DESKTOP "Native desktop platform (macOS/Linux/Windows)" ${_ae_desktop_default})
 
 # OpenGL dependency
-if (IOS_TOOLCHAIN_HAS_RUN)
+if (IOS)
 	set(OPENGL_FRAMEWORK "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
 	if (EXISTS ${OPENGL_FRAMEWORK})
 		message("Found OpenGLES")
@@ -77,7 +95,7 @@ else()
 endif()
 
 # OpenAL dependency
-if (IOS_TOOLCHAIN_HAS_RUN)
+if (IOS)
 	set(OPENAL_LIBRARY "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenAL.framework")
 	if (EXISTS ${OPENAL_LIBRARY})
 		message("Found OpenAL")
@@ -85,16 +103,6 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 	else()
 		message(SEND_ERROR "Could not find OpenAL")
 	endif()
-endif()
-
-if(NOT ${AE_LEAN_AND_MEAN})
-	message("Compiler Information:")
-	message("  CMAKE_CXX_COMPILER: ${CMAKE_CXX_COMPILER}")
-	message("  CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
-	message("  CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
-	message("  CMAKE_C_COMPILER: ${CMAKE_C_COMPILER}")
-	message("  CMAKE_C_COMPILER_ID: ${CMAKE_C_COMPILER_ID}")
-	message("  CMAKE_C_COMPILER_VERSION: ${CMAKE_C_COMPILER_VERSION}")
 endif()
 
 message("")
@@ -128,10 +136,17 @@ function(add_ae_library NAME LIB_TYPE)
 			target_compile_options(${NAME} PUBLIC -fmodules -fcxx-modules)
 		else()
 			find_library(AE_OPENAL_LIBRARY OpenAL REQUIRED)
-			find_library(AE_CARBON_LIBRARY Carbon REQUIRED)
-			find_library(AE_APPKIT_LIBRARY AppKit REQUIRED)
 			find_library(AE_GAMECONTROLLER_LIBRARY GameController REQUIRED)
-			target_link_libraries(${NAME} PUBLIC ${AE_OPENAL_LIBRARY} ${AE_CARBON_LIBRARY} ${AE_APPKIT_LIBRARY} ${AE_GAMECONTROLLER_LIBRARY})
+			if(IOS)
+				find_library(AE_UIKIT_LIBRARY UIKit REQUIRED)
+				find_library(AE_QUARTZCORE_LIBRARY QuartzCore REQUIRED)
+				find_library(AE_FOUNDATION_LIBRARY Foundation REQUIRED)
+				target_link_libraries(${NAME} PUBLIC ${AE_OPENAL_LIBRARY} ${AE_GAMECONTROLLER_LIBRARY} ${AE_UIKIT_LIBRARY} ${AE_QUARTZCORE_LIBRARY} ${AE_FOUNDATION_LIBRARY})
+			else()
+				find_library(AE_CARBON_LIBRARY Carbon REQUIRED)
+				find_library(AE_APPKIT_LIBRARY AppKit REQUIRED)
+				target_link_libraries(${NAME} PUBLIC ${AE_OPENAL_LIBRARY} ${AE_CARBON_LIBRARY} ${AE_APPKIT_LIBRARY} ${AE_GAMECONTROLLER_LIBRARY})
+			endif()
 		endif()
 		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_SKIP_INSTALL "YES") # See Professional CMake 24.7. Creating And Exporting Archives
 	else()

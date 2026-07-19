@@ -45,11 +45,10 @@ endif()
 # unit test executable
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
 add_executable(test ${TEST_SOURCES})
-if(CMAKE_GENERATOR STREQUAL Xcode)
+if(CMAKE_GENERATOR STREQUAL Xcode AND NOT IOS)
 	add_custom_command(TARGET test
 		POST_BUILD
 		COMMAND codesign --force -s - "$<TARGET_FILE:test>"
-		DEPENDS test
 		VERBATIM
 	)
 elseif(EMSCRIPTEN)

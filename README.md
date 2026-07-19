@@ -1,20 +1,22 @@
 <p align="center">
-	<img src="https://github.com/johnhues/aether-game-utils/blob/master/examples/data/Icon.png?raw=true" width="250">
+	<img src="https://github.com/johnhues/aether-game-utils/blob/main/examples/data/Icon.png?raw=true" width="250">
 </p>
 
 # aether game utils
-[![Windows](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml)
-[![MacOS](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml)
 [![Emscripten](https://github.com/johnhues/aether-game-utils/actions/workflows/emscripten.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/emscripten.yml)
+[![MacOS](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml)
+[![Windows](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml)
 [![Ubuntu clang](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml)
 [![Ubuntu g++](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml)
+[![Ubuntu MinGW](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_mingw.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_mingw.yml)
+[![Ubuntu Deprecated](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_deprecated.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_deprecated.yml)
 
-[`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) is a single-header collection of cross platform C++ utilities for quickly creating small games. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:
+[`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) is a single-header collection of cross platform C++ utilities for quickly creating small games. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:
 * Providing useful and performant utilities tailored for game development
 * Providing utilities that naturally conform to game development best practices
 * Not overstepping or emposing a particular game engine architecture
 
-Modules and utilities include:
+# Documentation
 * [Allocation](docs/Allocation.md)
 * [C++ reflection](docs/Meta.md)
 * [Data structures](docs/DataStructures.md)
@@ -30,7 +32,7 @@ Modules and utilities include:
 * Sockets
 
 # Getting Started
-The following are instructions to get started with aether-game-utils. This example has first person arrow key controls, textured geometry and basic kinematic physics. C++17 or later is required. A CMakeLists.txt file is provided for building examples and tests, but is not needed or recommended for including in your own project. Instead [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) is designed to be included as a single header file. Neither exceptions nor RTTI are used.
+The following are instructions to get started with aether-game-utils. This example has first person arrow key controls, textured geometry and basic kinematic physics. C++17 or later is required. A CMakeLists.txt file is provided for building examples and tests, but is not needed or recommended for including in your own project. Instead [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) is designed to be included as a single header file. Neither exceptions nor RTTI are used.
 
 <p align="center">
 	<a href=https://johnhues.github.io/aether-game-utils/examples/22_read_me/>
@@ -39,11 +41,11 @@ The following are instructions to get started with aether-game-utils. This examp
 </p>
 <p align="center">
 	<a href=https://johnhues.github.io/aether-game-utils/examples/22_read_me/>
-		<img src="https://github.com/johnhues/aether-game-utils/blob/master/examples/data/example.png?raw=true" width="65%">
+		<img src="https://github.com/johnhues/aether-game-utils/blob/main/examples/data/example.png?raw=true" width="65%">
 	</a>
 </p>
 
-This example is a single source file which only includes [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) (which handles linking the required system libraries).
+This example is a single source file which only includes [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) (which handles linking the required system libraries).
 
 ```cpp
 // main.cpp (or main.mm on Mac)
@@ -228,19 +230,19 @@ const char* kFragmentShader = R"(
 ```
 
 ## Building and Running on Mac
-Create a file called `main.mm` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.tga) to the same folder. Open the `Terminal` application. Type `cd` (with a space after it) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
+Create a file called `main.mm` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data/level.tga) to the same folder. Open the `Terminal` application. Type `cd` (with a space after it) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
 ```
 clang++ -std=c++17 -fmodules -fcxx-modules main.mm && ./a.out
 ```
 
 ## Building and Running on Windows
-Create a file called `main.cpp` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.tga) to the same folder. With Visual Studio installed, right click inside the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
+Create a file called `main.cpp` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data/level.tga) to the same folder. With Visual Studio installed, right click inside the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
 ```
 cl /std:c++17 -D_UNICODE -DUNICODE main.cpp
 ```
 
 ## Building and Running with Emscripten
-Create a file called `main.cpp` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.obj), [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.tga) and [index.html](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/index.html) to the same folder. Change to the directory with the downloaded files. With `emsdk` activated run:
+Create a file called `main.cpp` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data/level.obj), [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data/level.tga) and [index.html](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/index.html) to the same folder. Change to the directory with the downloaded files. With `emsdk` activated run:
 ```
 emcc -s MIN_WEBGL_VERSION=3 -s MAX_WEBGL_VERSION=3 -s ALLOW_MEMORY_GROWTH main.cpp -o index.js
 ```
@@ -249,17 +251,30 @@ You can run and play the result of the above command by running this in the same
 emrun index.html
 ```
 
+## Running an Example on iOS
+The CMake-built examples can be deployed to a connected iOS device. Make sure your device is setup for development, trusted, connected, and unlocked. Set the following `AE_APPLE_DEVELOPMENT_TEAM` to your Apple "Organizational Unit" ID and `AE_IOS_DEVICE` to the device's UUID (find it with `xcrun devicectl list devices`). The following configures, builds, installs, launches (held at entry), then attaches lldb:
+```
+export AE_APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX
+export AE_IOS_DEVICE=XXXXXXXX-XXXXXXXXXXXXXXXX
+TARGET=06_triangle && \
+  cmake --preset ios && \
+  cmake --build --preset ios-debug --target $TARGET && \
+  scripts/ios-install.sh $TARGET && \
+  scripts/ios-launch.sh --console --start-paused $TARGET && \
+  scripts/ios-debug.sh $TARGET
+```
+Device stdout/stderr is captured by `ios-launch.sh --console` into `/tmp/aether-ios-console.log`. Follow it in a second terminal:
+```
+tail -F /tmp/aether-ios-console.log
+```
+
 ## Building on Linux
 All utilities are currently supported on Linux except for windowing and graphics. Full windowing and graphics support is planned.
 
 # Games using aether game utils
-[Bella Lunaux: The Case of the Diamond Panther Tiara](https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html)
+[Bella Lunaux: The Case of the Diamond Panther Tiara](https://johnhues.itch.io/bella-lunaux-tiara)
 
-<a href="https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
-
-[Play in Browser](https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html)
-
-[See on Itch.io](https://johnhues.itch.io/bella-lunaux-tiara)
+<a href="https://johnhues.itch.io/bella-lunaux-tiara"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
 
 # Dependencies
 * [Catch2](https://github.com/catchorg/Catch2) (Test framework)

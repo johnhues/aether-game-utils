@@ -31,7 +31,7 @@ const ae::Tag TAG_TEST = "test";
 TEST_CASE( "hash map elements can be set and retrieved", "[ae::HashMap" AE_HASH_N "]" )
 {
 	ae::HashMap< uint32_t, 10, aeHashN > map;
-	REQUIRE( map.Size() == 10 );
+	REQUIRE( map.Capacity() == 10 );
 	for( uint32_t i = 0; i < 10; i++ )
 	{
 		REQUIRE( map.Set( 100 + i, i ) );
@@ -109,7 +109,7 @@ TEST_CASE( "hash map elements can be set and retrieved", "[ae::HashMap" AE_HASH_
 TEST_CASE( "hash map handles collisions", "[ae::HashMap" AE_HASH_N "]" )
 {
 	ae::HashMap< uint32_t, 5, aeHashN > map;
-	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Capacity() == 5 );
 	REQUIRE( map.Set( -2, 776 ) );
 	REQUIRE( map.Set( 4, 777 ) );
 	REQUIRE( map.Set( 14, 778 ) );
@@ -177,7 +177,7 @@ TEST_CASE( "hash map handles collisions", "[ae::HashMap" AE_HASH_N "]" )
 TEST_CASE( "hash map compaction", "[ae::HashMap" AE_HASH_N "]" )
 {
 	ae::HashMap< uint32_t, 5, aeHashN > map;
-	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Capacity() == 5 );
 	REQUIRE( map.Set( 0, 0 ) );
 	REQUIRE( map.Set( 1, 1 ) );
 	REQUIRE( map.Set( 5, 5 ) );
@@ -195,7 +195,7 @@ TEST_CASE( "hash map compaction", "[ae::HashMap" AE_HASH_N "]" )
 TEST_CASE( "hash map compaction 2", "[ae::HashMap" AE_HASH_N "]" )
 {
 	ae::HashMap< uint32_t, 5, aeHashN > map;
-	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Capacity() == 5 );
 	REQUIRE( map.Set( 0, 0 ) );
 	REQUIRE( map.Set( 1, 0 ) );
 	REQUIRE( map.Set( 6, 0 ) );
@@ -213,7 +213,7 @@ TEST_CASE( "hash map compaction 2", "[ae::HashMap" AE_HASH_N "]" )
 TEST_CASE( "hash map compaction (wrapping)", "[ae::HashMap" AE_HASH_N "]" )
 {
 	ae::HashMap< uint32_t, 5, aeHashN > map;
-	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Capacity() == 5 );
 	REQUIRE( map.Set( 3, 0 ) );
 	REQUIRE( map.Set( 4, 0 ) );
 	REQUIRE( map.Set( 8, 0 ) );
@@ -231,7 +231,7 @@ TEST_CASE( "hash map compaction (wrapping)", "[ae::HashMap" AE_HASH_N "]" )
 TEST_CASE( "hash map compaction (wrapping 2)", "[ae::HashMap" AE_HASH_N "]" )
 {
 	ae::HashMap< uint32_t, 5, aeHashN > map;
-	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Capacity() == 5 );
 	REQUIRE( map.Set( 3, 0 ) );
 	REQUIRE( map.Set( 4, 0 ) );
 	REQUIRE( map.Set( 9, 0 ) );
@@ -249,7 +249,7 @@ TEST_CASE( "hash map compaction (wrapping 2)", "[ae::HashMap" AE_HASH_N "]" )
 TEST_CASE( "hash map compaction (wrapping 3)", "[ae::HashMap" AE_HASH_N "]" )
 {
 	ae::HashMap< uint32_t, 5, aeHashN > map;
-	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Capacity() == 5 );
 	REQUIRE( map.Set( 3, 0 ) );
 	REQUIRE( map.Set( 4, 0 ) );
 	REQUIRE( map.Set( 0, 0 ) );
@@ -324,7 +324,7 @@ struct BadHash
 TEST_CASE( "map handles collisions", "[ae::Map" AE_HASH_N "]" )
 {
 	ae::Map< BadHash< aeHashUInt >, char, 5, aeHashN > map;
-	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Capacity() == 5 );
 	REQUIRE( map.Set( -2, 'A' ) );
 	REQUIRE( map.Set( 4, 'B' ) );
 	REQUIRE( map.Set( 14, 'C' ) );
@@ -389,7 +389,7 @@ TEST_CASE( "can access elements after reserve", "[ae::HashMap" AE_HASH_N "]" )
 	REQUIRE( map.Length() == 100 );
 	map.Reserve( 1000 );
 	REQUIRE( map.Length() == 100 );
-	REQUIRE( map.Size() >= 1000 );
+	REQUIRE( map.Capacity() >= 1000 );
 
 	SECTION( "can retrieve previously set values" )
 	{
@@ -412,11 +412,11 @@ TEST_CASE( "copy construct static hash map", "[ae::HashMap" AE_HASH_N "]" )
 	REQUIRE( map0.Length() == 100 );
 	map0.Reserve( 100 );
 	REQUIRE( map0.Length() == 100 );
-	REQUIRE( map0.Size() == 128 );
+	REQUIRE( map0.Capacity() == 128 );
 	
 	ae::HashMap< uint32_t, 128, aeHashN > map1 = map0;
 	REQUIRE( map1.Length() == 100 );
-	REQUIRE( map1.Size() == 128 );
+	REQUIRE( map1.Capacity() == 128 );
 
 	SECTION( "can retrieve previously set values" )
 	{
@@ -442,14 +442,14 @@ TEST_CASE( "copy assign static hash map", "[ae::HashMap" AE_HASH_N "]" )
 	REQUIRE( map0.Length() == 100 );
 	map0.Reserve( 100 );
 	REQUIRE( map0.Length() == 100 );
-	REQUIRE( map0.Size() == 128 );
+	REQUIRE( map0.Capacity() == 128 );
 	
 	ae::HashMap< uint32_t, 128, aeHashN > map1;
 	REQUIRE( map1.Length() == 0 );
-	REQUIRE( map1.Size() == 128 );
+	REQUIRE( map1.Capacity() == 128 );
 	map1 = map0;
 	REQUIRE( map1.Length() == 100 );
-	REQUIRE( map1.Size() == 128 );
+	REQUIRE( map1.Capacity() == 128 );
 
 	SECTION( "can retrieve previously set values" )
 	{
@@ -473,19 +473,19 @@ TEST_CASE( "can access elements after assignment of same size map", "[ae::HashMa
 		REQUIRE( map0.Set( 1000 + i, i ) );
 	}
 	REQUIRE( map0.Length() == 100 );
-	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map0.Capacity() >= 100 );
 	
 	ae::HashMap< uint32_t, 0, aeHashN > map1 = TAG_TEST;
 	REQUIRE( map1.Length() == 0 );
-	REQUIRE( map1.Size() == 0 );
-	map1.Reserve( map0.Size() );
+	REQUIRE( map1.Capacity() == 0 );
+	map1.Reserve( map0.Capacity() );
 	REQUIRE( map1.Length() == 0 );
-	REQUIRE( map1.Size() == map0.Size() );
+	REQUIRE( map1.Capacity() == map0.Capacity() );
 	map1 = map0;
 	REQUIRE( map0.Length() == 100 );
-	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map0.Capacity() >= 100 );
 	REQUIRE( map1.Length() == 100 );
-	REQUIRE( map1.Size() >= 100 );
+	REQUIRE( map1.Capacity() >= 100 );
 
 	SECTION( "can retrieve previously set values" )
 	{
@@ -510,19 +510,19 @@ TEST_CASE( "can access elements after assignment of smaller map", "[ae::HashMap"
 		REQUIRE( map0.Set( 1000 + i, i ) );
 	}
 	REQUIRE( map0.Length() == 100 );
-	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map0.Capacity() >= 100 );
 	REQUIRE( map1.Length() == 0 );
-	REQUIRE( map1.Size() == 0 );
+	REQUIRE( map1.Capacity() == 0 );
 	
 	map1.Reserve( 1000 );
 	REQUIRE( map1.Length() == 0 );
-	REQUIRE( map1.Size() >= 1000 );
+	REQUIRE( map1.Capacity() >= 1000 );
 	
 	map1 = map0;
 	REQUIRE( map0.Length() == 100 );
-	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map0.Capacity() >= 100 );
 	REQUIRE( map1.Length() == 100 );
-	REQUIRE( map1.Size() >= 100 );
+	REQUIRE( map1.Capacity() >= 100 );
 
 	SECTION( "can retrieve previously set values" )
 	{
@@ -547,19 +547,19 @@ TEST_CASE( "can access elements after assignment of bigger map", "[ae::HashMap" 
 		REQUIRE( map0.Set( 1000 + i, i ) );
 	}
 	REQUIRE( map0.Length() == 100 );
-	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map0.Capacity() >= 100 );
 	REQUIRE( map1.Length() == 0 );
-	REQUIRE( map1.Size() == 0 );
+	REQUIRE( map1.Capacity() == 0 );
 	
 	map1.Reserve( 10 );
 	REQUIRE( map1.Length() == 0 );
-	REQUIRE( map1.Size() >= 10 );
+	REQUIRE( map1.Capacity() >= 10 );
 	
 	map1 = map0;
 	REQUIRE( map0.Length() == 100 );
-	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map0.Capacity() >= 100 );
 	REQUIRE( map1.Length() == 100 );
-	REQUIRE( map1.Size() >= 100 );
+	REQUIRE( map1.Capacity() >= 100 );
 
 	SECTION( "can retrieve previously set values" )
 	{

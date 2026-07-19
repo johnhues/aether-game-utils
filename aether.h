@@ -62,6 +62,8 @@
 #define _AE_MINGW_ 0
 #define _AE_LINUX_ 0
 #define _AE_EMSCRIPTEN_ 0
+#define _AE_WASM_ 0
+#define _AE_WASI_ 0
 #if defined(__EMSCRIPTEN__)
 	#undef _AE_EMSCRIPTEN_
 	#define _AE_EMSCRIPTEN_ 1
@@ -91,6 +93,14 @@
 #elif defined(__linux__)
 	#undef _AE_LINUX_
 	#define _AE_LINUX_ 1
+#elif defined(__wasi__)
+	#undef _AE_WASM_
+	#define _AE_WASM_ 1
+	#undef _AE_WASI_
+	#define _AE_WASI_ 1
+#elif defined(__wasm__)
+	#undef _AE_WASM_
+	#define _AE_WASM_ 1
 #else
 	#error "Platform not supported"
 #endif
@@ -169,11 +179,22 @@
 #endif
 
 //------------------------------------------------------------------------------
+// AE_OPENGL_CUSTOM_HEADER define
+//------------------------------------------------------------------------------
+//! Define as the path to a custom OpenGL header if you want to use a specific
+//! header other than the default platform headers. Note that if you need to
+//! '#define GL_GLEXT_PROTOTYPES 1' etc. for your custom header, an option is
+//! adding it to your AE_CONFIG_FILE.
+#ifndef AE_OPENGL_CUSTOM_HEADER
+	#define AE_OPENGL_CUSTOM_HEADER 0 // <GL/glcorearb.h>
+#endif
+
+//------------------------------------------------------------------------------
 // AE_MAX_SCRATCH_BYTES_CONFIG define
 //------------------------------------------------------------------------------
-//! The cumulative maximum bytes of all currently allocated ae::ScratchBuffers.
-//! Note that ae::ScratchBuffer memory is always released in the reverse order
-//! that it was allocated, so this limit should accommodate the worst case.
+//! The maximum bytes available to each thread's ae::Scratch stack. Scratch
+//! memory is always released in reverse allocation order, so this limit should
+//! accommodate the worst-case stack usage of a single thread.
 //------------------------------------------------------------------------------
 #ifndef AE_MAX_SCRATCH_BYTES_CONFIG
 	#define AE_MAX_SCRATCH_BYTES_CONFIG ( 4 * 1024 *1024 )
@@ -260,8 +281,9 @@
 // System Headers
 //------------------------------------------------------------------------------
 #include <algorithm>
-#include <array> // @TODO: Remove. For _GetTypeName().
+#include <array>
 #include <cassert>
+#include <cerrno> // strtoll/strtoull error checking
 #include <chrono>
 #include <cinttypes>
 #include <climits>
@@ -276,10 +298,11 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <ostream>
+#include <random>
 #include <sstream>
-#include <mutex>
 #include <thread> // @TODO: Remove. For Globals::allocatorThread.
 #include <type_traits>
 #include <typeinfo>
@@ -303,7 +326,7 @@
 	#include <emscripten/html5.h>
 	#include <webgl/webgl1.h> // For Emscripten WebGL API headers (see also webgl/webgl1_ext.h and webgl/webgl2.h)
 #endif
-#if !_AE_WINDOWS_
+#if !_AE_WINDOWS_ && !_AE_WASM_
 	#include <cxxabi.h>
 	#if defined(__SSE3__)
 		#include <pmmintrin.h>
@@ -316,19 +339,21 @@ namespace ae {
 // Platform Utils
 //------------------------------------------------------------------------------
 #ifndef AE_BREAK
-	#if _AE_WINDOWS_
-		#define AE_BREAK() __debugbreak()
-	#elif _AE_APPLE_
-		#define AE_BREAK() __builtin_debugtrap()
-	#elif _AE_EMSCRIPTEN_
-		#define AE_BREAK() assert( 0 )
-	#elif defined( __aarch64__ )
-		#define AE_BREAK() asm( "brk #0" )
-	#elif defined( __x86_64__ ) || defined( __i386__ ) || defined( _M_X64 ) || defined( _M_IX86 )
-		#define AE_BREAK() asm( "int $3" )
-	#else
-		#define AE_BREAK() assert( 0 )
-	#endif
+#	if _AE_WINDOWS_
+#		define AE_BREAK() __debugbreak()
+#	elif _AE_APPLE_
+#		define AE_BREAK() __builtin_debugtrap()
+#	elif _AE_EMSCRIPTEN_
+#		define AE_BREAK() assert( 0 )
+#	elif _AE_WASM_
+#		define AE_BREAK() __builtin_trap()
+#	elif defined( __aarch64__ )
+#		define AE_BREAK() asm( "brk #0" )
+#	elif defined( __x86_64__ ) || defined( __i386__ ) || defined( _M_X64 ) || defined( _M_IX86 )
+#		define AE_BREAK() asm( "int $3" )
+#	else
+#		define AE_BREAK() assert( 0 )
+#	endif
 #endif
 
 #if _AE_WINDOWS_
@@ -399,7 +424,7 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 	[&]()\
 	{\
 		using _const_this_t = const ae::RemoveTypeQualifiers< decltype(*this) >*;\
-		using _return_t = decltype(_mem_fn_call);\
+		using _return_t = decltype(this->_mem_fn_call);\
 		if constexpr( std::is_reference_v< _return_t > || std::is_pointer_v< _return_t > )\
 		{\
 			return const_cast< _return_t >( const_cast< _const_this_t >( this )->_mem_fn_call );\
@@ -410,10 +435,14 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 		}\
 	}()
 
+//------------------------------------------------------------------------------
+// Internal Helpers
+//------------------------------------------------------------------------------
 #define _AE_STATIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
 #define _AE_DYNAMIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
 #define _AE_PAGED_POOL template< bool P = Paged, typename = std::enable_if_t< P > >
+template< typename T > using _EnableIfFractional = std::enable_if_t< std::is_floating_point_v< T > || ( std::is_class_v< T > && std::is_convertible_v< T, float > ) >;
 #if _AE_MSVC_
 	#define AE_DISABLE_INVALID_OFFSET_WARNING
 	#define AE_ENABLE_INVALID_OFFSET_WARNING
@@ -422,6 +451,13 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 	#define AE_ENABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic pop")
 #endif
 #define AE_DISABLE_COPY_ASSIGNMENT( _t ) _t( const _t& ) = delete; _t& operator=( const _t& ) = delete
+#if _AE_WASM_
+#	define AE_WASM_IMPORT( _m ) extern "C" __attribute__( ( import_module( #_m ) ) )
+#	define AE_WASM_EXPORT extern "C" __attribute__( ( visibility( "default" ) ) )
+#else
+#	define AE_WASM_IMPORT( _m )
+#	define AE_WASM_EXPORT
+#endif
 
 //------------------------------------------------------------------------------
 //! \defgroup Platform
@@ -436,11 +472,13 @@ bool IsDebuggerAttached();
 //! Returns the name of the given class or basic type from an instance. Note
 //! that this does not return the name of the derived class if the instance is
 //! a base class (get the ae::ClassType of an ae::Object in that case).
-template< typename T > const char* GetTypeName();
+template< typename T > constexpr const char* GetTypeName();
 //! Returns the name of the given class or basic type from an instance. Note
 //! that this does not return the name of the derived class if the instance is
 //! a base class (get the ae::ClassType of an ae::Object in that case).
-template< typename T > const char* GetTypeName( const T& );
+template< typename T > constexpr const char* GetTypeName( const T& );
+//! TODO
+constexpr uint32_t NormalizedWhiteSpaceTypeName( const char* str, char* out, uint32_t outSize );
 //! Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
 double GetTime();
 //! Shows a generic message box
@@ -532,7 +570,7 @@ void Free( void* data );
 // ae::Scratch< T > class
 //! Can be used for scoped allocations within a single frame. Because this uses
 //! a stack internally it can be used to make many cheap allocations, while
-//! avoiding memory fragmentation. Up to kMaxScratchSize bytes may be allocated
+//! avoiding memory fragmentation. Up to kScratchCapacity bytes may be allocated
 //! at a time. Allocated objects will have their constructors and destructors
 //! called in ae::Scratch() and ~ae::Scratch respectively.
 //------------------------------------------------------------------------------
@@ -551,12 +589,12 @@ public:
 	T& GetSafe( int32_t index );
 	const T& GetSafe( int32_t index ) const;
 
-	//! The max cumulative size of the internal scratch stack
-	static const uint32_t kMaxScratchSize = AE_MAX_SCRATCH_BYTES_CONFIG;
+	//! The max size of each thread's internal scratch stack
+	static const uint32_t kScratchCapacity = AE_MAX_SCRATCH_BYTES_CONFIG;
 
 private:
 	T* m_data;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	uint32_t m_prevOffsetCheck;
 };
 
@@ -590,11 +628,21 @@ inline float Atan2( float y, float x );
 inline float Sqrt( float x );
 
 inline uint32_t Mod( uint32_t i, uint32_t n );
+//! A mathematical modulo operation. Identical to C++ remainder operator '%' for
+//! positive values, but returns a "clock arithmetic" result for negative values.
+//! Eg. `ae::Mod( -3, 12 ) == 9`. Always returns a non-negative result in [0, n),
+//! regardless of the sign of \p i.
 inline int Mod( int32_t i, int32_t n );
+//! A mathematical modulo operation. Identical to C++ remainder operator '%' for
+//! positive values, but returns a "clock arithmetic" result for negative values.
+//! Eg. `ae::Mod( -2.5, 12 ) == 9.5`. Always returns a non-negative result in
+//! [0, n), regardless of the sign of \p f.
 inline float Mod( float f, float n );
 
 inline int32_t Ceil( float f );
 inline int32_t Floor( float f );
+//! A true mathematical floor division toward negative infinity. Unlike C++
+//! operator/ (which truncates toward zero), `Floor( -7, 2 ) == -4` not -3.
 inline int32_t Floor( int32_t value, int32_t divisor );
 inline int32_t Round( float f );
 
@@ -619,12 +667,22 @@ inline float Clip01( float x );
 // Interpolation
 //------------------------------------------------------------------------------
 template< typename T0, typename T1 > T0 Lerp( T0 start, T0 end, T1 t );
+//! Returns the shortest signed angular difference from \p start to \p end,
+//! in the range (-PI, PI]. Note parameter order: \p end comes first.
+//! Example: `AngleDifference(PI*1.5f, 0.0f) == -PI*0.5f` (takes short path).
 inline float AngleDifference( float end, float start );
 inline float LerpAngle( float start, float end, float t );
 inline float Delerp( float start, float end, float value );
 inline float Delerp01( float start, float end, float value );
+//! Frame-rate independent exponential lerp. Returns \p start unchanged when
+//! \p snappiness or \p dt is zero. Higher \p snappiness = faster convergence
+//! (double-exponential: `exp2(-exp2(snappiness) * dt)`).
 template< typename T > T DtLerp( T start, float snappiness, float dt, T end );
+//! Frame-rate independent exponential slerp. Same \p snappiness semantics as
+//! DtLerp. Delegates to \p start.DtSlerp().
 template< typename T > T DtSlerp( T start, float snappiness, float dt, T end );
+//! Frame-rate independent angular lerp with wrapping. Same \p snappiness
+//! semantics as DtLerp.
 inline float DtLerpAngle( float start, float snappiness, float dt, float end );
 // @TODO: Cleanup duplicate interpolation functions
 template< typename T > T CosineInterpolate( T start, T end, float t );
@@ -732,10 +790,15 @@ struct VecT
 	float Length() const;
 	float LengthSquared() const;
 	
+	//! Normalizes the vector in-place. Returns the previous length.
 	float Normalize();
+	//! Normalizes the vector in-place. Returns the previous length, or zero if
+	//! it was below \p epsilon (in which case the vector is left unchanged).
 	float SafeNormalize( float epsilon = 0.000001f );
 	T NormalizeCopy() const;
 	T SafeNormalizeCopy( float epsilon = 0.000001f ) const;
+	//! Clamps the vector length to \p length in-place. Returns the resulting
+	//! (possibly clamped) length. If already shorter than \p length, no change.
 	float Trim( float length );
 	T TrimCopy( float length ) const;
 
@@ -743,7 +806,7 @@ struct VecT
 };
 
 #if _AE_MSVC_
-	#pragma warning(disable:26495) // Vecs are left uninitialized for performance
+	#pragma warning(disable:26495) // Vectors are left uninitialized for performance
 #endif
 
 //------------------------------------------------------------------------------
@@ -756,14 +819,23 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 	explicit Vec2( float v );
 	Vec2( float x, float y );
 	explicit Vec2( const float* xy );
-	explicit Vec2( struct Int2 i2 );
+	//! Allow automatic integer to float conversion for convenience. An explicit
+	//! cast is required in the opposite direction to avoid accidental
+	//! truncation.
+	Vec2( struct Int2 i2 );
+	//! Returns a unit vector at the given angle in radians. Angle 0 maps to
+	//! +X; positive angles rotate CCW toward +Y (standard math convention).
 	static Vec2 FromAngle( float angle );
 
 	struct Int2 NearestCopy() const;
 	struct Int2 FloorCopy() const;
 	struct Int2 CeilCopy() const;
 	
+	//! Rotates CCW by \p rotation radians in the XY plane. Positive angle
+	//! rotates +X toward +Y (standard right-hand/math convention).
 	Vec2 RotateCopy( float rotation ) const;
+	//! Returns the angle of this vector in radians via atan2(y,x).
+	//! Angle 0 == +X axis; positive = CCW toward +Y.
 	float GetAngle() const;
 	Vec2 DtSlerp( const Vec2& end, float snappiness, float dt, float epsilon = 0.0001f ) const;
 	Vec2 Slerp( const Vec2& end, float t, float epsilon = 0.0001f ) const;
@@ -809,9 +881,14 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	struct Int3 FloorCopy() const;
 	struct Int3 CeilCopy() const;
 	
-	void AddRotationXY( float rotation ); // @TODO: Support Y up
+	//! Rotates the XY components CCW by \p rotation radians around the Z axis
+	//! (Z-up assumed). Positive angle rotates +X toward +Y. @TODO: Support Y up
+	void AddRotationXY( float rotation );
 	Vec3 AddRotationXYCopy( float rotation ) const;
 	float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
+	//! Rotates this vector around \p axis by \p angle radians using the
+	//! right-hand rule (Rodrigues' formula). Positive angle = CCW when viewed
+	//! from the tip of \p axis toward the origin.
 	Vec3 RotateCopy( Vec3 axis, float angle ) const;
 	//! Returns the shortest arc rotation from this vector's direction to
 	//! \p target's direction. Inputs do not need to be normalized.
@@ -830,6 +907,8 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	Vec3 ZeroAxisCopy( Vec3 axis ) const; // Zero component along arbitrary axis (ie vec dot axis == 0)
 	Vec3 ZeroDirectionCopy( Vec3 direction ) const; // Zero component along positive half of axis (ie vec dot dir > 0)
 
+	//! Transforms \p p by \p projection and performs a perspective divide (divides
+	//! xyz by w). Use Matrix4::TransformPoint3x4 for affine transforms.
 	static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p );
 
 	//! Define conversion functions etc for ae::Vec3. See AE_CONFIG_FILE for more info.
@@ -920,7 +999,13 @@ public:
 	static ae::Matrix4 Scaling( const ae::Vec3& s );
 	static ae::Matrix4 Scaling( float sx, float sy, float sz );
 	static ae::Matrix4 LocalToWorld( ae::Vec3 position, ae::Quaternion rotation, ae::Vec3 scale );
+	//! Builds a right-handed view matrix. \p forward is the camera's look direction
+	//! in world space; it maps to -Z in view space. Internally the \p forward row
+	//! stores the negated value.
 	static ae::Matrix4 WorldToView( ae::Vec3 position, ae::Vec3 forward, ae::Vec3 up );
+	//! Builds a perspective projection matrix. \p fov is the vertical field-of-view
+	//! in radians. Output clips-space conventions depend on the global `ae::ReverseZ`
+	//! setting (default: standard depth range).
 	static ae::Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
 	// Set transformation properties
@@ -939,11 +1024,22 @@ public:
 	// Get transformation properties
 	ae::Vec3 GetTranslation() const;
 	ae::Quaternion GetRotation() const;
+	//! Returns the scale encoded in this matrix. Assumes TRS decomposable.
+	//! When the determinant is negative (odd number of negative scale axes),
+	//! the z component, as it's ambiguous which axis was negated originally.
 	ae::Vec3 GetScale() const;
 	ae::Matrix4 GetTranspose() const;
 	ae::Matrix4 GetInverse() const; // @TODO: Handle non-invertible matrices in API
+	//! Returns the inverse transpose of this matrix. This is useful to preserve
+	//! the direction (but not length) of transformed normals when the matrix
+	//! has non-uniform scale. Assumes TRS decomposable.
 	ae::Matrix4 GetNormalMatrix() const;
+	//! Returns a matrix where the each column of the upper 3x3 rotation portion
+	//! of this matrix has been normalized to remove any scale. Assumes TRS
+	//! decomposable.
 	ae::Matrix4 GetScaleRemoved() const;
+	//! Returns the determinant of the full 4x4 matrix.
+	float Determinant() const;
 	ae::Vec3 GetAxis( uint32_t column ) const;
 	ae::Vec4 GetColumn( uint32_t column ) const;
 	ae::Vec4 GetRow( uint32_t row ) const;
@@ -1005,6 +1101,10 @@ public:
 
 	Quaternion( const float i, const float j, const float k, const float r ) : i(i), j(j), k(k), r(r) {}
 	explicit Quaternion( Vec3 v ) : i(v.x), j(v.y), k(v.z), r(0.0f) {}
+	//! Constructs a quaternion from a look direction. \p forward and \p up should
+	//! be orthogonal; if not, one is adjusted. When \p prioritizeUp is true \p forward
+	//! is corrected to be perpendicular to \p up; when false \p up is corrected.
+	//! Convention: right-handed (`forward.Cross(up)` = right).
 	Quaternion( Vec3 forward, Vec3 up, bool prioritizeUp = true );
 	Quaternion( Vec3 axis, float angle );
 	static Quaternion Identity() { return Quaternion( 0.0f, 0.0f, 0.0f, 1.0f ); }
@@ -1015,13 +1115,26 @@ public:
 	bool operator!=( const Quaternion& q ) const;
 	Quaternion& operator*= ( const Quaternion& q );
 	Quaternion operator* ( const Quaternion& q ) const;
+	//! Returns the antipodal quaternion (negates all four components i,j,k,r).
+	//! This is NOT the conjugate or inverse; both q and -q represent the same
+	//! rotation but may interpolate differently.
 	Quaternion operator- () const;
 	float Dot( const Quaternion& q ) const;
 	Quaternion operator* ( float s ) const;
+	//! Physics angular velocity integration: applies half-step `v*s` (where \p v
+	//! is angular velocity in rad/s and \p s is half dt). Leaves quat un-normalized.
 	void AddScaledVector( const Vec3& v, float s );
+	//! Rotates this quaternion by the rotation encoded in \p v: `|v|` is the
+	//! angle in radians, `v/|v|` is the axis. No-op if \p v is zero.
 	void RotateByVector( const Vec3& v );
+	//! Sets the Z-rotation so that the local X axis points toward the XY direction
+	//! of \p v. The Z component of \p v is ignored (Z-up assumed).
 	void SetDirectionXY( const Vec3& v );
+	//! Returns the XY direction the local X axis points after this quaternion's
+	//! Z-rotation. Returned vector always has z == 0.
 	Vec3 GetDirectionXY() const;
+	//! Zeroes the i and j components (XY rotation) without renormalizing.
+	//! The quaternion will be invalid until manually renormalized.
 	void ZeroXY();
 	void GetAxisAngle( Vec3* axis, float* angle ) const;
 	void AddRotationXY( float rotation );
@@ -1060,18 +1173,28 @@ struct IntT
 	int32_t operator[]( uint32_t idx ) const;
 	int32_t& operator[]( uint32_t idx );
 	T operator-() const;
+	T operator*( int32_t s ) const;
+	T operator/( int32_t s ) const;
 	T operator+( const T& v ) const;
 	T operator-( const T& v ) const;
 	T operator*( const T& v ) const;
 	T operator/( const T& v ) const;
+	void operator*=( int32_t s );
+	void operator/=( int32_t s );
 	void operator+=( const T& v );
 	void operator-=( const T& v );
 	void operator*=( const T& v );
 	void operator/=( const T& v );
-	T operator*( int32_t s ) const;
-	T operator/( int32_t s ) const;
-	void operator*=( int32_t s );
-	void operator/=( int32_t s );
+	// ae::IntT rejects scalar * and / by any operand that carries a fraction: a
+	// float, or a class convertible to one (eg. a fixed-point or half type), so
+	// rounding and truncation is explicit. Convert to an ae::Vec3 first, then
+	// floor/round/ceil. This is much more verbose, but can avoid accidental
+	// negative value truncation discrepancies.
+	// eg. '( ae::Vec3( int3Value ) * 2.5f ).FloorCopy()'
+	template< typename F, typename = ae::_EnableIfFractional< F > > T operator*( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
+	template< typename F, typename = ae::_EnableIfFractional< F > > T operator/( F s ) const = delete; // @TODO: Allow automatic promotion to VecT< V >? How to determine V?
+	template< typename F, typename = ae::_EnableIfFractional< F > > void operator*=( F s ) = delete; // Disabled. This operation would be silently lossy.
+	template< typename F, typename = ae::_EnableIfFractional< F > > void operator/=( F s ) = delete; // Disabled. This operation would be silently lossy.
 };
 template< typename T >
 inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v );
@@ -1143,7 +1266,8 @@ public:
 	Triangle( Vec3 (&v)[ 3 ] );
 	explicit Triangle( const Vec3* p012 );
 
-	bool IntersectRay( Vec3 source, Vec3 ray, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
+	bool Raycast( Vec3 source, Vec3 ray, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* distanceOut = nullptr ) const;
+	bool SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* distanceOut = nullptr ) const;
 	Vec3 ClosestPoint( Vec3 p ) const;
 	Vec3 CounterClockwiseNormal() const;
 	Vec3 ClockwiseNormal() const;
@@ -1162,7 +1286,7 @@ public:
 	explicit Sphere( const class OBB& obb );
 	void Expand( ae::Vec3 p );
 
-	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* tOut = nullptr ) const;
+	bool Raycast( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, Vec3* normalOut = nullptr, float* distanceOut = nullptr ) const;
 	bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* hitOut = nullptr ) const;
 	ae::Vec3 GetNearestPointOnSurface( ae::Vec3 p, float* signedDistOut = nullptr ) const;
 
@@ -1188,7 +1312,7 @@ public:
 	ae::Vec3 GetClosestPointToOrigin() const;
 
 	bool IntersectLine( ae::Vec3 p, ae::Vec3 d, ae::Vec3* hitOut = nullptr, float* tOut = nullptr ) const; // @TODO: Handle ray hitting normal reverse
-	bool IntersectRay( ae::Vec3 source, ae::Vec3 ray, ae::Vec3* hitOut = nullptr, float* tOut = nullptr ) const; // @TODO: Handle ray hitting normal reverse
+	bool Raycast( ae::Vec3 source, ae::Vec3 ray, ae::Vec3* hitOut = nullptr, float* distanceOut = nullptr ) const;
 	ae::Vec3 GetClosestPoint( ae::Vec3 pos, float* distanceOut = nullptr ) const;
 	float GetSignedDistance( ae::Vec3 pos ) const;
 
@@ -1249,6 +1373,9 @@ public:
 	void SetCenter( ae::Vec2 point ) { m_point = point; }
 	void SetRadius( float radius ) { m_radius = radius; }
 
+	//! Returns true if the two circles overlap. If \p out is non-null it receives
+	//! the midpoint of the overlap zone (midpoint between the two intersection points
+	//! projected onto the line between centers), NOT a contact normal or deepest point.
 	bool Intersect( const Circle& other, ae::Vec2* out ) const;
 	ae::Vec2 GetRandomPoint( uint64_t* seed = &_randomSeed ) const;
 
@@ -1326,9 +1453,9 @@ public:
 	//! will be set to the first intersection point on the surface (or to \p source
 	//! if the ray starts within the aabb). \p normOut will be set to the normal of
 	//! the face of the contact point, or to the normal of the nearest face to
-	//! \p source if it is inside the aabb. \p tOut will be set to a value so that
-	//! \p source + \p ray * \p tOut = \p hitOut.
-	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
+	//! \p source if it is inside the aabb. \p distanceOut will be set to the
+	//! world-space distance from \p source to \p hitOut along \p ray.
+	bool Raycast( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* distanceOut = nullptr ) const;
 
 private:
 	Vec3 m_min = Vec3( INFINITY );
@@ -1370,9 +1497,9 @@ public:
 	//! will be set to the first intersection point on the surface (or to \p source
 	//! if the ray starts within the obb). \p normOut will be set to the normal of
 	//! the face of the contact point, or to the normal of the nearest face to
-	//! \p source if it is inside the obb. \p tOut will be set to a value so that
-	//! \p source + \p ray * \p tOut = \p hitOut.
-	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
+	//! \p source if it is inside the obb. \p distanceOut will be set to the
+	//! world-space distance from \p source to \p hitOut along \p ray.
+	bool Raycast( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* distanceOut = nullptr ) const;
 	//! Returns an AABB that tightly fits this obb.
 	AABB GetAABB() const;
 	
@@ -1614,7 +1741,7 @@ public:
 	void Trim( uint32_t len );
 
 	uint32_t Length() const;
-	uint32_t Size() const;
+	uint32_t Capacity() const;
 	bool Empty() const;
 	static constexpr uint32_t MaxLength() { return N - 3u; } // Leave room for length var and null terminator
 
@@ -1710,7 +1837,6 @@ template<> uint64_t GetHash64( char* const& key );
 // ae::Hash64 class
 //! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
 //! hash to zero.
-//@TODO: constexpr
 //------------------------------------------------------------------------------
 template< typename U >
 class Hash
@@ -1718,19 +1844,19 @@ class Hash
 public:
 	using UInt = U;
 
-	Hash();
-	explicit Hash( U initialValue );
+	constexpr Hash();
+	constexpr explicit Hash( U initialValue );
 	
-	bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
-	bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
+	constexpr bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
+	constexpr bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
 
-	Hash& HashString( const char* str ); // @TODO: constexpr
+	constexpr Hash& HashString( const char* str );
 	Hash& HashData( const void* data, uint32_t length );
 	template< typename T, uint32_t N > Hash& HashType( const T (&array)[ N ] );
 	template< typename T > Hash& HashType( const T& v );
 	
-	void Set( U hash );
-	U Get() const;
+	constexpr void Set( U hash );
+	constexpr U Get() const;
 	
 private:
 	template< typename T > Hash( T initialValue ) = delete;
@@ -1779,28 +1905,28 @@ class Array
 {
 public:
 	//! Static array (N > 0) only. Constructs an empty array, where
-	//! ae::Array::Length() == 0 and ae::Array::Size() == N.
+	//! ae::Array::Length() == 0 and ae::Array::Capacity() == N.
 	Array();
 	//! Static array (N > 0) only. Appends 'length' number of 'val's, so that
-	//! ae::Array::Length() == 'length' and ae::Array::Size() == N.
+	//! ae::Array::Length() == 'length' and ae::Array::Capacity() == N.
 	Array( const T& val, uint32_t length );
 	//! Static array (N > 0) only. Constructs from a standard initializer list,
-	//! so that ae::Array::Length() == 'initList.size()' and ae::Array::Size() == N.
+	//! so that ae::Array::Length() == 'initList.Capacity()' and ae::Array::Capacity() == N.
 	Array( std::initializer_list< T > initList );
 
 	//! Dynamic array (N == 0) only. Constructs an empty array, where
-	//! ae::Array::Length() == 0 and ae::Array::Size() == N.
+	//! ae::Array::Length() == 0 and ae::Array::Capacity() == N.
 	Array( ae::Tag tag );
 	//! Dynamic array (N == 0) only. Constructs an empty array, while reserving
-	//! 'size' elements. ae::Array::Length() == 0 and ae::Array::Size() == 'size'.
-	Array( ae::Tag tag, uint32_t size );
+	//! 'capacity' elements. ae::Array::Length() == 0 and ae::Array::Capacity() == 'capacity'.
+	Array( ae::Tag tag, uint32_t capacity );
 	//! Dynamic array (N == 0) only. Reserves 'length' and appends 'length'
-	//! number of 'val's. ae::Array::Length() == 'length' and ae::Array::Size() >= 'length'.
+	//! number of 'val's. ae::Array::Length() == 'length' and ae::Array::Capacity() >= 'length'.
 	Array( ae::Tag tag, const T& val, uint32_t length );
 	//! Dynamic array (N == 0) only. Expands the internal array storage to avoid
 	//! copying data unnecessarily on Append(). This does not affect the number
 	//! of elements returned by Length(). Retrieve the current storage limit
-	//! with Size().
+	//! with Capacity().
 	void Reserve( uint32_t total );
 
 	//! Copy constructor. The ae::Tag of \p other will be used for the newly
@@ -1876,7 +2002,7 @@ public:
 	//! less than or equal to Length().
 	void Remove( uint32_t index, uint32_t count = 1 );
 	//! Destructs all elements in the array and resets the array to length zero.
-	//! Does not affect the size of the array.
+	//! Does not affect the capacity of the array.
 	void Clear();
 
 	//! Performs bounds checking in debug mode, use 'GetData()' instead to
@@ -1896,7 +2022,7 @@ public:
 	//! Returns the last element. Performs bounds checking in debug mode.
 	T& Last();
 	//! Returns true when it is no longer safe to append to this array.
-	_AE_STATIC_STORAGE bool Full() { return m_length == m_size; }
+	_AE_STATIC_STORAGE bool Full() { return m_length == m_capacity; }
 	//! It is always safe to append to dynamic arrays, barring system memory limits.
 	_AE_DYNAMIC_STORAGE bool Full(...) const { return false; }
 
@@ -1908,17 +2034,17 @@ public:
 	const T* Data() const { return m_array; }
 	//! Returns the number of elements currently in the array
 	uint32_t Length() const { return m_length; }
-	//! Returns the total size of a static array (N > 0)
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
-	//! Returns the total size of a dynamic array (N == 0)
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
+	//! Returns the total capacity of a static array (N > 0)
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
+	//! Returns the total capacity of a dynamic array (N == 0)
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_capacity; }
 	//! Returns the tag provided to the constructor for dynamic arrays (N == 0).
 	//! Returns ae::Tag() for all static arrays (N > 0).
 	ae::Tag Tag() const { return m_tag; }
 
 private:
 	uint32_t m_length;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	T* m_array;
 	ae::Tag m_tag;
 	// clang-format off
@@ -1964,10 +2090,10 @@ public:
 	HashMap();
 	//! Constructor for a hash map with dynamically allocated storage (N == 0).
 	HashMap( ae::Tag pool );
-	//! Expands the storage if necessary so a \p size number of key/index pairs
+	//! Expands the storage if necessary so a \p capacity number of key/index pairs
 	//! can be added without any internal allocations. Asserts if using static
-	//! storage and \p size is greater than N.
-	void Reserve( uint32_t size );
+	//! storage and \p capacity is greater than N.
+	void Reserve( uint32_t capacity );
 	
 	HashMap( const HashMap< Key, N, Hash >& other );
 	void operator =( const HashMap< Key, N, Hash >& other );
@@ -1999,9 +2125,9 @@ public:
 	//! Returns the number of entries.
 	uint32_t Length() const;
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the number of allocated entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_capacity; }
 
 private:
 	bool m_Insert( Key key, typename Hash::UInt hash, int32_t index );
@@ -2014,7 +2140,7 @@ private:
 	};
 	ae::Tag m_tag;
 	Entry* m_entries;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	uint32_t m_length;
 	// clang-format off
 #if _AE_LINUX_|| _AE_WINDOWS_
@@ -2103,9 +2229,9 @@ public:
 	//! Returns the number of key/value pairs in the map
 	uint32_t Length() const;
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the number of allocated entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_pairs.Size(); }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_pairs.Capacity(); }
 
 	// Ranged-based loop. Lowercase to match c++ standard
 	ae::Pair< Key, Value >* begin() { return m_pairs.begin(); }
@@ -2161,9 +2287,9 @@ public:
 	const char* GetValue( uint32_t idx ) const;
 	uint32_t Length() const { return m_entries.Length(); }
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the max number of entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_entries.Size(); }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_entries.Capacity(); }
 	
 	// Ranged-based loop. Lowercase to match c++ standard
 	ae::Pair< ae::Str128, ae::Str128 >* begin() { return m_entries.begin(); }
@@ -2278,14 +2404,14 @@ public:
 	//! Constructor for a ring buffer with static allocated storage (N > 0).
 	RingBuffer();
 	//! Constructor for a ring buffer with dynamically allocated storage (N == 0).
-	RingBuffer( ae::Tag tag, uint32_t size );
+	RingBuffer( ae::Tag tag, uint32_t capacity );
 	//! Appends an element to the current end of the ring buffer. It's safe to
 	//! call this when the ring buffer is full, although in this case the
 	//! element previously at index 0 to be destroyed. Does not affect
-	//! ae::RingBuffer::Size().
+	//! ae::RingBuffer::Capacity().
 	T& Append( const T& val );
 	//! Resets ae::RingBuffer::Length() and ae::RingBuffer::GetOffset() to 0.
-	//! Does not affect ae::RingBuffer::Size().
+	//! Does not affect ae::RingBuffer::Capacity().
 	void Clear();
 
 	//! Returns the element at the given \p index, which must be less than
@@ -2311,7 +2437,7 @@ public:
 	//! (or 0 when the buffer is empty). Use this in conjunction with
 	//! ae::RingBuffer::Data() to get a pointer to the the first element in the
 	//! buffer, iterate 0 to ae::RingBuffer::Length() elements, and reduce the
-	//! iteration index modulo ae::RingBuffer::Size() when indexing the buffer.
+	//! iteration index modulo ae::RingBuffer::Capacity() when indexing the buffer.
 	//! This is a more complicated approach than using ae::RingBuffer::Get() but
 	//! can be useful to avoid copying data for APIs that accept generic ring
 	//! buffer data, such as ImGui.
@@ -2319,37 +2445,37 @@ public:
 	//! \code
 	//! for( uint32_t i = 0; i < ringBuffer.Length(); i++ )
 	//! {
-	//!     const uint32_t index = ( ringBuffer.GetOffset() + i ) % ringBuffer.Size();
+	//!     const uint32_t index = ( ringBuffer.GetOffset() + i ) % ringBuffer.Capacity();
 	//!     const T& element = ringBuffer.Data()[ index ];
 	//! }
 	//! \endcode
 	uint32_t GetOffset() const { return m_first; }
 
-	//! Returns the number of appended entries up to ae::RingBuffer::Size().
+	//! Returns the number of appended entries up to ae::RingBuffer::Capacity().
 	uint32_t Length() const { return m_buffer.Length(); }
 	//! Returns the max number of entries.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the max number of entries.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_capacity; }
 
 private:
 	uint32_t m_first;
-	uint32_t m_size;
+	uint32_t m_capacity;
 	ae::Array< T, N > m_buffer;
 };
 
 //------------------------------------------------------------------------------
 // ae::FreeList class
 //! ae::FreeList can be used along side a separate data array to track allocated
-//! elements. Given a size, ae::FreeList allows allocation and release of array
-//! indices from 0 to size - 1.
+//! elements. Given a capacity, ae::FreeList allows allocation and release of array
+//! indices from 0 to capacity - 1.
 //------------------------------------------------------------------------------
 template< uint32_t N = 0 >
 class FreeList
 {
 public:
 	FreeList();
-	FreeList( const ae::Tag& tag, uint32_t size );
+	FreeList( const ae::Tag& tag, uint32_t capacity );
 
 	//! Returns (0 <= index < N) on success, and negative on failure.
 	int32_t Allocate();
@@ -2375,11 +2501,11 @@ public:
 	bool HasFree() const;
 	//! Returns the number of allocated elements. Is constant time.
 	uint32_t Length() const;
-	//! Returns the maximum length of the list (constxpr for static
+	//! Returns the maximum length of the list (constexpr for static
 	//! ae::FreeList's). Is constant time.
-	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Capacity() { return N; }
 	//! Returns the maximum length of the list. Is constant time.
-	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_pool.Length(); }
+	_AE_DYNAMIC_STORAGE uint32_t Capacity(...) const { return m_pool.Length(); }
 
 private:
 	struct Entry { Entry* next; };
@@ -2430,9 +2556,9 @@ public:
 	//! Returns the number of allocated objects. Is constant time.
 	uint32_t Length() const;
 	//! Returns the total number of available objects in the pool. Is constant time.
-	_AE_FIXED_POOL static constexpr uint32_t Size() { return N; }
+	_AE_FIXED_POOL static constexpr uint32_t Capacity() { return N; }
 	//! Returns INT32_MAX max, as paged pools can grow indefinitely. Is constant time.
-	_AE_PAGED_POOL uint32_t Size(...) const { return INT32_MAX; }
+	_AE_PAGED_POOL uint32_t Capacity(...) const { return INT32_MAX; }
 
 private:
 	struct Page; // Internal forward declaration
@@ -2527,12 +2653,12 @@ public:
 	//! Constructs an ae::OpaquePool with dynamic internal storage. \p tag will
 	//! be used for all internal allocations. All objects returned by the pool
 	//! will have \p objectSize and \p objectAlignment. If the pool is \p paged
-	//! it will allocate pages of \p size as necessary. If the pool is
-	//! not \p paged, then \p size objects can be allocated at a time. It may be
+	//! it will allocate pages of \p capacity as necessary. If the pool is
+	//! not \p paged, then \p capacity objects can be allocated at a time. It may be
 	//! useful to use this in conjunction with registered ae::ClassType's, passing the
 	//! results of ae::ClassType::GetSize() to \p objectSize and ae::ClassType::GetAlignment()
 	//! to \p objectAlignment.
-	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t size, bool paged );
+	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t capacity, bool paged );
 	//! All objects allocated with ae::OpaquePool::Allocate/New() must be destroyed before
 	//! the ae::OpaquePool is destroyed.
 	~OpaquePool();
@@ -2569,9 +2695,9 @@ public:
 	uint32_t Length() const { return m_length; }
 	//! Returns the max number of objects that can be allocated, or INT32_MAX
 	//! for paged pools as they can grow indefinitely. Is constant time.
-	uint32_t Size() const { return m_paged ? INT32_MAX : m_pageSize; }
+	uint32_t Capacity() const { return m_paged ? INT32_MAX : m_pageCapacity; }
 	//! Returns the maximum number of objects per page. Is constant time.
-	uint32_t PageSize() const { return m_pageSize; }
+	uint32_t PageCapacity() const { return m_pageCapacity; }
 
 private:
 	struct Page; // Internal forward declaration
@@ -2617,7 +2743,7 @@ private:
 	{
 		// Pages are deleted by the pool when empty, so it's safe to
 		// assume pages always contain at least one object.
-		Page( const ae::Tag& tag, uint32_t size ) : freeList( tag, size ) {}
+		Page( const ae::Tag& tag, uint32_t capacity ) : freeList( tag, capacity ) {}
 		ae::ListNode< Page > node = this; // List node.
 		ae::FreeList<> freeList; // Free object information.
 		void* objects; // Pointer to array of objects in this page.
@@ -2625,7 +2751,7 @@ private:
 	const void* m_GetFirst() const;
 	const void* m_GetNext( const Page*& page, const void* obj, uint32_t seq ) const;
 	ae::Tag m_tag;
-	uint32_t m_pageSize; // Number of objects per page.
+	uint32_t m_pageCapacity; // Number of objects per page.
 	bool m_paged; // If true, pool can be infinitely big.
 	uint32_t m_objectSize; // Size of each object.
 	uint32_t m_objectAlignment; // Alignment of each object.
@@ -2638,30 +2764,58 @@ private:
 //------------------------------------------------------------------------------
 // ae::Any
 //------------------------------------------------------------------------------
-template< uint32_t Size, uint32_t Alignment >
+//! A fixed-size, type-safe container for opaque storage of a single value.
+//! The template parameters \p Capacity (bytes) and \p Alignment control the
+//! internal buffer; no dynamic allocation is ever performed. Only trivially
+//! copyable and trivially destructible types are accepted, enforced at compile
+//! time. The type of the stored value is recorded so that reads are type-safe.
+//! C-strings are explicitly rejected; use an ae::Str instead.
+//------------------------------------------------------------------------------
+template< uint32_t Capacity, uint32_t Alignment >
 struct Any
 {
 	Any() = default;
-	template< typename T > explicit Any( const T& value );
+	template< typename T > Any( const T& value );
 	template< typename T > void operator=( const T& value );
+
+	//! Returns the stored value only when \p T matches the stored type exactly.
+	//! For non-pointer types, const is ignored: 'TryGet<const T>()' succeeds
+	//! when 'T' is stored. For pointers, retrieval as a const pointer is
+	//! allowed when a non-const pointer was stored. Returns \p defaultValue
+	//! otherwise.
 	template< typename T > T Get( const T& defaultValue = {} ) const;
+	//! Returns a pointer to the stored value only when \p T matches the stored
+	//! type exactly. For non-pointer types, const is ignored: 'TryGet<const T>()'
+	//! succeeds when 'T' is stored. For pointers, retrieval as a const pointer
+	//! is allowed when a non-const pointer was stored. Returns nullptr otherwise.
 	template< typename T > T* TryGet();
+	//! Returns a pointer to the stored value only when \p T matches the stored
+	//! type exactly. For non-pointer types, const is ignored: 'TryGet<const T>()'
+	//! succeeds when 'T' is stored. For pointers, retrieval as a const pointer
+	//! is allowed when a non-const pointer was stored. Returns nullptr otherwise.
 	template< typename T > const T* TryGet() const;
-	uint32_t GetType() const { return m_typeId; }
+	//! Returns the type id of the stored value, or 0 if empty. The type id is
+	//! generated by ae::GetTypeIdWithQualifiers< T >().
+	uint32_t GetTypeId() const;
+	//! Returns true if any value is stored.
+	operator bool() const;
 
 private:
 	uint32_t m_typeId = 0; // ae::TypeId
-	alignas( Alignment ) std::byte m_data[ Size ];
+	alignas( Alignment ) std::byte m_data[ Capacity ] = {};
 };
 
-
+// Intentionally unimplemented ae::Function forward declaration, to handle degenerate function signatures.
+template< typename Signature, size_t Capacity = 32 > class Function;
 //------------------------------------------------------------------------------
 // ae::Function class
 //------------------------------------------------------------------------------
-// Unimplemented ae::Function forward declaration, to handle degenerate function signatures.
-template< typename Signature, size_t MaxSize = 32 > class Function;
-// The lambda capture invoker is stateless so it's trivially copyable. Small
-// captures like a few pointers/ints work.
+//! An opaque callable wrapper for free functions, member functions, and
+//! lambdas, so long as their return and parameter types match the ae::Function
+//! signature. Captured values must be trivially copyable. Storage is fixed-size
+//! and no dynamic allocations are made. Storing a callable larger than \tparam
+//! Capacity bytes is a compile time error. ae::Function itself is trivially
+//! copyable.
 // Usage:
 /*
 	int total = 0;
@@ -2671,19 +2825,30 @@ template< typename Signature, size_t MaxSize = 32 > class Function;
 	const int three = increment( 1 );
 	const int ten = increment( 7 );
 */
-template< typename R, typename... Args, size_t MaxSize >
-class Function< R( Args... ), MaxSize >
+//------------------------------------------------------------------------------
+template< typename R, typename... Args, size_t Capacity >
+class Function< R( Args... ), Capacity >
 {
 public:
+	//! Default construction. Note that it is not 
 	Function();
+	//! Lambda or free function capture
 	template< typename F > Function( F&& f );
+	//! Member function capture
+	template< typename T > Function( T* obj, R ( T::*mfp )( Args... ) );
+	//! Member function capture
+	template< typename T > Function( const T* obj, R ( T::*mfp )( Args... ) const );
+	//! Opaquely call the captured function. It is undefined behavior to call
+	//! this when no function has been assigned. Check for validity with
+	//! ae::Function::operator bool.
 	R operator()( Args... args ) const;
+	//! Return true if this ae::Function instance is callable.
 	explicit operator bool() const;
 
 private:
 	using InvokerType = R ( * )( const void*, Args... );
 	InvokerType m_invoker;
-	alignas( std::max_align_t ) uint8_t m_storage[ MaxSize ];
+	alignas( std::max_align_t ) uint8_t m_storage[ Capacity ];
 };
 
 //------------------------------------------------------------------------------
@@ -2962,6 +3127,7 @@ public:
 	Rect() = default;
 	static Rect FromCenterAndSize( ae::Vec2 center, ae::Vec2 size );
 	static Rect FromPoints( ae::Vec2 p0, ae::Vec2 p1 );
+	static Rect FromPoints( float x0, float y0, float x1, float y1 );
 
 	Vec2 GetMin() const { return m_min; }
 	Vec2 GetMax() const { return m_max; }
@@ -3199,7 +3365,7 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 // Assertion functions
 //------------------------------------------------------------------------------
 #ifndef AE_ASSERT_IMPL
-	#define AE_ASSERT_IMPL( msgStr ) { if( !ae::IsDebuggerAttached() ) { ae::ShowMessage( msgStr ? msgStr : "Unspecified Fatal Error" ); } else { AE_BREAK(); } }
+#	define AE_ASSERT_IMPL( msgStr ) do { (void)(msgStr); AE_BREAK(); } while(0)
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 #define AE_ASSERT( _x ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
@@ -3342,10 +3508,55 @@ struct Screen
 ae::Array< ae::Screen, 16 > GetScreens();
 
 //------------------------------------------------------------------------------
+// ae::Application function
+//------------------------------------------------------------------------------
+// A full minimal program using ae::Application:
+#if 0
+int main( int argc, char* argv[] )
+{
+	// ...
+	auto init = []() { return true; };
+	auto update = []() { return true; };
+	auto terminate = []() { return 0; };
+	return ae::Application( argc, argv, init, update, terminate );
+}
+#endif
+//------------------------------------------------------------------------------
+using AppInitializeFn = ae::Function< bool(), 256 >;
+using AppUpdateFn = ae::Function< bool(), 256 >;
+using AppTerminateFn = ae::Function< int32_t(), 256 >;
+//! Call this function to drive a program's lifecycle identically on platforms
+//! that own the main loop and platforms that don't. This function wraps the
+//! platform specific mechanisms that drive the main loop, and calls the given
+//! functions when appropriate.
+//! \param argc Forward from main()
+//! \param argv Forward from main()
+//! \param initialize Called once at startup. This is a good place to initialize
+//! an ae::Window, ae::GraphicsDevice, and ae::Input combo. The given function
+//! should return true if initialization succeeds, and should return false if
+//! \p update calls should be skipped and \p terminate should be called immediately.
+//! \param update Called each frame. Return false from your given function to
+//! quit the application. Note that this is called by the system on platforms
+//! where the system owns the main loop (like iOS and web).
+//! \param terminate For platforms where the program controls its life-cycle
+//! (desktop operating systems): Called once at termination, whether or not the
+//! \p initialize succeeded. On platforms where the system owns the main
+//! loop (iOS and web): Terminate may never be called.
+//! \return The return value of \p terminate
+int32_t Application(
+	int32_t argc,
+	char* argv[],
+	const AppInitializeFn& initialize,
+	const AppUpdateFn& update,
+	const AppTerminateFn& terminate
+);
+
+//------------------------------------------------------------------------------
 // ae::Window class
+// @TODO: WindowUnits enum: virtual dpi (OS desktop), Content (actual pixels)
 //! Window size is specified in virtual DPI units. Actual window content width and height are subject to the
 //! displays scale factor. Passing a width and height of 1280x720 on a display with a scale factor of 2 will result
-//! in a virtual window size of 1280x720 and a backbuffer size of 2560x1440. The windows scale factor can be
+//! in a virtual window size of 1280x720 and a back buffer size of 2560x1440. The windows scale factor can be
 //! checked with ae::Window::GetScaleFactor().
 //------------------------------------------------------------------------------
 class Window
@@ -3375,13 +3586,35 @@ public:
 	bool GetMaximized() const { return m_maximized; }
 	//! True if the user is currently working with this window
 	bool GetFocused() const { return m_focused; }
+	//! Top left window position in virtual DPI units @TODO: Content or window width in dpi units?
 	Int2 GetPosition() const { return m_pos; }
-	//! Virtual window width (unscaled by display scale factor)
+	//! Virtual DPI window width @TODO: Content or window width in dpi units?
 	int32_t GetWidth() const;
-	//! Virtual window height (unscaled by display scale factor)
+	//! Virtual DPI window height @TODO: Content or window height in dpi units?
 	int32_t GetHeight() const;
+	//! Get the safe area of the window: the area not obscured by notches,
+	//! rounded corners, or other display cutouts. Coordinates are in
+	//! virtual DPI window space. Note that the windows content area (graphics
+	//! surface) will be larger than any non-trivial safe area, so this is only
+	//! relevant for visual layout purposes on devices.
+	ae::Rect GetSafeArea() const;
 	//! Window content scale factor
 	float GetScaleFactor() const { return m_scaleFactor; }
+	//! Low-level context/surface activation. Most rendering code should use
+	//! GraphicsDevice::Activate() instead.
+	void ActivateContext();
+	//! Low-level presentation primitive for custom final compositing. Most
+	//! rendering code should use GraphicsDevice::Present() instead.
+	void BindBackBuffer();
+	//! Low-level platform swap/flush. GraphicsDevice::Present() calls this after
+	//! compositing its canvas to the window back buffer.
+	void Present();
+	//! Drawable pixel size for low-level presentation code. This differs from
+	//! GetWidth() on scaled displays.
+	uint32_t GetDrawWidth() const;
+	//! Drawable pixel size for low-level presentation code. This differs from
+	//! GetHeight() on scaled displays.
+	uint32_t GetDrawHeight() const;
 
 	//! Enable window events logging to console
 	void SetLoggingEnabled( bool enable ) { m_debugLog = enable; }
@@ -3407,11 +3640,23 @@ public:
 	void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
 	void m_UpdateFullScreen( bool fullScreen ) { m_fullScreen = fullScreen; }
 	void m_UpdateFocused( bool focused );
+	void m_UpdateBackBuffer();
 	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
 	ae::Int2 m_nativeToAe( ae::Int2 pos, ae::Int2 size );
 	bool m_fixCanvasStyle = false;
 	void* window = nullptr;
 	class GraphicsDevice* graphicsDevice = nullptr;
+#if _AE_EMSCRIPTEN_
+	EMSCRIPTEN_WEBGL_CONTEXT_HANDLE m_context = 0;
+#else
+	void* m_context = nullptr;
+#endif
+	uint32_t m_defaultFramebuffer = 0;
+#if _AE_IOS_
+	// Depth lives on the GraphicsDevice canvas, not here.
+	uint32_t m_iosColorRenderbuffer = 0;
+#endif
+	class RenderTarget* m_backBuffer = nullptr;
 	class Input* input = nullptr;
 };
 
@@ -3509,7 +3754,7 @@ enum class Key : uint8_t
 	Down = 81,
 	Up = 82,
 
-	NumLock = 84,
+	NumLock = 83,
 	NumPadDivide = 84,
 	NumPadMultiply = 85,
 	NumPadMinus = 86,
@@ -3555,16 +3800,17 @@ struct MouseState
 	bool leftButton = false;
 	bool middleButton = false;
 	bool rightButton = false;
-	//! Window space coordinates (ie. not affected by window scale factor). This
+	//! Window space coordinates in points (ie. not affected by window scale factor). This
 	//! value should be used for cursors etc. and not for calculating changes in
 	//! position. In other words don't subtract mouse position from a previous
 	//! frame. Use ae::MouseState::movement for changes in position.
-	ae::Int2 position = ae::Int2( 0 );
-	//! Window space coordinates (ie. not affected by window scale factor). This
+	ae::Vec2 position = ae::Vec2( 0.0f );
+	//! Window space coordinates in points (ie. not affected by window scale factor). This
 	//! value should be used for detecting how much the mouse cursor is moved.
 	//! Cursor jumps are filtered when the mouse is captured and when the window
-	//! becomes active.
-	ae::Int2 movement = ae::Int2( 0 );
+	//! becomes active. Preserves sub-pixel precision for consistent behavior across
+	//! browsers that report movement at different frequencies.
+	ae::Vec2 movement = ae::Vec2( 0.0f );
 	//! Raw scroll input only (no momentum). Wheel gives ~1.0 per notch, and
 	//! uses sub-line float precision if possible. Is reset each frame. Physical
 	//! direction regardless of OS natural scrolling setting, see
@@ -3627,17 +3873,44 @@ struct GamepadState // @TODO: Rename Gamepad
 };
 
 //------------------------------------------------------------------------------
+// ae::Touch constants
+//------------------------------------------------------------------------------
+const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
+const uint32_t kMaxTouchSamples = 64; //!< Max number of position samples stored for each touch
+
+//------------------------------------------------------------------------------
 // ae::Touch struct
 //------------------------------------------------------------------------------
 struct Touch
 {
 	uint32_t id = 0;
-	ae::Int2 startPosition = ae::Int2( 0.0f );
-	ae::Int2 position = ae::Int2( 0.0f );
-	ae::Int2 movement = ae::Int2( 0.0f );
+	struct Sample
+	{
+		double time; // Relative to ae::GetTime()
+		ae::Vec2 position; // Relative to the virtual window size (ie. not affected by window scale factor)
+	};
+	//! The oldest position sample is at index 0, and the newest is at index
+	//! ( length - 1 ). Position samples are added on every system input event,
+	//! so the time between samples is not fixed. Once max samples is reached
+	//! the sample that contributes the least to the 'shape' of the curve formed
+	//! by the consecutive samples is removed to make room for the new sample.
+	ae::Array< Sample, kMaxTouchSamples > samples;
+	//! True after the user releases or cancels the touch. The touch remains
+	//! visible via ae::Input::GetTouches() until ae::Input::ReleaseTouch() is
+	//! called. samples is not modified after the touch ends.
+	bool ended = false;
+
+	ae::Vec2 Position() const;
+	ae::Vec2 StartPosition() const;
+	ae::Vec2 StartDelta() const;
+	bool Ended() const { return ended; }
+	double Lifetime() const;
+
+	// Internal: appends a sample, simplifying the stored curve when full.
+	void _AppendSample( double time, ae::Vec2 position );
 };
-const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
-using TouchArray = ae::Array< ae::Touch, ae::kMaxTouches >;
+
+using TouchArray = ae::Array< ae::Touch*, ae::kMaxTouches >;
 
 //------------------------------------------------------------------------------
 // ae::Input class
@@ -3705,22 +3978,27 @@ public:
 	inline bool GetGamepadPressLeft( uint32_t idx = 0 ) const { return gamepads[ idx ].left && !gamepadsPrev[ idx ].left; }
 	inline bool GetGamepadPressRight( uint32_t idx = 0 ) const { return gamepads[ idx ].right && !gamepadsPrev[ idx ].right; }
 
-	//! Returns an active touch with the given \p id or nullptr if it does not
-	//! exist
-	const ae::Touch* GetTouchById( uint32_t id ) const;
-	//! Returns a touch that was just released with the given \p id or nullptr
-	//! if it does not exist
-	const ae::Touch* GetFinishedTouchById( uint32_t id ) const;
-	//! Returns all touches that have stated since the last ae::Input::Pump()
-	//! call
-	ae::TouchArray GetNewTouches() const;
-	//! Returns all touches that have been released since the last
-	//! ae::Input::Pump() call
-	ae::TouchArray GetFinishedTouches() const;
-	//! Returns all touches that are currently active
-	const ae::TouchArray& GetTouches() const;
-	//! Returns all touches that were active in the previous frame
-	const ae::TouchArray& GetPreviousTouches() const;
+	//! Adopts the oldest un-pumped touch into the tracked set, making it
+	//! visible via ae::Input::GetTouches() until explicitly released with
+	//! ae::Input::ReleaseTouch(). Failure to release pumped touches will result
+	//! in new lost touches. It is safe to hold on to a pumped touch pointer
+	//! until it is released. Pumped touches will continue to be updated over
+	//! their lifetime. Returns the adopted touch, or nullptr if there are no
+	//! new touches. Touches are discarded if they start and end before
+	//! ae::Input::PumpTouches() is called.
+	const ae::Touch* PumpTouches();
+	//! Returns the touches the caller has opted into tracking via
+	//! ae::Input::PumpTouches() and have not yet released. Touches that have
+	//! not been pumped are not visible here. The array is returned by value so
+	//! it's safe to iterate through this result and call
+	//! ae::Input::ReleaseTouch() on all/any of the touches in any order
+	//! (although you should be careful not to access the internals of touches
+	//! in this array that you've already released).
+	ae::TouchArray GetTouches() const { return m_touches; }
+	//! Frees a touch returned by PumpTouches(). This **must** be called per
+	//! touch or internal limits will be hit and new touches may be discarded.
+	//! It is not safe to access a touch after it has been released.
+	void ReleaseTouch( const ae::Touch* touch );
 	
 	MouseState mouse;
 	MouseState mousePrev;
@@ -3730,16 +4008,21 @@ public:
 
 // private:
 	Input( const Input& ) = delete;
-	void m_SetMousePos( ae::Int2 pos );
-	void m_SetMousePos( ae::Int2 pos, ae::Int2 movement );
-	void m_SetCursorPos( ae::Int2 pos );
+	void m_TryNewFrame();
+	void m_SetMousePos( ae::Vec2 pos );
+	void m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement );
+	void m_WarpCursor( ae::Vec2 pos ); // Attempts to move the OS's cursor to the given position
 	void m_SetMouseCaptured( bool captured );
 	void m_UpdateModifiers();
 	ae::TimeStep m_timeStep;
 	ae::Window* m_window = nullptr;
+	bool m_pendingNewFrame = true;
 	bool m_captureMouse = false;
-	ae::Int2 m_capturedMousePos = ae::Int2( INT_MAX );
+	ae::Optional< ae::Vec2 > m_capturedMousePos;
 	bool m_mousePosSet = false;
+#if _AE_EMSCRIPTEN_
+	int m_pendingPointerLock = 0; // -1 = unlock pending, 1 = lock pending
+#endif
 	bool m_hideCursor = false;
 	bool m_keys[ 256 ];
 	bool m_keysPrev[ 256 ];
@@ -3752,11 +4035,11 @@ public:
 	bool m_gamepadRequiresFocus = true;
 	bool m_naturalScroll = false;
 	// Touch
-	ae::TouchArray m_touches;
-	ae::TouchArray m_touchesPrev;
+	using TouchPool = ae::ObjectPool< ae::Touch, ae::kMaxTouches >;
+	TouchPool m_touchPool;
+	TouchArray m_newTouches;
+	TouchArray m_touches;
 	uint32_t m_touchIndex = 0; // 0 is invalid
-	// Emscripten
-	bool newFrame_HACK = false;
 };
 
 /* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
@@ -3847,8 +4130,8 @@ public:
 		Data, //!< A given existing directory
 		User, //!< A directory for storing preferences and savedata
 		Cache, //!< A directory for storing expensive to generate data (computed, downloaded, etc)
-		UserShared, //!< Same as above but shared accross the 'organization name'
-		CacheShared //!< Same as above but shared accross the 'organization name'
+		UserShared, //!< Same as above but shared across the 'organization name'
+		CacheShared //!< Same as above but shared across the 'organization name'
 	};
 	
 	//! If \p dataDir is absolute no processing on the path will be done. Passing
@@ -3899,6 +4182,7 @@ public:
 	bool GetRootDir( Root root, Str256* outDir ) const;
 	uint32_t GetSize( Root root, const char* filePath ) const;
 	uint32_t Read( Root root, const char* filePath, void* buffer, uint32_t bufferSize ) const;
+	//! Returns the number of bytes written
 	uint32_t Write( Root root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const;
 	bool CreateFolder( Root root, const char* folderPath ) const;
 	void ShowFolder( Root root, const char* folderPath ) const;
@@ -3909,6 +4193,7 @@ public:
 	// Static member functions intended to be used when not creating a instance
 	static uint32_t GetSize( const char* filePath );
 	static uint32_t Read( const char* filePath, void* buffer, uint32_t bufferSize );
+	//! Returns the number of bytes written
 	static uint32_t Write( const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs );
 	static bool CreateFolder( const char* folderPath );
 	static void ShowFolder( const char* folderPath );
@@ -3925,24 +4210,30 @@ public:
 	//! Returns the entire file extension in the case of multiple dots. If
 	//! \p includeDot is true the returned string will include the first dot,
 	//! which can be useful for creating a substring of the file name.
-	static const char* GetFileExtFromPath( const char* filePath, bool includeDot = false );
+	static const char* GetFileExtensionFromPath( const char* filePath, bool includeDot = false );
 	//! Returns a range within \p filePath to the first section of a path. Eg.
 	//! "/User/Documents/file.txt" will allow the extraction of the directory
 	//! "User" by returning a pointer to both "User/Documents/file.txt" and
-	//! /Documents/file.txt". No exceptions are made for file names (ie. files
+	//! "/Documents/file.txt". No exceptions are made for file names (ie. files
 	//! with a '.' in the name). The path can be separated by forward or
 	//! backward slashes.
 	static std::pair< const char*, const char* > TraversePath( const char* filePath );
 	static Str256 GetDirectoryFromPath( const char* filePath );
 	static void AppendToPath( Str256* path, const char* str );
-	//! Replaces the extension of the given path with \p ext. If the given path
-	//! does not have an extension then \p ext will be appended to the path.
-	//! \p ext must be only alphanumeric characters.
+	//! Replaces the extension of the given \p path with \p ext, or appends
+	//! \p ext if \p path has no extension. Returns true if \p path was updated.
+	//! Returns false and leaves \p path unchanged if \p path is null, empty, a
+	//! directory path, or if \p ext is null, empty, or contains characters other
+	//! than letters and numbers.
 	static bool SetExtension( Str256* path, const char* ext );
-	// @todo delete
-	//! Returns true if the given path is a directory. This function does not
-	//! access the underlying filesystem to see if the directory exists.
-	static bool IsDirectory( const char* path );
+	//! Returns true if the given \p filePath has the complete \p extension.
+	//! The extension can include any number of dots, and may include multiple
+	//! dot-separated segments. A leading dot in \p extension is ignored before
+	//! matching. For example ".TAR.GZ" or "tAr.gZ" are valid extensions, and
+	//! are considered equivalent to "tar.gz" when \p caseSensitive is false.
+	//! Empty segments are allowed, but "tar..gz" and "tar.gz" are not
+	//! considered equivalent.
+	static bool HasExtension( const char* filePath, const char* extension, bool caseSensitive = false );
 	//! Returns true if the given path is a file and the current user has write permissions. This function accesses the
 	//! underlying filesystem to see if the file exists and is not a directory.
 	static bool IsWritable( const char* path );
@@ -3970,6 +4261,11 @@ private:
 	ae::Str256 m_cacheDir;
 	ae::Str256 m_userSharedDir;
 	ae::Str256 m_cacheSharedDir;
+public:
+	//! Returns true if the given path is a directory. This
+	//! function does not access the underlying filesystem to see if the
+	//! directory exists.
+	static bool IsDirectory( const char* path ); // @todo delete
 };
 
 //------------------------------------------------------------------------------
@@ -4152,8 +4448,9 @@ private:
 //------------------------------------------------------------------------------
 // @TODO: Graphics globals. Should be parameters to modules that need them.
 //------------------------------------------------------------------------------
-extern int32_t GLMajorVersion;
-extern int32_t GLMinorVersion;
+int32_t GLMajorVersion();
+int32_t GLMinorVersion();
+const char* GLProfile(); // es, core, compatibility
 // Caller enables this externally.  The renderer, Shader, math aren't tied to one another
 // enough to pass this locally.  glClipControl is also not accessible in ES or GL 4.1, so
 // doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
@@ -4632,11 +4929,14 @@ public:
 	static Matrix4 GetQuadToNDCTransform( Rect ndc, float z );
 
 private:
+	friend class Window;
+	void m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer );
 	uint32_t m_fbo = 0;
 	Array< Texture2D*, 4 > m_targets;
 	Texture2D m_depth;
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
+	bool m_externalFramebuffer = false;
 };
 
 //------------------------------------------------------------------------------
@@ -4656,7 +4956,7 @@ public:
 	void Initialize( class Window* window );
 	void Terminate();
 
-	void SetVsyncEnbled( bool enabled );
+	void SetVsyncEnabled( bool enabled );
 	bool GetVsyncEnabled() const;
 
 	void Activate();
@@ -4763,7 +5063,7 @@ public:
 	//! false once this limit has been reached until ae::DebugLines::Clear() or ae::DebugLines::Render()
 	//! is called.
 	void Initialize( uint32_t maxVerts );
-	//! Deallocates vertices and frees GPU recources.
+	//! Deallocates vertices and frees GPU resources.
 	void Terminate();
 	//! Draws all debug lines submitted with ae::DebugLines::Add...() since the last call to ae::DebugLines::Clear()
 	//! or ae::DebugLines::Render(). All debug lines must be resubmitted after calling this.
@@ -5061,8 +5361,9 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::CollisionExtra
-//! AE_COLLISION_EXTRA_CONFIG can be defined to provide extra vertex data returned
-//! from Raycasts and PushOuts. See AE_CONFIG_FILE for more info.
+//------------------------------------------------------------------------------
+//! AE_COLLISION_EXTRA_CONFIG can be defined to provide extra vertex data
+//! returned from Raycasts and PushOuts. See AE_CONFIG_FILE for more info.
 //------------------------------------------------------------------------------
 #ifdef AE_COLLISION_EXTRA_CONFIG
 	typedef AE_COLLISION_EXTRA_CONFIG CollisionExtra;
@@ -5075,15 +5376,10 @@ private:
 //------------------------------------------------------------------------------
 struct RaycastParams
 {
-	ae::Matrix4 transform = ae::Matrix4::Identity();
-	const void* userData = nullptr;
 	ae::Vec3 source = ae::Vec3( 0.0f );
 	ae::Vec3 ray = ae::Vec3( 0.0f, 0.0f, -1.0f );
 	uint32_t maxHits = 1;
-	bool hitCounterclockwise = true;
-	bool hitClockwise = false;
-	ae::DebugLines* debug = nullptr; // Draw collision results
-	ae::Color debugColor = ae::Color::Red();
+	ae::Any< 32, 16 > userData;
 };
 
 //------------------------------------------------------------------------------
@@ -5096,8 +5392,8 @@ struct RaycastResult
 		ae::Vec3 position = ae::Vec3( 0.0f );
 		ae::Vec3 normal = ae::Vec3( 0.0f );
 		float distance = 0.0f;
-		const void* userData = nullptr;
-		CollisionExtra extra = {};
+		ae::Any< 32, 16 > userData;
+		CollisionExtra extra = {}; // @TODO: Cleanup. This is CollisionMesh specific.
 	};
 	ae::Array< Hit, 8 > hits;
 
@@ -5108,15 +5404,56 @@ struct RaycastResult
 };
 
 //------------------------------------------------------------------------------
+// ae::TriangleRaycastParams
+//------------------------------------------------------------------------------
+struct TriangleRaycastParams
+{
+	bool hitCounterclockwise = true;
+	bool hitClockwise = false;
+};
+
+//------------------------------------------------------------------------------
+// ae::CollisionMeshRaycastParams
+//------------------------------------------------------------------------------
+struct CollisionMeshRaycastParams
+{
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	bool hitCounterclockwise = true;
+	bool hitClockwise = false;
+	ae::DebugLines* debug = nullptr; // Draw collision results
+	ae::Color debugColor = ae::Color::Red();
+};
+
+//------------------------------------------------------------------------------
+// ae::Raycast free functions
+//------------------------------------------------------------------------------
+//! These wrap the shapes' Raycast() methods using the RaycastParams /
+//! RaycastResult pattern, matching CollisionMesh::Raycast. Passing the result
+//! of a previous call as \p prevResult chains multiple shape raycasts together.
+//------------------------------------------------------------------------------
+RaycastResult Raycast( const Triangle& tri, const RaycastParams& params, const TriangleRaycastParams& triParams = {}, RaycastResult prevResult = {} );
+RaycastResult Raycast( const Sphere& sphere, const RaycastParams& params, RaycastResult prevResult = {} );
+RaycastResult Raycast( const Plane& plane, const RaycastParams& params, RaycastResult prevResult = {} );
+RaycastResult Raycast( const AABB& aabb, const RaycastParams& params, RaycastResult prevResult = {} );
+RaycastResult Raycast( const OBB& obb, const RaycastParams& params, RaycastResult prevResult = {} );
+
+//------------------------------------------------------------------------------
+// ae::CollisionMeshPushOutParams
+//------------------------------------------------------------------------------
+struct CollisionMeshPushOutParams
+{
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	ae::DebugLines* debug = nullptr; // Draw collision results
+	ae::Color debugColor = ae::Color::Red();
+};
+
+//------------------------------------------------------------------------------
 // ae::PushOutParams
 //! Sphere collision
 //------------------------------------------------------------------------------
 struct PushOutParams
 {
-	ae::Matrix4 transform = ae::Matrix4::Identity();
-	const void* userData = nullptr;
-	ae::DebugLines* debug = nullptr; // Draw collision results
-	ae::Color debugColor = ae::Color::Red();
+	ae::Any< 32, 16 > userData;
 };
 
 //------------------------------------------------------------------------------
@@ -5129,9 +5466,9 @@ struct PushOutInfo
 	ae::Vec3 velocity = ae::Vec3( 0.0f );
 	struct Hit
 	{
-		ae::Vec3 position;
-		ae::Vec3 normal;
-		CollisionExtra extra;
+		ae::Vec3 position = ae::Vec3( 0.0f );
+		ae::Vec3 normal = ae::Vec3( 0.0f );
+		CollisionExtra extra = {}; // @TODO: Cleanup. This is CollisionMesh specific.
 	};
 	ae::Array< Hit, 8 > hits;
 
@@ -5178,8 +5515,8 @@ public:
 	//! sizes are maintained.
 	void Clear();
 
-	RaycastResult Raycast( const RaycastParams& params, RaycastResult prevResult = RaycastResult() ) const;
-	PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
+	RaycastResult Raycast( const RaycastParams& params, const CollisionMeshRaycastParams& meshParams = {}, RaycastResult prevResult = {} ) const;
+	PushOutInfo PushOut( const PushOutParams& params, const CollisionMeshPushOutParams& meshParams = {}, const PushOutInfo& prevInfo = {} ) const;
 	// @TODO: GetClosestPoint()
 	ae::AABB GetAABB() const { return m_bvh.GetAABB(); }
 	
@@ -5202,34 +5539,45 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::AStarNode example interface
-// ae::AStar is a generic A* algorithm implementation. It requires a type T
-// which requires the following interface:
+//------------------------------------------------------------------------------
+//! ae::AStar() is a generic A* algorithm implementation. It requires a type T
+//! which has an interface with the three functions below: GetNext(),
+//! GetNextCount(), and GetHeuristic(). Note that the template N in AStarNode is
+//! not part of the required interface and is only for convenience. N can be set
+//! to 0 for dynamic 'next' node limits, 4 for a 2d grid with cartesian
+//! connections, 8 for a 2d grid with diagonal connections, or 26 for a full 3d
+//! 'voxel' grid, etc. If the topology of your graph is very well defined you
+//! would probably want to copy and replace this struct to calculate the next
+//! nodes on the fly instead of storing them in an array.
 //------------------------------------------------------------------------------
 template< uint32_t N = 0 >
 struct AStarNode
 {
-	AStarNode() : pos( 0.0f ) {}
-	AStarNode( const ae::Tag& tag ) : next( tag ), pos( 0.0f ) {}
+	using AStarNodeT = AStarNode< N >;
+	AStarNode() = default;
+	AStarNode( const ae::Tag& tag ) : next( tag ) {}
+	ae::Array< const AStarNodeT*, N > next;
+	ae::Vec3 pos = ae::Vec3( 0.0f );
 
+	//--------------------------------------------------------------------------
 	// ae::AStar type T must implement these following functions:
-	//! Returns the next node in the path. \p index is the index of the next
-	//! node in the path. Edges between paths can be uni-directional or
-	//! bi-directional.
-	const ae::AStarNode< N >* GetNext( uint32_t index ) const { return next[ index ]; }
+	//--------------------------------------------------------------------------
+	//! Returns one of the next traversable nodes in the path. Argument \p index
+	//! should be no more than ae::AStarNode::GetNextCount() - 1. Note that
+	//! edges between paths can be uni or bi-directional.
+	const AStarNodeT* GetNext( uint32_t index ) const { return next[ index ]; }
 	//! Returns the number of nodes directly visitable from this node.
 	uint32_t GetNextCount() const { return next.Length(); }
 	//! Returns the heuristic distance between this node and \p other. For
 	//! ae::AStar to return a least cost path, this function must be 'admissible'.
 	//! This means this function should never overestimate the cost of
 	//! traveling between this node and \p other.
-	float GetHeuristic( const ae::AStarNode< N >* other ) const { return ( pos - other->pos ).Length(); }
-
-	ae::Array< const ae::AStarNode< N >*, N > next;
-	ae::Vec3 pos = ae::Vec3( 0.0f );
+	float GetHeuristic( const AStarNodeT* other ) const { return ( pos - other->pos ).Length(); }
 };
 
 //------------------------------------------------------------------------------
 // ae::AStar algorithm
+//------------------------------------------------------------------------------
 //! \brief A generic A* algorithm implementation. Requires a type T which
 //! implements the functions: GetNext(), GetNextCount(), and GetHeuristic().
 //! See ae::AStarNode for exact function signatures. \p startNode is the node
@@ -5416,7 +5764,7 @@ struct IK
 	ae::Matrix4 debugModelToWorld = ae::Matrix4::Identity();
 	float debugJointScale = 0.1f; //!< Useful default when working in meters
 
-	// @TODO: Cleaup IK helpers
+	// @TODO: Cleanup IK helpers
 	static ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 p );
 	//! Returns the deterministic orthonormal basis perpendicular to \p primary
 	//! that ae::IKRotationConstraint rotation limits are expressed in.
@@ -5682,9 +6030,7 @@ public:
 	template< typename T > void SetUserData( T* userData );
 	template< typename T > T* GetUserData();
 
-	void* m_userData = nullptr;
-	uint32_t m_userDataTypeId = 0; // ae::TypeId
-	uint32_t m_userDataConstTypeId = 0; // ae::TypeId
+	ae::Any< sizeof(void*), alignof(void*) > m_userData;
 
 protected:
 	enum class Mode
@@ -6002,7 +6348,7 @@ public:
 	//! ae::NetObject::SetInitData() on the object to finalize the object for
 	//! remote creation. Call ae::NetObjectServer::DestroyNetObject() when finished.
 	NetObject* CreateNetObject();
-	//! Will cause the ae::NetObject to be detroyed on remote clients.
+	//! Will cause the ae::NetObject to be destroyed on remote clients.
 	//! Must be called for each ae::NetObject allocated with
 	//! ae::NetObjectServer::CreateNetObject().
 	void DestroyNetObject( NetObject* netObject );
@@ -6225,13 +6571,20 @@ private:
 //! Call signature: AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
 #define AE_FORCE_LINK_CLASS( ... ) AE_FORCE_LINK_CLASS_IMPL( __VA_ARGS__ )
 
+#define AE_BASE_TYPE\
+	static const char* GetParentTypeName() { return ""; }\
+	static const ae::ClassType* GetParentType() { return nullptr; }\
+	ae::TypeId GetTypeId() const { return _metaTypeId; }\
+	ae::TypeId _metaTypeId = ae::kInvalidTypeId;\
+
 //------------------------------------------------------------------------------
 // Meta class registration macros
 //------------------------------------------------------------------------------
 //! Registers a new type that can be retrieved with ae::GetClassType( "Namespace0::NameSpace1::MyType" )
 //! or ae::GetClassType< Namespace0::NameSpace1::MyType >(). Call this once in the
-//! global scope of any cpp file. The class must indirectly inherit from from
-//! ae::Inheritor< ae::Object, MyType >.
+//! global scope of any cpp file. The class (or a type it inherits from, see
+//! ae::Inheritor) must use the AE_BASE_TYPE macro. ae::Object does this, but is
+//! not required -- any struct can root its own hierarchy this way.
 #define AE_REGISTER_CLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE(_CLASS), AE_GLUE_TYPE(_CLASS) )
 //! Registers the class variable 'MyType::classVar'
 #define AE_REGISTER_CLASS_VAR( _CLASS, _V ) AE_REGISTER_NAMESPACECLASS_VAR( (_CLASS), _V )
@@ -6244,8 +6597,9 @@ private:
 
 //! Registers a new type that can be retrieved with ae::GetClassType( "Namespace0::NameSpace1::MyType" )
 //! or ae::GetClassType< Namespace0::NameSpace1::MyType >(). Call this once in the
-//! global scope of any cpp file. The class must indirectly inherit from from
-//! ae::Inheritor< ae::Object, MyType >.
+//! global scope of any cpp file. The class (or a type it inherits from, see
+//! ae::Inheritor) must use the AE_BASE_TYPE macro. ae::Object does this, but is
+//! not required -- any struct can root its own hierarchy this way.
 //! Call signature: AE_REGISTER_NAMESPACECLASS( (Namespace0, ..., NameSpaceN, MyType) );
 #define AE_REGISTER_NAMESPACECLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS )
 //! Registers the class variable 'Namespace0::...::NamespaceN::MyType::classVar'
@@ -6264,8 +6618,9 @@ private:
 // External enum definer and registerer
 //------------------------------------------------------------------------------
 //! Define a new enum (must register with AE_REGISTER_ENUM_CLASS)
-#define AE_DEFINE_ENUM_CLASS( E, T, ... ) AE_DEFINE_ENUM_CLASS_IMPL( E, T, ##__VA_ARGS__ )
-
+#define AE_DEFINE_ENUM_CLASS( E, T, ... ) AE_DEFINE_ENUM_CLASS_IMPL( E, T, false, ##__VA_ARGS__ )
+//! Define a new bit field enum (must register with AE_REGISTER_ENUM_CLASS)
+#define AE_DEFINE_BIT_FIELD_ENUM_CLASS( E, T, ... ) AE_DEFINE_BIT_FIELD_ENUM_CLASS_IMPL( E, T, ##__VA_ARGS__ )
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
 #define AE_REGISTER_ENUM_CLASS( E ) AE_REGISTER_ENUM_CLASS_IMPL( E )
 
@@ -6274,13 +6629,14 @@ private:
 //------------------------------------------------------------------------------
 //! Register an already defined c-style enum type
 #define AE_REGISTER_ENUM( E ) AE_REGISTER_ENUM_IMPL( E )
-
+//! Register an already defined c-style bit field enum type
+#define AE_REGISTER_BIT_FIELD_ENUM( E ) AE_REGISTER_BIT_FIELD_ENUM_IMPL( E )
 //! Register an already defined c-style enum type where each value has a prefix
 #define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) AE_REGISTER_ENUM_PREFIX_IMPL( E, PREFIX )
-
+//! Register an already defined c-style bit field enum type where each value has a prefix
+#define AE_REGISTER_BIT_FIELD_ENUM_PREFIX( E, PREFIX ) AE_REGISTER_BIT_FIELD_ENUM_PREFIX_IMPL( E, PREFIX )
 //! Register c-style enum value
 #define AE_REGISTER_ENUM_VALUE( E, V ) ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #V, V );
-
 //! Register c-style enum value with a manually specified name
 #define AE_REGISTER_ENUM_VALUE_NAME( E, V, N ) ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #N, V );
 
@@ -6289,7 +6645,8 @@ private:
 //------------------------------------------------------------------------------
 //! Register an already defined enum class type
 #define AE_REGISTER_ENUM_CLASS2( E ) AE_REGISTER_ENUM_CLASS2_IMPL( E )
-
+//! Register an already defined bit field enum class type
+#define AE_REGISTER_BIT_FIELD_ENUM_CLASS2( E ) AE_REGISTER_BIT_FIELD_ENUM_CLASS2_IMPL( E )
 //! Register enum class value
 #define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##V( #V, E::V ); }
 
@@ -6298,13 +6655,28 @@ private:
 //------------------------------------------------------------------------------
 // Meta system
 //------------------------------------------------------------------------------
-using TypeId = uint32_t;
+struct TypeId
+{
+	constexpr TypeId() : m_id( 0 ) {}
+	constexpr explicit TypeId( uint32_t id ) : m_id( id ) {}
+	template< uint32_t N >
+	constexpr TypeId( const char (&name)[ N ] )
+		: m_id( name[ 0 ] ? Hash32().HashString( name ).Get() : 0 ) {}
+
+	constexpr operator uint32_t() const { return m_id; }
+	constexpr bool operator==( TypeId o ) const { return m_id == o.m_id; }
+	constexpr bool operator!=( TypeId o ) const { return m_id != o.m_id; }
+	constexpr bool operator<( TypeId o ) const { return m_id < o.m_id; }
+
+private:
+	uint32_t m_id;
+};
 using TypeName = ae::Str64;
 class Type;
 class ClassType;
 class ClassVar;
 class EnumType;
-const TypeId kInvalidTypeId = 0;
+constexpr TypeId kInvalidTypeId;
 
 //------------------------------------------------------------------------------
 // Meta limit defines
@@ -6320,12 +6692,6 @@ const TypeId kInvalidTypeId = 0;
 #endif
 #ifndef AE_MAX_META_ENUM_VALUES_CONFIG
 	#define AE_MAX_META_ENUM_VALUES_CONFIG 64
-#endif
-#ifndef AE_MAX_META_PROPS_CONFIG
-	#define AE_MAX_META_PROPS_CONFIG 8
-#endif
-#ifndef AE_MAX_META_PROP_LIST_LENGTH_CONFIG
-	#define AE_MAX_META_PROP_LIST_LENGTH_CONFIG 8
 #endif
 #ifndef AE_MAX_META_ATTRIBUTES_CONFIG
 	#define AE_MAX_META_ATTRIBUTES_CONFIG 8
@@ -6346,16 +6712,6 @@ const uint32_t kMaxMetaEnumTypes = AE_MAX_META_ENUM_TYPES_CONFIG;
 //! value can be overridden by defining AE_MAX_META_ENUM_VALUES_CONFIG. See
 //! AE_CONFIG_FILE for more details.
 const uint32_t kMaxMetaEnumValues = AE_MAX_META_ENUM_VALUES_CONFIG;
-//! The maximum number of properties that can be registered with the
-//! AE_REGISTER_*_PROPERTY() functions per class, var, enum, etc. This value
-//! can be overridden by defining AE_MAX_META_PROPS_CONFIG. See AE_CONFIG_FILE
-//! for more details.
-const uint32_t kMaxMetaProps = AE_MAX_META_PROPS_CONFIG;
-//! The maximum number of values that can be registered per property with the
-//! AE_REGISTER_*_PROPERTY_VALUE() functions. This value can be
-//! overridden by defining AE_MAX_META_PROP_LIST_LENGTH_CONFIG. See
-//! AE_CONFIG_FILE for more details.
-const uint32_t kMaxMetaPropListLength = AE_MAX_META_PROP_LIST_LENGTH_CONFIG;
 //! The maximum number of attributes that can be registered with
 //! AE_REGISTER_CLASS_ATTRIBUTE(), AE_REGISTER_CLASS_VAR_ATTRIBUTE(), and
 //! AE_REGISTER_ENUM_ATTRIBUTE() per class, var, or enum. This value can
@@ -6368,15 +6724,14 @@ const uint32_t kMaxMetaAttributes = AE_MAX_META_ATTRIBUTES_CONFIG;
 //! Base class for all meta registered objects. Inherit from this using
 //! ae::Inheritor and register your classes with AE_REGISTER_CLASS.
 //------------------------------------------------------------------------------
+// #if AE_DEPRECATED
 class Object
 {
 public:
 	virtual ~Object() {}
-	static const char* GetParentTypeName() { return ""; }
-	static const ae::ClassType* GetParentType() { return nullptr; }
-	ae::TypeId GetTypeId() const { return _metaTypeId; }
-	ae::TypeId _metaTypeId = ae::kInvalidTypeId;
+	AE_BASE_TYPE;
 };
+// #endif
 
 //------------------------------------------------------------------------------
 // ae::Inheritor
@@ -6403,25 +6758,25 @@ const ae::ClassType* GetClassTypeByIndex( uint32_t i );
 const ae::ClassType* GetClassTypeById( ae::TypeId id );
 //! Get a registered ae::ClassType from a type name
 const ae::ClassType* GetClassTypeByName( const char* typeName );
-//! Get a registered ae::ClassType from an ae::Object
-const ae::ClassType* GetClassTypeFromObject( const ae::Object& obj );
-//! Get a registered ae::ClassType from a pointer to an ae::Object
-const ae::ClassType* GetClassTypeFromObject( const ae::Object* obj );
+//! Get a registered ae::ClassType from a type \p T
+template< typename T > std::enable_if_t< !std::is_pointer_v< T >,
+const ae::ClassType* > GetClassTypeFromObject( const T& obj );
+//! Get a registered ae::ClassType from a pointer to a type \p T
+template< typename T > const ae::ClassType* GetClassTypeFromObject( const T* obj );
 //! Get a registered ae::ClassType directly from a type
 template< typename T > const ae::ClassType* GetClassType();
 //! Get a registered ae::EnumType by name
 const class ae::EnumType* GetEnumType( const char* enumName );
-//! Get a registered ae::TypeId from an ae::Object
-ae::TypeId GetObjectTypeId( const ae::Object* obj );
-//! Get a registered ae::TypeId from a type name
-//@TODO: Constexpr
-ae::TypeId GetTypeIdFromName( const char* name );
+//! Get a registered ae::TypeId from a \p T type.
+template< typename T > ae::TypeId GetObjectTypeId( const T* obj );
+//! Get a registered ae::TypeId from a type name. Can be evaluated at compile time when given a string literal.
+constexpr ae::TypeId GetTypeIdFromName( const char* name );
 //! Returns an integer id for the given type, which ignores const, pointer, and
 //! reference qualifiers.
-template< typename T > ae::TypeId GetTypeIdWithoutQualifiers();
+template< typename T > constexpr ae::TypeId GetTypeIdWithoutQualifiers();
 //! Returns an integer id for the given type, which respects const, pointer, and
 //! reference qualifiers.
-template< typename T > ae::TypeId GetTypeIdWithQualifiers();
+template< typename T > constexpr ae::TypeId GetTypeIdWithQualifiers();
 
 //------------------------------------------------------------------------------
 // ae::Attribute class
@@ -6430,10 +6785,7 @@ template< typename T > ae::TypeId GetTypeIdWithQualifiers();
 class Attribute
 {
 public:
-	static const char* GetParentTypeName() { return ""; }
-	static const ae::ClassType* GetParentType() { return nullptr; }
-	ae::TypeId GetTypeId() const { return _metaTypeId; }
-	ae::TypeId _metaTypeId = ae::kInvalidTypeId;
+	AE_BASE_TYPE;
 };
 
 //------------------------------------------------------------------------------
@@ -6478,8 +6830,9 @@ class DataPointer
 public:
 	DataPointer();
 	template< typename T > explicit DataPointer( T* data );
+	template< typename T > DataPointer( const ae::ClassVar* var, T* object );
 	DataPointer( const ae::Type& varType, void* data );
-	DataPointer( const ae::ClassVar* var, ae::Object* object );
+	DataPointer( const ae::ClassVar* var, std::nullptr_t ) : DataPointer() {}
 
 	//! Returns true if the data is valid.
 	explicit operator bool() const;
@@ -6507,8 +6860,9 @@ public:
 	ConstDataPointer();
 	ConstDataPointer( DataPointer varData );
 	template< typename T > explicit ConstDataPointer( const T* data );
+	template< typename T > ConstDataPointer( const ae::ClassVar* var, const T* object );
 	ConstDataPointer( const ae::Type& varType, const void* data );
-	ConstDataPointer( const ae::ClassVar* var, const ae::Object* object );
+	ConstDataPointer( const ae::ClassVar* var, std::nullptr_t ) : ConstDataPointer() {}
 	
 	//! Returns true if the data is valid.
 	explicit operator bool() const;
@@ -6528,20 +6882,26 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::ObjectPointerToStringFn
-//! Used with ae::PointerType to convert object pointers to strings, most
-//! useful when serializing references to game objects to json etc. Should be
-//! implemented with an encoding that matches ae::StringToObjectPointerFn.
+//! Used with ae::ObjectPointerType to convert object pointers to strings, most useful
+//! when serializing references to game objects to json etc. Should be
+//! implemented with an encoding that matches ae::StringToObjectPointerFn. Note
+//! that "null" object references should be a distinct pattern like 'NULL' or
+//! '0' so that the ae::ObjectPointerToStringFn can fail properly on bad
+//! formatting.
 //------------------------------------------------------------------------------
-using ObjectPointerToStringFn = std::string ( * )( const void* userData, const ae::Object* obj );
+using ObjectPointerToStringFn = ae::Function< std::string( const ae::Object* obj ), 64 >;
 
 //------------------------------------------------------------------------------
 // ae::StringToObjectPointerFn
-//! Used with ae::PointerType to convert strings to object pointers, most
-//! useful when serializing game objects from json etc. Should be implemented
-//! with a lookup into the game object system. The encoding of the given string
-//! should match ae::ObjectPointerToStringFn.
+//! Used with ae::ObjectPointerType to convert strings to object pointers, most useful
+//! when serializing game objects from json etc. Should be implemented with a
+//! lookup into the game object system. The encoding of the given string should
+//! match ae::ObjectPointerToStringFn. Note that a nullptr should be returned
+//! when a reference to a "null" object is serialized, only return an empty
+//! optional type when an error occurs: bad string formatting, type mismatch, a
+//! failed reference lookup etc.
 //------------------------------------------------------------------------------
-using StringToObjectPointerFn = bool ( * )( const void* userData, const char* pointerVal, ae::Object** objOut );
+using StringToObjectPointerFn = ae::Function< ae::Optional< ae::Object* >( const char* str ), 64 >;
 
 //------------------------------------------------------------------------------
 // ae::Type
@@ -6558,6 +6918,9 @@ public:
 
 	virtual ae::TypeId GetBaseVarTypeId() const = 0;
 	virtual ae::TypeId GetExactVarTypeId() const = 0;
+
+	AE_BASE_TYPE;
+
 protected:
 	Type() = default;
 	Type( const Type& ) = delete;
@@ -6595,13 +6958,6 @@ public:
 		Matrix4,
 		Color,
 		UUID,
-#if AE_DEPRECATED
-		Class, // @TODO: Remove
-		Enum, // @TODO: Remove
-		Pointer, // @TODO: Remove
-		CustomRef, // @TODO: Remove
-		None, // @TODO: Remove
-#endif // AE_DEPRECATED
 	};
 
 	virtual ae::BasicType::Type GetType() const = 0;
@@ -6626,7 +6982,7 @@ public:
 	template< typename T > bool SetVarData( ae::DataPointer varData, const T& value ) const;
 	
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< BasicType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6642,16 +6998,37 @@ public:
 	const char* GetPrefix() const { return m_prefix.c_str(); }
 	uint32_t TypeSize() const { return m_size; }
 	bool TypeIsSigned() const { return m_isSigned; }
+	bool TypeIsBitField() const { return m_isBitField; }
 
 	//--------------------------------------------------------------------------
 	// Enum values
 	//--------------------------------------------------------------------------
+	//! Returns the registered enum member name for \p value, or an empty string
+	//! if \p value does not exactly match a registered enum member.
+	// TODO: Should return a char*, and bitfields should have a separate API
 	template< typename T > std::string GetNameByValue( T value ) const;
+	//! Returns a value through \p valueOut for the registered enum member named
+	//! in \p str. \p str can be either the full name of the enum member or a
+	//! numeric string that exactly matches the value of the enum member. T
+	//! must be an integral or enum type, and must be be large enough to hold
+	//! the enum's underlying type. Returns false on failure.
 	template< typename T > bool GetValueFromString( const char* str, T* valueOut ) const;
+	//! Returns the registered enum member value for \p str, or \p defaultValue
+	//! if \p str does not match any registered enum member name or value. T
+	//! must be an integral or enum type, and must be be large enough to hold
+	//! the enum's underlying type.
 	template< typename T > T GetValueFromString( const char* str, T defaultValue ) const;
+	//! Returns true if \p value exactly matches a registered enum member value.
 	template< typename T > bool HasValue( T value ) const;
-	int32_t GetValueByIndex( int32_t index ) const;
+	//! Returns the registered enum member value for \p index. Asserts if
+	//! \p index is out of range. The result will be returned as the type
+	//! specified by T, but the value is not checked for narrowing, so it may be
+	//! truncated if T is smaller than the enum's underlying type.
+	template< typename T > T GetValueByIndex( int32_t index ) const;
+	//! Returns the registered enum member name for \p index, or an empty string
+	//! if \p index is out of range.
 	std::string GetNameByIndex( int32_t index ) const;
+	//! Returns the number of registered enum members.
 	uint32_t Length() const;
 
 	//--------------------------------------------------------------------------
@@ -6661,10 +7038,10 @@ public:
 	//! enum value name), or an empty string if the value is not a named enum
 	//! member or \p varData is null.
 	std::string GetVarDataAsString( ae::ConstDataPointer varData ) const;
-	//! Parses \p value as an enum name or integer string and writes the result
-	//! to \p varData. Returns true on success. Returns false if \p varData is
-	//! null or \p value does not match any enum name and cannot be parsed as
-	//! a valid integer for this enum's underlying type.
+	//! Parses \p value as an enum name or numeric string for a registered enum
+	//! member and writes the result to \p varData. Returns true on success.
+	//! Returns false if \p varData is null, if \p value does not match any enum
+	//! name, or if the numeric string does not fit the enum's underlying type.
 	bool SetVarDataFromString( ae::DataPointer varData, const char* value ) const;
 	//! Copies the enum value at \p varData into \p valueOut. Returns false if
 	//! \p varData is null or T does not match the exact registered enum type
@@ -6688,20 +7065,23 @@ private:
 	ae::TypeName m_prefix;
 	uint32_t m_size;
 	bool m_isSigned;
-	ae::Map< int32_t, std::string, kMaxMetaEnumValues > m_enumValueToName;
-	ae::Map< std::string, int32_t, kMaxMetaEnumValues > m_enumNameToValue;
+	bool m_isBitField;
+	ae::Map< uint64_t, std::string, kMaxMetaEnumValues > m_enumValueToName;
+	ae::Map< std::string, uint64_t, kMaxMetaEnumValues > m_enumNameToValue;
 protected:
-	EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned );
+	EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned, bool isBitField );
 public:
 	const ae::EnumType* GetEnumType() const { return this; } // @TODO: Remove
-	void m_AddValue( const char* name, int32_t value );
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< EnumType >(); }
+	template< typename T > void m_AppendValue( const char* name, T value );
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
-// ae::PointerType
+// ae::ObjectPointerType
+// @TODO: Move this. It's too specialized for ae::Object to be part of the core
+// meta system API.
 //------------------------------------------------------------------------------
-class PointerType : public ae::Type
+class ObjectPointerType : public ae::Type
 {
 public:
 	//! Returns the type pointed to by this type
@@ -6712,7 +7092,9 @@ public:
 	//! referenced value is separate from the const-ness of the pointer.
 	ae::DataPointer Dereference( ae::ConstDataPointer pointer ) const;
 	//! Writes \p value to the given \p pointer, returning true on success.
-	virtual bool Set( ae::DataPointer pointer, ae::Object* value ) const = 0;
+	//! Fails when \p value is non-null and type-incompatible, or when
+	//! \p pointer has the wrong type.
+	bool Set( ae::DataPointer pointer, ae::Object* value ) const;
 	//! Returns a pointer to the inner value of \p pointer, unless given null.
 	template< typename T > T** Get( ae::DataPointer pointer ) const;
 	//! Returns a pointer to the inner value of \p pointer, unless given null.
@@ -6721,17 +7103,14 @@ public:
 	//! Parses \p value as a reference to an object and writes the result to
 	//! \p pointer, returning true on success. The encoding of \p value should
 	//! match the encoding used by ObjectPointerToStringFn.
-	virtual bool FromString( ae::DataPointer pointer, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
-	//! Returns a string representation of the object pointer at \p pointer, or
-	//! an empty string if \p pointer is null. The encoding of the returned
-	//! string should match the encoding expected by StringToObjectPointerFn.
-	virtual std::string ToString( ae::ConstDataPointer pointer, ObjectPointerToStringFn fn, const void* userData ) const = 0;
+	bool FromString( ae::DataPointer pointer, const char* value, const StringToObjectPointerFn& fn ) const;
+	//! Returns a string representation of the object pointer at \p pointer. The
+	//! encoding of the returned string should match the encoding expected by
+	//! StringToObjectPointerFn.
+	std::string ToString( ae::ConstDataPointer pointer, const ObjectPointerToStringFn& fn ) const;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< PointerType >(); }
-#if AE_DEPRECATED
-	virtual ae::BasicType::Type GetBasicType() const { return ae::BasicType::Pointer; } // @HACK: Remove
-#endif // AE_DEPRECATED
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6761,7 +7140,7 @@ public:
 	virtual void Clear( ae::DataPointer optional ) const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< OptionalType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6801,7 +7180,7 @@ public:
 	virtual uint32_t IsFixedLength() const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< ArrayType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6842,7 +7221,7 @@ public:
 	virtual uint32_t GetMaxLength() const = 0;
 
 	// Internal
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< MapType >(); }
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -6865,8 +7244,8 @@ public:
 	uint32_t GetOffset() const;
 	//! Returns the class type that this member variable belongs too.
 	const ae::ClassType& GetClassType() const;
-	//! Returns the 'outermost' type of this var, eg. if this is an array of ints
-	//! the outer type would be ArrayType
+	//! Returns the 'outermost' type of this var, eg. if this is an array of
+	//! integers the outer type would be ArrayType
 	const ae::Type& GetOuterVarType() const;
 
 	//--------------------------------------------------------------------------
@@ -6898,55 +7277,6 @@ public:
 	_TypePointer m_varType;
 	ae::TypeName m_name;
 	uint32_t m_offset = 0;
-#if AE_DEPRECATED
-	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
-	void m_AddProp( const char* prop, const char* value );
-	class Serializer
-	{
-	public:
-		virtual ~Serializer();
-		virtual std::string ObjectPointerToString( const ae::Object* obj ) const = 0;
-		virtual bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const = 0;
-	};
-	static void SetSerializer( const ae::ClassVar::Serializer* serializer );
-	std::string GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
-	bool SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx = -1 ) const;
-	template< typename T > bool GetObjectValue( const ae::Object* obj, T* valueOut, int32_t arrayIdx = -1 ) const;
-	template< typename T > bool SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx = -1 ) const;
-	template< typename T > T* GetPointer( ae::Object* obj, int32_t arrayIdx = -1 ) const;
-	template< typename T > const T* GetPointer( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
-	bool HasProperty( const char* prop ) const;
-	int32_t GetPropertyIndex( const char* prop ) const;
-	int32_t GetPropertyCount() const;
-	const char* GetPropertyName( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( const char* propName ) const;
-	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
-	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
-	ae::BasicType::Type GetType() const;
-	const class ae::EnumType* GetEnumType() const;
-	const char* GetTypeName() const;
-	const ae::ClassType* GetSubType() const;
-	bool IsArray() const;
-	bool IsArrayFixedLength() const;
-	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const;
-	uint32_t GetArrayLength( const ae::Object* obj ) const;
-	uint32_t GetArrayMaxLength() const;
-	template< typename T >
-	const T* m_HACK_FindInnerVarType() const
-	{
-		static_assert( std::is_base_of_v< ae::Type, T >, "" );
-		const ae::Type* iter = m_varType.Get();
-		while( iter )
-		{
-			if( const T* innerType = iter->AsVarType< T >() ) { return innerType; }
-			else if( const ae::PointerType* pointerVarType = iter->AsVarType< ae::PointerType >() ) { iter = &pointerVarType->GetInnerVarType(); }
-			else if( const ae::ArrayType* arrayVarType = iter->AsVarType< ae::ArrayType >() ) { iter = &arrayVarType->GetInnerVarType(); }
-			else { iter = nullptr; }
-		}
-		return nullptr;
-	}
-#endif // AE_DEPRECATED
 };
 
 //------------------------------------------------------------------------------
@@ -6967,14 +7297,15 @@ public:
 	//! Placement-constructs an instance of this type into \p obj and returns
 	//! it cast to T. Returns null if this type is abstract, has no registered
 	//! constructor, or T is not a base of this type.
-	template< typename T = ae::Object > T* New( void* obj ) const;
+	template< typename T > T* New( T* obj ) const;
+	//! See New(T*). This is a convenience function that takes a void*.
+	template< typename T > T* New( void* obj ) const { return New( static_cast< T* >( obj ) ); }
 	//! Creates a temporary instance of this type and copies the vtable from
 	//! the instance. This type must be default constructible.
 	void PatchVTable( ae::Object* obj ) const;
 	uint32_t GetSize() const;
 	uint32_t GetAlignment() const;
 	const char* GetName() const;
-	bool HasNew() const;
 	bool IsAbstract() const;
 	bool IsPolymorphic() const;
 	bool IsDefaultConstructible() const;
@@ -7032,14 +7363,11 @@ public:
 	// Internal
 	//------------------------------------------------------------------------------
 private:
-	ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
+	void* ( *m_placementNew )( void* ) = nullptr;
 	ae::TypeName m_name;
 	ae::TypeId m_id = ae::kInvalidTypeId;
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
-#if AE_DEPRECATED
-	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
-#endif // AE_DEPRECATED
 	ae::Array< const ae::ClassVar*, kMaxMetaVars > m_vars;
 	ae::TypeName m_parent;
 	bool m_isAbstract = false;
@@ -7050,20 +7378,7 @@ public:
 	template< typename T > typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type Init( const char* name );
 	template< typename T > typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type Init( const char* name );
 	void m_AddVar( const ae::ClassVar* var );
-	ae::TypeId GetBaseVarTypeId() const override { return ae::GetTypeIdWithoutQualifiers< ClassType >(); }
-#if AE_DEPRECATED
-	void m_AddProp( const char* prop, const char* value );
-	const ae::ClassType* GetClassType() const { return this; }
-	bool HasProperty( const char* property ) const;
-	const ae::ClassType* GetTypeWithProperty( const char* property ) const;
-	int32_t GetPropertyIndex( const char* prop ) const;
-	int32_t GetPropertyCount() const;
-	const char* GetPropertyName( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( const char* propName ) const;
-	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
-	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
-#endif // AE_DEPRECATED
+	ae::TypeId GetBaseVarTypeId() const override;
 };
 
 //------------------------------------------------------------------------------
@@ -7074,16 +7389,21 @@ template< typename T, typename C > T* Cast( C* obj );
 
 //------------------------------------------------------------------------------
 // ae::PatchVTable
-//! Overwrites the v-table of the given \p obj with the v-table of the given
-//! type. Use this over ae::ClassType::PatchVTable() when the type of \p obj
-//! is known at compile time. T Must be the bottom-most class in the given
-//! \p obj inheritance hierarchy. A temporary instance of the object will be
-//! constructed. \p ctorArgs may be provided if the type does not have a default
-//! constructor. 
+//! Replaces the v-table of \p obj with the v-table of type T.
+//!
+//! Use this function instead of ae::ClassType::PatchVTable() when the type is
+//! known at compile time. T must be the most derived class in \p obj's
+//! inheritance hierarchy.
+//!
+//! A temporary instance of T will be constructed to extract its v-table. If T
+//! does not have a default constructor, provide the necessary arguments via \p
+//! ctorArgs.
 //------------------------------------------------------------------------------
 template< typename T, typename... Args >
 void PatchVTable( T* obj, Args... ctorArgs )
 {
+	// @TODO: Could add a conditional safety check here for types with '_metaTypeId'
+	// @TODO: Allocate with ae::ScratchBuffer in case the object doesn't fit on the stack
 	T temp = T( ctorArgs... );
 	void* vtable = *(void**)&temp;
 	memcpy( (void*)obj, &vtable, sizeof(void*) );
@@ -7191,7 +7511,7 @@ private:
 class _ScratchBuffer
 {
 public:
-	_ScratchBuffer( uint32_t size );
+	_ScratchBuffer( uint32_t capacity );
 	~_ScratchBuffer();
 	static uint32_t GetScratchBytes( uint32_t bytes );
 
@@ -7202,7 +7522,7 @@ public:
 #endif
 	uint8_t* data = nullptr;
 	uint32_t offset = 0;
-	uint32_t size = 0;
+	uint32_t capacity = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -7220,20 +7540,16 @@ struct _Globals
 	std::thread::id allocatorThread;
 	_DefaultAllocator defaultAllocator;
 
-	// Scratch
-	_ScratchBuffer scratchBuffer = ae::Scratch< uint8_t >::kMaxScratchSize;
-
 	// Reflection
 	uint32_t metaCacheSeq = 0;
 	ae::Map< ae::TypeId, const ae::EnumType*, kMaxMetaEnumTypes, ae::Hash32, ae::MapMode::Stable > enumTypes;
 	ae::Map< ae::TypeId, ae::ClassType*, kMaxMetaTypes, ae::Hash32, ae::MapMode::Stable > classTypes;
-#if AE_DEPRECATED
-	const ae::ClassVar::Serializer* varSerializer = nullptr;
-	bool varSerializerInitialized = false;
-#endif // AE_DEPRECATED
 
-	// Graphics
+	// Platform
 	class GraphicsDevice* graphicsDevice = nullptr;
+	class _Application* application = nullptr;
+	void* eaglLayer = nullptr; // iOS: CAEAGLLayer, set by aeApplicationDelegate before Window init
+	class Input* input = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -7241,8 +7557,11 @@ struct _Globals
 //------------------------------------------------------------------------------
 struct _ThreadLocals
 {
+	_ThreadLocals();
 	static _ThreadLocals* Get();
 
+	_ScratchBuffer scratchBuffer;
+	std::mt19937_64 uuidRandom;
 	ae::Array< ae::Str64, 8 > logTagStack;
 };
 
@@ -7280,8 +7599,60 @@ private:
 // GetTypeName() internal implementation
 // https://stackoverflow.com/a/59522794
 //------------------------------------------------------------------------------
+constexpr uint32_t NormalizedWhiteSpaceTypeName( const char* str, char* out, uint32_t outSize )
+{
+	if( outSize == 0 )
+	{
+		return 0;
+	}
+	auto isws = []( char c ) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'; };
+	uint32_t length = 0;
+	for( ; *str; str++ )
+	{
+		const char c = isws( *str ) ? ' ' : *str;
+		if( c == ' ' )
+		{
+			// Skip leading, consecutive, and post-'['/post-'::' spaces
+			if( length == 0 || out[ length - 1 ] == ' ' || out[ length - 1 ] == '[' )
+			{
+				continue;
+			}
+			if( length >= 2 && out[ length - 1 ] == ':' && out[ length - 2 ] == ':' )
+			{
+				continue;
+			}
+			// Skip space if next non-space token doesn't need a leading space
+			const char* peek = str + 1;
+			while( isws( *peek ) ) { peek++; }
+			if( *peek == '\0' || *peek == '[' || *peek == ']' || *peek == '*' || *peek == '&'
+				|| ( *peek == ':' && *(peek + 1) == ':' ) )
+			{
+				continue;
+			}
+		}
+		if( length >= outSize - 1 )
+		{
+			out[ 0 ] = '\0';
+			return 0;
+		}
+		out[ length++ ] = c;
+	}
+	// Remove trailing space
+	if( length && out[ length - 1 ] == ' ' )
+	{
+		length--;
+	}
+	out[ length ] = '\0';
+	return length;
+}
+
+} // ae end
+
+// Get a string representation of this functions signature, which includes the
+// type name of T. This is declared in the global namespace, so aether type
+// names are always prepended with "ae::".
 template< typename T >
-constexpr const auto& _RawTypeName()
+constexpr const auto& _ae_CompilerTypeName()
 {
 #ifdef _MSC_VER
 	return __FUNCSIG__;
@@ -7290,62 +7661,87 @@ constexpr const auto& _RawTypeName()
 #endif
 }
 
-struct _RawTypeNameFormat
-{
-	std::size_t leadingJunk = 0;
-	std::size_t trailingJunk = 0;
-};
-
-inline constexpr bool _GetRawTypeNameFormat( ae::_RawTypeNameFormat* format )
-{
-	const auto& str = ae::_RawTypeName< int >();
-	for( std::size_t i = 0; str[ i ]; i++ )
-	{
-		if( str[ i ] == 'i' && str[ i + 1 ] == 'n' && str[ i + 2 ] == 't' )
-		{
-			if( format )
-			{
-				format->leadingJunk = i;
-				format->trailingJunk = sizeof( str ) - i - sizeof( "int" );
-			}
-			return true;
-		}
-	}
-	return false;
-}
-
-inline static constexpr _RawTypeNameFormat _rawTypeNameFormat = []
-{
-	static_assert( ae::_GetRawTypeNameFormat( nullptr ), "Unable to figure out how to generate type names on this compiler." );
-	ae::_RawTypeNameFormat format;
-	ae::_GetRawTypeNameFormat( &format );
-	return format;
-}();
-
 template< typename T >
-constexpr auto _GetTypeName() // @TODO: Return ae::Str
+constexpr auto _ae_RawTypeName()
 {
-	constexpr std::size_t len = sizeof( ae::_RawTypeName< T >() ) - ae::_rawTypeNameFormat.leadingJunk - ae::_rawTypeNameFormat.trailingJunk;
-	std::array< char, len > name{}; // @TODO: Compile time ae::Array
-	for( std::size_t i = 0; i < len - 1; i++ )
+	// This "searches" the string at compile time to find the known "int" string
+	// and records the substring start and end, relative to the start and end of
+	// the full string. This allows the extraction of unknown type names.
+	struct RawTypeNameFormat
 	{
-		name[ i ] = ae::_RawTypeName< T >()[ i + ae::_rawTypeNameFormat.leadingJunk ];
-	}
+		std::size_t leadingChars = 0;
+		std::size_t trailingChars = 0;
+		bool found = false;
+	};
+	constexpr RawTypeNameFormat format = []
+	{
+		RawTypeNameFormat rv;
+		const auto& str = ::_ae_CompilerTypeName< int >();
+		for( std::size_t i = 0; str[ i ]; i++ )
+		{
+			if( str[ i ] == 'i' && str[ i + 1 ] && str[ i + 1 ] == 'n' && str[ i + 2 ] && str[ i + 2 ] == 't' )
+			{
+				rv.leadingChars = i;
+				rv.trailingChars = sizeof( str ) - i - sizeof( "int" );
+				rv.found = true;
+				break;
+			}
+		}
+		return rv;
+	}();
+	static_assert( format.found, "Unable to figure out how to generate type names on this compiler." );
+	
+	const auto& compilerName = ::_ae_CompilerTypeName< T >();
+	constexpr std::size_t rawLen = sizeof( compilerName ) - format.leadingChars - format.trailingChars;
+	std::array< char, rawLen > name{};
+	for( std::size_t i = 0; i < rawLen - 1; i++ ) { name[ i ] = compilerName[ i + format.leadingChars ]; }
+	ae::NormalizedWhiteSpaceTypeName( name.data(), name.data(), (uint32_t)rawLen );
 	return name;
 }
 
+namespace ae {
+
 template< typename T >
-const char* GetTypeName()
+struct _GetTypeNameImpl
 {
-	static constexpr auto name = ae::_GetTypeName< T >();
-	return name.data();
+	// Keep this storage at namespace scope. A function-local static inside the
+	// constexpr GetTypeName<T>() body would require the C++23 local-static-in-
+	// constexpr rules, while an inline static data member like this is valid in
+	// C++17.
+	inline static constexpr auto value = ::_ae_RawTypeName< T >();
+};
+
+template< typename T >
+constexpr const char* GetTypeName()
+{
+	return ae::_GetTypeNameImpl< T >::value.data();
 }
 
 template< typename T >
-const char* GetTypeName( const T& )
+constexpr const char* GetTypeName( const T& )
 {
 	return ae::GetTypeName< T >();
 }
+
+//------------------------------------------------------------------------------
+// ae::GetTypeName() constexpr validation
+//------------------------------------------------------------------------------
+constexpr bool _GetTypeNameValidation( const char* lhs, const char* rhs )
+{
+	for( std::size_t i = 0; ; i++ )
+	{
+		if( lhs[ i ] != rhs[ i ] )
+		{
+			return false;
+		}
+		if( !lhs[ i ] )
+		{
+			return true;
+		}
+	}
+}
+static_assert( ae::_GetTypeNameValidation( ::_ae_RawTypeName< int >().data(), "int" ), "_ae_RawTypeName() must remain constexpr." );
+static_assert( ae::_GetTypeNameValidation( ae::GetTypeName< int >(), "int" ), "GetTypeName() must remain constexpr." );
 
 //------------------------------------------------------------------------------
 // Log levels internal implementation
@@ -7371,7 +7767,7 @@ template< typename... Args >
 void PushLogTag( const char* format, Args... args )
 {
 	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
-	const bool canAppendMessage = ( threadLocals->logTagStack.Length() < threadLocals->logTagStack.Size() );
+	const bool canAppendMessage = ( threadLocals->logTagStack.Length() < threadLocals->logTagStack.Capacity() );
 	AE_DEBUG_ASSERT( canAppendMessage );
 	if( canAppendMessage )
 	{
@@ -7422,7 +7818,7 @@ std::string _Log( ae::LogSeverity severity, const char* filePath, uint32_t line,
 		os << assertInfo << " ";
 	}
 	_BuildLogMessage( os, format, args... );
-	const char* tags[ decltype(threadLocals->logTagStack)::Size() ];
+	const char* tags[ decltype(threadLocals->logTagStack)::Capacity() ];
 	for( uint32_t i = 0; i < threadLocals->logTagStack.Length(); i++ )
 	{
 		tags[ i ] = threadLocals->logTagStack[ i ].c_str();
@@ -7589,29 +7985,29 @@ inline void Free( void* data )
 // ae::Scratch< T > member functions
 //------------------------------------------------------------------------------
 template< typename T >
-Scratch< T >::Scratch( uint32_t count )
+Scratch< T >::Scratch( uint32_t capacity )
 {
 	AE_STATIC_ASSERT( alignof(T) <= _ScratchBuffer::kScratchAlignment );
-	ae::_ScratchBuffer* globalScratch = &ae::_Globals::Get()->scratchBuffer;
-	const uint32_t bytes = globalScratch->GetScratchBytes( count * sizeof(T) );
+	ae::_ScratchBuffer* scratchBuffer = &ae::_ThreadLocals::Get()->scratchBuffer;
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( capacity * sizeof(T) );
 	
-	m_size = count;
-	m_data = (T*)( globalScratch->data + globalScratch->offset );
+	m_capacity = capacity;
+	m_data = (T*)( scratchBuffer->data + scratchBuffer->offset );
 	AE_DEBUG_ASSERT( ( (intptr_t)m_data % ae::_ScratchBuffer::kScratchAlignment ) == 0 );
-	m_prevOffsetCheck = globalScratch->offset;
-	globalScratch->offset += bytes;
-	AE_ASSERT_MSG( globalScratch->offset <= globalScratch->size, "Global scratch buffer size exceeded: # bytes / (# bytes). The global max can be set with AE_MAX_SCRATCH_BYTES_CONFIG.", globalScratch->offset, globalScratch->size );
+	m_prevOffsetCheck = scratchBuffer->offset;
+	scratchBuffer->offset += bytes;
+	AE_ASSERT_MSG( scratchBuffer->offset <= scratchBuffer->capacity, "Scratch buffer capacity exceeded: # bytes / (# bytes). The per-thread max can be set with AE_MAX_SCRATCH_BYTES_CONFIG.", scratchBuffer->offset, scratchBuffer->capacity );
 	
 #if _AE_DEBUG_
-	memset( m_data, 0xCD, m_size * sizeof(T) );
+	memset( m_data, 0xCD, m_capacity * sizeof(T) );
 	// Guard
-	uint8_t* guard = (uint8_t*)m_data + m_size * sizeof(T);
+	uint8_t* guard = (uint8_t*)m_data + m_capacity * sizeof(T);
 	const intptr_t guardLength = ( (uint8_t*)m_data + bytes ) - guard;
 	for( uint32_t i = 0; i < guardLength; i++ ) { guard[ i ] = 0xBD; }
 #endif
 	if( !std::is_trivially_constructible< T >::value )
 	{
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			new ( &m_data[ i ] ) T();
 		}
@@ -7621,12 +8017,12 @@ Scratch< T >::Scratch( uint32_t count )
 template< typename T >
 Scratch< T >::~Scratch()
 {
-	ae::_ScratchBuffer* scratchBuffer = &ae::_Globals::Get()->scratchBuffer;
+	ae::_ScratchBuffer* scratchBuffer = &ae::_ThreadLocals::Get()->scratchBuffer;
 	
-	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_size * sizeof(T) );
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_capacity * sizeof(T) );
 #if _AE_DEBUG_
 	// Guard
-	const uint8_t* guard = (uint8_t*)m_data + m_size * sizeof(T);
+	const uint8_t* guard = (uint8_t*)m_data + m_capacity * sizeof(T);
 	const intptr_t guardLength = ( (uint8_t*)m_data + bytes ) - guard;
 	for( uint32_t i = 0; i < guardLength; i++ ) { AE_ASSERT_MSG( guard[ i ] == 0xBD, "Scratch buffer guard has been overwritten" ); }
 #endif
@@ -7634,7 +8030,7 @@ Scratch< T >::~Scratch()
 	
 	if( !std::is_trivially_constructible< T >::value )
 	{
-		for( int32_t i = m_size - 1; i >= 0; i-- )
+		for( int32_t i = m_capacity - 1; i >= 0; i-- )
 		{
 			m_data[ i ].~T();
 		}
@@ -7653,7 +8049,7 @@ T* Scratch< T >::Data()
 template< typename T >
 uint32_t Scratch< T >::Length() const
 {
-	return m_size;
+	return m_capacity;
 }
 
 template< typename T >
@@ -7671,14 +8067,14 @@ const T& Scratch< T >::operator[] ( int32_t index ) const
 template< typename T >
 T& Scratch< T >::GetSafe( int32_t index )
 {
-	AE_ASSERT( index < (int32_t)m_size );
+	AE_ASSERT( index < (int32_t)m_capacity );
 	return m_data[ index ];
 }
 
 template< typename T >
 const T& Scratch< T >::GetSafe( int32_t index ) const
 {
-	AE_ASSERT( index < (int32_t)m_size );
+	AE_ASSERT( index < (int32_t)m_capacity );
 	return m_data[ index ];
 }
 
@@ -8770,50 +9166,50 @@ inline void Int3::SetXZ( Int2 xz ) { x = xz.x; z = xz.y; }
 //------------------------------------------------------------------------------
 // clang-format off
 // Grayscale
-inline Color Color::White() { static Color c = Color::SRGB8( 255, 255, 255 ); return c; }
-inline Color Color::Gray() { static Color c = Color::SRGB8( 127, 127, 127 ); return c; }
-inline Color Color::Black() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
+inline Color Color::White() { static const Color c = Color::SRGB8( 255, 255, 255 ); return c; }
+inline Color Color::Gray() { static const Color c = Color::SRGB8( 127, 127, 127 ); return c; }
+inline Color Color::Black() { static const Color c = Color::SRGB8( 0, 0, 0 ); return c; }
 // Rainbow
-inline Color Color::Red() { static Color c = Color::SRGB8( 255, 0, 0 ); return c; }
-inline Color Color::Orange() { static Color c = Color::SRGB8( 255, 127, 0 ); return c; }
-inline Color Color::Yellow() { static Color c = Color::SRGB8( 255, 255, 0 ); return c; }
-inline Color Color::Green() { static Color c = Color::SRGB8( 0, 255, 0 ); return c; }
-inline Color Color::Blue() { static Color c = Color::SRGB8( 0, 0, 255 ); return c; }
-inline Color Color::Indigo() { static Color c = Color::SRGB8( 75, 0, 130 ); return c; }
-inline Color Color::Violet() { static Color c = Color::SRGB8( 148, 0, 211 ); return c; }
+inline Color Color::Red() { static const Color c = Color::SRGB8( 255, 0, 0 ); return c; }
+inline Color Color::Orange() { static const Color c = Color::SRGB8( 255, 127, 0 ); return c; }
+inline Color Color::Yellow() { static const Color c = Color::SRGB8( 255, 255, 0 ); return c; }
+inline Color Color::Green() { static const Color c = Color::SRGB8( 0, 255, 0 ); return c; }
+inline Color Color::Blue() { static const Color c = Color::SRGB8( 0, 0, 255 ); return c; }
+inline Color Color::Indigo() { static const Color c = Color::SRGB8( 75, 0, 130 ); return c; }
+inline Color Color::Violet() { static const Color c = Color::SRGB8( 148, 0, 211 ); return c; }
 // Other
-inline Color Color::Cyan() { static Color c = Color( 0.0f, 1.0f, 1.0f ); return c; }
-inline Color Color::Magenta() { static Color c = Color( 1.0f, 0.0f, 1.0f ); return c; }
+inline Color Color::Cyan() { static const Color c = Color( 0.0f, 1.0f, 1.0f ); return c; }
+inline Color Color::Magenta() { static const Color c = Color( 1.0f, 0.0f, 1.0f ); return c; }
 // aether
-inline Color Color::AetherDarkRed() { static Color c = Color::SRGB8( 175, 65, 90 ); return c; }
-inline Color Color::AetherRed() { static Color c = Color::SRGB8( 240, 75, 90 ); return c; }
-inline Color Color::AetherOrange() { static Color c = Color::SRGB8( 255, 150, 60 ); return c; }
-inline Color Color::AetherYellow() { static Color c = Color::SRGB8( 250, 205, 100 ); return c; }
-inline Color Color::AetherGreen() { static Color c = Color::SRGB8( 180, 240, 80 ); return c; }
-inline Color Color::AetherTeal() { static Color c = Color::SRGB8( 90, 195, 185 ); return c; }
-inline Color Color::AetherBlue() { static Color c = Color::SRGB8( 70, 120, 225 ); return c; }
-inline Color Color::AetherPurple() { static Color c = Color::SRGB8( 120, 90, 195 ); return c; }
-inline Color Color::AetherWhite() { static Color c = Color::SRGB8( 235, 230, 215 ); return c; }
-inline Color Color::AetherGray() { static Color c = Color::SRGB8( 145, 135, 130 ); return c; }
-inline Color Color::AetherDarkGray() { static Color c = Color::SRGB8( 105, 105, 100 ); return c; }
-inline Color Color::AetherBlack() { static Color c = Color::SRGB8( 45, 45, 45 ); return c; }
+inline Color Color::AetherDarkRed() { static const Color c = Color::SRGB8( 175, 65, 90 ); return c; }
+inline Color Color::AetherRed() { static const Color c = Color::SRGB8( 240, 75, 90 ); return c; }
+inline Color Color::AetherOrange() { static const Color c = Color::SRGB8( 255, 150, 60 ); return c; }
+inline Color Color::AetherYellow() { static const Color c = Color::SRGB8( 250, 205, 100 ); return c; }
+inline Color Color::AetherGreen() { static const Color c = Color::SRGB8( 180, 240, 80 ); return c; }
+inline Color Color::AetherTeal() { static const Color c = Color::SRGB8( 90, 195, 185 ); return c; }
+inline Color Color::AetherBlue() { static const Color c = Color::SRGB8( 70, 120, 225 ); return c; }
+inline Color Color::AetherPurple() { static const Color c = Color::SRGB8( 120, 90, 195 ); return c; }
+inline Color Color::AetherWhite() { static const Color c = Color::SRGB8( 235, 230, 215 ); return c; }
+inline Color Color::AetherGray() { static const Color c = Color::SRGB8( 145, 135, 130 ); return c; }
+inline Color Color::AetherDarkGray() { static const Color c = Color::SRGB8( 105, 105, 100 ); return c; }
+inline Color Color::AetherBlack() { static const Color c = Color::SRGB8( 45, 45, 45 ); return c; }
 // Pico
-inline Color Color::PicoBlack() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
-inline Color Color::PicoDarkBlue() { static Color c = Color::SRGB8( 29, 43, 83 ); return c; }
-inline Color Color::PicoDarkPurple() { static Color c = Color::SRGB8( 126, 37, 83 ); return c; }
-inline Color Color::PicoDarkGreen() { static Color c = Color::SRGB8( 0, 135, 81 ); return c; }
-inline Color Color::PicoBrown() { static Color c = Color::SRGB8( 171, 82, 54 ); return c; }
-inline Color Color::PicoDarkGray() { static Color c = Color::SRGB8( 95, 87, 79 ); return c; }
-inline Color Color::PicoLightGray() { static Color c = Color::SRGB8( 194, 195, 199 ); return c; }
-inline Color Color::PicoWhite() { static Color c = Color::SRGB8( 255, 241, 232 ); return c; }
-inline Color Color::PicoRed() { static Color c = Color::SRGB8( 255, 0, 77 ); return c; }
-inline Color Color::PicoOrange() { static Color c = Color::SRGB8( 255, 163, 0 ); return c; }
-inline Color Color::PicoYellow() { static Color c = Color::SRGB8( 255, 236, 39 ); return c; }
-inline Color Color::PicoGreen() { static Color c = Color::SRGB8( 0, 228, 54 ); return c; }
-inline Color Color::PicoBlue() { static Color c = Color::SRGB8( 41, 173, 255 ); return c; }
-inline Color Color::PicoIndigo() { static Color c = Color::SRGB8( 131, 118, 156 ); return c; }
-inline Color Color::PicoPink() { static Color c = Color::SRGB8( 255, 119, 168 ); return c; }
-inline Color Color::PicoPeach() { static Color c = Color::SRGB8( 255, 204, 170 ); return c; }
+inline Color Color::PicoBlack() { static const Color c = Color::SRGB8( 0, 0, 0 ); return c; }
+inline Color Color::PicoDarkBlue() { static const Color c = Color::SRGB8( 29, 43, 83 ); return c; }
+inline Color Color::PicoDarkPurple() { static const Color c = Color::SRGB8( 126, 37, 83 ); return c; }
+inline Color Color::PicoDarkGreen() { static const Color c = Color::SRGB8( 0, 135, 81 ); return c; }
+inline Color Color::PicoBrown() { static const Color c = Color::SRGB8( 171, 82, 54 ); return c; }
+inline Color Color::PicoDarkGray() { static const Color c = Color::SRGB8( 95, 87, 79 ); return c; }
+inline Color Color::PicoLightGray() { static const Color c = Color::SRGB8( 194, 195, 199 ); return c; }
+inline Color Color::PicoWhite() { static const Color c = Color::SRGB8( 255, 241, 232 ); return c; }
+inline Color Color::PicoRed() { static const Color c = Color::SRGB8( 255, 0, 77 ); return c; }
+inline Color Color::PicoOrange() { static const Color c = Color::SRGB8( 255, 163, 0 ); return c; }
+inline Color Color::PicoYellow() { static const Color c = Color::SRGB8( 255, 236, 39 ); return c; }
+inline Color Color::PicoGreen() { static const Color c = Color::SRGB8( 0, 228, 54 ); return c; }
+inline Color Color::PicoBlue() { static const Color c = Color::SRGB8( 41, 173, 255 ); return c; }
+inline Color Color::PicoIndigo() { static const Color c = Color::SRGB8( 131, 118, 156 ); return c; }
+inline Color Color::PicoPink() { static const Color c = Color::SRGB8( 255, 119, 168 ); return c; }
+inline Color Color::PicoPeach() { static const Color c = Color::SRGB8( 255, 204, 170 ); return c; }
 // clang-format on
 
 //------------------------------------------------------------------------------
@@ -9155,255 +9551,306 @@ inline std::string ToString( ae::UUID v )
 }
 
 //------------------------------------------------------------------------------
-// ae::FromString functions
+// ae::TryFromString functions
 //------------------------------------------------------------------------------
-// No implementation so this acts as a forward declaration. A default templated
-// ae::ToString implementation would prevent the compiler/linker from looking
-// for ae::ToString definitions in other modules.
-template< typename T > T FromString( const char* str, const T& defaultValue );
+//! Parses \p str and writes the result to \p out. Returns true and writes to
+//! \p out on success; returns false and leaves \p out unchanged on failure.
+//! Parsing is permissive: leading whitespace, a leading \c + sign, and trailing
+//! non-numeric characters are accepted. \p str must not be null.
+//! No default implementation is provided — unsupported types produce a linker
+//! error. Register enum support with AE_DEFINE_ENUM_CLASS or AE_ENUM_CLASS.
+template< typename T > bool TryFromString( const char* str, T* out );
 
 template<>
-inline std::string FromString( const char* str, const std::string& )
+inline bool TryFromString( const char* str, std::string* out )
 {
-	return std::string( str );
+	*out = str;
+	return true;
 }
 
 template<>
-inline int8_t FromString( const char* str, const int8_t& defaultValue )
+inline bool TryFromString( const char* str, int8_t* out )
 {
 	int8_t v;
-	if( sscanf( str, "%" SCNi8, &v ) == 1 )
+	if( sscanf( str, "%" SCNi8, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline int16_t FromString( const char* str, const int16_t& defaultValue )
+inline bool TryFromString( const char* str, int16_t* out )
 {
 	int16_t v;
-	if( sscanf( str, "%" SCNi16, &v ) == 1 )
+	if( sscanf( str, "%" SCNi16, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline int32_t FromString( const char* str, const int32_t& defaultValue )
+inline bool TryFromString( const char* str, int32_t* out )
 {
 	int32_t v;
-	if( sscanf( str, "%" SCNi32, &v ) == 1 )
+	if( sscanf( str, "%" SCNi32, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline int64_t FromString( const char* str, const int64_t& defaultValue )
+inline bool TryFromString( const char* str, int64_t* out )
 {
-	int64_t v;
-	if( sscanf( str, "%" SCNi64, &v ) == 1 )
+	char* end = nullptr;
+	errno = 0;
+	const int64_t v = strtoll( str, &end, 10 );
+	if( errno == ERANGE || end == str )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline uint8_t FromString( const char* str, const uint8_t& defaultValue )
+inline bool TryFromString( const char* str, uint8_t* out )
 {
 	uint8_t v;
-	if( sscanf( str, "%" SCNu8, &v ) == 1 )
+	if( sscanf( str, "%" SCNu8, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline uint16_t FromString( const char* str, const uint16_t& defaultValue )
+inline bool TryFromString( const char* str, uint16_t* out )
 {
 	uint16_t v;
-	if( sscanf( str, "%" SCNu16, &v ) == 1 )
+	if( sscanf( str, "%" SCNu16, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline uint32_t FromString( const char* str, const uint32_t& defaultValue )
+inline bool TryFromString( const char* str, uint32_t* out )
 {
 	uint32_t v;
-	if( sscanf( str, "%" SCNu32, &v ) == 1 )
+	if( sscanf( str, "%" SCNu32, &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline uint64_t FromString( const char* str, const uint64_t& defaultValue )
+inline bool TryFromString( const char* str, uint64_t* out )
 {
-	uint64_t v;
-	if( sscanf( str, "%" SCNu64, &v ) == 1 )
+	char* end = nullptr;
+	errno = 0;
+	const uint64_t v = strtoull( str, &end, 10 );
+	if( errno == ERANGE || end == str )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline float FromString( const char* str, const float& defaultValue )
+inline bool TryFromString( const char* str, float* out )
 {
 	float v;
-	if( sscanf( str, "%f", &v ) == 1 )
+	if( sscanf( str, "%f", &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline double FromString( const char* str, const double& defaultValue )
+inline bool TryFromString( const char* str, double* out )
 {
 	double v;
-	if( sscanf( str, "%lf", &v ) == 1 )
+	if( sscanf( str, "%lf", &v ) != 1 )
 	{
-		return v;
+		return false;
 	}
-	return defaultValue;
+	*out = v;
+	return true;
 }
 
 template<>
-inline ae::Int2 FromString( const char* str, const ae::Int2& defaultValue )
+inline bool TryFromString( const char* str, ae::Int2* out )
 {
 	ae::Int2 r;
-	if( sscanf( str, "%d %d", r.data, r.data + 1 ) == 2 )
+	if( sscanf( str, "%d %d", r.data, r.data + 1 ) != 2 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Int3 FromString( const char* str, const ae::Int3& defaultValue )
+inline bool TryFromString( const char* str, ae::Int3* out )
 {
 	ae::Int3 r;
-	if( sscanf( str, "%d %d %d", r.data, r.data + 1, r.data + 2 ) == 3 )
+	if( sscanf( str, "%d %d %d", r.data, r.data + 1, r.data + 2 ) != 3 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Vec2 FromString( const char* str, const ae::Vec2& defaultValue )
+inline bool TryFromString( const char* str, ae::Vec2* out )
 {
 	ae::Vec2 r;
-	if( sscanf( str, "%f %f", r.data, r.data + 1 ) == 2 )
+	if( sscanf( str, "%f %f", r.data, r.data + 1 ) != 2 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Vec3 FromString( const char* str, const ae::Vec3& defaultValue )
+inline bool TryFromString( const char* str, ae::Vec3* out )
 {
 	ae::Vec3 r;
-	if( sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 ) == 3 )
+	if( sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 ) != 3 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Vec4 FromString( const char* str, const ae::Vec4& defaultValue )
+inline bool TryFromString( const char* str, ae::Vec4* out )
 {
 	ae::Vec4 r;
-	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) != 4 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Quaternion FromString( const char* str, const ae::Quaternion& defaultValue )
+inline bool TryFromString( const char* str, ae::Quaternion* out )
 {
 	ae::Quaternion r;
-	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) != 4 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Matrix4 FromString( const char* str, const ae::Matrix4& defaultValue )
+inline bool TryFromString( const char* str, ae::Matrix4* out )
 {
 	ae::Matrix4 r;
-	if( sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
-		r.data, r.data + 1, r.data + 2, r.data + 3,
-		r.data + 4, r.data + 5, r.data + 6, r.data + 7,
-		r.data + 8, r.data + 9, r.data + 10, r.data + 11,
-		r.data + 12, r.data + 13, r.data + 14, r.data + 15 ) == 16 )
+	if( sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3, r.data + 4, r.data + 5, r.data + 6, r.data + 7, r.data + 8, r.data + 9, r.data + 10, r.data + 11, r.data + 12, r.data + 13, r.data + 14, r.data + 15 ) != 16 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline ae::Color FromString( const char* str, const ae::Color& defaultValue )
+inline bool TryFromString( const char* str, ae::Color* out )
 {
 	ae::Color r;
-	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) != 4 )
 	{
-		return r;
+		return false;
 	}
-	return defaultValue;
+	*out = r;
+	return true;
 }
 
 template<>
-inline bool FromString( const char* str, const bool& defaultValue )
+inline bool TryFromString( const char* str, bool* out )
 {
 	auto StrCmp = []( const char* boolStr, const char* inputStr )
 	{
 		while( *boolStr && *inputStr )
 		{
-			if( *boolStr != tolower( *inputStr ) ) { return false; }
+			if( *boolStr != tolower( *inputStr ) )
+			{
+				return false;
+			}
 			boolStr++;
 			inputStr++;
 		}
 		return ( !*boolStr && !*inputStr );
 	};
-	
 	float f;
-	if( StrCmp( "true", str ) ) { return true; }
-	if( StrCmp( "false", str ) ) { return false; }
+	if( StrCmp( "true", str ) )
+	{
+		*out = true;
+		return true;
+	}
+	if( StrCmp( "false", str ) )
+	{
+		*out = false;
+		return true;
+	}
 	// @TODO: Check int first
-	if( sscanf( str, "%f", &f ) == 1 ) { return (bool)f; }
-	return defaultValue;
+	if( sscanf( str, "%f", &f ) == 1 )
+	{
+		*out = (bool)f;
+		return true;
+	}
+	return false;
 }
 
 template<>
-inline ae::UUID FromString( const char* str, const ae::UUID& defaultValue )
+inline bool TryFromString( const char* str, ae::UUID* out )
 {
-	ae::UUID r = defaultValue;
+	ae::UUID r;
 #define _aescn8 "%2" SCNx8
-	sscanf( str, _aescn8 _aescn8 _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 _aescn8 _aescn8 _aescn8 _aescn8,
-		&r.data[ 0 ], &r.data[ 1 ], &r.data[ 2 ], &r.data[ 3 ], &r.data[ 4 ], &r.data[ 5 ], &r.data[ 6 ], &r.data[ 7 ],
-		&r.data[ 8 ], &r.data[ 9 ], &r.data[ 10 ], &r.data[ 11 ], &r.data[ 12 ], &r.data[ 13 ], &r.data[ 14 ], &r.data[ 15 ]
-	);
+	const int32_t count = sscanf( str, _aescn8 _aescn8 _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 _aescn8 _aescn8 _aescn8 _aescn8, &r.data[ 0 ], &r.data[ 1 ], &r.data[ 2 ], &r.data[ 3 ], &r.data[ 4 ], &r.data[ 5 ], &r.data[ 6 ], &r.data[ 7 ], &r.data[ 8 ],
+		&r.data[ 9 ], &r.data[ 10 ], &r.data[ 11 ], &r.data[ 12 ], &r.data[ 13 ], &r.data[ 14 ], &r.data[ 15 ] );
 #undef _aescn8
-	return r;
+	if( count != 16 )
+	{
+		return false;
+	}
+	*out = r;
+	return true;
+}
+
+//------------------------------------------------------------------------------
+// ae::FromString functions
+//------------------------------------------------------------------------------
+//! Convenience wrapper around ae::TryFromString(). Returns the parsed value on
+//! success, or \p defaultValue if parsing fails.
+template< typename T >
+inline T FromString( const char* str, const T& defaultValue )
+{
+	T v = defaultValue;
+	TryFromString( str, &v );
+	return v;
 }
 
 //------------------------------------------------------------------------------
@@ -9677,7 +10124,7 @@ uint32_t Str< N >::Length() const
 }
 
 template< uint32_t N >
-uint32_t Str< N >::Size() const
+uint32_t Str< N >::Capacity() const
 {
 	return MaxLength();
 }
@@ -9830,72 +10277,17 @@ inline void Serialize( ae::BinaryWriter* stream, const ae::UUID* uuid )
 	stream->SerializeRaw( uuid->data, sizeof( uuid->data ) );
 }
 
-//------------------------------------------------------------------------------
-// ae::GetHash32 inline helpers
-//------------------------------------------------------------------------------
-// Use the non-fixed size integer types for GetHash32. int8_t cannot be passed
-// as char without an explicit cast, where the reverse does not need a cast.
-// long/unsigned long are normalized to int64_t/uint64_t first for
-// platform-independent results (long is 32-bit on Windows, 64-bit on
-// macOS/Linux).
-template<> inline uint32_t GetHash32( const bool& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const signed char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned char& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const short& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned short& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const int& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const unsigned int& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash32( const long& value ) { const int64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
-template<> inline uint32_t GetHash32( const unsigned long& value ) { const uint64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
-template<> inline uint32_t GetHash32( const long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const unsigned long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const float& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const double& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec2& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec3& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Vec4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Matrix4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash32( const char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
-template<> inline uint32_t GetHash32( char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
-template< uint32_t N > inline uint32_t GetHash32( const char (&value)[ N ] ) { return ae::Hash32().HashString( value ).Get(); }
-template<> inline uint32_t GetHash32( const std::string& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
-template<> inline uint32_t GetHash32( const ae::Hash32& value ) { return value.Get(); }
-template< typename T > inline uint32_t GetHash32( T* const& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
-template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+inline void Serialize( ae::BinaryStream* stream, ae::TypeId* id )
+{
+	uint32_t raw = (uint32_t)*id;
+	stream->SerializeUInt32( raw );
+	*id = ae::TypeId( raw );
+}
 
-//------------------------------------------------------------------------------
-// ae::GetHash64 inline helpers
-//------------------------------------------------------------------------------
-// Use the non-fixed size integer types for GetHash64. int8_t cannot be passed
-// as char without an explicit cast, where the reverse does not need a cast.
-// long/unsigned long are casted wide to uint64_t. This is always safe
-// regardless of long's native size (32-bit on Windows, 64-bit on macOS/Linux).
-template<> inline uint64_t GetHash64( const bool& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const signed char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned char& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const short& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned short& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const int& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned int& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const long long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const unsigned long long& value ) { return (uint64_t)value; }
-template<> inline uint64_t GetHash64( const float& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint64_t GetHash64( const double& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec2& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec3& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Vec4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Matrix4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
-template<> inline uint64_t GetHash64( const char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
-template<> inline uint64_t GetHash64( char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
-template< uint32_t N > inline uint64_t GetHash64( const char (&value)[ N ] ) { return ae::Hash64().HashString( value ).Get(); }
-template<> inline uint64_t GetHash64( const std::string& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
-template<> inline uint64_t GetHash64( const ae::Hash64& value ) { return value.Get(); }
-template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
-template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
+inline void Serialize( ae::BinaryWriter* stream, const ae::TypeId* id )
+{
+	stream->SerializeUInt32( (uint32_t)*id );
+}
 
 //------------------------------------------------------------------------------
 // ae::GetHash
@@ -9937,27 +10329,16 @@ U GetHash( const T& v )
 // ae::Hash templated member functions
 //------------------------------------------------------------------------------
 template< typename U >
-Hash< U >::Hash()
-{
-	if constexpr( sizeof(U) == 4 )
-	{
-		m_hash = (U)AE_HASH32_FNV1A_OFFSET_BASIS_CONFIG;
-	}
-	else if constexpr( sizeof(U) == 8 )
-	{
-		m_hash = (U)AE_HASH64_FNV1A_OFFSET_BASIS_CONFIG;
-	}
-	else
-	{
-		m_hash = 0;
-	}
-}
+constexpr Hash< U >::Hash()
+	: m_hash( sizeof(U) == 4 ? (U)AE_HASH32_FNV1A_OFFSET_BASIS_CONFIG
+	        : sizeof(U) == 8 ? (U)AE_HASH64_FNV1A_OFFSET_BASIS_CONFIG
+	        : (U)0 )
+{}
 
 template< typename U >
-Hash< U >::Hash( U initialValue )
-{
-	m_hash = initialValue;
-}
+constexpr Hash< U >::Hash( U initialValue )
+	: m_hash( initialValue )
+{}
 
 template<>
 constexpr uint32_t Hash< uint32_t >::m_GetPrime()
@@ -9992,9 +10373,8 @@ Hash< U >& Hash< U >::HashType( const T& v )
 }
 
 template< typename U >
-Hash< U >& Hash< U >::HashString( const char* str )
+constexpr Hash< U >& Hash< U >::HashString( const char* str )
 {
-	// @TODO: constexpr
 	while( *str )
 	{
 		m_hash = m_hash ^ str[ 0 ];
@@ -10019,16 +10399,85 @@ Hash< U >& Hash< U >::HashData( const void* _data, uint32_t length )
 }
 
 template< typename U >
-void Hash< U >::Set( U hash )
+constexpr void Hash< U >::Set( U hash )
 {
 	m_hash = hash;
 }
 
 template< typename U >
-U Hash< U >::Get() const
+constexpr U Hash< U >::Get() const
 {
 	return m_hash;
 }
+
+//------------------------------------------------------------------------------
+// ae::GetHash32 inline helpers
+//------------------------------------------------------------------------------
+// Note that this has to be after the ae::Hash member function definitions since
+// some compilers are stricter about the order of constexpr functions. The
+// non-explicitly sized integer types must be used for these GetHash32 and
+// GetHash64 functions, because int8_t cannot be passed as char reference
+// without an explicit cast, where the reverse does not need a cast.
+// long/unsigned long are normalized to int64_t/uint64_t first for
+// platform-independent results (long is 32-bit on Windows, 64-bit on
+// macOS/Linux).
+template<> inline uint32_t GetHash32( const bool& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const signed char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned char& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const short& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned short& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const int& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const unsigned int& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const long& value ) { const int64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
+template<> inline uint32_t GetHash32( const unsigned long& value ) { const uint64_t v = value; return ae::Hash32().HashData( &v, sizeof(v) ).Get(); }
+template<> inline uint32_t GetHash32( const long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const unsigned long long& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const float& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const double& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec2& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec3& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Matrix4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
+template<> inline uint32_t GetHash32( char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
+template< uint32_t N > inline uint32_t GetHash32( const char (&value)[ N ] ) { return ae::Hash32().HashString( value ).Get(); }
+template<> inline uint32_t GetHash32( const std::string& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Hash32& value ) { return value.Get(); }
+template<> inline uint32_t GetHash32( const ae::TypeId& value ) { return (uint32_t)value; }
+template< typename T > inline uint32_t GetHash32( T* const& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+//------------------------------------------------------------------------------
+// ae::GetHash64 inline helpers
+//------------------------------------------------------------------------------
+// See ae::GetHash32 comments above.
+//------------------------------------------------------------------------------
+template<> inline uint64_t GetHash64( const bool& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const signed char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned char& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const short& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned short& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const int& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned int& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const long long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const unsigned long long& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const float& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint64_t GetHash64( const double& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec2& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec3& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Matrix4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
+template<> inline uint64_t GetHash64( char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
+template< uint32_t N > inline uint64_t GetHash64( const char (&value)[ N ] ) { return ae::Hash64().HashString( value ).Get(); }
+template<> inline uint64_t GetHash64( const std::string& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Hash64& value ) { return value.Get(); }
+template<> inline uint64_t GetHash64( const ae::TypeId& value ) { return (uint64_t)(uint32_t)value; }
+template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
 // ae::Optional templated member functions
@@ -10194,7 +10643,7 @@ Array< T, N >::Array()
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 	
 	m_length = 0;
-	m_size = N;
+	m_capacity = N;
 	m_array = (T*)&m_storage;
 }
 
@@ -10204,7 +10653,7 @@ Array< T, N >::Array( const T& value, uint32_t length )
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 	
 	m_length = length;
-	m_size = N;
+	m_capacity = N;
 	m_array = (T*)&m_storage;
 	for( uint32_t i = 0; i < length; i++ )
 	{
@@ -10219,7 +10668,7 @@ Array< T, N >::Array( std::initializer_list< T > initList )
 	AE_ASSERT_MSG( N >= initList.size(), "Initializer list is longer than max length (# >= #)", N, initList.size() );
 	
 	m_length = (uint32_t)initList.size();
-	m_size = N;
+	m_capacity = N;
 	m_array = (T*)&m_storage;
 	uint32_t i = 0;
 	for( const T& value : initList )
@@ -10232,7 +10681,7 @@ Array< T, N >::Array( std::initializer_list< T > initList )
 template< typename T, uint32_t N >
 Array< T, N >::Array( ae::Tag tag ) :
 	m_length( 0 ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_array( nullptr ),
 	m_tag( tag )
 {
@@ -10241,20 +10690,20 @@ Array< T, N >::Array( ae::Tag tag ) :
 }
 
 template< typename T, uint32_t N >
-Array< T, N >::Array( ae::Tag tag, uint32_t size ) :
+Array< T, N >::Array( ae::Tag tag, uint32_t capacity ) :
 	m_length( 0 ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_array( nullptr ),
 	m_tag( tag )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
-	Reserve( size );
+	Reserve( capacity );
 }
 
 template< typename T, uint32_t N >
 Array< T, N >::Array( ae::Tag tag, const T& value, uint32_t length ) :
 	m_length( 0 ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_array( nullptr ),
 	m_tag( tag )
 {
@@ -10266,7 +10715,7 @@ template< typename T, uint32_t N >
 Array< T, N >::Array( const Array< T, N >& other )
 {
 	m_length = 0;
-	m_size = N;
+	m_capacity = N;
 	m_array = N ? (T*)&m_storage : nullptr;
 	m_tag = other.m_tag;
 	
@@ -10288,7 +10737,7 @@ Array< T, N >::Array( Array< T, N >&& other ) noexcept
 		AE_DEBUG_ASSERT( m_tag == ae::Tag() );
 		AE_DEBUG_ASSERT( other.m_tag == ae::Tag() );
 		m_length = 0;
-		m_size = N;
+		m_capacity = N;
 		m_array = (T*)&m_storage;
 		*this = other; // Regular assignment (without std::move)
 	}
@@ -10296,11 +10745,11 @@ Array< T, N >::Array( Array< T, N >&& other ) noexcept
 	{
 		m_tag = other.m_tag;
 		m_length = other.m_length;
-		m_size = other.m_size;
+		m_capacity = other.m_capacity;
 		m_array = other.m_array;
 		
 		other.m_length = 0;
-		other.m_size = 0;
+		other.m_capacity = 0;
 		other.m_array = nullptr;
 		// @NOTE: Don't reset tag. 'other' must remain in a valid state.
 	}
@@ -10345,11 +10794,11 @@ void Array< T, N >::operator =( Array< T, N >&& other ) noexcept
 		}
 		
 		m_length = other.m_length;
-		m_size = other.m_size;
+		m_capacity = other.m_capacity;
 		m_array = other.m_array;
 		
 		other.m_length = 0;
-		other.m_size = 0;
+		other.m_capacity = 0;
 		other.m_array = nullptr;
 	}
 }
@@ -10362,7 +10811,7 @@ Array< T, N >::~Array()
 	{
 		ae::Free( m_array );
 	}
-	m_size = 0;
+	m_capacity = 0;
 	m_array = nullptr;
 }
 
@@ -10389,7 +10838,7 @@ template< typename T, uint32_t N >
 T* Array< T, N >::AppendArray( const T* values, uint32_t count )
 {
 	Reserve( m_length + count );
-	AE_DEBUG_ASSERT( m_size >= m_length + count );
+	AE_DEBUG_ASSERT( m_capacity >= m_length + count );
 	T* result = m_array + m_length;
 	for( uint32_t i = 0; i < count; i++ )
 	{
@@ -10572,54 +11021,54 @@ int32_t Array< T, N >::FindLastFn( Fn testFn ) const
 }
 
 template< typename T, uint32_t N >
-void Array< T, N >::Reserve( uint32_t _size )
+void Array< T, N >::Reserve( uint32_t _capacity )
 {
 	if( N > 0 )
 	{
 		AE_DEBUG_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
-		AE_ASSERT_MSG( N >= _size, "# >= #", N, _size );
+		AE_ASSERT_MSG( N >= _capacity, "# >= #", N, _capacity );
 		return;
 	}
-	else if( _size <= m_size )
+	else if( _capacity <= m_capacity )
 	{
 		return;
 	}
 	
 	AE_DEBUG_ASSERT( m_tag != ae::Tag() );
 	
-	constexpr uint32_t maxExponentialSize = ( 1 << 18 );
-	uint32_t size = _size;
-	if( m_size == 0 && size > 1 )
+	constexpr uint32_t maxExponentialCapacity = ( 1 << 18 );
+	uint32_t capacity = _capacity;
+	if( m_capacity == 0 && capacity > 1 )
 	{
 		// Exact amount specified, so use that
 	}
-	else if( size <= maxExponentialSize )
+	else if( capacity <= maxExponentialCapacity )
 	{
-		if( m_size == 0 )
+		if( m_capacity == 0 )
 		{
 			// Initially allocate at least 64 bytes (rounded down) of type
-			size = ae::Max( size, 64u / (uint32_t)sizeof(T) );
+			capacity = ae::Max( capacity, 64u / (uint32_t)sizeof(T) );
 		}
 		else
 		{
-			// At least double the size, to reduce the number of resizes
-			size = ae::Max( size, m_size * 2 );
+			// At least double the capacity, to reduce the number of resizes
+			capacity = ae::Max( capacity, m_capacity * 2 );
 		}
-		size = ae::NextPowerOfTwo( size );
+		capacity = ae::NextPowerOfTwo( capacity );
 	}
 	else
 	{
-		// Don't double the size or use powers of two here, as the array will
+		// Don't double the capacity or use powers of two here, as the array will
 		// become very very large. At this point the user should be manually
-		// calling reserve with the expected needed size.
-		size = ( size / maxExponentialSize + 1 ) * maxExponentialSize;
+		// calling reserve with the expected needed capacity.
+		capacity = ( capacity / maxExponentialCapacity + 1 ) * maxExponentialCapacity;
 	}
-	AE_DEBUG_ASSERT( size );
-	AE_DEBUG_ASSERT( size >= _size );
-	m_size = size;
+	AE_DEBUG_ASSERT( capacity );
+	AE_DEBUG_ASSERT( capacity >= _capacity );
+	m_capacity = capacity;
 	
 	// @TODO: Try to use realloc
-	T* arr = (T*)ae::Allocate( m_tag, m_size * sizeof(T), alignof(T) );
+	T* arr = (T*)ae::Allocate( m_tag, m_capacity * sizeof(T), alignof(T) );
 	for( uint32_t i = 0; i < m_length; i++ )
 	{
 		new ( &arr[ i ] ) T ( std::move( m_array[ i ] ) );
@@ -10686,7 +11135,7 @@ T& Array< T, N >::Last()
 template< typename Key, uint32_t N, typename Hash >
 HashMap< Key, N, Hash >::HashMap() :
 	m_entries( (Entry*)&m_storage ),
-	m_size( N ),
+	m_capacity( N ),
 	m_length( 0 )
 {
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
@@ -10696,7 +11145,7 @@ template< typename Key, uint32_t N, typename Hash >
 HashMap< Key, N, Hash >::HashMap( ae::Tag tag ) :
 	m_tag( tag ),
 	m_entries( nullptr ),
-	m_size( 0 ),
+	m_capacity( 0 ),
 	m_length( 0 )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
@@ -10704,28 +11153,28 @@ HashMap< Key, N, Hash >::HashMap( ae::Tag tag ) :
 }
 
 template< typename Key, uint32_t N, typename Hash >
-void HashMap< Key, N, Hash >::Reserve( uint32_t size )
+void HashMap< Key, N, Hash >::Reserve( uint32_t capacity )
 {
 	if( N )
 	{
-		AE_DEBUG_ASSERT_MSG( m_size >= size, "Static array size is fixed (# >= #)", m_size, size );
+		AE_DEBUG_ASSERT_MSG( m_capacity >= capacity, "Static array capacity is fixed (# >= #)", m_capacity, capacity );
 		return;
 	}
-	else if( m_size >= size )
+	else if( m_capacity >= capacity )
 	{
 		return;
 	}
 	
 	Entry* prevEntries = m_entries;
-	const uint32_t prevSize = m_size;
+	const uint32_t prevCapacity = m_capacity;
 	const uint32_t prevLength = m_length;
 	m_length = 0;
-	m_size = size;
+	m_capacity = capacity;
 	// @TODO: Support 'Entry' having no default constructor
-	m_entries = ae::NewArray< Entry >( m_tag, m_size );
+	m_entries = ae::NewArray< Entry >( m_tag, m_capacity );
 	if( prevEntries )
 	{
-		for( uint32_t i = 0; i < prevSize; i++ )
+		for( uint32_t i = 0; i < prevCapacity; i++ )
 		{
 			const Entry& e = prevEntries[ i ];
 			if( e.index >= 0 )
@@ -10741,7 +11190,7 @@ void HashMap< Key, N, Hash >::Reserve( uint32_t size )
 
 template< typename Key, uint32_t N, typename Hash >
 HashMap< Key, N, Hash >::HashMap( const HashMap< Key, N, Hash >& other ) :
-	m_size( N ),
+	m_capacity( N ),
 	m_length( 0 )
 {
 	if( N )
@@ -10766,15 +11215,15 @@ void HashMap< Key, N, Hash >::operator =( const HashMap< Key, N, Hash >& other )
 		return;
 	}
 	Clear();
-	Reserve( other.m_size );
-	if( m_size == other.m_size )
+	Reserve( other.m_capacity );
+	if( m_capacity == other.m_capacity )
 	{
-		std::copy_n( other.m_entries, m_size, m_entries );
+		std::copy_n( other.m_entries, m_capacity, m_entries );
 		m_length = other.m_length;
 	}
 	else
 	{
-		for( uint32_t i = 0; i < other.m_size; i++ )
+		for( uint32_t i = 0; i < other.m_capacity; i++ )
 		{
 			Entry e = other.m_entries[ i ];
 			if( e.index >= 0 )
@@ -10793,7 +11242,7 @@ HashMap< Key, N, Hash >::~HashMap()
 		ae::Delete( m_entries );
 	}
 	m_length = 0;
-	m_size = 0;
+	m_capacity = 0;
 	m_entries = nullptr;
 }
 
@@ -10804,11 +11253,11 @@ bool HashMap< Key, N, Hash >::Set( Key key, uint32_t index )
 	const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
 	if( m_length )
 	{
-		AE_DEBUG_ASSERT( m_size );
-		const uint32_t startIdx = hash % m_size;
-		for( uint32_t i = 0; i < m_size; i++ )
+		AE_DEBUG_ASSERT( m_capacity );
+		const uint32_t startIdx = hash % m_capacity;
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
-			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			Entry* e = &m_entries[ ( i + startIdx ) % m_capacity ];
 			if( e->index < 0 )
 			{
 				break;
@@ -10827,9 +11276,9 @@ bool HashMap< Key, N, Hash >::Set( Key key, uint32_t index )
 	{
 		return false;
 	}
-	else if( !N && ( !m_size || ( m_length / (float)m_size ) > 0.8f ) )
+	else if( !N && ( !m_capacity || ( m_length / (float)m_capacity ) > 0.8f ) )
 	{
-		Reserve( m_size ? m_size * 2 : 32 );
+		Reserve( m_capacity ? m_capacity * 2 : 32 );
 	}
 	return m_Insert( key, hash, index );
 }
@@ -10843,12 +11292,12 @@ int32_t HashMap< Key, N, Hash >::Remove( Key key )
 	}
 	Entry* entry = nullptr;
 	{
-		AE_DEBUG_ASSERT( m_size );
+		AE_DEBUG_ASSERT( m_capacity );
 		const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
-		const uint32_t startIdx = hash % m_size;
-		for( uint32_t i = 0; i < m_size; i++ )
+		const uint32_t startIdx = hash % m_capacity;
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
-			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			Entry* e = &m_entries[ ( i + startIdx ) % m_capacity ];
 			if( e->index < 0 )
 			{
 				return -1;
@@ -10868,11 +11317,11 @@ int32_t HashMap< Key, N, Hash >::Remove( Key key )
 		// their hash index exactly or a gap is found.
 		const uint32_t startIndex = uint32_t( entry - m_entries );
 		uint32_t targetIndex = startIndex;
-		for( uint32_t i = 1; i < m_size; i++ )
+		for( uint32_t i = 1; i < m_capacity; i++ )
 		{
-			uint32_t fromIndex = ( i + startIndex ) % m_size;
+			uint32_t fromIndex = ( i + startIndex ) % m_capacity;
 			Entry* e = &m_entries[ fromIndex ];
-			if( e->index < 0 || ( ( e->hash % m_size ) == fromIndex ) )
+			if( e->index < 0 || ( ( e->hash % m_capacity ) == fromIndex ) )
 			{
 				break;
 			}
@@ -10892,7 +11341,7 @@ void HashMap< Key, N, Hash >::Increment( uint32_t index )
 {
 	if( m_length )
 	{
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			Entry* e = &m_entries[ i ];
 			if( e->index >= (int32_t)index )
@@ -10908,7 +11357,7 @@ void HashMap< Key, N, Hash >::Decrement( uint32_t index )
 {
 	if( m_length )
 	{
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			Entry* e = &m_entries[ i ];
 			if( e->index > (int32_t)index )
@@ -10924,12 +11373,12 @@ int32_t HashMap< Key, N, Hash >::Get( Key key ) const
 {
 	if( m_length )
 	{
-		AE_DEBUG_ASSERT( m_size );
+		AE_DEBUG_ASSERT( m_capacity );
 		const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
-		const uint32_t startIdx = hash % m_size;
-		for( uint32_t i = 0; i < m_size; i++ )
+		const uint32_t startIdx = hash % m_capacity;
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
-			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			Entry* e = &m_entries[ ( i + startIdx ) % m_capacity ];
 			if( e->index < 0 )
 			{
 				return -1;
@@ -10949,7 +11398,7 @@ void HashMap< Key, N, Hash >::Clear()
 	if( m_length )
 	{
 		m_length = 0;
-		for( uint32_t i = 0; i < m_size; i++ )
+		for( uint32_t i = 0; i < m_capacity; i++ )
 		{
 			m_entries[ i ].index = -1;
 		}
@@ -10968,10 +11417,10 @@ bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32
 	AE_DEBUG_ASSERT( index >= 0 );
 	AE_DEBUG_ASSERT( ae::GetHash< typename Hash::UInt >( key ) == hash );
 	// 'hash' is modified in loop
-	const uint32_t startIdx = ( hash % m_size );
-	for( uint32_t i = 0; i < m_size; i++ )
+	const uint32_t startIdx = ( hash % m_capacity );
+	for( uint32_t i = 0; i < m_capacity; i++ )
 	{
-		const uint32_t currentIdx = ( i + startIdx ) % m_size;
+		const uint32_t currentIdx = ( i + startIdx ) % m_capacity;
 		Entry* e = &m_entries[ currentIdx ];
 		if( e->index < 0 )
 		{
@@ -10981,9 +11430,9 @@ bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32
 			m_length++;
 			return true;
 		}
-#define mod_subtract( idx, baseIdx ) ( ( (idx) + m_size - (baseIdx) ) % m_size )
-		const uint32_t currDist = mod_subtract( currentIdx, ( e->hash % m_size ) );
-		const uint32_t dist = mod_subtract( currentIdx, ( hash % m_size ) );
+#define mod_subtract( idx, baseIdx ) ( ( (idx) + m_capacity - (baseIdx) ) % m_capacity )
+		const uint32_t currDist = mod_subtract( currentIdx, ( e->hash % m_capacity ) );
+		const uint32_t dist = mod_subtract( currentIdx, ( hash % m_capacity ) );
 #undef mod_subtract
 		if( dist > currDist )
 		{
@@ -11172,7 +11621,7 @@ template< typename K, typename V, uint32_t N, typename H, MapMode M >
 void Map< K, V, N, H, M >::Reserve( uint32_t count )
 {
 	m_pairs.Reserve( count );
-	m_hashMap.Reserve( m_pairs.Size() ); // @TODO: Should this be bigger than storage, so it's faster to do lookups?
+	m_hashMap.Reserve( m_pairs.Capacity() ); // @TODO: Should this be bigger than storage, so it's faster to do lookups?
 	AE_DEBUG_ASSERT( m_pairs.Length() == m_hashMap.Length() );
 }
 
@@ -11729,27 +12178,27 @@ uint32_t List< T >::Length() const
 template< typename T, uint32_t N >
 RingBuffer< T, N >::RingBuffer() :
 	m_first( 0 ),
-	m_size( N )
+	m_capacity( N )
 {}
 
 template< typename T, uint32_t N >
-RingBuffer< T, N >::RingBuffer( ae::Tag tag, uint32_t size ) :
+RingBuffer< T, N >::RingBuffer( ae::Tag tag, uint32_t capacity ) :
 	m_first( 0 ),
-	m_size( size ),
+	m_capacity( capacity ),
 	m_buffer( tag )
 {}
 
 template< typename T, uint32_t N >
 T& RingBuffer< T, N >::Append( const T& val )
 {
-	if( m_buffer.Length() < Size() )
+	if( m_buffer.Length() < Capacity() )
 	{
 		return m_buffer.Append( val );
 	}
 	else
 	{
-		AE_DEBUG_ASSERT( m_buffer.Length() == Size() );
-		uint32_t idx = m_first % Size();
+		AE_DEBUG_ASSERT( m_buffer.Length() == Capacity() );
+		uint32_t idx = m_first % Capacity();
 		m_buffer[ idx ] = val;
 		m_first++;
 		return m_buffer[ idx ];
@@ -11767,14 +12216,14 @@ template< typename T, uint32_t N >
 T& RingBuffer< T, N >::Get( uint32_t index )
 {
 	AE_ASSERT( index < m_buffer.Length() );
-	return m_buffer[ ( m_first + index ) % Size() ];
+	return m_buffer[ ( m_first + index ) % Capacity() ];
 }
 
 template< typename T, uint32_t N >
 const T& RingBuffer< T, N >::Get( uint32_t index ) const
 {
 	AE_ASSERT( index < m_buffer.Length() );
-	return m_buffer[ ( m_first + index ) % Size() ];
+	return m_buffer[ ( m_first + index ) % Capacity() ];
 }
 
 //------------------------------------------------------------------------------
@@ -11789,8 +12238,8 @@ FreeList< N >::FreeList() :
 }
 
 template< uint32_t N >
-FreeList< N >::FreeList( const ae::Tag& tag, uint32_t size ) :
-	m_pool( tag, Entry(), size )
+FreeList< N >::FreeList( const ae::Tag& tag, uint32_t capacity ) :
+	m_pool( tag, Entry(), capacity )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
 	FreeAll();
@@ -12092,7 +12541,7 @@ T* ObjectPool< T, N, Paged >::GetNext( T* obj )
 template< typename T, uint32_t N, bool Paged >
 bool ObjectPool< T, N, Paged >::HasFree() const
 {
-	return Length() < Size();
+	return Length() < Capacity();
 }
 
 template< typename T, uint32_t N, bool Paged >
@@ -12289,9 +12738,9 @@ OpaquePool::Iterator< T > OpaquePool::Iterator< T >::end()
 //------------------------------------------------------------------------------
 // ae::Any templated member functions
 //------------------------------------------------------------------------------
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-Any< Size, Alignment >::Any( const T& value )
+Any< Capacity, Alignment >::Any( const T& value )
 {
 	*this = value;
 }
@@ -12302,9 +12751,12 @@ Any< Size, Alignment >::Any( const T& value )
 // on a template parameter.
 template< typename... > inline constexpr bool _False = false;
 
-template< uint32_t Size, uint32_t Alignment >
+template< typename T > struct _RemovePointerConst { using Type = T; };
+template< typename U > struct _RemovePointerConst< const U* > { using Type = U*; };
+
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-void Any< Size, Alignment >::operator=( const T& value )
+void Any< Capacity, Alignment >::operator=( const T& value )
 {
 	if constexpr( !std::is_trivially_destructible_v< T > )
 	{
@@ -12314,7 +12766,7 @@ void Any< Size, Alignment >::operator=( const T& value )
 	{
 		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T must be trivially copyable" );
 	}
-	else if constexpr( sizeof( T ) > Size )
+	else if constexpr( sizeof( T ) > Capacity )
 	{
 		AE_STATIC_ASSERT_MSG( ae::_False< T >, "T is too large to store in DocumentValue" );
 	}
@@ -12330,64 +12782,126 @@ void Any< Size, Alignment >::operator=( const T& value )
 	}
 	else
 	{
-		m_typeId = ae::GetTypeIdWithQualifiers< T >();
-		new ( &m_data ) T( value );
+		// remove_const_t is a no-op for pointer types (only strips a top-level
+		// const on the pointer itself, not the pointee), so this only affects
+		// by-value non-pointer T: const is ignored for storage identity there.
+		using StoredT = std::remove_const_t< T >;
+		m_typeId = ae::GetTypeIdWithQualifiers< StoredT >();
+		new ( &m_data ) StoredT( value );
 	}
 }
 
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-T Any< Size, Alignment >::Get( const T& defaultValue ) const
+T Any< Capacity, Alignment >::Get( const T& defaultValue ) const
 {
 	const T* value = TryGet< T >();
 	return value ? *value : defaultValue;
 }
 
-template< uint32_t Size, uint32_t Alignment >
+template< uint32_t Capacity, uint32_t Alignment >
 template< typename T >
-T* Any< Size, Alignment >::TryGet()
+T* Any< Capacity, Alignment >::TryGet()
 {
-	if( m_typeId == ae::GetTypeIdWithQualifiers< T >() )
+	return AE_CALL_CONST_MEMBER_FUNCTION( template TryGet< T >() );
+}
+
+template< uint32_t Capacity, uint32_t Alignment >
+template< typename T >
+const T* Any< Capacity, Alignment >::TryGet() const
+{
+	// remove_const_t is a no-op for pointer types, so this only widens
+	// by-value non-pointer retrieval (const is ignored on read, matching
+	// the storage side above); pointer const-ness is still checked exactly.
+	const ae::TypeId returnTypeId = ae::GetTypeIdWithQualifiers< std::remove_const_t< T > >();
+	if( m_typeId == returnTypeId )
 	{
-		return reinterpret_cast< T* >( &m_data );
+		return reinterpret_cast< const T* >( &m_data );
+	}
+	// Allow retrieving as 'const U*' when 'U*' was stored
+	using NonConstPtrType = typename ae::_RemovePointerConst< T >::Type;
+	if constexpr( !std::is_same_v< T, NonConstPtrType > )
+	{
+		if( m_typeId == ae::GetTypeIdWithQualifiers< NonConstPtrType >() )
+		{
+			return reinterpret_cast< const T* >( &m_data );
+		}
 	}
 	return nullptr;
 }
 
-template< uint32_t Size, uint32_t Alignment >
-template< typename T >
-const T* Any< Size, Alignment >::TryGet() const
+template< uint32_t Capacity, uint32_t Alignment >
+uint32_t Any< Capacity, Alignment >::GetTypeId() const
 {
-	if( m_typeId == ae::GetTypeIdWithQualifiers< T >() )
-	{
-		return reinterpret_cast< const T* >( &m_data );
-	}
-	return nullptr;
+	return m_typeId;
+}
+
+template< uint32_t Size, uint32_t Alignment >
+Any< Size, Alignment >::operator bool() const
+{
+	return m_typeId != 0;
 }
 
 //------------------------------------------------------------------------------
 // ae::Function templated member functions
 //------------------------------------------------------------------------------
-template< typename R, typename... Args, size_t MaxSize >
-Function< R( Args... ), MaxSize >::Function() : m_invoker( nullptr )
+template< typename R, typename... Args, size_t Capacity >
+Function< R( Args... ), Capacity >::Function() : m_invoker( nullptr )
 {
 }
-template< typename R, typename... Args, size_t MaxSize >
+template< typename R, typename... Args, size_t Capacity >
 template< typename F >
-Function< R( Args... ), MaxSize >::Function( F&& f )
+Function< R( Args... ), Capacity >::Function( F&& f )
 {
-	static_assert( sizeof( F ) <= MaxSize, "Lambda too large" );
-	static_assert( std::is_trivially_copyable< F >::value, "Lambda must be trivially copyable" );
-	memcpy( m_storage, &f, sizeof( F ) );
-	m_invoker = []( const void* ptr, Args... args ) -> R { return ( *reinterpret_cast< const F* >( ptr ) )( args... ); };
+	using FT = std::decay_t< F >;
+	static_assert( std::is_invocable_r_v< R, const FT&, Args... >, "Callable does not match ae::Function signature R( Args... )" );
+	static_assert( sizeof( FT ) <= Capacity, "Callable too large" );
+	static_assert( std::is_trivially_copyable< FT >::value, "Callable must be trivially copyable" );
+	FT stored = f;
+	memcpy( m_storage, &stored, sizeof( FT ) );
+	m_invoker = []( const void* ptr, Args... args ) -> R
+	{
+		return ( *reinterpret_cast< const FT* >( ptr ) )( args... );
+	};
 }
-template< typename R, typename... Args, size_t MaxSize >
-R Function< R( Args... ), MaxSize >::operator()( Args... args ) const
+template< typename R, typename... Args, size_t Capacity >
+template< typename T >
+Function< R( Args... ), Capacity >::Function( T* obj, R ( T::*mfp )( Args... ) )
 {
+	struct Bound { T* obj; R ( T::*mfp )( Args... ); };
+	static_assert( std::is_invocable_r_v< R, decltype( mfp ), T*, Args... >, "Member function does not match ae::Function signature R( Args... )" );
+	static_assert( sizeof( Bound ) <= Capacity, "Bound member too large" );
+	const Bound b = { obj, mfp };
+	memcpy( m_storage, &b, sizeof( Bound ) );
+	m_invoker = []( const void* ptr, Args... args ) -> R
+	{
+		const Bound* p = reinterpret_cast< const Bound* >( ptr );
+		return ( p->obj->*p->mfp )( args... );
+	};
+}
+template< typename R, typename... Args, size_t Capacity >
+template< typename T >
+Function< R( Args... ), Capacity >::Function( const T* obj, R ( T::*mfp )( Args... ) const )
+{
+	struct Bound { const T* obj; R ( T::*mfp )( Args... ) const; };
+	static_assert( std::is_invocable_r_v< R, decltype( mfp ), const T*, Args... >, "Member function does not match ae::Function signature R( Args... )" );
+	static_assert( sizeof( Bound ) <= Capacity, "Bound member too large" );
+	const Bound b = { obj, mfp };
+	memcpy( m_storage, &b, sizeof( Bound ) );
+	m_invoker = []( const void* ptr, Args... args ) -> R
+	{
+		const Bound* p = reinterpret_cast< const Bound* >( ptr );
+		return ( p->obj->*p->mfp )( args... );
+	};
+}
+template< typename R, typename... Args, size_t Capacity >
+R Function< R( Args... ), Capacity >::operator()( Args... args ) const
+{
+	AE_DEBUG_ASSERT( m_invoker );
 	return m_invoker( m_storage, args... );
 }
-template< typename R, typename... Args, size_t MaxSize >
-Function< R( Args... ), MaxSize >::operator bool() const
+template< typename R, typename... Args, size_t Capacity >
+Function< R( Args... ), Capacity >::operator bool() const
 {
 	return m_invoker != nullptr;
 }
@@ -12672,7 +13186,7 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 #if _AE_DEBUG_ && ( N == 0 )
 	if( m_limit )
 	{
-		AE_ASSERT( m_nodes.Size() >= m_limit );
+		AE_ASSERT( m_nodes.Capacity() >= m_limit );
 	}
 	auto* preCheck = m_nodes.Data();
 #endif
@@ -12796,7 +13310,7 @@ template< uint32_t V, uint32_t T, uint32_t B >
 void CollisionMesh< V, T, B >::Reserve( uint32_t vertCount, uint32_t triCount, uint32_t bvhNodeCount )
 {
 	AE_DEBUG_ASSERT( m_positions.Length() == m_collisionExtras.Length() );
-	if( m_positions.Size() < vertCount || m_tris.Size() < triCount || m_bvh.GetLimit() < bvhNodeCount )
+	if( m_positions.Capacity() < vertCount || m_tris.Capacity() < triCount || m_bvh.GetLimit() < bvhNodeCount )
 	{
 		m_positions.Reserve( vertCount );
 		m_collisionExtras.Reserve( vertCount );
@@ -12912,7 +13426,7 @@ void CollisionMesh< V, T, B >::Clear()
 }
 
 template< uint32_t V, uint32_t T, uint32_t B >
-RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, RaycastResult result ) const
+RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, const CollisionMeshRaycastParams& meshParams, RaycastResult result ) const
 {
 	// Early out
 	{
@@ -12922,42 +13436,42 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, Ra
 			return result;
 		}
 		// Sphere/OBB check in world space
-		const ae::Vec3 aabbMin = ( params.transform * ae::Vec4( m_aabb.GetMin(), 1.0f ) ).GetXYZ();
-		const ae::Vec3 aabbMax = ( params.transform * ae::Vec4( m_aabb.GetMax(), 1.0f ) ).GetXYZ();
+		const ae::Vec3 aabbMin = ( meshParams.transform * ae::Vec4( m_aabb.GetMin(), 1.0f ) ).GetXYZ();
+		const ae::Vec3 aabbMax = ( meshParams.transform * ae::Vec4( m_aabb.GetMax(), 1.0f ) ).GetXYZ();
 		const ae::Sphere sphere( ( aabbMin + aabbMax ) * 0.5f, ( aabbMax - aabbMin ).Length() * 0.5f );
 		if( result.EarlyOut( params, sphere ) )
 		{
 			return result; // Early out if previous hits already closer than sphere
 		}
-		const ae::OBB obb( params.transform * m_aabb.GetTransform() );
+		const ae::OBB obb( meshParams.transform * m_aabb.GetTransform() );
 		if( result.EarlyOut( params, obb ) )
 		{
 			return result; // Early out if previous hits already closer than obb
 		}
-		if( ae::DebugLines* debug = params.debug )
+		if( ae::DebugLines* debug = meshParams.debug )
 		{
-			debug->AddOBB( obb, params.debugColor ); // Ray intersects obb
+			debug->AddOBB( obb, meshParams.debugColor ); // Ray intersects obb
 		}
 	}
 
-	const ae::Matrix4 invTransform = params.transform.GetInverse();
+	const ae::Matrix4 invTransform = meshParams.transform.GetInverse();
 	const ae::Matrix4 normalTransform = invTransform.GetTranspose();
 	const ae::Vec3 source( invTransform * ae::Vec4( params.source, 1.0f ) );
 	const ae::Vec3 rayEnd( invTransform * ae::Vec4( params.source + params.ray, 1.0f ) );
 	const ae::Vec3 ray = rayEnd - source;
-	const bool ccw = params.hitCounterclockwise;
-	const bool cw = params.hitClockwise;
+	const bool ccw = meshParams.hitCounterclockwise;
+	const bool cw = meshParams.hitClockwise;
 
 	auto bvhFn = [&]( auto&& bvhFn, const ae::BVH< BVHTri, B >* bvh, const BVHNode* current ) -> void
 	{
-		if( !current->aabb.IntersectRay( source, ray ) )
+		if( !current->aabb.Raycast( source, ray ) )
 		{
 			return;
 		}
-		if( params.debug )
+		if( meshParams.debug )
 		{
-			ae::OBB obb( params.transform * current->aabb.GetTransform() );
-			params.debug->AddOBB( obb, params.debugColor );
+			ae::OBB obb( meshParams.transform * current->aabb.GetTransform() );
+			meshParams.debug->AddOBB( obb, meshParams.debugColor );
 		}
 		if( const BVHLeaf< BVHTri >* leaf = bvh->TryGetLeaf( current->leafIdx ) )
 		{
@@ -12968,19 +13482,19 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, Ra
 				ae::Vec3 a = m_positions[ idx0 ];
 				ae::Vec3 b = m_positions[ leaf->data[ i ].idx[ 1 ] ];
 				ae::Vec3 c = m_positions[ leaf->data[ i ].idx[ 2 ] ];
-				if( Triangle( a, b, c ).IntersectRay( source, ray, ccw, cw, &p, &n, nullptr ) )
+				if( Triangle( a, b, c ).Raycast( source, ray, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit hit;
-					hit.position = ae::Vec3( params.transform * ae::Vec4( p, 1.0f ) ); // Undo local space transforms
+					hit.position = ae::Vec3( meshParams.transform * ae::Vec4( p, 1.0f ) ); // Undo local space transforms
 					hit.normal = ae::Vec3( normalTransform * ae::Vec4( n, 0.0f ) ).SafeNormalizeCopy(); // SafeNormalizeCopy
 					hit.distance = ( hit.position - params.source ).Length(); // Calculate here because transform might not have uniform scale
 					hit.userData = params.userData;
 					hit.extra = m_collisionExtras[ idx0 ];
 					result.Accumulate( params, hit );
-					if( ae::DebugLines* debug = params.debug )
+					if( ae::DebugLines* debug = meshParams.debug )
 					{
-						debug->AddCircle( hit.position, hit.normal, 0.25f, params.debugColor, 8 );
-						debug->AddLine( hit.position, hit.position + hit.normal, params.debugColor );
+						debug->AddCircle( hit.position, hit.normal, 0.25f, meshParams.debugColor, 8 );
+						debug->AddLine( hit.position, hit.position + hit.normal, meshParams.debugColor );
 					}
 				}
 			}
@@ -13002,34 +13516,34 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, Ra
 }
 
 template< uint32_t V, uint32_t T, uint32_t B >
-PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const
+PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, const CollisionMeshPushOutParams& meshParams, const PushOutInfo& prevInfo ) const
 {
 	if( !m_bvh.GetRoot() )
 	{
 		return prevInfo;
 	}
 	
-	if( ae::DebugLines* debug = params.debug )
+	if( ae::DebugLines* debug = meshParams.debug )
 	{
-		debug->AddSphere( prevInfo.sphere.center, prevInfo.sphere.radius, params.debugColor, 8 );
+		debug->AddSphere( prevInfo.sphere.center, prevInfo.sphere.radius, meshParams.debugColor, 8 );
 	}
 
-	ae::OBB obb( params.transform * m_aabb.GetTransform() );
+	ae::OBB obb( meshParams.transform * m_aabb.GetTransform() );
 	if( obb.GetSignedDistanceFromSurface( prevInfo.sphere.center ) > prevInfo.sphere.radius )
 	{
 		return prevInfo; // Early out if sphere is to far from mesh
 	}
 	
-	if( ae::DebugLines* debug = params.debug )
+	if( ae::DebugLines* debug = meshParams.debug )
 	{
 		// Sphere intersects obb
-		debug->AddOBB( obb, params.debugColor );
+		debug->AddOBB( obb, meshParams.debugColor );
 	}
 	
 	PushOutInfo result;
 	result.sphere = prevInfo.sphere;
 	result.velocity = prevInfo.velocity;
-	const bool hasIdentityTransform = ( params.transform == ae::Matrix4::Identity() );
+	const bool hasIdentityTransform = ( meshParams.transform == ae::Matrix4::Identity() );
 	
 	auto bvhFn = [&]( auto&& bvhFn, const ae::BVH< BVHTri, B >* bvh, const BVHNode* current ) -> void
 	{
@@ -13041,21 +13555,21 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 			{
 				return;
 			}
-			if( params.debug )
+			if( meshParams.debug )
 			{
-				params.debug->AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), params.debugColor );
+				meshParams.debug->AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), meshParams.debugColor );
 			}
 		}
 		else
 		{
-			ae::OBB obb( params.transform * aabb.GetTransform() );
+			ae::OBB obb( meshParams.transform * aabb.GetTransform() );
 			if( obb.GetSignedDistanceFromSurface( prevInfo.sphere.center ) > prevInfo.sphere.radius )
 			{
 				return;
 			}
-			if( params.debug )
+			if( meshParams.debug )
 			{
-				params.debug->AddOBB( obb, params.debugColor );
+				meshParams.debug->AddOBB( obb, meshParams.debugColor );
 			}
 		}
 		// Triangle checks
@@ -13070,9 +13584,9 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 				ae::Vec3 c = m_positions[ leaf->data[ i ].idx[ 2 ] ];
 				if( !hasIdentityTransform )
 				{
-					a = ae::Vec3( params.transform * ae::Vec4( a, 1.0f ) );
-					b = ae::Vec3( params.transform * ae::Vec4( b, 1.0f ) );
-					c = ae::Vec3( params.transform * ae::Vec4( c, 1.0f ) );
+					a = ae::Vec3( meshParams.transform * ae::Vec4( a, 1.0f ) );
+					b = ae::Vec3( meshParams.transform * ae::Vec4( b, 1.0f ) );
+					c = ae::Vec3( meshParams.transform * ae::Vec4( c, 1.0f ) );
 				}
 		
 				const ae::Vec3 triNormal = ( ( b - a ).Cross( c - a ) ).SafeNormalizeCopy();
@@ -13101,7 +13615,7 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 					result.velocity.ZeroDirection( -triNormal );
 		
 					// @TODO: Sort. Shouldn't randomly discard hits.
-					if( result.hits.Length() < result.hits.Size() )
+					if( result.hits.Length() < result.hits.Capacity() )
 					{
 						ae::PushOutInfo::Hit& hitOut = result.hits.Append( {} );
 						hitOut.position = triHitPos;
@@ -13109,14 +13623,14 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 						hitOut.extra = extra;
 					}
 		
-					if( ae::DebugLines* debug = params.debug )
+					if( ae::DebugLines* debug = meshParams.debug )
 					{
-						debug->AddLine( a, b, params.debugColor );
-						debug->AddLine( b, c, params.debugColor );
-						debug->AddLine( c, a, params.debugColor );
+						debug->AddLine( a, b, meshParams.debugColor );
+						debug->AddLine( b, c, meshParams.debugColor );
+						debug->AddLine( c, a, meshParams.debugColor );
 		
-						debug->AddLine( triHitPos, triHitPos + triNormal * 2.0f, params.debugColor );
-						debug->AddSphere( triHitPos, 0.05f, params.debugColor, 4 );
+						debug->AddLine( triHitPos, triHitPos + triNormal * 2.0f, meshParams.debugColor );
+						debug->AddSphere( triHitPos, 0.05f, meshParams.debugColor, 4 );
 					}
 				}
 			}
@@ -13354,23 +13868,12 @@ const T* VertexArray::GetIndices() const
 template< typename T >
 void BinaryStream::SetUserData( T* userData )
 {
-	m_userData = const_cast< void* >( reinterpret_cast< const void* >( userData ) );
-	m_userDataTypeId = std::is_const_v< T > ? ae::kInvalidTypeId : ae::GetTypeIdWithQualifiers< T >(); // Don't allow removal of const with GetUserData()
-	m_userDataConstTypeId = ae::GetTypeIdWithQualifiers< const T >();
+	m_userData = userData;
 }
 template< typename T >
 T* BinaryStream::GetUserData()
 {
-	const ae::TypeId returnTypeId = ae::GetTypeIdWithQualifiers< T >();
-	if( m_userDataTypeId == returnTypeId )
-	{
-		return reinterpret_cast< T* >( m_userData );
-	}
-	else if( m_userDataConstTypeId == returnTypeId )
-	{
-		return reinterpret_cast< T* >( m_userData );
-	}
-	return nullptr;
+	return m_userData.Get< T* >();
 }
 
 template< typename E >
@@ -13496,7 +13999,7 @@ void BinaryWriter::SerializeObject( const T& v )
 //------------------------------------------------------------------------------
 // Internal helpers
 //------------------------------------------------------------------------------
-template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( d ) T(); }
+template< typename T > void* _PlacementNew( void* d ) { return new( d ) T(); }
 #define AE_EVAL(...) __VA_ARGS__
 #define AE_STRINGIFY_IMPL(S) #S
 #define AE_VA_ARGS_COUNT_IMPL(_,_9,_8,_7,_6,_5,_4,_3,_2,X_,...) X_
@@ -13565,33 +14068,6 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__) AE_GLUE_UNDERSCORE(_ae_forceLink, __VA_ARGS__);
 
 //------------------------------------------------------------------------------
-// Deprecated meta class property registration macros
-//------------------------------------------------------------------------------
-#if AE_DEPRECATED
-
-//! Register a class property
-//! Call signature: AE_REGISTER_CLASS_PROPERTY( (Namespace0, ..., NameSpaceN, MyType), typeProperty );
-#define AE_REGISTER_NAMESPACECLASS_PROPERTY( _C, _P ) AE_REGISTER_CLASS_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P )
-#define AE_REGISTER_CLASS_PROPERTY( _C, _P ) AE_REGISTER_NAMESPACECLASS_PROPERTY( (_C), _P )
-
-//! Register a class property with an additional value. Multiple values can be
-//! specified per property.
-//! Call signature: AE_REGISTER_CLASS_PROPERTY_VALUE( (Namespace0, ..., NameSpaceN, MyType), typeProperty, typePropertyValue );
-#define AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( _C, _P, _V ) AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P, _V )
-#define AE_REGISTER_CLASS_PROPERTY_VALUE( _C, _P, _V ) AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (_C), _P, _V )
-
-//! Register a property for a specific class variable
-#define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( _C, _V, _P ) AE_REGISTER_CLASS_VAR_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P )
-#define AE_REGISTER_CLASS_VAR_PROPERTY( _C, _V, _P ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( (_C), _V, _P )
-
-//! Register a property for a specific class variable with an additional value.
-//! Multiple values can be specified per property.
-#define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P, _PV )
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (_C), _V, _P, _PV )
-
-#endif // AE_DEPRECATED
-
-//------------------------------------------------------------------------------
 // Internal meta class registration macros
 //------------------------------------------------------------------------------
 #define AE_REGISTER_CLASS_IMPL( _N, _T )\
@@ -13602,24 +14078,10 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	template<> ae::Type* ae::FindMetaRegistrationFor< ::_T >() { return ae::TypeT< ::_T >::Get(); }\
 	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, SourceFileAttribute)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute), nullptr) );
 
-#define AE_REGISTER_CLASS_PROPERTY_IMPL( _N, _T, _P ) static ae::_PropCreator< ::_T > AE_GLUE_UNDERSCORE(ae_prop_creator, _N , _P)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_P, "" )
-
-#define AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL( _N, _T, _P, _V ) static ae::_PropCreator< ::_T > AE_GLUE_UNDERSCORE(ae_prop_creator, _N, _P, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_P, #_V )
-
 #define AE_REGISTER_CLASS_VAR_IMPL( _N, _T, _V )\
 	AE_DISABLE_INVALID_OFFSET_WARNING\
 	static ae::_VarCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_V );\
 	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, SourceFileAttribute)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute), nullptr) );\
-	AE_ENABLE_INVALID_OFFSET_WARNING
-
-#define AE_REGISTER_CLASS_VAR_PROPERTY_IMPL( _N, _T, _V, _P )\
-	AE_DISABLE_INVALID_OFFSET_WARNING\
-	static ae::_VarPropCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_prop_creator, _N, _V, _P)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), #_P, "" );\
-	AE_ENABLE_INVALID_OFFSET_WARNING
-
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( _N, _T, _V, _P, _PV )\
-	AE_DISABLE_INVALID_OFFSET_WARNING\
-	static ae::_VarPropCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_prop_creator, _N, _V, _P, _PV)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), #_P, #_PV );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
 
 #define AE_REGISTER_CLASS_ATTRIBUTE_IMPL( _N, _T, _AN, _AT, _ARGS )\
@@ -13633,22 +14095,36 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
 //------------------------------------------------------------------------------
-#define AE_DEFINE_ENUM_CLASS_IMPL( E, T, ... )\
+#define _AE_DEFINE_BIT_FIELD_OPS( E )\
+	typedef std::underlying_type_t< E > _ae_##E;\
+	inline E operator|( E a, E b ) { return E( (_ae_##E)a | (_ae_##E)b ); }\
+	inline E operator&( E a, E b ) { return E( (_ae_##E)a & (_ae_##E)b ); }\
+	inline E operator^( E a, E b ) { return E( (_ae_##E)a ^ (_ae_##E)b ); }\
+	inline E& operator|=( E& a, E b ) { a = ( a | b ); return a; }\
+	inline E& operator&=( E& a, E b ) { a = ( a & b ); return a; }\
+	inline E& operator^=( E& a, E b ) { a = ( a ^ b ); return a; }\
+	inline E operator~( E a ) { return (E)~(_ae_##E)a; } /* @TODO: Is this necessary? */
+
+#define AE_DEFINE_ENUM_CLASS_IMPL( E, T, B, ... )\
 	enum class E : T {\
 		__VA_ARGS__\
 	};\
 	template<> const ae::EnumType* ae::GetEnumType< E >();\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< T > ) {}\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< T >, B ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	struct _EnumValues##E { _EnumValues##E( const char* values = #__VA_ARGS__ ) : values( values ) {} const char* values; };\
-	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnumType< E >()->GetNameByValue( (int32_t)e ); return os; }\
+	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnumType< E >()->GetNameByValue( e ); return os; }\
 	namespace ae { template<> inline std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
-	namespace ae { template<> inline E FromString( const char* str, const E& e ) { return ae::GetEnumType< E >()->GetValueFromString( str, e ); } }\
-	namespace ae { template<> inline uint32_t GetHash32( const E& e ) { return (uint32_t)e; } }
+	namespace ae { template<> inline bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }\
+	namespace ae { template<> inline uint32_t GetHash32( const E& e ) { return ae::GetHash32( static_cast< T >( e ) ); } }
+
+#define AE_DEFINE_BIT_FIELD_ENUM_CLASS_IMPL( E, T, ... )\
+	AE_DEFINE_ENUM_CLASS_IMPL( E, T, true, ##__VA_ARGS__ )\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
 
 #define AE_REGISTER_ENUM_CLASS_IMPL( E )\
 	ae::_RegisterEnum< E > ae_enum_creator_##E( #E, _EnumValues##E().values );\
@@ -13669,14 +14145,14 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	}\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, false ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
 	namespace ae { template<> std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
-	namespace ae { template<> E FromString( const char* str, const E& e ) { return ae::GetEnumType< E >()->GetValueFromString( str, e ); } }
+	namespace ae { template<> bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }
 
 #define AE_REGISTER_ENUM_PREFIX_IMPL( E, PREFIX )\
 	template<> const ae::EnumType* ae::GetEnumType< E >() {\
@@ -13686,12 +14162,46 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	}\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, false ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+
+#define AE_REGISTER_BIT_FIELD_ENUM_IMPL( E )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, true ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	namespace ae { template<> std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
+	namespace ae { template<> bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
+
+#define AE_REGISTER_BIT_FIELD_ENUM_PREFIX_IMPL( E, PREFIX )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, true ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
 
 //------------------------------------------------------------------------------
 // External enum class registerer
@@ -13704,13 +14214,29 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 	}\
 	template<>\
 	struct ae::TypeT< E > : public ae::EnumType {\
-		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, false ) {}\
 		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }
 	// @NOTE: Nested namespace declaration requires C++17
+
+#define AE_REGISTER_BIT_FIELD_ENUM_CLASS2_IMPL( E )\
+	template<> const ae::EnumType* ae::GetEnumType< E >() {\
+		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
+		if( !s_enum ) { s_enum = GetEnumType( #E ); }\
+		return s_enum;\
+	}\
+	template<>\
+	struct ae::TypeT< E > : public ae::EnumType {\
+		TypeT() : EnumType( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > >, true ) {}\
+		static ae::Type* Get() { static ae::TypeT< E > s_type; return &s_type; }\
+		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
+	};\
+	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
+	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
+	_AE_DEFINE_BIT_FIELD_OPS( E )
 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
@@ -13753,14 +14279,30 @@ template< typename T > struct TypeT
 	static ae::Type* Get( uint32_t _i = 0 ) { return ae::FindMetaRegistrationFor< std::remove_const_t< T > >(); }
 };
 
-template< typename T > ae::TypeId GetTypeIdWithoutQualifiers()
+constexpr ae::TypeId GetTypeIdFromName( const char* name )
+{
+	return ae::TypeId( name[ 0 ] ? ae::Hash32().HashString( name ).Get() : 0u );
+}
+
+template< typename T > constexpr ae::TypeId GetTypeIdWithoutQualifiers()
 {
 	return ae::GetTypeIdWithQualifiers< ae::RemoveTypeQualifiers< T > >();
 }
 
-template< typename T > ae::TypeId GetTypeIdWithQualifiers()
+template< typename T > constexpr ae::TypeId GetTypeIdWithQualifiers()
 {
-	return ae::GetTypeIdFromName( ae::_GetTypeName< T >().data() );
+	return ae::GetTypeIdFromName( ae::GetTypeName< T >() );
+}
+
+template< typename T >
+ae::TypeId GetObjectTypeId( const T* obj )
+{
+	if( obj )
+	{
+		AE_DEBUG_ASSERT_MSG( obj->GetTypeId(), "Object has no meta type, it's possible this object has not been constructed." );
+		return obj->GetTypeId();
+	}
+	return ae::kInvalidTypeId;
 }
 
 template< typename T >
@@ -13835,6 +14377,7 @@ public:
 		strMap.erase( std::remove( strMap.begin(), strMap.end(), '\n' ), strMap.end() );
 
 		T currentValue = 0;
+		std::vector< std::pair< std::string, uint64_t > > registeredValues;
 		std::vector< std::string > enumTokens( m_SplitString( strMap, ',' ) );
 		for( auto iter = enumTokens.begin(); iter != enumTokens.end(); ++iter )
 		{
@@ -13845,19 +14388,15 @@ public:
 			}
 			else
 			{
-				std::vector<std::string> enumNameValue( m_SplitString( *iter, '=' ) );
-				enumName = enumNameValue[ 0 ];
-				if( std::is_unsigned< T >::value )
-				{
-					currentValue = static_cast< T >( std::stoull( enumNameValue[ 1 ], 0, 0 ) );
-				}
-				else
-				{
-					currentValue = static_cast< T >( std::stoll( enumNameValue[ 1 ], 0, 0 ) );
-				}
+				// Split on the first '=' only — value expressions may not contain '='
+				std::size_t eqPos = iter->find( '=' );
+				enumName = iter->substr( 0, eqPos );
+				const std::string valueExpr = iter->substr( eqPos + 1 );
+				currentValue = static_cast< T >( m_ParseValueExpression( valueExpr, registeredValues, typeName ) );
 			}
-				
-			enumType->m_AddValue( enumName.c_str(), currentValue );
+			AE_ASSERT_MSG( !enumName.empty(), "Enum '#' has an empty member name", typeName );
+			registeredValues.push_back( { enumName, static_cast< uint64_t >( currentValue ) } );
+			enumType->m_AppendValue( enumName.c_str(), currentValue );
 			currentValue++;
 		}
 		globals->metaCacheSeq++;
@@ -13871,6 +14410,95 @@ public:
 	}
 		
 private:
+	using RegisteredValues = std::vector< std::pair< std::string, uint64_t > >;
+
+	// Try to parse a string as an integer literal (decimal, 0x hex, 0 octal, or negative).
+	// Returns false without modifying *out if the string is not a valid literal.
+	static bool m_TryParseIntLiteral( const std::string& s, uint64_t* out )
+	{
+		if( s.empty() ) { return false; }
+		const char* p = s.c_str();
+		char* end = nullptr;
+		if( p[ 0 ] == '-' )
+		{
+			const int64_t v = std::strtoll( p, &end, 0 );
+			if( !end || end != p + s.size() || end == p ) { return false; }
+			*out = static_cast< uint64_t >( v );
+		}
+		else
+		{
+			const uint64_t v = std::strtoull( p, &end, 0 );
+			if( !end || end != p + s.size() || end == p ) { return false; }
+			*out = v;
+		}
+		return true;
+	}
+
+	// Evaluate a single token: an integer literal, a '<<' shift (both sides integer literals),
+	// or a previously-registered member name. Fatal assert on any parse failure.
+	static uint64_t m_ParseToken(
+		const std::string& token,
+		const RegisteredValues& registered,
+		const char* typeName,
+		const std::string& fullExpr )
+	{
+		// Check for left-shift operator
+		const std::size_t shiftPos = token.find( "<<" );
+		if( shiftPos != std::string::npos )
+		{
+			const std::string lhsStr = token.substr( 0, shiftPos );
+			const std::string rhsStr = token.substr( shiftPos + 2 );
+			uint64_t lhs = 0, rhs = 0;
+			AE_ASSERT_MSG( m_TryParseIntLiteral( lhsStr, &lhs ),
+				"Enum '#' value expression '#': left side of '<<' must be an integer literal (got '#')",
+				typeName, fullExpr.c_str(), lhsStr.c_str() );
+			AE_ASSERT_MSG( m_TryParseIntLiteral( rhsStr, &rhs ),
+				"Enum '#' value expression '#': right side of '<<' must be an integer literal (got '#')",
+				typeName, fullExpr.c_str(), rhsStr.c_str() );
+			return lhs << rhs;
+		}
+
+		// Try integer literal
+		uint64_t intVal = 0;
+		if( m_TryParseIntLiteral( token, &intVal ) ) { return intVal; }
+
+		// Try previously registered member name (linear search — registration-time only)
+		for( const auto& kv : registered )
+		{
+			if( kv.first == token ) { return kv.second; }
+		}
+
+		AE_FAIL_MSG(
+			"Enum '#' value expression '#': '#' is not an integer literal and is not a previously defined member name. "
+			"Supported syntax: integer literals (e.g. 4, 0x4), bit shifts (e.g. 1<<2), "
+			"and '|'-separated combinations of the above (e.g. Player|Camera, 1<<0|1<<1).",
+			typeName, fullExpr.c_str(), token.c_str() );
+		return 0;
+	}
+
+	// Evaluate a value expression as a '|'-separated combination of tokens.
+	static uint64_t m_ParseValueExpression(
+		const std::string& expr,
+		const RegisteredValues& registered,
+		const char* typeName )
+	{
+		AE_ASSERT_MSG( !expr.empty(), "Enum '#' has a member with an empty value expression", typeName );
+		uint64_t result = 0;
+		std::size_t start = 0;
+		while( true )
+		{
+			const std::size_t end = expr.find( '|', start );
+			const std::string token = expr.substr( start, end == std::string::npos ? std::string::npos : end - start );
+			AE_ASSERT_MSG( !token.empty(),
+				"Enum '#' value expression '#': empty token (stray '|'?)",
+				typeName, expr.c_str() );
+			result |= m_ParseToken( token, registered, typeName, expr );
+			if( end == std::string::npos ) { break; }
+			start = end + 1;
+		}
+		return result;
+	}
+
 	static std::vector< std::string > m_SplitString( std::string str, char separator )
 	{
 		std::vector< std::string > result;
@@ -13913,7 +14541,7 @@ public:
 		const uint32_t prefixLen = (uint32_t)strlen( prefix );
 		AE_ASSERT( prefixLen < strlen( valueName ) );
 		AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
-		enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
+		enumType->m_AppendValue( valueName + prefixLen, value );
 		ae::_Globals::Get()->metaCacheSeq++;
 	}
 };
@@ -13964,12 +14592,11 @@ _ae_DefineBasicVarType( ae::UUID, UUID );
 namespace ae {
 
 //------------------------------------------------------------------------------
-// ae::PointerType templated member functions
+// ae::ObjectPointerType templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
-T** ae::PointerType::Get( ae::DataPointer varData ) const
+T** ObjectPointerType::Get( ae::DataPointer varData ) const
 {
-	static_assert( std::is_base_of_v< ae::Object, T >, "T must be derived from ae::Object" );
 	if( GetInnerVarType().GetExactVarTypeId() == ae::GetTypeIdWithQualifiers< T >() )
 	{
 		return static_cast< T** >( varData.Get( this ) );
@@ -13978,9 +14605,8 @@ T** ae::PointerType::Get( ae::DataPointer varData ) const
 }
 
 template< typename T >
-T*const* ae::PointerType::Get( ae::ConstDataPointer varData ) const
+T*const* ObjectPointerType::Get( ae::ConstDataPointer varData ) const
 {
-	static_assert( std::is_base_of_v< ae::Object, T >, "T must be derived from ae::Object" );
 	if( GetInnerVarType().GetExactVarTypeId() == ae::GetTypeIdWithQualifiers< T >() )
 	{
 		return static_cast< T*const* >( varData.Get( this ) );
@@ -13988,87 +14614,28 @@ T*const* ae::PointerType::Get( ae::ConstDataPointer varData ) const
 	return nullptr;
 }
 
+//------------------------------------------------------------------------------
+// ae::ObjectPointerType specializations
+//------------------------------------------------------------------------------
 template< typename T >
-struct TypeT< T* > : public ae::PointerType
+struct TypeT< T* > : public ae::ObjectPointerType
 {
-	static_assert( std::is_base_of< ae::Object, T >::value, "T must be derived from ae::Object" );
-
 	const ae::Type& GetInnerVarType() const override { return *ae::TypeT< T >::Get(); }
 	static ae::Type* Get() { static ae::TypeT< T* > s_type; return &s_type; }
 	ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< T* >(); }
-
-	bool Set( ae::DataPointer _varData, ae::Object* value ) const override
-	{
-		if( T** varData = static_cast< T** >( _varData.Get( this ) ) )
-		{
-			if( !value )
-			{
-				*varData = nullptr;
-				return true;
-			}
-			else
-			{
-				const ae::ClassType* varType = GetClassType< T >();
-				const ae::ClassType* valueType = ae::GetClassTypeFromObject( value );
-				if( varType && valueType && valueType->IsType( varType ) )
-				{
-					*varData = static_cast< T* >( value );
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-
-	bool FromString( ae::DataPointer _varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override
-	{
-		if( T** varData = static_cast< T** >( _varData.Get( this ) ) )
-		{
-			ae::Object* obj = nullptr;
-			if( fn && fn( userData, value, &obj ) )
-			{
-				if( !obj )
-				{
-					// When fn return true and null, clear pointer value
-					*varData = nullptr;
-					return true;
-				}
-				const ae::ClassType* varType = GetClassType< T >();
-				const ae::ClassType* valueType = ae::GetClassTypeFromObject( obj );
-				if( varType && valueType && valueType->IsType( varType ) )
-				{
-					*varData = static_cast< T* >( obj );
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-
-	std::string ToString( ae::ConstDataPointer _varData, ObjectPointerToStringFn fn, const void* userData ) const override
-	{
-		if( fn )
-		{
-			// @TODO: Type compatibility checks
-			if( T* const* varData = static_cast< T* const* >( _varData.Get( this ) ) )
-			{
-				return fn( userData, *varData );
-			}
-		}
-		return "";
-	}
 };
+
 template<>
-struct TypeT< std::nullptr_t > : public ae::PointerType
+struct TypeT< std::nullptr_t > : public ae::ObjectPointerType
 {
 	const ae::Type& GetInnerVarType() const override { AE_FAIL(); return *Get(); } // @TODO: Must return something, add Void type
 	static ae::Type* Get() { static ae::TypeT< std::nullptr_t > s_type; return &s_type; }
 	ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< std::nullptr_t >(); }
-	bool Set( ae::DataPointer varData, ae::Object* value ) const override { AE_FAIL(); return false; }
-	bool FromString( ae::DataPointer varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override { AE_FAIL(); return false; }
-	std::string ToString( ae::ConstDataPointer varData, ObjectPointerToStringFn fn, const void* userData ) const override { AE_FAIL(); return ""; }
 };
 
+//------------------------------------------------------------------------------
+// ae::DynamicArrayVarType partial specialization
+//------------------------------------------------------------------------------
 template< typename T, uint32_t N >
 class DynamicArrayVarType : public ae::ArrayType
 {
@@ -14156,7 +14723,7 @@ public:
 	_ClassTypeT( const char* typeName )
 	{
 		_Globals* globals = _Globals::Get();
-		AE_ASSERT_MSG( globals->classTypes.Length() < globals->classTypes.Size(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->classTypes.Size() );
+		AE_ASSERT_MSG( globals->classTypes.Length() < globals->classTypes.Capacity(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->classTypes.Capacity() );
 		Init< T >( typeName );
 		globals->classTypes.Set( GetId(), this ); // @TODO: Should check for hash collision
 		globals->metaCacheSeq++;
@@ -14179,16 +14746,6 @@ struct _TypeCreator
 	ae::ClassType* Get() { return static_cast< ae::ClassType* >( ae::TypeT< T >::Get() ); }
 };
 
-template< typename C >
-struct _PropCreator
-{
-	// Take _TypeCreator param as a safety check that _PropCreator typeName is provided correctly
-	_PropCreator( ae::_TypeCreator< C >& typeCreator, const char* typeName, const char* propName, const char* propValue )
-	{
-		typeCreator.Get()->m_AddProp( propName, propValue );
-	}
-};
-
 template< typename C, typename V, uint32_t Offset >
 struct _VarCreator
 {
@@ -14209,16 +14766,6 @@ struct _VarCreator
 		typeCreator.Get()->m_AddVar( &m_var );
 	}
 	ae::ClassVar m_var;
-};
-
-template< typename C, typename V, uint32_t Offset >
-struct _VarPropCreator
-{
-	// Take _VarCreator param as a safety check
-	_VarPropCreator( ae::_VarCreator< C, V, Offset >& varCreator, const char* propName, const char* propValue )
-	{
-		varCreator.m_var.m_AddProp( propName, propValue );
-	}
 };
 
 //------------------------------------------------------------------------------
@@ -14272,7 +14819,7 @@ struct ae::TypeT< ae::Map< K, V, N, H > > : public ae::MapType
 			if( const K* key = static_cast< const K* >( _key.Get( &GetKeyVarType() ) ) )
 			{
 				V* value = map->TryGet( *key );
-				if( !value && ( ( N == 0 ) || ( map->Length() < map->Size() ) ) )
+				if( !value && ( ( N == 0 ) || ( map->Length() < map->Capacity() ) ) )
 				{
 					value = &map->Set( *key, {} );
 				}
@@ -14357,6 +14904,18 @@ bool ae::ClassType::IsType() const
 }
 
 template< typename T >
+const ae::ClassType* ae::GetClassTypeFromObject( const T* obj )
+{
+	return obj ? GetClassTypeFromObject( *obj ) : nullptr;
+}
+
+template< typename T >
+std::enable_if_t< !std::is_pointer_v< T >, const ae::ClassType* > ae::GetClassTypeFromObject( const T& obj )
+{
+	return GetClassTypeById( GetObjectTypeId( &obj ) );
+}
+
+template< typename _T >
 const ae::ClassType* ae::GetClassType()
 {
 	static _StaticCacheVar< const ae::ClassType* > s_type = nullptr;
@@ -14366,11 +14925,12 @@ const ae::ClassType* ae::GetClassType()
 	}
 	else
 	{
+		using T = ae::RemoveTypeQualifiers< _T >;
 		_Globals* globals = _Globals::Get();
 		// @TODO: Conditionally enable this check when T is not a forward declaration
 		//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
 		s_type = globals->classTypes.Get( ae::GetTypeIdWithoutQualifiers< T >(), nullptr );
-		AE_ASSERT_MSG( s_type, "No meta info for type name: #", ae::GetTypeName< ae::RemoveTypeQualifiers< T > >() );
+		AE_ASSERT_MSG( s_type, "No meta info for type name: #", ae::GetTypeName< T >() );
 		return s_type;
 	}
 }
@@ -14381,32 +14941,179 @@ const ae::ClassType* ae::GetClassType()
 template< typename T >
 std::string ae::EnumType::GetNameByValue( T value ) const
 {
-	return m_enumValueToName.Get( (int32_t)value, "" );
+	if constexpr( std::is_integral_v< T > || std::is_enum_v< T > )
+	{
+		const uint64_t storedValue = static_cast< uint64_t >( value );
+		if( m_isBitField )
+		{
+			if( storedValue == 0 )
+			{
+				return m_enumValueToName.Get( 0, "0" );
+			}
+			std::string result;
+			for( int32_t i = 0; i < m_enumValueToName.Length(); i++ )
+			{
+				const uint64_t entryValue = m_enumValueToName.GetKey( i );
+				if( entryValue != 0 && ( entryValue & storedValue ) == entryValue )
+				{
+					if( !result.empty() ) { result += ' '; }
+					result += m_enumValueToName.GetValue( i );
+				}
+			}
+			return result;
+		}
+		return m_enumValueToName.Get( storedValue, "" );
+	}
+	return "";
 }
 
 template< typename T >
 bool ae::EnumType::GetValueFromString( const char* str, T* valueOut ) const
 {
-	if( !str )
+	if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
 	{
 		return false;
 	}
-	int32_t value = 0;
-	if( m_enumNameToValue.TryGet( str, &value ) ) // Set object var with named enum value
+	else if( !str || !valueOut )
 	{
-		*valueOut = (T)value;
+		return false;
+	}
+	if( m_isBitField )
+	{
+		// Check for a single integer value first (applies to both flags and regular enums)
+		// by falling through only when the string contains spaces or is a pure name token.
+		// Split by spaces and OR the token values together.
+		const char* p = str;
+		// Skip leading spaces
+		while( *p == ' ' ) { p++; }
+		if( *p == '\0' ) { return false; }
+		// Check if it looks like a numeric string (no spaces, starts with digit or '-')
+		bool hasSpace = ( strchr( str, ' ' ) != nullptr );
+		if( !hasSpace )
+		{
+			// Single token: try name lookup first, then integer parse
+			uint64_t storedValue = 0;
+			if( m_enumNameToValue.TryGet( str, &storedValue ) )
+			{
+				*valueOut = static_cast< T >( storedValue );
+				return true;
+			}
+			// Try numeric parse with bounds check
+			if( TypeIsSigned() )
+			{
+				int64_t value = 0;
+				if( !ae::TryFromString( str, &value ) ) { return false; }
+				switch( TypeSize() )
+				{
+					case 1: if( value < (int64_t)INT8_MIN || value > (int64_t)INT8_MAX ) { return false; } break;
+					case 2: if( value < (int64_t)INT16_MIN || value > (int64_t)INT16_MAX ) { return false; } break;
+					case 4: if( value < (int64_t)INT32_MIN || value > (int64_t)INT32_MAX ) { return false; } break;
+					case 8: break;
+					default: AE_DEBUG_FAIL(); return false;
+				}
+				*valueOut = static_cast< T >( value );
+				return true;
+			}
+			else
+			{
+				if( str[ 0 ] == '-' ) { return false; }
+				uint64_t value = 0;
+				if( !ae::TryFromString( str, &value ) ) { return false; }
+				switch( TypeSize() )
+				{
+					case 1: if( value > (uint64_t)UINT8_MAX ) { return false; } break;
+					case 2: if( value > (uint64_t)UINT16_MAX ) { return false; } break;
+					case 4: if( value > (uint64_t)UINT32_MAX ) { return false; } break;
+					case 8: break;
+					default: AE_DEBUG_FAIL(); return false;
+				}
+				*valueOut = static_cast< T >( value );
+				return true;
+			}
+		}
+		// Multiple space-separated tokens: OR the named values together
+		uint64_t combined = 0;
+		std::string token;
+		const char* cur = str;
+		while( true )
+		{
+			if( *cur == ' ' || *cur == '\0' )
+			{
+				if( !token.empty() )
+				{
+					uint64_t tokenValue = 0;
+					if( !m_enumNameToValue.TryGet( token.c_str(), &tokenValue ) )
+					{
+						return false; // Unknown flag name
+					}
+					combined |= tokenValue;
+					token.clear();
+				}
+				if( *cur == '\0' ) { break; }
+			}
+			else
+			{
+				token += *cur;
+			}
+			cur++;
+		}
+		*valueOut = static_cast< T >( combined );
 		return true;
 	}
-	else if( isdigit( str[ 0 ] ) || str[ 0 ] == '-' ) // Set object var with a numerical enum value
+	uint64_t storedValue = 0;
+	if( m_enumNameToValue.TryGet( str, &storedValue ) )
 	{
-		value = atoi( str );
-		if( HasValue( value ) )
-		{
-			*valueOut = (T)value;
-			return true;
-		}
+		*valueOut = static_cast< T >( storedValue );
+		return true;
 	}
-	return false;
+	else if( TypeIsSigned() )
+	{
+		int64_t value = 0;
+		if( !ae::TryFromString( str, &value ) )
+		{
+			return false;
+		}
+		switch( TypeSize() )
+		{
+			case 1: if( value < (int64_t)INT8_MIN || value > (int64_t)INT8_MAX ) { return false; } break;
+			case 2: if( value < (int64_t)INT16_MIN || value > (int64_t)INT16_MAX ) { return false; } break;
+			case 4: if( value < (int64_t)INT32_MIN || value > (int64_t)INT32_MAX ) { return false; } break;
+			case 8: break;
+			default: AE_DEBUG_FAIL(); return false;
+		}
+		if( !m_enumValueToName.TryGet( static_cast< uint64_t >( value ) ) )
+		{
+			return false; // Valid integer, but not a valid enum value
+		}
+		*valueOut = static_cast< T >( value );
+		return true;
+	}
+	else
+	{
+		if( str[ 0 ] == '-' )
+		{
+			return false;
+		}
+		uint64_t value = 0;
+		if( !ae::TryFromString( str, &value ) )
+		{
+			return false;
+		}
+		switch( TypeSize() )
+		{
+			case 1: if( value > (uint64_t)UINT8_MAX ) { return false; } break;
+			case 2: if( value > (uint64_t)UINT16_MAX ) { return false; } break;
+			case 4: if( value > (uint64_t)UINT32_MAX ) { return false; } break;
+			case 8: break;
+			default: AE_DEBUG_FAIL(); return false;
+		}
+		if( !m_enumValueToName.TryGet( static_cast< uint64_t >( value ) ) )
+		{
+			return false; // Valid integer, but not a valid enum value
+		}
+		*valueOut = static_cast< T >( value );
+		return true;
+	}
 }
 
 template< typename T >
@@ -14419,7 +15126,28 @@ T ae::EnumType::GetValueFromString( const char* str, T defaultValue ) const
 template< typename T >
 bool ae::EnumType::HasValue( T value ) const
 {
-	return m_enumValueToName.TryGet( value );
+	if constexpr( std::is_integral_v< T > || std::is_enum_v< T > )
+	{
+		return m_enumValueToName.TryGet( static_cast< uint64_t >( value ) );
+	}
+	return false;
+}
+
+template< typename T >
+T ae::EnumType::GetValueByIndex( int32_t index ) const
+{
+	AE_STATIC_ASSERT( std::is_integral_v< T > || std::is_enum_v< T > );
+	AE_ASSERT_MSG( 0 <= index && (uint32_t)index < m_enumValueToName.Length(), "Invalid index # #", GetName(), index );
+	return static_cast< T >( m_enumValueToName.GetKey( index ) );
+}
+
+template< typename T >
+void ae::EnumType::m_AppendValue( const char* name, T value )
+{
+	AE_ASSERT_MSG( m_enumValueToName.Length() < m_enumValueToName.Capacity(), "Set/increase AE_MAX_META_ENUM_VALUES_CONFIG (Currently: #)", m_enumValueToName.Capacity() );
+	const uint64_t storedValue = uint64_t( value );
+	m_enumValueToName.Set( storedValue, name );
+	m_enumNameToValue.Set( name, storedValue );
 }
 
 //------------------------------------------------------------------------------
@@ -14431,6 +15159,25 @@ ae::DataPointer::DataPointer( T* data )
 	m_data = data;
 	m_varType = data ? ae::TypeT< T >::Get() : nullptr;
 }
+template< typename T >
+ae::DataPointer::DataPointer( const ae::ClassVar* var, T* object )
+{
+	if( var && object )
+	{
+		m_varType = &var->GetOuterVarType();
+		m_data = ( (uint8_t*)object + var->GetOffset() );
+		if constexpr( _AE_DEBUG_ )
+		{
+			const ae::ClassType* type = ae::GetClassTypeFromObject( object );
+			AE_ASSERT_MSG( !object || type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
+		}
+	}
+	else
+	{
+		m_varType = nullptr;
+		m_data = nullptr;
+	}
+}
 
 //------------------------------------------------------------------------------
 // ae::ConstDataPointer templated member functions
@@ -14440,6 +15187,25 @@ ae::ConstDataPointer::ConstDataPointer( const T* data )
 {
 	m_data = data;
 	m_varType = data ? ae::TypeT< T >::Get() : nullptr;
+}
+template< typename T >
+ae::ConstDataPointer::ConstDataPointer( const ae::ClassVar* var, const T* object )
+{
+	if( var && object )
+	{
+		m_varType = &var->GetOuterVarType();
+		m_data = (uint8_t*)object + var->GetOffset();
+		if constexpr( _AE_DEBUG_ )
+		{
+			const ae::ClassType* type = ae::GetClassTypeFromObject( object );
+			AE_ASSERT_MSG( type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
+		}
+	}
+	else
+	{
+		m_varType = nullptr;
+		m_data = nullptr;
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -14619,7 +15385,7 @@ const T* ae::ClassType::TryGet( ae::ConstDataPointer varData ) const
 }
 
 template< typename T >
-T* ae::ClassType::New( void* obj ) const
+T* ae::ClassType::New( T* obj ) const
 {
 	AE_ASSERT( obj );
 	AE_ASSERT_MSG( !m_isAbstract, "Placement new not available for abstract type: #", m_name.c_str() );
@@ -14634,14 +15400,7 @@ template< typename T >
 typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
 ae::ClassType::Init( const char* name )
 {
-	if constexpr( std::is_base_of_v< ae::Object, T > )
-	{
-		m_placementNew = &( _PlacementNew< T > );
-	}
-	else
-	{
-		m_placementNew = nullptr;
-	}
+	m_placementNew = &( _PlacementNew< T > );
 	m_name = name;
 	m_id = GetTypeIdFromName( name );
 	m_size = sizeof( T );
@@ -14649,7 +15408,7 @@ ae::ClassType::Init( const char* name )
 	m_parent = T::GetParentTypeName();
 	m_isAbstract = false;
 	m_isPolymorphic = std::is_polymorphic< T >::value;
-	m_isDefaultConstructible = (bool)m_placementNew;
+	m_isDefaultConstructible = true;
 	m_isFinal = std::is_final< T >::value;
 }
 template< typename T >
@@ -14664,7 +15423,7 @@ ae::ClassType::Init( const char* name )
 	m_parent = T::GetParentTypeName();
 	m_isAbstract = std::is_abstract< T >::value;
 	m_isPolymorphic = std::is_polymorphic< T >::value;
-	m_isDefaultConstructible = (bool)m_placementNew;
+	m_isDefaultConstructible = false;
 	m_isFinal = std::is_final< T >::value;
 }
 
@@ -14681,12 +15440,12 @@ const T* ae::AttributeList::TryGet( uint32_t idx ) const
 	else
 	{
 		static_assert( std::is_final_v< T >, "ae::AttributeList::TryGet() does not support intermediate levels of inheritance." );
-		const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() ); // @TODO: Compile time
+		static const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() );
 		const _Info* info = m_attributeTypes.TryGet( attributeType );
 		if( info && idx < info->count )
 		{
 			const ae::Attribute* result = m_attributes[ info->start + idx ];
-			AE_DEBUG_ASSERT( !result || result->_metaTypeId == attributeType );
+			AE_DEBUG_ASSERT( !result || result->GetTypeId() == attributeType );
 			return static_cast< const T* >( result );
 		}
 	}
@@ -14703,7 +15462,7 @@ uint32_t ae::AttributeList::GetCount() const
 	else
 	{
 		static_assert( std::is_final_v< T >, "ae::AttributeList::TryGet() does not support intermediate levels of inheritance." );
-		const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() ); // @TODO: Compile time
+		static const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() );
 		const _Info* info = m_attributeTypes.TryGet( attributeType );
 		return info ? info->count : 0;
 	}
@@ -14714,152 +15473,6 @@ bool ae::AttributeList::Has() const
 {
 	return (bool)GetCount< T >();
 }
-
-//------------------------------------------------------------------------------
-// ae::ClassVar templated member functions
-//------------------------------------------------------------------------------
-#if AE_DEPRECATED
-
-template< typename T >
-bool ae::ClassVar::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx ) const
-{
-	if( !obj )
-	{
-		return false;
-	}
-
-	const ae::ClassType* objType = ae::GetClassTypeFromObject( obj );
-	AE_ASSERT( objType );
-	AE_ASSERT_MSG( objType->IsType( m_owner.GetClassType() ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner.GetClassType()->GetName() );
-
-	ae::DataPointer varData( this, obj );
-	if( const ae::ArrayType* arrayVarType = varData.GetVarType().AsVarType< ae::ArrayType >() )
-	{
-		if( arrayIdx < 0 )
-		{
-			return false;
-		}
-		varData = arrayVarType->GetElement( varData, arrayIdx );
-	}
-	else if( arrayIdx >= 0 )
-	{
-		return false;
-	}
-
-	if( varData )
-	{
-		const ae::Type* varType = &varData.GetVarType();
-		if( const ae::BasicType* basicVarType = varType->AsVarType< ae::BasicType >() )
-		{
-			return basicVarType->SetVarData( varData, value );
-		}
-		else if( const ae::EnumType* enumVarType = varType->AsVarType< ae::EnumType >() )
-		{
-			return enumVarType->SetVarData( varData, value );
-		}
-		else if( const ae::ClassType* classType = varType->AsVarType< ae::ClassType >() )
-		{
-			if( T* innerObject = classType->TryGet< T >( varData ) )
-			{
-				*innerObject = value;
-				return true;
-			}
-		}
-		else if constexpr( std::is_pointer_v< T > || std::is_null_pointer_v< T > )
-		{
-			const ae::PointerType* pointerVarType = varType->AsVarType< ae::PointerType >();
-			return pointerVarType ? pointerVarType->Set( varData, (ae::Object*)value ) : false;
-		}
-	}
-	return false;
-}
-
-template< typename T >
-bool ae::ClassVar::GetObjectValue( const ae::Object* object, T* valueOut, int32_t arrayIdx ) const
-{
-	if( !object )
-	{
-		return false;
-	}
-
-	ae::ConstDataPointer varData;
-	if( const ae::ArrayType* arrayType = GetOuterVarType().AsVarType< ae::ArrayType >() )
-	{
-		if( arrayIdx < 0 )
-		{
-			return false;
-		}
-		ae::ConstDataPointer array( this, object );
-		varData = arrayType->GetElement( array, arrayIdx );
-	}
-	else if( arrayIdx < 0 )
-	{
-		varData = { this, object };
-	}
-
-	if( varData )
-	{
-		const ae::Type* varType = &varData.GetVarType();
-		if( const ae::BasicType* basicType = varType->AsVarType< ae::BasicType >() )
-		{
-			return basicType->GetVarData( varData, valueOut );
-		}
-		else if( const ae::EnumType* enumType = varType->AsVarType< ae::EnumType >() )
-		{
-			return enumType->GetVarData( varData, valueOut );
-		}
-		else if( const ae::ClassType* classType = varType->AsVarType< ae::ClassType >() )
-		{
-			if( valueOut )
-			{
-				if( const T* innerObject = classType->TryGet< T >( varData ) )
-				{
-					*valueOut = *innerObject;
-					return true;
-				}
-			}
-		}
-	}
-	return false;
-}
-
-template< typename T >
-T* ae::ClassVar::GetPointer( ae::Object* obj, int32_t arrayIdx ) const
-{
-	return const_cast< T* >( GetPointer< T >( const_cast< const ae::Object* >( obj ), arrayIdx ) );
-}
-
-template< typename T >
-const T* ae::ClassVar::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
-{
-	if( !obj )
-	{
-		return nullptr;
-	}
-
-	ae::ConstDataPointer varData( this, obj );
-	if( const ae::ArrayType* arrayVarType = varData.GetVarType().AsVarType< ae::ArrayType >() )
-	{
-		if( arrayIdx < 0 )
-		{
-			return nullptr;
-		}
-		varData = arrayVarType->GetElement( varData, arrayIdx );
-	}
-	else if( arrayIdx >= 0 )
-	{
-		return nullptr;
-	}
-
-	if( varData )
-	{
-		const ae::ClassType* classVarType = varData.GetVarType().AsVarType< ae::ClassType >();
-		return classVarType ? classVarType->TryGet< T >( varData ) : nullptr;
-	}
-	return nullptr;
-}
-
-#endif // AE_DEPRECATED
 
 //------------------------------------------------------------------------------
 // ae::Cast implementation
@@ -14873,11 +15486,11 @@ const T* ae::Cast( const C* obj )
 		return nullptr;
 	}
 	const ae::ClassType* type = ae::GetClassType< T >();
-	if( type->GetId() == obj->_metaTypeId )
+	if( type->GetId() == obj->GetTypeId() )
 	{
 		return static_cast< const T* >( obj );
 	}
-	const ae::ClassType* objType = ae::GetClassTypeById( obj->_metaTypeId );
+	const ae::ClassType* objType = ae::GetClassTypeById( obj->GetTypeId() );
 	AE_ASSERT( objType );
 	return objType->IsType( type ) ? static_cast< const T* >( obj ) : nullptr; // No use of RTTI
 }
@@ -14908,6 +15521,7 @@ T* ae::Cast( C* obj )
 	#endif
 #elif _AE_APPLE_
 	#define GL_SILENCE_DEPRECATION
+	#define GLES_SILENCE_DEPRECATION
 #endif
 
 //------------------------------------------------------------------------------
@@ -14937,10 +15551,13 @@ T* ae::Cast( C* obj )
 		#pragma comment (lib, "Winmm.lib")
 		#pragma comment (lib, "Ws2_32.lib")
 		#pragma comment (lib, "XInput.lib")
-		#pragma comment (lib, "OpenGL32.lib")
-	#endif
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 0
+		#if AE_ENABLE_OPENGL
+			#pragma comment (lib, "opengl32.lib")
+			#pragma comment (lib, "glu32.lib")
+		#endif
+	#endif // _AE_MSVC_
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 0
 	#endif
 	#ifdef RGB
 		#undef RGB
@@ -14952,7 +15569,19 @@ T* ae::Cast( C* obj )
 	#include <dlfcn.h>
 	#include <mach-o/dyld.h>
 	#include <sys/stat.h>
-	#ifdef AE_USE_MODULES
+	#if _AE_IOS_
+		#import <Foundation/Foundation.h>
+		#import <UIKit/UIKit.h>
+		#import <QuartzCore/QuartzCore.h>
+		#import <OpenGLES/EAGL.h>
+		#import <OpenGLES/ES3/gl.h>
+		#include <GameController/GameController.h>
+		// @TODO:
+		// <OpenGLES/ES3/glext.h> is NOT imported here on purpose. It defines
+		// GL_BGR / GL_BGRA which clash with `const auto GL_BGR = GL_RGB;` later
+		// in this header. The Window::m_Initialize iOS branch only needs symbols
+		// from <OpenGLES/ES3/gl.h>.
+	#elif defined(AE_USE_MODULES)
 		@import AppKit;
 		@import Carbon;
 		@import Cocoa;
@@ -14961,33 +15590,26 @@ T* ae::Cast( C* obj )
 		@import OpenAL;
 		@import GameController;
 	#else
-		#if _AE_IOS_
-		#import <Foundation/Foundation.h>
-		#else
 		#include <Cocoa/Cocoa.h>
 		#include <Carbon/Carbon.h>
-		#endif
 		#include <GameController/GameController.h>
 	#endif
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 1
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 1
 	#endif
 #elif _AE_LINUX_
 	#include <unistd.h>
 	#include <pwd.h>
 	#include <limits.h>
 	#include <sys/stat.h>
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 0
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 0
 	#endif
 #elif _AE_EMSCRIPTEN_
-	#ifndef AE_USE_OPENAL
-		#define AE_USE_OPENAL 1
+	#ifndef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 1
 	#endif
 #endif
-#include <inttypes.h>
-#include <thread>
-#include <random>
 // Socket
 #if _AE_WINDOWS_
 	// Be caeful with include case-sensitivity here for MinGW/cross-compiling
@@ -14999,6 +15621,13 @@ T* ae::Cast( C* obj )
 	typedef char _ae_sock_buff_t;
 	#define _ae_sock_poll WSAPoll
 	#define _ae_ioctl ioctlsocket
+#elif _AE_WASM_
+	typedef uint16_t _ae_sa_family_t;
+	typedef int _ae_sock_err_t;
+	struct _ae_poll_fd_t { int fd; short events; short revents; };
+	typedef uint8_t _ae_sock_buff_t;
+	inline int _ae_sock_poll( _ae_poll_fd_t*, unsigned int, int ) { return -1; }
+	inline int _ae_ioctl( int, unsigned long, ... ) { return -1; }
 #else
 	#include <netdb.h>
 	#include <netinet/in.h>
@@ -15015,7 +15644,7 @@ T* ae::Cast( C* obj )
 	#define _ae_sock_poll poll
 	#define _ae_ioctl ioctl
 #endif
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	#if _AE_APPLE_
 		#include <OpenAL/al.h>
 		#include <OpenAL/alc.h>
@@ -15031,6 +15660,20 @@ T* ae::Cast( C* obj )
 	#include <arm_neon.h>
 #endif
 
+#if AE_ENABLE_OPENGL && _AE_WINDOWS_
+	// Forward declarations so ae::Window::m_Initialize (defined earlier in the
+	// translation unit than the unified GL function pointer table) can name
+	// these. Storage and the rest of the WGL/GL surface live near the X-macro
+	// further down.
+	#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+	#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+	#define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+	#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+	#define WGL_CONTEXT_FLAGS_ARB 0x2094
+	#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
+	extern HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList );
+#endif
+
 namespace ae {
 
 //------------------------------------------------------------------------------
@@ -15040,16 +15683,14 @@ ae::_Globals::~_Globals()
 {
 	AE_ASSERT( !enumTypes.Length() );
 	AE_ASSERT( !classTypes.Length() );
-	AE_ASSERT( !scratchBuffer.offset );
 }
 
 //------------------------------------------------------------------------------
 // Internal ae::_ScratchBuffer storage
 //------------------------------------------------------------------------------
-_ScratchBuffer::_ScratchBuffer( uint32_t size ) : size( size )
+_ScratchBuffer::_ScratchBuffer( uint32_t capacity ) : offset( 0 ), capacity( capacity )
 {
-	offset = 0;
-	data = new uint8_t[ size ]; // @TODO: Maybe this shouldn't use new/delete?
+	data = new uint8_t[ capacity ]; // @TODO: Maybe this shouldn't use new/delete?
 	AE_ASSERT( (intptr_t)data % kScratchAlignment == 0 );
 }
 _ScratchBuffer::~_ScratchBuffer()
@@ -15079,6 +15720,26 @@ ae::_Globals* ae::_Globals::Get()
 //------------------------------------------------------------------------------
 // Internal ae::_ThreadLocals functions
 //------------------------------------------------------------------------------
+ae::_ThreadLocals::_ThreadLocals() :
+	scratchBuffer( ae::Scratch< uint8_t >::kScratchCapacity )
+{
+	std::random_device randomDevice;
+	const uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+	const uint64_t threadSeed = std::hash< std::thread::id >{}( std::this_thread::get_id() );
+	std::seed_seq seed
+	{
+		randomDevice(),
+		randomDevice(),
+		randomDevice(),
+		randomDevice(),
+		static_cast< uint32_t >( timeSeed ),
+		static_cast< uint32_t >( timeSeed >> 32 ),
+		static_cast< uint32_t >( threadSeed ),
+		static_cast< uint32_t >( threadSeed >> 32 ),
+	};
+	uuidRandom.seed( seed );
+}
+
 ae::_ThreadLocals* ae::_ThreadLocals::Get()
 {
 	static thread_local ae::_ThreadLocals s_threadLocals;
@@ -15092,7 +15753,7 @@ uint32_t GetPID()
 {
 #if _AE_WINDOWS_
 	return GetCurrentProcessId();
-#elif _AE_EMSCRIPTEN_
+#elif _AE_EMSCRIPTEN_ || _AE_WASM_
 	return 0;
 #else
 	return getpid();
@@ -15101,7 +15762,11 @@ uint32_t GetPID()
 
 uint32_t GetMaxConcurrentThreads()
 {
+#if _AE_WASM_
+	return 1; // @TODO: Detect threads at runtime (SharedArrayBuffer requires COOP/COEP cross-origin isolation, etc.)
+#else
 	return std::thread::hardware_concurrency();
+#endif
 }
 
 #if _AE_APPLE_
@@ -15148,12 +15813,13 @@ EM_JS( float, _ae_performance_now, (),
 double GetTime()
 {
 #if _AE_WINDOWS_
-	static LARGE_INTEGER counterFrequency = { 0 };
-	if( !counterFrequency.QuadPart )
+	static const LARGE_INTEGER counterFrequency = []()
 	{
-		bool success = QueryPerformanceFrequency( &counterFrequency ) != 0;
+		LARGE_INTEGER result = { 0 };
+		bool success = QueryPerformanceFrequency( &result ) != 0;
 		AE_ASSERT( success );
-	}
+		return result;
+	}();
 
 	LARGE_INTEGER performanceCount = { 0 };
 	bool success = QueryPerformanceCounter( &performanceCount ) != 0;
@@ -15161,6 +15827,10 @@ double GetTime()
 	return performanceCount.QuadPart / (double)counterFrequency.QuadPart;
 #elif _AE_EMSCRIPTEN_
 	return _ae_performance_now() / 1000.0f;
+#elif _AE_WASM_
+	struct timespec ts;
+	clock_gettime( CLOCK_MONOTONIC, &ts );
+	return ts.tv_sec + ts.tv_nsec * 1e-9;
 #else
 	return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::high_resolution_clock::now().time_since_epoch() ).count() / 1000000.0;
 #endif
@@ -15612,19 +16282,19 @@ Matrix4& Matrix4::SetTranslation( const Vec3& translation )
 	return *this;
 }
 
-Matrix4& Matrix4::SetRotation( const Quaternion& q2 )
+Matrix4& Matrix4::SetRotation( const Quaternion& _q )
 {
-	// @TODO: Don't clear scale
-	Quaternion q = q2.GetInverse();
-	data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
-	data[4] = 2*q.i*q.j + 2*q.k*q.r;
-	data[8] = 2*q.i*q.k - 2*q.j*q.r;
-	data[1] = 2*q.i*q.j - 2*q.k*q.r;
-	data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
-	data[9] = 2*q.j*q.k + 2*q.i*q.r;
-	data[2] = 2*q.i*q.k + 2*q.j*q.r;
-	data[6] = 2*q.j*q.k - 2*q.i*q.r;
-	data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+	const ae::Vec3 s = GetScale();
+	const ae::Quaternion q = _q.GetInverse();
+	data[ 0 ] = s.x * ( 1 - ( 2 * q.j * q.j + 2 * q.k * q.k ) );
+	data[ 1 ] = s.x * ( 2 * q.i * q.j - 2 * q.k * q.r );
+	data[ 2 ] = s.x * ( 2 * q.i * q.k + 2 * q.j * q.r );
+	data[ 4 ] = s.y * ( 2 * q.i * q.j + 2 * q.k * q.r );
+	data[ 5 ] = s.y * ( 1 - ( 2 * q.i * q.i + 2 * q.k * q.k ) );
+	data[ 6 ] = s.y * ( 2 * q.j * q.k - 2 * q.i * q.r );
+	data[ 8 ] = s.z * ( 2 * q.i * q.k - 2 * q.j * q.r );
+	data[ 9 ] = s.z * ( 2 * q.j * q.k + 2 * q.i * q.r );
+	data[ 10 ] = s.z * ( 1 - ( 2 * q.i * q.i + 2 * q.j * q.j ) );
 	return *this;
 }
 
@@ -15772,11 +16442,31 @@ Quaternion Matrix4::GetRotation() const
 
 Vec3 Matrix4::GetScale() const
 {
-	return Vec3(
-		Vec3( &data[ 0 ] ).Length(),
-		Vec3( &data[ 4 ] ).Length(),
-		Vec3( &data[ 8 ] ).Length()
-	);
+	const float sx = Vec3( &data[ 0 ] ).Length();
+	const float sy = Vec3( &data[ 4 ] ).Length();
+	const float sz = Vec3( &data[ 8 ] ).Length();
+	return Vec3( sx, sy, ( Determinant() < 0.0f ) ? -sz : sz );
+}
+
+float Matrix4::Determinant() const
+{
+	const float c0 =
+		  data[ 5 ] * ( data[ 10 ] * data[ 15 ] - data[ 11 ] * data[ 14 ] )
+		- data[ 9 ] * ( data[  6 ] * data[ 15 ] - data[  7 ] * data[ 14 ] )
+		+ data[ 13] * ( data[  6 ] * data[ 11 ] - data[  7 ] * data[ 10 ] );
+	const float c1 =
+		- data[ 4 ] * ( data[ 10 ] * data[ 15 ] - data[ 11 ] * data[ 14 ] )
+		+ data[ 8 ] * ( data[  6 ] * data[ 15 ] - data[  7 ] * data[ 14 ] )
+		- data[ 12] * ( data[  6 ] * data[ 11 ] - data[  7 ] * data[ 10 ] );
+	const float c2 =
+		  data[ 4 ] * ( data[  9 ] * data[ 15 ] - data[ 11 ] * data[ 13 ] )
+		- data[ 8 ] * ( data[  5 ] * data[ 15 ] - data[  7 ] * data[ 13 ] )
+		+ data[ 12] * ( data[  5 ] * data[ 11 ] - data[  7 ] * data[  9 ] );
+	const float c3 =
+		- data[ 4 ] * ( data[  9 ] * data[ 14 ] - data[ 10 ] * data[ 13 ] )
+		+ data[ 8 ] * ( data[  5 ] * data[ 14 ] - data[  6 ] * data[ 13 ] )
+		- data[ 12] * ( data[  5 ] * data[ 10 ] - data[  6 ] * data[  9 ] );
+	return data[ 0 ] * c0 + data[ 1 ] * c1 + data[ 2 ] * c2 + data[ 3 ] * c3;
 }
 
 Matrix4 Matrix4::GetTranspose() const
@@ -15994,9 +16684,9 @@ ae::Vec3 Matrix4::TransformPoint3x4( ae::Vec3 v ) const
 ae::Vec3 Matrix4::TransformVector3x4( ae::Vec3 v ) const
 {
 	return Vec3(
-		v.x * data[ 0 ] + v.y * data[ 1 ] + v.z * data[ 2 ],
-		v.x * data[ 4 ] + v.y * data[ 5 ] + v.z * data[ 6 ],
-		v.x * data[ 8 ] + v.y * data[ 9 ] + v.z * data[ 10 ] );
+		v.x * data[ 0 ] + v.y * data[ 4 ] + v.z * data[ 8 ],
+		v.x * data[ 1 ] + v.y * data[ 5 ] + v.z * data[ 9 ],
+		v.x * data[ 2 ] + v.y * data[ 6 ] + v.z * data[ 10 ] );
 }
 
 bool Matrix4::IsNAN() const
@@ -16378,13 +17068,11 @@ void Sphere::Expand( ae::Vec3 p0 )
 	}
 }
 
-bool Sphere::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut, float* tOut ) const
+bool Sphere::Raycast( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut, float* distanceOut ) const
 {
-	const Vec3 direction = ray.SafeNormalizeCopy();
-	const float rayLength = ray.Length();
-
 	const Vec3 m = source - center;
-	const float b = m.Dot( direction );
+	const float a = ray.Dot( ray );
+	const float b = m.Dot( ray );
 	const float c = m.Dot( m ) - radius * radius;
 	// Exit if r's origin outside s (c > 0) and r pointing away from s (b > 0)
 	if( c > 0.0f && b > 0.0f )
@@ -16393,30 +17081,29 @@ bool Sphere::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, Vec3* normalOut,
 	}
 
 	// A negative discriminant corresponds to ray missing sphere
-	const float discr = b * b - c;
+	const float discr = b * b - a * c;
 	if( discr < 0.0f )
 	{
 		return false;
 	}
 
 	// Ray now found to intersect sphere, compute smallest t value of intersection
-	float t = -b - sqrtf( discr );
+	float t = ( -b - sqrtf( discr ) ) / a;
 	if( t < 0.0f )
 	{
 		t = 0.0f; // If t is negative, ray started inside sphere so clamp t to zero
 	}
-	
 	// Check if hit is within ray length
-	if( t > rayLength )
+	else if( t > 1.0f )
 	{
 		return false;
 	}
-	
-	if( tOut )
+
+	if( distanceOut )
 	{
-		*tOut = t;
+		*distanceOut = ray.Length() * t;
 	}
-	const ae::Vec3 hit = source + direction * t;
+	const ae::Vec3 hit = source + ray * t;
 	if( hitOut )
 	{
 		*hitOut = hit;
@@ -16535,7 +17222,7 @@ bool Plane::IntersectLine( ae::Vec3 p, ae::Vec3 d, Vec3* hitOut, float* tOut ) c
 	return true;
 }
 
-bool Plane::IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* tOut ) const
+bool Plane::Raycast( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* distanceOut ) const
 {
 	const ae::Vec4 plane = GetSignedDistance( source ) >= 0.0f ? m_plane : -m_plane; // Plane normal towards ray source
 	const ae::Vec3 n = plane.GetXYZ();
@@ -16556,9 +17243,9 @@ bool Plane::IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* tO
 	{
 		*hitOut = source + ray * t;
 	}
-	if( tOut )
+	if( distanceOut )
 	{
-		*tOut = t;
+		*distanceOut = ray.Length() * t;
 	}
 	return true;
 }
@@ -16918,14 +17605,14 @@ bool AABB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* 
 	return true;
 }
 
-bool AABB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* tOut ) const
+bool AABB::Raycast( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* distanceOut ) const
 {
 	float t;
 	if( IntersectLine( source, ray, &t, nullptr, normOut, nullptr ) && t <= 1.0f )
 	{
 		if( t >= 0.0f )
 		{
-			if( tOut ) { *tOut = t; }
+			if( distanceOut ) { *distanceOut = ray.Length() * t; }
 			if( hitOut ) { *hitOut = source + ray * t; }
 			return true;
 		}
@@ -16935,7 +17622,7 @@ bool AABB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut,
 			ae::Vec3 closest = GetClosestPointOnSurface( source, &inside );
 			if( inside )
 			{
-				if( tOut ) { *tOut = 0.0f; }
+				if( distanceOut ) { *distanceOut = 0.0f; }
 				if( hitOut ) { *hitOut = source; }
 				if( normOut ) { *normOut = ( closest - source ).SafeNormalizeCopy(); }
 				return true;
@@ -17061,14 +17748,14 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* n
 	return true;
 }
 
-bool OBB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* tOut ) const
+bool OBB::Raycast( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* distanceOut ) const
 {
 	float t;
 	if( IntersectLine( source, ray, &t, nullptr, normOut, nullptr ) && t <= 1.0f )
 	{
 		if( t >= 0.0f )
 		{
-			if( tOut ) { *tOut = t; }
+			if( distanceOut ) { *distanceOut = ray.Length() * t; }
 			if( hitOut ) { *hitOut = source + ray * t; }
 			return true;
 		}
@@ -17078,7 +17765,7 @@ bool OBB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, 
 			ae::Vec3 closest = GetClosestPointOnSurface( source, &inside );
 			if( inside )
 			{
-				if( tOut ) { *tOut = 0.0f; }
+				if( distanceOut ) { *distanceOut = 0.0f; }
 				if( hitOut ) { *hitOut = source; }
 				if( normOut ) { *normOut = ( closest - source ).SafeNormalizeCopy(); }
 				return true;
@@ -17163,7 +17850,7 @@ AABB OBB::GetAABB() const
 //------------------------------------------------------------------------------
 // ae::Triangle member functions @TODO: move
 //------------------------------------------------------------------------------
-bool Triangle::IntersectRay( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut ) const
+bool Triangle::Raycast( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* distanceOut ) const
 {
 	// Möller–Trumbore ray-triangle intersection
 	const ae::Vec3 edge1 = vertices[ 1 ] - vertices[ 0 ];
@@ -17218,9 +17905,226 @@ bool Triangle::IntersectRay( Vec3 p, Vec3 ray, bool ccw, bool cw, Vec3* pOut, Ve
 		// Ensure normal orientation is consistent with det sign
 		*nOut = ( ray.Dot( normal ) > 0.0f ) ? -normal : normal;
 	}
-	if( tOut )
+	if( distanceOut )
 	{
-		*tOut = t;
+		*distanceOut = ray.Length() * t;
+	}
+	return true;
+}
+
+bool Triangle::SphereCast( Vec3 source, Vec3 ray, float radius, bool ccw, bool cw, Vec3* hitOut, Vec3* normalOut, float* distanceOut ) const
+{
+	if( !ccw && !cw )
+	{
+		return false;
+	}
+
+	const ae::Vec3 edge1 = vertices[ 1 ] - vertices[ 0 ];
+	const ae::Vec3 edge2 = vertices[ 2 ] - vertices[ 0 ];
+	const ae::Vec3 triNormal = edge1.Cross( edge2 ).SafeNormalizeCopy();
+	// Degenerate triangle
+	if( triNormal.LengthSquared() < 0.5f )
+	{
+		return false;
+	}
+
+	const float epsilon = 1e-8f;
+	float bestT = 2.0f; // Beyond [0,1], i.e. no hit yet
+	ae::Vec3 bestHit, bestNormal;
+
+	//------------------------------------------------------------------------------
+	// 1. Face hit: sphere center reaches plane at distance +/-radius from triangle
+	//------------------------------------------------------------------------------
+	const float dist = triNormal.Dot( source - vertices[ 0 ] );
+	const float rate = triNormal.Dot( ray );
+
+	auto tryFaceHit = [&]( float targetDist, ae::Vec3 faceNormal )
+	{
+		if( ae::Abs( rate ) < epsilon )
+		{
+			return;
+		}
+		const float t = ( targetDist - dist ) / rate;
+		if( t < 0.0f || t > 1.0f || t >= bestT )
+		{
+			return;
+		}
+		// Projection of sphere center onto triangle plane at time t
+		const ae::Vec3 planeHit = source + ray * t - faceNormal * radius;
+		// Barycentric test: is planeHit inside the triangle?
+		const ae::Vec3 toHit = planeHit - vertices[ 0 ];
+		const float d00 = edge1.Dot( edge1 );
+		const float d01 = edge1.Dot( edge2 );
+		const float d11 = edge2.Dot( edge2 );
+		const float denom = d00 * d11 - d01 * d01;
+		if( ae::Abs( denom ) < epsilon )
+		{
+			return;
+		}
+		const float invDenom = 1.0f / denom;
+		const float u = ( d11 * toHit.Dot( edge1 ) - d01 * toHit.Dot( edge2 ) ) * invDenom;
+		const float v = ( d00 * toHit.Dot( edge2 ) - d01 * toHit.Dot( edge1 ) ) * invDenom;
+		if( u >= 0.0f && v >= 0.0f && u + v <= 1.0f )
+		{
+			bestT = t;
+			bestHit = planeHit;
+			bestNormal = faceNormal;
+		}
+	};
+
+	if( ccw && rate < -epsilon )
+	{
+		tryFaceHit( radius, triNormal ); // Sphere approaches from CCW (front) side
+	}
+	if( cw && rate > epsilon )
+	{
+		tryFaceHit( -radius, -triNormal ); // Sphere approaches from CW (back) side
+	}
+
+	//------------------------------------------------------------------------------
+	// 2. Edge hits: sphere center at distance radius from each infinite edge line
+	//------------------------------------------------------------------------------
+	auto tryEdgeHit = [&]( ae::Vec3 A, ae::Vec3 B )
+	{
+		const ae::Vec3 edgeVec = B - A;
+		const float edgeLen = edgeVec.Length();
+		if( edgeLen < epsilon )
+		{
+			return;
+		}
+		const ae::Vec3 edgeDir = edgeVec / edgeLen;
+
+		// Decompose ray and (source-A) into components perpendicular to the edge
+		const ae::Vec3 w = source - A;
+		const ae::Vec3 dPerp = ray - edgeDir * ray.Dot( edgeDir );
+		const ae::Vec3 wPerp = w - edgeDir * w.Dot( edgeDir );
+
+		const float a = dPerp.Dot( dPerp );
+		if( a < epsilon )
+		{
+			return; // Ray parallel to edge
+		}
+		const float b = 2.0f * wPerp.Dot( dPerp );
+		const float c = wPerp.Dot( wPerp ) - radius * radius;
+		const float discr = b * b - 4.0f * a * c;
+		if( discr < 0.0f )
+		{
+			return; // No intersection
+		}
+
+		const float sqrtDiscr = sqrtf( discr );
+		float t = ( -b - sqrtDiscr ) / ( 2.0f * a );
+		if( t < 0.0f )
+		{
+			t = ( -b + sqrtDiscr ) / ( 2.0f * a ); // Started inside, use exit point
+		}
+		if( t < 0.0f || t > 1.0f || t >= bestT )
+		{
+			return;
+		}
+
+		// Check that the closest point on the edge is within the segment [A, B]
+		const ae::Vec3 spherePos = source + ray * t;
+		const float s = ( spherePos - A ).Dot( edgeDir );
+		if( s < 0.0f || s > edgeLen )
+		{
+			return;
+		}
+
+		const ae::Vec3 edgePoint = A + edgeDir * s;
+		const ae::Vec3 contactNormal = ( spherePos - edgePoint ).SafeNormalizeCopy();
+
+		// Winding filter: contact normal must face the allowed side(s)
+		const float nDot = triNormal.Dot( contactNormal );
+		if( ccw && !cw && nDot < 0.0f )
+		{
+			return;
+		}
+		if( cw && !ccw && nDot > 0.0f )
+		{
+			return;
+		}
+
+		bestT = t;
+		bestHit = edgePoint;
+		bestNormal = contactNormal;
+	};
+
+	tryEdgeHit( vertices[ 0 ], vertices[ 1 ] );
+	tryEdgeHit( vertices[ 1 ], vertices[ 2 ] );
+	tryEdgeHit( vertices[ 2 ], vertices[ 0 ] );
+
+	//------------------------------------------------------------------------------
+	// 3. Vertex hits: sphere center at distance radius from each vertex
+	//------------------------------------------------------------------------------
+	auto tryVertexHit = [&]( ae::Vec3 V )
+	{
+		const ae::Vec3 w = source - V;
+		const float a = ray.Dot( ray );
+		if( a < epsilon )
+		{
+			return;
+		}
+		const float b = 2.0f * w.Dot( ray );
+		const float c = w.Dot( w ) - radius * radius;
+		const float discr = b * b - 4.0f * a * c;
+		if( discr < 0.0f )
+		{
+			return;
+		}
+
+		const float sqrtDiscr = sqrtf( discr );
+		float t = ( -b - sqrtDiscr ) / ( 2.0f * a );
+		if( t < 0.0f )
+		{
+			t = ( -b + sqrtDiscr ) / ( 2.0f * a ); // Started inside, use exit point
+		}
+		if( t < 0.0f || t > 1.0f || t >= bestT )
+		{
+			return;
+		}
+
+		const ae::Vec3 spherePos = source + ray * t;
+		const ae::Vec3 contactNormal = ( spherePos - V ).SafeNormalizeCopy();
+
+		// Winding filter
+		const float nDot = triNormal.Dot( contactNormal );
+		if( ccw && !cw && nDot < 0.0f )
+		{
+			return;
+		}
+		if( cw && !ccw && nDot > 0.0f )
+		{
+			return;
+		}
+
+		bestT = t;
+		bestHit = V;
+		bestNormal = contactNormal;
+	};
+
+	tryVertexHit( vertices[ 0 ] );
+	tryVertexHit( vertices[ 1 ] );
+	tryVertexHit( vertices[ 2 ] );
+
+	//------------------------------------------------------------------------------
+	// Return earliest hit
+	//------------------------------------------------------------------------------
+	if( bestT > 1.0f )
+	{
+		return false;
+	}
+	if( hitOut )
+	{
+		*hitOut = bestHit;
+	}
+	if( normalOut )
+	{
+		*normalOut = bestNormal;
+	}
+	if( distanceOut )
+	{
+		*distanceOut = ray.Length() * bestT;
 	}
 	return true;
 }
@@ -17293,12 +18197,12 @@ ae::Vec3 Triangle::ClosestPoint( ae::Vec3 p ) const
 //------------------------------------------------------------------------------
 const char* LogLevelNames[] =
 {
-	"FATAL",
-	"ERROR",
-	"WARN ",
-	"INFO ",
-	"DEBUG",
-	"TRACE",
+	"fatal",
+	"error",
+	"warn",
+	"info",
+	"debug",
+	"trace",
 };
 
 //------------------------------------------------------------------------------
@@ -17359,7 +18263,8 @@ void _LogFormat( std::ostream& os, ae::LogSeverity severity, const char* filePat
 	{
 		os << LogLevelColors[ (uint32_t)severity ];
 	}
-	os << LogLevelNames[ (uint32_t)severity ];
+	const char* levelName = LogLevelNames[ (uint32_t)severity ];
+	os << " [" << levelName << ( strlen( levelName ) < 5 ? "]  " : "] " );
 #if AE_ENABLE_SOURCE_INFO
 	if( _ae_logColors )
 	{
@@ -17387,7 +18292,7 @@ void _LogImpl( ae::LogSeverity severity, const char* filePath, uint32_t line, co
 {
 	std::stringstream os;
 	_LogFormat( os, severity, filePath, line, tags, tagCount, message );
-	static bool s_logStdOut = !ae::IsDebuggerAttached();
+	static const bool s_logStdOut = !ae::IsDebuggerAttached();
 	if( s_logStdOut )
 	{
 		printf( os.str().c_str() ); // std out
@@ -17649,8 +18554,8 @@ void TimeStep::SetDt( float sec )
 
 void TimeStep::Tick()
 {
-#if _AE_EMSCRIPTEN_
-	// Frame rate of emscripten builds is controlled by the browser
+#if _AE_EMSCRIPTEN_ || _AE_WASM_
+	// Frame rate of emscripten/WASM builds is controlled externally
 	const bool allowSleep = false;
 #else
 	const bool allowSleep = ( m_timeStep > 0.0 );
@@ -17716,14 +18621,12 @@ ae::UUID ae::UUID::Generate()
 	// 12 bits: rand_a (sub-millisecond precision/randomness)
 	// 2 bits: variant (10)
 	// 62 bits: rand_b
-	std::random_device rd;
-	std::mt19937_64 gen( rd() );
-	std::uniform_int_distribution< uint64_t > dis;
+	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
 	const auto now = std::chrono::system_clock::now();
 	const uint64_t ms = std::chrono::duration_cast< std::chrono::milliseconds >( now.time_since_epoch() ).count();
 	const uint64_t ms48 = ( ms & 0x0000FFFFFFFFFFFFULL );
-	const uint16_t ra = static_cast< uint16_t >( dis( gen ) & 0x0FFFULL ); // 12-bit rand_a
-	const uint64_t rb = ( dis( gen ) & 0x3FFFFFFFFFFFFFFFULL ); // 62-bit rand_b
+	const uint16_t ra = static_cast< uint16_t >( threadLocals->uuidRandom() & 0x0FFFULL ); // 12-bit rand_a
+	const uint64_t rb = ( threadLocals->uuidRandom() & 0x3FFFFFFFFFFFFFFFULL ); // 62-bit rand_b
 	// High 64 bits: [timestamp_ms(48)] [version(4)] [rand_a(12)] — big-endian byte order
 	r.data[ 0 ] = static_cast< uint8_t >( ( ms48 >> 40 ) & 0xFF );
 	r.data[ 1 ] = static_cast< uint8_t >( ( ms48 >> 32 ) & 0xFF );
@@ -17808,13 +18711,13 @@ template<> uint64_t GetHash64( const ae::Color& v ) { return ae::Hash64().HashTy
 //------------------------------------------------------------------------------
 #define _AE_POOL_ELEMENT( _arr, _idx ) ( (uint8_t*)_arr + (intptr_t)_idx * m_objectSize )
 
-OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t size, bool paged ) :
-	m_firstPage( tag, size )
+OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t capacity, bool paged ) :
+	m_firstPage( tag, capacity )
 {
 	AE_ASSERT( tag != ae::Tag() );
-	AE_ASSERT( size > 0 );
+	AE_ASSERT( capacity > 0 );
 	m_tag = tag;
-	m_pageSize = size;
+	m_pageCapacity = capacity;
 	m_paged = paged;
 	m_objectSize = objectSize;
 	m_objectAlignment = objectAlignment;
@@ -17836,13 +18739,13 @@ void* OpaquePool::Allocate()
 		{
 			AE_DEBUG_ASSERT( m_firstPage.freeList.Length() == 0 );
 			page = &m_firstPage;
-			page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
+			page->objects = ae::Allocate( m_tag, m_pageCapacity * m_objectSize, m_objectAlignment );
 			m_pages.Append( page->node );
 		}
 		else if( m_paged )
 		{
-			page = ae::New< Page >( m_tag, m_tag, m_pageSize );
-			page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
+			page = ae::New< Page >( m_tag, m_tag, m_pageCapacity );
+			page->objects = ae::Allocate( m_tag, m_pageCapacity * m_objectSize, m_objectAlignment );
 			m_pages.Append( page->node );
 		}
 	}
@@ -17870,7 +18773,7 @@ void OpaquePool::Free( void* obj )
 	while( page )
 	{
 		index = (int32_t)( ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize );
-		bool found = ( 0 <= index && index < (int32_t)m_pageSize );
+		bool found = ( 0 <= index && index < (int32_t)m_pageCapacity );
 		if( found )
 		{
 			break;
@@ -17905,7 +18808,7 @@ void OpaquePool::Free( void* obj )
 		return;
 	}
 #if _AE_DEBUG_
-	AE_FAIL_MSG( "Object '#' not found in pool '#:#:#:#'", obj, m_objectSize, m_objectAlignment, m_pageSize, m_paged );
+	AE_FAIL_MSG( "Object '#' not found in pool '#:#:#:#'", obj, m_objectSize, m_objectAlignment, m_pageCapacity, m_paged );
 #endif
 }
 
@@ -17933,7 +18836,7 @@ void OpaquePool::FreeAll()
 
 bool OpaquePool::HasFree() const
 {
-	return Length() < Size();
+	return Length() < Capacity();
 }
 
 const void* OpaquePool::m_GetFirst() const
@@ -17959,7 +18862,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj, uint32_t 
 		page = m_pages.FindFn( [&]( const Page* page )
 		{
 			const uint8_t* pageStart = reinterpret_cast< const uint8_t* >( page->objects );
-			const uint8_t* pageEnd = pageStart + m_pageSize * m_objectSize;
+			const uint8_t* pageEnd = pageStart + m_pageCapacity * m_objectSize;
 			return ( pageStart <= pageObj ) && ( pageObj < pageEnd );
 		} );
 	}
@@ -17968,7 +18871,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj, uint32_t 
 		AE_DEBUG_ASSERT( m_length > 0 );
 		AE_DEBUG_ASSERT( page->freeList.Length() );
 		const int32_t index = (int32_t)( ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize );
-		const bool found = ( 0 <= index && index < (int32_t)m_pageSize );
+		const bool found = ( 0 <= index && index < (int32_t)m_pageCapacity );
 		if( found )
 		{
 			AE_DEBUG_ASSERT( _AE_POOL_ELEMENT( page->objects, index ) == obj );
@@ -17985,7 +18888,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj, uint32_t 
 			// Given object is last element of previous page so return the first element on next page
 			AE_DEBUG_ASSERT( page->freeList.Length() > 0 );
 			const int32_t next = page->freeList.GetFirst();
-			AE_DEBUG_ASSERT( 0 <= next && next < (int32_t)m_pageSize );
+			AE_DEBUG_ASSERT( 0 <= next && next < (int32_t)m_pageCapacity );
 			return _AE_POOL_ELEMENT( page->objects, next );
 		}
 	}
@@ -18029,7 +18932,7 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 		case DocumentValueType::Number:
 		case DocumentValueType::Bool:
 		case DocumentValueType::Opaque:
-			if( m_value.GetType() )
+			if( m_value )
 			{
 				UndoOp op;
 				op.type = UndoOpType::OpaqueSet;
@@ -18062,7 +18965,7 @@ DocumentValue& DocumentValue::Initialize( DocumentValueType type )
 	}
 	// Data should already be cleared by the switch above
 	AE_ASSERT( m_string.empty() );
-	AE_ASSERT( !m_value.GetType() );
+	AE_ASSERT( !m_value );
 	AE_ASSERT( m_array.Length() == 0 );
 	AE_ASSERT( m_map.Length() == 0 );
 	return *this;
@@ -18149,7 +19052,7 @@ void DocumentValue::BoolSet( bool value )
 bool DocumentValue::BoolGet() const
 {
 	AE_ASSERT( IsBool() );
-	AE_DEBUG_ASSERT( m_value.GetType() == ae::GetTypeIdWithoutQualifiers< bool >() );
+	AE_DEBUG_ASSERT( m_value );
 	return m_value.Get< bool >( false );
 }
 
@@ -18435,7 +19338,7 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target )
 				// Data should always be empty when the type changes since
 				// Initialize() removes all elements first
 				AE_DEBUG_ASSERT( op.target->m_string.empty() );
-				AE_DEBUG_ASSERT( !op.target->m_value.GetType() );
+				AE_DEBUG_ASSERT( !op.target->m_value );
 				AE_DEBUG_ASSERT( op.target->m_array.Length() == 0 );
 				AE_DEBUG_ASSERT( op.target->m_map.Length() == 0 );
 				break;
@@ -18525,7 +19428,7 @@ void Document::m_ValidateState( const ae::Array< UndoOp >& operations )
 		{
 			// Validate type consistency with data contents
 			AE_DEBUG_ASSERT( target->m_string.length() == 0 || target->m_type == DocumentValueType::String );
-			AE_DEBUG_ASSERT( !target->m_value.GetType() || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
+			AE_DEBUG_ASSERT( !target->m_value || target->m_type == DocumentValueType::Opaque || target->m_type == DocumentValueType::Number || target->m_type == DocumentValueType::Bool );
 			AE_DEBUG_ASSERT( target->m_array.Length() == 0 || target->m_type == DocumentValueType::Array );
 			AE_DEBUG_ASSERT( target->m_map.Length() == 0 || target->m_type == DocumentValueType::Object );
 			AE_DEBUG_ASSERT( target->m_refCount >= 0 );
@@ -18549,6 +19452,14 @@ Rect Rect::FromPoints( ae::Vec2 p0, ae::Vec2 p1 )
 	Rect rect;
 	rect.ExpandPoint( p0 );
 	rect.ExpandPoint( p1 );
+	return rect;
+}
+
+Rect Rect::FromPoints( float x0, float y0, float x1, float y1 )
+{
+	Rect rect;
+	rect.ExpandPoint( ae::Vec2( x0, y0 ) );
+	rect.ExpandPoint( ae::Vec2( x1, y1 ) );
 	return rect;
 }
 
@@ -19002,7 +19913,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	if( _aeWindow->input )
 	{
 		NSPoint mouseScreenPos = [NSEvent mouseLocation];
-		_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+		_aeWindow->input->m_SetMousePos( ae::Vec2( mouseScreenPos.x, mouseScreenPos.y ) );
 	}
 }
 - (void)windowDidMove:(NSNotification *)notification
@@ -19018,7 +19929,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	if( _aeWindow->input )
 	{
 		NSPoint mouseScreenPos = [NSEvent mouseLocation];
-		_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+		_aeWindow->input->m_SetMousePos( ae::Vec2( mouseScreenPos.x, mouseScreenPos.y ) );
 	}
 }
 - (void)windowDidBecomeKey:(NSNotification *)notification
@@ -19034,6 +19945,283 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 @end
 namespace ae {
 #endif
+
+//------------------------------------------------------------------------------
+// ae::_Application (internal)
+//------------------------------------------------------------------------------
+// Internal: holds an ae::Application()'s callbacks and owns the platform main
+// loop. Constructed by ae::Application(); not intended to be used directly
+// outside of aether.
+class _Application
+{
+public:
+	AppInitializeFn Initialize;
+	AppUpdateFn Update;
+	AppTerminateFn Terminate;
+	int32_t Run( int32_t argc, char* argv[] );
+};
+
+//------------------------------------------------------------------------------
+// ae::Application Objective-C aeApplicationDelegate class (iOS)
+//------------------------------------------------------------------------------
+#if _AE_IOS_
+} // ae end
+@interface aeEAGLView : UIView
+{
+	NSMapTable< UITouch*, NSNumber* >* _touchIds;
+}
+@end
+@implementation aeEAGLView
++ (Class)layerClass
+{
+	return [CAEAGLLayer class];
+}
+- (instancetype)initWithFrame:(CGRect)frame
+{
+	self = [super initWithFrame:frame];
+	if( self )
+	{
+		CAEAGLLayer* layer = (CAEAGLLayer*)self.layer;
+		layer.opaque = YES;
+		layer.contentsScale = [UIScreen mainScreen].scale;
+		// SRGBA8 matches macOS's NSOpenGLPFAColorSize=24 default backing: the
+		// framebuffer auto-applies linear→sRGB on fragment write, so SRGB
+		// textures and linear shading round-trip correctly to display. The
+		// drawable is fully overwritten by GraphicsDevice::Present each frame.
+		layer.drawableProperties = @{
+			kEAGLDrawablePropertyColorFormat : kEAGLColorFormatSRGBA8,
+		};
+		self.multipleTouchEnabled = YES;
+		_touchIds = [NSMapTable weakToStrongObjectsMapTable];
+	}
+	return self;
+}
+- (ae::Vec2)aePosForTouch:(UITouch*)t
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	const CGPoint p = [t locationInView:self];
+	const float height = ( input && input->m_window ) ? (float)input->m_window->GetHeight() : (float)self.bounds.size.height;
+	return ae::Vec2( (float)p.x, height - (float)p.y );
+}
+- (ae::Touch*)aeFindTouchById:(uint32_t)id
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return nullptr; }
+	const auto matchFn = [&]( ae::Touch* t ){ return t->id == id; };
+	int32_t idx = input->m_newTouches.FindFn( matchFn );
+	if( idx >= 0 ) { return input->m_newTouches[ idx ]; }
+	idx = input->m_touches.FindFn( matchFn );
+	if( idx >= 0 ) { return input->m_touches[ idx ]; }
+	return nullptr;
+}
+- (void)touchesBegan:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		if( input->m_newTouches.Full() ) { break; }
+		ae::Touch* touch = input->m_touchPool.New();
+		if( !touch ) { break; }
+		input->m_touchIndex++;
+		if( input->m_touchIndex == 0 ) { input->m_touchIndex = 1; }
+		touch->id = input->m_touchIndex;
+		touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+		input->m_newTouches.Append( touch );
+		[_touchIds setObject:@(touch->id) forKey:uiTouch];
+	}
+}
+- (void)touchesMoved:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch && !touch->ended )
+		{
+			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+		}
+	}
+}
+- (void)touchesEnded:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch )
+		{
+			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
+			touch->ended = true;
+		}
+		[_touchIds removeObjectForKey:uiTouch];
+	}
+}
+- (void)touchesCancelled:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input ) { return; }
+	input->m_TryNewFrame();
+	for( UITouch* uiTouch in touches )
+	{
+		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
+		if( !idNum ) { continue; }
+		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		if( touch ) { touch->ended = true; }
+		[_touchIds removeObjectForKey:uiTouch];
+	}
+}
+@end
+
+@interface aeViewController : UIViewController
+@property ( nonatomic, strong ) aeEAGLView* glView;
+@end
+@implementation aeViewController
+- (void)loadView
+{
+	self.glView = [[aeEAGLView alloc] initWithFrame:[UIScreen mainScreen].bounds];
+	self.view = self.glView;
+}
+- (void)viewDidLoad
+{
+	[super viewDidLoad];
+	[self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
+}
+- (void)viewDidLayoutSubviews
+{
+	[super viewDidLayoutSubviews];
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input || !input->m_window )
+	{
+		return;
+	}
+	ae::Window* window = input->m_window;
+	CAEAGLLayer* eaglLayer = (CAEAGLLayer*)self.glView.layer;
+	const CGSize sizePoints = eaglLayer.bounds.size;
+	const float scale = (float)eaglLayer.contentsScale;
+#if AE_ENABLE_OPENGL
+	if( window->m_context && window->m_iosColorRenderbuffer )
+	{
+		EAGLContext* eaglContext = (__bridge EAGLContext*)window->m_context;
+		[ EAGLContext setCurrentContext:eaglContext ];
+		glBindRenderbuffer( GL_RENDERBUFFER, window->m_iosColorRenderbuffer );
+		GLint currentWidth = 0;
+		GLint currentHeight = 0;
+		glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &currentWidth );
+		glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &currentHeight );
+		const GLint targetWidth = (GLint)( sizePoints.width * scale );
+		const GLint targetHeight = (GLint)( sizePoints.height * scale );
+		if( currentWidth != targetWidth || currentHeight != targetHeight )
+		{
+			const bool storageOk = [ eaglContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:eaglLayer ];
+			AE_ASSERT_MSG( storageOk, "renderbufferStorage:fromDrawable: failed on resize" );
+		}
+	}
+#endif
+	window->m_UpdateSize( (int32_t)sizePoints.width, (int32_t)sizePoints.height, scale );
+}
+- (BOOL)prefersStatusBarHidden
+{
+	return YES; // Hide battery and time etc
+}
+- (UIRectEdge)preferredScreenEdgesDeferringSystemGestures {
+	return UIRectEdgeAll; // Prevent system gestures from interfering with edge input
+}
+- (BOOL)prefersHomeIndicatorAutoHidden {
+	return NO; // Must be NO for the '...DeferringSystemGestures' to work
+}
+@end
+
+@interface aeApplicationDelegate : UIResponder < UIApplicationDelegate >
+@property ( nonatomic, strong ) UIWindow* window;
+@property ( nonatomic, strong ) aeViewController* viewController;
+@property ( nonatomic, strong ) CADisplayLink* displayLink;
+@end
+@implementation aeApplicationDelegate
+- (BOOL)application:(UIApplication*)app didFinishLaunchingWithOptions:(NSDictionary*)opts
+{
+	self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+	self.viewController = [[aeViewController alloc] init];
+	self.window.rootViewController = self.viewController;
+	[self.window makeKeyAndVisible];
+	[self.viewController.view layoutIfNeeded];
+	// Provide the CAEAGLLayer so Window::Initialize() can attach its
+	// renderbuffer, then run the app's Initialize callback.
+	ae::_Globals::Get()->eaglLayer = (__bridge void*)self.viewController.glView.layer;
+	if( !ae::_Globals::Get()->application->Initialize() )
+	{
+		const int32_t termResult = ae::_Globals::Get()->application->Terminate();
+		exit( termResult );
+	}
+	self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick: )];
+	[self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
+	return YES;
+}
+- (void)tick:(CADisplayLink*)link
+{
+	if( !ae::_Globals::Get()->application->Update() )
+	{
+		[link invalidate];
+		const int32_t termResult = ae::_Globals::Get()->application->Terminate();
+		exit( termResult );
+	}
+}
+@end
+namespace ae {
+#endif
+
+//------------------------------------------------------------------------------
+// ae::_Application member functions
+//------------------------------------------------------------------------------
+int32_t _Application::Run( int32_t argc, char* argv[] )
+{
+#if _AE_IOS_
+	ae::_Globals::Get()->application = this;
+	@autoreleasepool
+	{
+		return UIApplicationMain( argc, argv, nil, @"aeApplicationDelegate" );
+	}
+#else
+	(void)argc;
+	(void)argv;
+	if( !Initialize() )
+	{
+		return Terminate();
+	}
+#	if _AE_EMSCRIPTEN_
+		emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
+#	else
+		while( Update() ) {}
+#	endif
+	return Terminate();
+#endif
+}
+
+//------------------------------------------------------------------------------
+// ae::Application
+//------------------------------------------------------------------------------
+int32_t Application( int32_t argc, char* argv[],
+	const AppInitializeFn& initialize,
+	const AppUpdateFn& update,
+	const AppTerminateFn& terminate )
+{
+	_Application app;
+	app.Initialize = initialize;
+	app.Update = update;
+	app.Terminate = terminate;
+	return app.Run( argc, argv );
+}
+
+uint32_t _ae_GetCurrentFramebuffer();
 
 //------------------------------------------------------------------------------
 // ae::Screen functions
@@ -19129,11 +20317,13 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 	m_height = height;
 	m_fullScreen = false;
 
+#if !_AE_IOS_
 	// Center window on primary screen
 	const ae::Array< ae::Screen, 16 > screens = ae::GetScreens();
 	AE_ASSERT( screens.Length() > 0 );
 	m_pos = ( screens[ 0 ].size - ae::Int2( width, height ) ) / 2;
 	m_pos += screens[ 0 ].position;
+#endif
 
 	m_Initialize( rememberPosition );
 
@@ -19296,6 +20486,33 @@ void Window::m_Initialize( bool rememberPosition )
 		AE_FAIL_MSG( "Could not set window pixel format. Error: #", GetLastError() );
 	}
 
+#if AE_ENABLE_OPENGL
+	HGLRC dummyCtx = wglCreateContext( hdc );
+	AE_ASSERT_MSG( dummyCtx, "Failed to create dummy OpenGL Rendering Context" );
+	wglMakeCurrent( hdc, dummyCtx );
+
+	int attribs[] =
+	{
+		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion(),
+		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion(),
+		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+		0
+	};
+	wglCreateContextAttribsARB = (decltype( wglCreateContextAttribsARB ))wglGetProcAddress( "wglCreateContextAttribsARB" );
+	AE_ASSERT_MSG( wglCreateContextAttribsARB, "Failed to load wglCreateContextAttribsARB" );
+	HGLRC ctx = wglCreateContextAttribsARB( hdc, 0, attribs );
+	AE_ASSERT_MSG( ctx, "Failed to create extended OpenGL Rendering Context" );
+
+	wglMakeCurrent( nullptr, nullptr );
+	wglDeleteContext( dummyCtx );
+	if( !wglMakeCurrent( hdc, ctx ) )
+	{
+		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+	}
+	m_context = ctx;
+#endif
+
 	// Finish window setup
 	ShowWindow( hwnd, SW_SHOW );
 	SetForegroundWindow( hwnd ); // Slightly Higher Priority
@@ -19332,6 +20549,7 @@ void Window::m_Initialize( bool rememberPosition )
 		backing:NSBackingStoreBuffered
 		defer:YES
 	];
+	[nsWindow setRestorable:NO];
 	nsWindow.delegate = windowDelegate;
 	[nsWindow setColorSpace:[NSColorSpace sRGBColorSpace]];
 	this->window = nsWindow;
@@ -19344,14 +20562,15 @@ void Window::m_Initialize( bool rememberPosition )
 		[nsWindow setFrame:frame display:YES];
 		frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
 	}
+	const NSRect viewFrame = NSMakeRect( 0.0, 0.0, frame.size.width, frame.size.height );
 	
 #if AE_ENABLE_OPENGL
 	NSOpenGLPixelFormatAttribute openglProfile;
-	if( ae::GLMajorVersion >= 4 )
+	if( ae::GLMajorVersion() >= 4 )
 	{
 		openglProfile = NSOpenGLProfileVersion4_1Core;
 	}
-	else if( ae::GLMajorVersion >= 3 )
+	else if( ae::GLMajorVersion() >= 3 )
 	{
 		openglProfile = NSOpenGLProfileVersion3_2Core;
 	}
@@ -19376,16 +20595,17 @@ void Window::m_Initialize( bool rememberPosition )
 	NSOpenGLPixelFormat* nsPixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:nsPixelAttribs];
 	AE_ASSERT_MSG( nsPixelFormat, "Could not determine a valid pixel format" );
 	
-	NSOpenGLView* glView = [[NSOpenGLView alloc] initWithFrame:frame pixelFormat:nsPixelFormat];
+	NSOpenGLView* glView = [[NSOpenGLView alloc] initWithFrame:viewFrame pixelFormat:nsPixelFormat];
 	AE_ASSERT_MSG( glView, "Could not create view with specified pixel format" );
 	[glView setWantsBestResolutionOpenGLSurface:true]; // @TODO: Retina. Does this do anything?
 	[glView.openGLContext makeCurrentContext];
+	m_context = glView.openGLContext;
 	
 	[nsPixelFormat release];
 	[nsWindow setContentView:glView];
 	[nsWindow makeFirstResponder:glView];
 #else
-	NSView* view = [[NSView alloc] initWithFrame:frame];
+	NSView* view = [[NSView alloc] initWithFrame:viewFrame];
 	[nsWindow setContentView:view];
 	[nsWindow makeFirstResponder:nsWindow];
 #endif
@@ -19411,18 +20631,170 @@ void Window::m_Initialize( bool rememberPosition )
 	// as a console app.
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #elif _AE_EMSCRIPTEN_
+#if AE_ENABLE_OPENGL
+	EmscriptenWebGLContextAttributes attrs;
+	emscripten_webgl_init_context_attributes( &attrs );
+	attrs.alpha = 0;
+	attrs.majorVersion = ae::GLMajorVersion();
+	attrs.minorVersion = ae::GLMinorVersion();
+	m_context = emscripten_webgl_create_context( "canvas", &attrs );
+	AE_ASSERT( m_context > 0 );
+	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
+	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+#endif
 	_aeEmscriptenGetCanvasInfo( &m_width, &m_height, &m_scaleFactor );
 	if( m_width == 300 && m_height == 150 )
 	{
 		AE_WARN( "Canvas size was not configured. Defaulting to WxH 100\%." );
 		m_fixCanvasStyle = true;
 	}
+#elif _AE_IOS_
+#if AE_ENABLE_OPENGL
+	EAGLContext* eaglContext = [ [ EAGLContext alloc ] initWithAPI:kEAGLRenderingAPIOpenGLES3 ];
+	AE_ASSERT_MSG( eaglContext, "Failed to create EAGLContext (OpenGL ES 3)" );
+	const bool madeCurrent = [ EAGLContext setCurrentContext:eaglContext ];
+	AE_ASSERT_MSG( madeCurrent, "Failed to make EAGLContext current" );
+	m_context = (__bridge_retained void*)eaglContext;
+
+	// aeApplicationDelegate sets eaglLayer before calling Application::Initialize().
+	void* eaglLayerPtr = ae::_Globals::Get()->eaglLayer;
+	for( int i = 0; i < 100 && !eaglLayerPtr; i++ )
+	{
+		[ NSThread sleepForTimeInterval:0.01 ];
+		eaglLayerPtr = ae::_Globals::Get()->eaglLayer;
+	}
+	AE_ASSERT_MSG( eaglLayerPtr, "ae::_Globals::eaglLayer not set (aeApplicationDelegate did not run)" );
+	CAEAGLLayer* eaglLayer = (__bridge CAEAGLLayer*)eaglLayerPtr;
+
+	GLuint colorRb = 0;
+	glGenRenderbuffers( 1, &colorRb );
+	glBindRenderbuffer( GL_RENDERBUFFER, colorRb );
+	const bool storageOk = [ eaglContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:eaglLayer ];
+	AE_ASSERT_MSG( storageOk, "renderbufferStorage:fromDrawable: failed" );
+
+	GLint drawableWidth = 0;
+	GLint drawableHeight = 0;
+	glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &drawableWidth );
+	glGetRenderbufferParameteriv( GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &drawableHeight );
+
+	GLuint fbo = 0;
+	glGenFramebuffers( 1, &fbo );
+	glBindFramebuffer( GL_FRAMEBUFFER, fbo );
+	glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, colorRb );
+	const GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	AE_ASSERT_MSG( fboStatus == GL_FRAMEBUFFER_COMPLETE, "Default FBO incomplete: 0x#x", (uint32_t)fboStatus );
+	glBindRenderbuffer( GL_RENDERBUFFER, colorRb );
+
+	m_iosColorRenderbuffer = colorRb;
+	m_defaultFramebuffer = fbo;
+
+	glViewport( 0, 0, drawableWidth, drawableHeight );
+
+	m_scaleFactor = (float)eaglLayer.contentsScale;
+	m_width = (int32_t)eaglLayer.bounds.size.width;
+	m_height = (int32_t)eaglLayer.bounds.size.height;
+#else
+	{
+		UIScreen* const screen = [ UIScreen mainScreen ];
+		const CGRect bounds = screen.bounds;
+		m_width = (int32_t)bounds.size.width;
+		m_height = (int32_t)bounds.size.height;
+		m_scaleFactor = (float)screen.scale;
+	}
+#endif
+#endif
+#if AE_ENABLE_OPENGL
+	m_defaultFramebuffer = _ae_GetCurrentFramebuffer();
+	m_UpdateBackBuffer();
 #endif
 }
 
 void Window::Terminate()
 {
-	// @TODO
+	if( m_backBuffer )
+	{
+		ae::Delete( m_backBuffer );
+		m_backBuffer = nullptr;
+	}
+}
+
+void Window::ActivateContext()
+{
+#if AE_ENABLE_OPENGL
+#if _AE_WINDOWS_
+	if( window && m_context )
+	{
+		HDC hdc = GetDC( (HWND)window );
+		AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+		if( !wglMakeCurrent( hdc, (HGLRC)m_context ) )
+		{
+			AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+		}
+	}
+#elif _AE_OSX_
+	if( m_context )
+	{
+		[(NSOpenGLContext*)m_context makeCurrentContext];
+	}
+#elif _AE_IOS_
+	if( m_context )
+	{
+		[ EAGLContext setCurrentContext:(__bridge EAGLContext*)m_context ];
+	}
+#elif _AE_EMSCRIPTEN_
+	if( m_context )
+	{
+		EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
+		AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+	}
+#endif
+#endif
+}
+
+void Window::BindBackBuffer()
+{
+	ActivateContext();
+#if AE_ENABLE_OPENGL
+	m_UpdateBackBuffer();
+	AE_ASSERT( m_backBuffer );
+	m_backBuffer->Activate();
+#endif
+}
+
+void Window::Present()
+{
+#if AE_ENABLE_OPENGL
+#if _AE_OSX_
+	if( m_context )
+	{
+		[(NSOpenGLContext*)m_context flushBuffer];
+	}
+#elif _AE_IOS_
+	if( m_context && m_iosColorRenderbuffer )
+	{
+		glBindRenderbuffer( GL_RENDERBUFFER, m_iosColorRenderbuffer );
+		[(__bridge EAGLContext*)m_context presentRenderbuffer:GL_RENDERBUFFER];
+	}
+#elif _AE_WINDOWS_
+	if( window )
+	{
+		HDC hdc = GetDC( (HWND)window );
+		AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+		SwapBuffers( hdc );
+	}
+#endif
+#endif
+}
+
+void Window::m_UpdateBackBuffer()
+{
+#if AE_ENABLE_OPENGL
+	if( !m_backBuffer )
+	{
+		m_backBuffer = ae::New< RenderTarget >( AE_ALLOC_TAG_RENDER );
+	}
+	m_backBuffer->m_Initialize( GetDrawWidth(), GetDrawHeight(), m_defaultFramebuffer );
+#endif
 }
 
 int32_t Window::GetWidth() const
@@ -19433,6 +20805,27 @@ int32_t Window::GetWidth() const
 int32_t Window::GetHeight() const
 {
 	return m_height;
+}
+
+uint32_t Window::GetDrawWidth() const
+{
+	return (uint32_t)( m_width * m_scaleFactor );
+}
+
+uint32_t Window::GetDrawHeight() const
+{
+	return (uint32_t)( m_height * m_scaleFactor );
+}
+
+ae::Rect Window::GetSafeArea() const
+{
+#if _AE_EMSCRIPTEN_
+	EM_ASM( {
+		console.log( window.innerWidth, window.innerHeight );
+		console.log( window.visualViewport );
+	} );
+#endif
+	return ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( m_width, m_height ) );
 }
 
 void Window::SetTitle( const char* title )
@@ -19696,95 +21089,88 @@ namespace ae {
 // ae::Input member functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
-void _aeEmscriptenTryNewFrame( Input* input )
-{
-	if( input->newFrame_HACK )
-	{
-		memcpy( input->m_keysPrev, input->m_keys, sizeof(input->m_keys) );
-		input->mousePrev = input->mouse;
-		input->mouse.movement = ae::Int2( 0 );
-		input->m_touchesPrev = input->m_touches;
-		for( ae::Touch& touch : input->m_touches )
-		{
-			touch.movement = ae::Int2( 0 );
-		}
-		input->newFrame_HACK = false;
-	}
-}
-
 EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
-	static ae::Key s_keyMap[ 255 ];
-	static bool s_first = true;
-	// First time this function is called only
-	if( s_first )
+	static const std::array< ae::Key, 255 > s_keyMap = []()
 	{
-		s_first = false;
-		memset( s_keyMap, 0, sizeof( s_keyMap ) );
-		s_keyMap[ 8 ] = ae::Key::Backspace;
-		s_keyMap[ 9 ] = ae::Key::Tab;
-		s_keyMap[ 13 ] = ae::Key::Enter;
-		s_keyMap[ 16 ] = ae::Key::LeftShift;
-		s_keyMap[ 17 ] = ae::Key::LeftControl;
-		s_keyMap[ 18 ] = ae::Key::LeftAlt;
-		s_keyMap[ 19 ] = ae::Key::Pause;
-		s_keyMap[ 20 ] = ae::Key::CapsLock;
-		s_keyMap[ 27 ] = ae::Key::Escape;
-		s_keyMap[ 32 ] = ae::Key::Space;
-		s_keyMap[ 33 ] = ae::Key::PageUp;
-		s_keyMap[ 34 ] = ae::Key::PageDown;
-		s_keyMap[ 35 ] = ae::Key::End;
-		s_keyMap[ 36 ] = ae::Key::Home;
-		s_keyMap[ 37 ] = ae::Key::Left;
-		s_keyMap[ 38 ] = ae::Key::Up;
-		s_keyMap[ 39 ] = ae::Key::Right;
-		s_keyMap[ 40 ] = ae::Key::Down;
-		s_keyMap[ 45 ] = ae::Key::Insert;
-		s_keyMap[ 46 ] = ae::Key::Delete;
-		for( uint32_t i = 0; i <= 9; i++ )
-		{
-			s_keyMap[ 48 + i ] = (ae::Key)((int)ae::Key::Num0 + i);
-		}
+		std::array< ae::Key, 255 > keyMap{};
+		keyMap[ 8 ] = ae::Key::Backspace;
+		keyMap[ 9 ] = ae::Key::Tab;
+		keyMap[ 13 ] = ae::Key::Enter;
+		keyMap[ 16 ] = ae::Key::LeftShift;
+		keyMap[ 17 ] = ae::Key::LeftControl;
+		keyMap[ 18 ] = ae::Key::LeftAlt;
+		keyMap[ 19 ] = ae::Key::Pause;
+		keyMap[ 20 ] = ae::Key::CapsLock;
+		keyMap[ 27 ] = ae::Key::Escape;
+		keyMap[ 32 ] = ae::Key::Space;
+		keyMap[ 33 ] = ae::Key::PageUp;
+		keyMap[ 34 ] = ae::Key::PageDown;
+		keyMap[ 35 ] = ae::Key::End;
+		keyMap[ 36 ] = ae::Key::Home;
+		keyMap[ 37 ] = ae::Key::Left;
+		keyMap[ 38 ] = ae::Key::Up;
+		keyMap[ 39 ] = ae::Key::Right;
+		keyMap[ 40 ] = ae::Key::Down;
+		keyMap[ 45 ] = ae::Key::Insert;
+		keyMap[ 46 ] = ae::Key::Delete;
+		keyMap[ 48 ] = ae::Key::Num0;
+		keyMap[ 49 ] = ae::Key::Num1;
+		keyMap[ 50 ] = ae::Key::Num2;
+		keyMap[ 51 ] = ae::Key::Num3;
+		keyMap[ 52 ] = ae::Key::Num4;
+		keyMap[ 53 ] = ae::Key::Num5;
+		keyMap[ 54 ] = ae::Key::Num6;
+		keyMap[ 55 ] = ae::Key::Num7;
+		keyMap[ 56 ] = ae::Key::Num8;
+		keyMap[ 57 ] = ae::Key::Num9;
 		for( uint32_t i = 0; i < 26; i++ )
 		{
-			s_keyMap[ 65 + i ] = (ae::Key)((int)ae::Key::A + i);
+			keyMap[ 65 + i ] = (ae::Key)((int)ae::Key::A + i);
 		}
-		s_keyMap[ 91 ] = ae::Key::LeftSuper;
-		s_keyMap[ 92 ] = ae::Key::RightSuper;
-		for( uint32_t i = 0; i <= 9; i++ )
-		{
-			s_keyMap[ 96 + i ] = (ae::Key)((int)ae::Key::NumPad0 + i);
-		}
-		s_keyMap[ 106 ] = ae::Key::NumPadMultiply;
-		s_keyMap[ 107 ] = ae::Key::NumPadPlus;
-		s_keyMap[ 109 ] = ae::Key::NumPadMinus;
-		s_keyMap[ 110 ] = ae::Key::NumPadPeriod;
-		s_keyMap[ 111 ] = ae::Key::NumPadDivide;
+		keyMap[ 91 ] = ae::Key::LeftSuper;
+		keyMap[ 92 ] = ae::Key::RightSuper;
+		keyMap[ 96 ] = ae::Key::NumPad0;
+		keyMap[ 97 ] = ae::Key::NumPad1;
+		keyMap[ 98 ] = ae::Key::NumPad2;
+		keyMap[ 99 ] = ae::Key::NumPad3;
+		keyMap[ 100 ] = ae::Key::NumPad4;
+		keyMap[ 101 ] = ae::Key::NumPad5;
+		keyMap[ 102 ] = ae::Key::NumPad6;
+		keyMap[ 103 ] = ae::Key::NumPad7;
+		keyMap[ 104 ] = ae::Key::NumPad8;
+		keyMap[ 105 ] = ae::Key::NumPad9;
+		keyMap[ 106 ] = ae::Key::NumPadMultiply;
+		keyMap[ 107 ] = ae::Key::NumPadPlus;
+		keyMap[ 109 ] = ae::Key::NumPadMinus;
+		keyMap[ 110 ] = ae::Key::NumPadPeriod;
+		keyMap[ 111 ] = ae::Key::NumPadDivide;
 		for( uint32_t i = 0; i < 12; i++ )
 		{
-			s_keyMap[ 112 + i ] = (ae::Key)((int)ae::Key::F1 + i);
+			keyMap[ 112 + i ] = (ae::Key)((int)ae::Key::F1 + i);
 		}
-		s_keyMap[ 144 ] = ae::Key::NumLock;
-		s_keyMap[ 145 ] = ae::Key::ScrollLock;
-		s_keyMap[ 186 ] = ae::Key::Semicolon;
-		s_keyMap[ 187 ] = ae::Key::Equals;
-		s_keyMap[ 188 ] = ae::Key::Comma;
-		s_keyMap[ 189 ] = ae::Key::Minus;
-		s_keyMap[ 190 ] = ae::Key::Period;
-		s_keyMap[ 191 ] = ae::Key::Slash;
-		s_keyMap[ 192 ] = ae::Key::Tilde;
-		s_keyMap[ 219 ] = ae::Key::LeftBracket;
-		s_keyMap[ 220 ] = ae::Key::Backslash;
-		s_keyMap[ 221 ] = ae::Key::RightBracket;
-		s_keyMap[ 222 ] = ae::Key::Apostrophe;
-	}
+		keyMap[ 144 ] = ae::Key::NumLock;
+		keyMap[ 145 ] = ae::Key::ScrollLock;
+		keyMap[ 186 ] = ae::Key::Semicolon;
+		keyMap[ 187 ] = ae::Key::Equals;
+		keyMap[ 188 ] = ae::Key::Comma;
+		keyMap[ 189 ] = ae::Key::Minus;
+		keyMap[ 190 ] = ae::Key::Period;
+		keyMap[ 191 ] = ae::Key::Slash;
+		keyMap[ 192 ] = ae::Key::Tilde;
+		keyMap[ 219 ] = ae::Key::LeftBracket;
+		keyMap[ 220 ] = ae::Key::Backslash;
+		keyMap[ 221 ] = ae::Key::RightBracket;
+		keyMap[ 222 ] = ae::Key::Apostrophe;
+		return keyMap;
+	}();
 
 	// Start key handling
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 
-	if( keyEvent->which < countof(s_keyMap) && (int)s_keyMap[ keyEvent->which ] )
+	if( keyEvent->which < s_keyMap.size() && (int)s_keyMap[ keyEvent->which ] )
 	{
 		bool pressed = ( EMSCRIPTEN_EVENT_KEYUP != eventType );
 		input->m_keys[ (int)s_keyMap[ keyEvent->which ] ] = pressed;
@@ -19796,30 +21182,68 @@ EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* ke
 	return true;
 }
 
+EM_BOOL _aeEmscriptenHandleWheel( int eventType, const EmscriptenWheelEvent* wheelEvent, void* userData )
+{
+	AE_ASSERT( userData );
+	Input* input = (Input*)userData;
+	input->m_TryNewFrame();
+	// DOM_DELTA_PIXEL (0) is the trackpad path; DOM_DELTA_LINE (1) is the mouse wheel path.
+	// DOM_DELTA_PAGE (2) is not handled — too coarse for camera/UI input.
+	if( wheelEvent->deltaMode != DOM_DELTA_PAGE )
+	{
+		const float scale = ( wheelEvent->deltaMode == DOM_DELTA_LINE ) ? 40.0f : 1.0f;
+		const float dx = (float)wheelEvent->deltaX * scale;
+		const float dy = -(float)wheelEvent->deltaY * scale; // Negate Y: browser positive=down, aether positive=up
+		input->mouse.usingTouch = ( wheelEvent->deltaMode == DOM_DELTA_PIXEL );
+		input->mouse.scroll.x += dx;
+		input->mouse.scroll.y += dy;
+		input->mouse.scrollMomentum.x += dx;
+		input->mouse.scrollMomentum.y += dy;
+	}
+	return true;
+}
+
+EM_BOOL _aeEmscriptenHandleFocus( int eventType, const EmscriptenFocusEvent* focusEvent, void* userData )
+{
+	AE_ASSERT( userData );
+	Input* input = (Input*)userData;
+	input->m_window->m_UpdateFocused( eventType == EMSCRIPTEN_EVENT_FOCUS );
+	return true;
+}
+
 EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent* mouseEvent, void* userData )
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
-	
-	switch( eventType )
-	{
-		case EMSCRIPTEN_EVENT_MOUSEENTER: // @TODO: It seems like this event is never received
-			input->m_window->m_UpdateFocused( true );
-			break;
-		case EMSCRIPTEN_EVENT_MOUSELEAVE: // @TODO: It seems like this event is never received
-			input->m_window->m_UpdateFocused( false );
-			break;
-		default:
-			break;
-	}
+	input->m_TryNewFrame();
 	
 	const ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY );
-	input->m_SetMousePos( pos.FloorCopy(), ae::Int2( mouseEvent->movementX, -mouseEvent->movementY ) );
+	input->m_SetMousePos( pos, ae::Vec2( mouseEvent->movementX, -mouseEvent->movementY ) );
 	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
 	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
 	input->mouse.middleButton = ( mouseEvent->buttons & 4 );
-	
+
+	// Process pending pointer lock request synchronously (required by Safari)
+	if( input->m_pendingPointerLock > 0 )
+	{
+		input->m_pendingPointerLock = 0;
+		const ae::Vec2 localCenter( input->m_window->GetWidth() / 2.0f, input->m_window->GetHeight() / 2.0f );
+		input->m_WarpCursor( localCenter );
+		input->m_mousePosSet = false;
+		input->m_capturedMousePos = ae::Optional< ae::Vec2 >( pos );
+		emscripten_request_pointerlock( "canvas", true );
+	}
+	else if( input->m_pendingPointerLock < 0 )
+	{
+		input->m_pendingPointerLock = 0;
+		if( const ae::Vec2* p = input->m_capturedMousePos.TryGet() )
+		{
+			input->m_WarpCursor( *p );
+			input->mouse.position = *p;
+		}
+		emscripten_exit_pointerlock();
+	}
+
 	return true;
 }
 
@@ -19835,59 +21259,61 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	_aeEmscriptenTryNewFrame( input );
+	input->m_TryNewFrame();
 
+	const double now = ae::GetTime();
 	for( uint32_t i = 0; i < touchEvent->numTouches; i++ )
 	{
 		const EmscriptenTouchPoint* emTouch = &touchEvent->touches[ i ];
-		if( emTouch->isChanged )
+		if( !emTouch->isChanged ) { continue; }
+		ae::Vec2 pos( (float)emTouch->targetX, (float)emTouch->targetY );
+		pos.y = input->m_window->GetHeight() - pos.y;
+		const uint32_t id = (uint32_t)emTouch->identifier;
+		const auto matchFn = [&]( ae::Touch* t ){ return t->id == id; };
+		ae::Touch* touch = nullptr;
+		int32_t idx = input->m_newTouches.FindFn( matchFn );
+		if( idx >= 0 ) { touch = input->m_newTouches[ idx ]; }
+		else
 		{
-			ae::Int2 pos( emTouch->targetX, emTouch->targetY );
-			pos.y = input->m_window->GetHeight() - pos.y;
-			switch( eventType )
+			idx = input->m_touches.FindFn( matchFn );
+			if( idx >= 0 ) { touch = input->m_touches[ idx ]; }
+		}
+		switch( eventType )
+		{
+			case EMSCRIPTEN_EVENT_TOUCHSTART:
 			{
-				case EMSCRIPTEN_EVENT_TOUCHSTART:
-				{
-					if( input->m_touches.Length() < input->m_touches.Size() )
-					{
-						ae::Touch* touch = &input->m_touches.Append( {} );
-						touch->id = emTouch->identifier;
-						touch->startPosition = pos;
-						touch->position = pos;
-					}
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHEND:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHCANCEL:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
-					if( prevTouchIdx >= 0 ) { input->m_touchesPrev.Remove( prevTouchIdx ); }
-					break;
-				}
-				case EMSCRIPTEN_EVENT_TOUCHMOVE:
-				{
-					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
-					if( touchIdx >= 0 )
-					{
-						input->m_touches[ touchIdx ].position = pos;
-						if( prevTouchIdx >= 0 )
-						{
-							input->m_touches[ touchIdx ].movement += pos - input->m_touchesPrev[ prevTouchIdx ].position;
-						}
-					}
-					break;
-				}
-				default:
-					break;
+				if( touch ) { break; } // Already known
+				if( input->m_newTouches.Full() ) { break; }
+				touch = input->m_touchPool.New();
+				if( !touch ) { break; }
+				touch->id = id;
+				touch->_AppendSample( now, pos );
+				input->m_newTouches.Append( touch );
+				break;
 			}
+			case EMSCRIPTEN_EVENT_TOUCHEND:
+			{
+				if( !touch ) { break; }
+				touch->_AppendSample( now, pos );
+				touch->ended = true;
+				break;
+			}
+			case EMSCRIPTEN_EVENT_TOUCHCANCEL:
+			{
+				if( !touch ) { break; }
+				touch->ended = true;
+				break;
+			}
+			case EMSCRIPTEN_EVENT_TOUCHMOVE:
+			{
+				if( touch && !touch->ended )
+				{
+					touch->_AppendSample( now, pos );
+				}
+				break;
+			}
+			default:
+				break;
 		}
 	}
 
@@ -19919,6 +21345,7 @@ void Input::Initialize( Window* window )
 	{
 		window->input = this;
 	}
+	ae::_Globals::Get()->input = this;
 	memset( m_keys, 0, sizeof(m_keys) );
 	memset( m_keysPrev, 0, sizeof(m_keysPrev) );
 
@@ -19941,8 +21368,11 @@ void Input::Initialize( Window* window )
 	emscripten_set_touchend_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	emscripten_set_touchmove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	emscripten_set_touchcancel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
+	emscripten_set_wheel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleWheel );
+	emscripten_set_focus_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
+	emscripten_set_blur_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
-	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleLockChange );
+	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, true, &_aeEmscriptenHandleLockChange );
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -19963,29 +21393,41 @@ void Input::Initialize( Window* window )
 }
 
 void Input::Terminate()
-{}
+{
+	if( ae::_Globals::Get()->input == this )
+	{
+		ae::_Globals::Get()->input = nullptr;
+	}
+}
+
+void Input::m_TryNewFrame()
+{
+	if( m_pendingNewFrame )
+	{
+		memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
+		mousePrev = mouse;
+		mouse.movement = ae::Vec2( 0.0f );
+		mouse.scroll = ae::Vec2( 0.0f );
+		mouse.scrollMomentum = ae::Vec2( 0.0f );
+		// Discard touches that ended before they were adopted via PumpTouches().
+		// Per the staged API contract, ended touches are never returned.
+		for( int32_t i = (int32_t)m_newTouches.Length() - 1; i >= 0; i-- )
+		{
+			if( m_newTouches[ i ]->ended )
+			{
+				m_touchPool.Delete( m_newTouches[ i ] );
+				m_newTouches.Remove( i );
+			}
+		}
+		m_pendingNewFrame = false;
+	}
+}
 
 void Input::Pump()
 {
 	m_timeStep.Tick();
-#if _AE_EMSCRIPTEN_
-	_aeEmscriptenTryNewFrame( this );
-	newFrame_HACK = true;
-#else
-	// Clear keys each frame and then check for presses below
-	// Emscripten doesn't do this because it uses a callback to set m_keys
-	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-	memset( m_keys, 0, sizeof(m_keys) );
-	mousePrev = mouse;
-	mouse.movement = ae::Int2( 0 );
-	mouse.scroll = ae::Vec2( 0.0f );
-	mouse.scrollMomentum = ae::Vec2( 0.0f );
-	m_touchesPrev = m_touches;
-	for( ae::Touch& touch : m_touches )
-	{
-		touch.movement = ae::Int2( 0 );
-	}
-#endif
+	m_TryNewFrame();
+	m_pendingNewFrame = true;
 	m_textInput = ""; // Clear last frames text input
 
 	// Handle system events
@@ -20074,8 +21516,8 @@ void Input::Pump()
 		{
 			if( ScreenToClient( (HWND)m_window->window, &mouseWindowPt ) )
 			{
-				ae::RectInt windowRect = ae::RectInt::FromPointAndSize( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
-				ae::Int2 localMouse( mouseWindowPt.x, m_window->GetHeight() - mouseWindowPt.y );
+				const ae::Rect windowRect = ae::Rect::FromPoints( 0.0f, 0.0f, m_window->GetWidth(), m_window->GetHeight() );
+				const ae::Vec2 localMouse( mouseWindowPt.x, m_window->GetHeight() - mouseWindowPt.y );
 				if( windowRect.Contains( localMouse ) )
 				{
 					m_SetMousePos( localMouse );
@@ -20103,13 +21545,13 @@ void Input::Pump()
 			}
 			
 			// Cursor
-			const ae::RectInt windowRect = ae::RectInt::FromPointAndSize(
-				0,
-				0,
+			const ae::Rect windowRect = ae::Rect::FromPoints(
+				0.0f,
+				0.0f,
 				m_window->GetWidth(),
-				m_window->GetHeight() - 4 );
+				m_window->GetHeight() - 4.0f );
 			const NSPoint cursorScreenPos = [NSEvent mouseLocation];
-			const ae::Int2 cursorLocalPos = ae::Int2( cursorScreenPos.x, cursorScreenPos.y ) - m_window->GetPosition();
+			const ae::Vec2 cursorLocalPos = ae::Vec2( cursorScreenPos.x, cursorScreenPos.y ) - m_window->GetPosition();
 			const bool cursorWithinWindow = windowRect.Contains( cursorLocalPos );
 			if( cursorWithinWindow )
 			{
@@ -20244,12 +21686,11 @@ void Input::Pump()
 	// Mouse capture
 	if( m_captureMouse )
 	{
-		mouse.movement = ae::Int2( 0 );
+		mouse.movement = ae::Vec2( 0.0f );
 		if( m_window )
 		{
-			// Calculate center in case the window height is an odd number
-			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-			m_SetCursorPos( localCenter );
+			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
+			m_WarpCursor( localCenter );
 			// Mouse pos is previously set elsewhere, so when the mouse position is set
 			// to the window center the movement vector needs to be reversed.
 			m_SetMousePos( localCenter );
@@ -20839,39 +22280,38 @@ void Input::SetMouseCaptured( bool enable )
 	
 	if( enable != m_captureMouse )
 	{
+#if _AE_EMSCRIPTEN_
+		m_pendingPointerLock = enable ? 1 : -1;
+#else
 		if( enable )
 		{
 			// Remember original cursor position
-			m_capturedMousePos = m_mousePosSet ? mouse.position : ae::Int2( INT_MAX );
+			m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( mouse.position ) : ae::Optional< ae::Vec2 >();
 #if _AE_WINDOWS_
 			ShowCursor( FALSE );
 #elif _AE_OSX_
 			CGDisplayHideCursor( kCGDirectMainDisplay );
-#elif _AE_EMSCRIPTEN_
-			emscripten_request_pointerlock( "canvas", true );
 #endif
-			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-			m_SetCursorPos( localCenter );
+			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
+			m_WarpCursor( localCenter );
 			m_mousePosSet = false;
 		}
 		else
 		{
 			// Restore original cursor position
-			if( m_capturedMousePos != ae::Int2( INT_MAX ) )
+			if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
 			{
-				m_SetCursorPos( m_capturedMousePos );
-				mouse.position = m_capturedMousePos;
+				m_WarpCursor( *pos );
+				mouse.position = *pos;
 			}
 #if _AE_WINDOWS_
 			ShowCursor( TRUE );
 #elif _AE_OSX_
 			CGDisplayShowCursor( kCGDirectMainDisplay );
-#elif _AE_EMSCRIPTEN_
-			emscripten_exit_pointerlock();
 #endif
 		}
-		
 		m_captureMouse = enable;
+#endif
 	}
 }
 
@@ -20915,58 +22355,96 @@ bool Input::GetPrev( ae::Key key ) const
 	return m_keysPrev[ static_cast< int >( key ) ];
 }
 
-const ae::Touch* Input::GetTouchById( uint32_t id ) const
+ae::Vec2 Touch::Position() const
 {
-	const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	return ( touchIdx >= 0 ) ? &m_touches[ touchIdx ] : nullptr;
-}
-
-const ae::Touch* Input::GetFinishedTouchById( uint32_t id ) const
-{
-	const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	const int32_t prevTouchIdx = m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
-	return ( touchIdx < 0 && prevTouchIdx >= 0 ) ? &m_touchesPrev[ prevTouchIdx ] : nullptr;
-}
-
-ae::TouchArray Input::GetNewTouches() const
-{
-	ae::TouchArray result;
-	for( const ae::Touch& touch : m_touches )
+	if( samples.Length() )
 	{
-		const int32_t prevTouchIdx = m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == touch.id; } );
-		if( prevTouchIdx < 0 )
-		{
-			result.Append( touch );
-		}
+		return samples[ samples.Length() - 1 ].position; // Last sample
 	}
+	else
+	{
+		AE_DEBUG_FAIL_MSG( "Touch has no samples" );
+		return ae::Vec2( 0.0f );
+	}
+}
+
+ae::Vec2 Touch::StartPosition() const
+{
+	if( samples.Length() )
+	{
+		return samples[ 0 ].position; // First sample
+	}
+	else
+	{
+		AE_DEBUG_FAIL_MSG( "Touch has no samples" );
+		return ae::Vec2( 0.0f );
+	}
+}
+
+ae::Vec2 Touch::StartDelta() const
+{
+	return Position() - StartPosition();
+}
+
+double Touch::Lifetime() const
+{
+	if( samples.Length() < 2 )
+	{
+		return 0.0;
+	}
+	return samples[ samples.Length() - 1 ].time - samples[ 0 ].time;
+}
+
+void Touch::_AppendSample( double time, ae::Vec2 position )
+{
+	if( samples.Full() )
+	{
+		// Visvalingam: drop the interior sample with the smallest triangle area
+		// against its immediate neighbors. Endpoints (start and most recent)
+		// are preserved.
+		int32_t dropIdx = 1;
+		float minArea = ae::MaxValue< float >();
+		for( uint32_t i = 1; i + 1 < samples.Length(); i++ )
+		{
+			const ae::Vec2 a = samples[ i - 1 ].position;
+			const ae::Vec2 b = samples[ i ].position;
+			const ae::Vec2 c = samples[ i + 1 ].position;
+			const float cross = ( b.x - a.x ) * ( c.y - a.y ) - ( b.y - a.y ) * ( c.x - a.x );
+			const float area = ae::Abs( cross );
+			if( area < minArea )
+			{
+				minArea = area;
+				dropIdx = (int32_t)i;
+			}
+		}
+		samples.Remove( dropIdx );
+	}
+	samples.Append( { time, position } );
+}
+
+const ae::Touch* Input::PumpTouches()
+{
+	if( !m_newTouches.Length() || m_touches.Full() )
+	{
+		return nullptr;
+	}
+	ae::Touch* result = m_newTouches[ 0 ];
+	m_newTouches.Remove( 0 );
+	m_touches.Append( result );
 	return result;
 }
 
-ae::TouchArray Input::GetFinishedTouches() const
+void Input::ReleaseTouch( const ae::Touch* touch )
 {
-	ae::TouchArray result;
-	for( const ae::Touch& touch : m_touchesPrev )
+	const int32_t idx = m_touches.Find( touch );
+	if( idx >= 0 )
 	{
-		const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == touch.id; } );
-		if( touchIdx < 0 )
-		{
-			result.Append( touch );
-		}
+		m_touches.Remove( idx );
+		m_touchPool.Delete( const_cast< ae::Touch* >( touch ) );
 	}
-	return result;
 }
 
-const ae::TouchArray& Input::GetTouches() const
-{
-	return m_touches;
-}
-
-const ae::TouchArray& Input::GetPreviousTouches() const
-{
-	return m_touchesPrev;
-}
-
-void Input::m_SetMousePos( ae::Int2 pos )
+void Input::m_SetMousePos( ae::Vec2 pos )
 {
 	AE_ASSERT( m_window );
 	if( m_mousePosSet )
@@ -20977,7 +22455,7 @@ void Input::m_SetMousePos( ae::Int2 pos )
 	m_mousePosSet = true;
 }
 
-void Input::m_SetMousePos( ae::Int2 pos, ae::Int2 movement )
+void Input::m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement )
 {
 	AE_ASSERT( m_window );
 	mouse.movement += movement;
@@ -20985,11 +22463,13 @@ void Input::m_SetMousePos( ae::Int2 pos, ae::Int2 movement )
 	m_mousePosSet = true;
 }
 
-void Input::m_SetCursorPos( ae::Int2 pos )
+void Input::m_WarpCursor( ae::Vec2 pos )
 {
 #if _AE_WINDOWS_
 	{
-		POINT centerPt = { pos.x, m_window->GetHeight() - pos.y };
+		// SetCursorPos takes integer screen pixels, so round to the nearest
+		const ae::Int2 px = pos.NearestCopy();
+		POINT centerPt = { px.x, m_window->GetHeight() - px.y };
 		if( ClientToScreen( (HWND)m_window->window, &centerPt ) )
 		{
 			SetCursorPos( centerPt.x, centerPt.y );
@@ -21227,6 +22707,15 @@ void _ae_GetCurrentWorkingDir( Str256* outDir )
 	url[ 0 ] = 0;
 	EM_ASM( { stringToUTF8(window.location.href, $0, 256) }, url );
 	*outDir = ae::FileSystem::GetDirectoryFromPath( url );
+}
+#elif _AE_WASM_
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+	return false;
+}
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+	return false;
 }
 #endif
 
@@ -22088,7 +23577,7 @@ const char* FileSystem::GetFileNameFromPath( const char* filePath )
 	}
 }
 
-const char* FileSystem::GetFileExtFromPath( const char* filePath, bool includeDot )
+const char* FileSystem::GetFileExtensionFromPath( const char* filePath, bool includeDot )
 {
 	// Find first dot after last separator
 	const char* fileName = GetFileNameFromPath( filePath );
@@ -22103,6 +23592,60 @@ const char* FileSystem::GetFileExtFromPath( const char* filePath, bool includeDo
 		uint32_t len = (uint32_t)strlen( fileName );
 		return fileName + len;
 	}
+}
+
+static char _ToLowerASCII( char c )
+{
+	if( c >= 'A' && c <= 'Z' )
+	{
+		return c + ( 'a' - 'A' );
+	}
+	return c;
+}
+
+static bool _StringsEqualASCII( const char* a, const char* b )
+{
+	while( a[ 0 ] && b[ 0 ] )
+	{
+		if( _ToLowerASCII( a[ 0 ] ) != _ToLowerASCII( b[ 0 ] ) )
+		{
+			return false;
+		}
+		a++;
+		b++;
+	}
+	return a[ 0 ] == b[ 0 ]; // Null / string length equivalency check
+}
+
+bool FileSystem::HasExtension( const char* filePath, const char* extension, bool caseSensitive )
+{
+	if( !filePath || !filePath[ 0 ] || !extension || !extension[ 0 ] )
+	{
+		return false;
+	}
+	if( IsDirectory( filePath ) )
+	{
+		return false;
+	}
+	if( extension[ 0 ] == '.' )
+	{
+		extension++;
+	}
+	if( !extension[ 0 ] )
+	{
+		return false;
+	}
+
+	const char* fileExt = GetFileExtensionFromPath( filePath, false );
+	if( !fileExt[ 0 ] )
+	{
+		return false;
+	}
+	if( caseSensitive )
+	{
+		return strcmp( fileExt, extension ) == 0;
+	}
+	return _StringsEqualASCII( fileExt, extension );
 }
 
 std::pair< const char*, const char* > FileSystem::TraversePath( const char* filePath )
@@ -22621,6 +24164,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 //------------------------------------------------------------------------------
 // ae::Socket and ae::ListenerSocket helpers
 //------------------------------------------------------------------------------
+#if !_AE_WASM_
 uint32_t _winsockCount = 0;
 bool _WinsockInit()
 {
@@ -23392,197 +24936,383 @@ uint32_t ListenerSocket::GetConnectionCount() const
 	return m_connections.Length();
 }
 
+#endif // !_AE_WASM_
+
 }  // ae end
+
+//------------------------------------------------------------------------------
+// OpenGL start
+//------------------------------------------------------------------------------
+// clang-format off
+// _ae_GLProfileEnum returns an int enum (0=none, 1=core, 2=es, 3=compatibility)
+// rather than a string so the value crosses the WASM<->host ABI cleanly. The
+// public ae::GLProfile() below maps it back to a string on the local side.
+enum _ae_GLProfileEnum
+{
+	_AE_GLProfile_None = 0,
+	_AE_GLProfile_Core = 1,
+	_AE_GLProfile_ES = 2
+};
+#if !AE_ENABLE_OPENGL
+	int32_t _ae_GLMajorVersion() { return 0; }
+	int32_t _ae_GLMinorVersion() { return 0; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_None; }
+#elif _AE_IOS_ || _AE_EMSCRIPTEN_
+	int32_t _ae_GLMajorVersion() { return 3; }
+	int32_t _ae_GLMinorVersion() { return 0; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_ES; }
+#elif _AE_WASM_
+	// Instead of defining values here, the WASM host must provide these function implementations
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLMajorVersion();
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLMinorVersion();
+	AE_WASM_IMPORT( ae ) int32_t _ae_GLProfileEnum();
+#else
+	int32_t _ae_GLMajorVersion() { return 4; }
+	int32_t _ae_GLMinorVersion() { return 1; }
+	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_Core; }
+#endif
+
+//------------------------------------------------------------------------------
+// OpenGL includes / declarations
+//------------------------------------------------------------------------------
+#if AE_ENABLE_OPENGL
+#	ifndef AE_GL_DEBUG_MODE
+#		define AE_GL_DEBUG_MODE 0
+#	endif
+
+#	if AE_OPENGL_CUSTOM_HEADER
+#		include AE_OPENGL_CUSTOM_HEADER
+#	elif _AE_EMSCRIPTEN_
+#		include <GLES3/gl3.h>
+#	elif _AE_LINUX_
+#		define GL_GLEXT_PROTOTYPES 1
+#		include <GL/glcorearb.h>
+#	elif _AE_IOS_
+#		include <OpenGLES/ES3/gl.h>
+#	elif _AE_APPLE_
+#		include <OpenGL/glext.h>
+#		include <OpenGL/gl3.h>
+#		include <OpenGL/gl3ext.h>
+#	else
+		// Define minimal GL types and constants for platforms without headers
+		typedef uint32_t GLenum;
+		typedef uint32_t GLbitfield;
+		typedef uint32_t GLuint;
+		typedef int32_t  GLint;
+		typedef int32_t  GLsizei;
+		typedef float    GLfloat;
+		typedef double   GLdouble;
+		typedef uint8_t  GLboolean;
+		typedef char GLchar;
+		typedef uint8_t GLubyte;
+		typedef void GLvoid;
+		typedef intptr_t GLsizeiptr;
+		typedef intptr_t GLintptr;
+
+#		define GL_TRUE  1
+#		define GL_FALSE 0
+
+#		ifndef WGL_CONTEXT_MAJOR_VERSION_ARB
+#			define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
+#			define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
+#			define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
+#			define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
+#			define WGL_CONTEXT_FLAGS_ARB 0x2094
+#			define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
+#		endif
+
+		// GL primitives
+#		define GL_POINTS                           0x0000
+#		define GL_LINES                            0x0001
+#		define GL_LINE_STRIP                       0x0003
+#		define GL_TRIANGLES                        0x0004
+#		define GL_TRIANGLE_STRIP                   0x0005
+
+		// GL data types
+#		define GL_BYTE                             0x1400
+#		define GL_UNSIGNED_BYTE                    0x1401
+#		define GL_SHORT                            0x1402
+#		define GL_UNSIGNED_SHORT                   0x1403
+#		define GL_INT                              0x1404
+#		define GL_UNSIGNED_INT                     0x1405
+#		define GL_FLOAT                            0x1406
+
+		// GL depth functions
+#		define GL_LESS                             0x0201
+#		define GL_EQUAL                            0x0202
+#		define GL_LEQUAL                           0x0203
+#		define GL_GREATER                          0x0204
+#		define GL_GEQUAL                           0x0206
+#		define GL_ALWAYS                           0x0207
+
+		// GL blend factors
+#		define GL_ZERO                             0x0000
+#		define GL_ONE                              0x0001
+#		define GL_SRC_ALPHA                        0x0302
+#		define GL_ONE_MINUS_SRC_ALPHA              0x0303
+#		define GL_DST_ALPHA                        0x0304
+#		define GL_ONE_MINUS_DST_ALPHA              0x0305
+
+		// GL state / caps
+#		define GL_CULL_FACE                        0x0B44
+#		define GL_DEPTH_TEST                       0x0B71
+#		define GL_BLEND                            0x0BE2
+#		define GL_SCISSOR_TEST                     0x0C11
+#		define GL_UNPACK_ALIGNMENT                 0x0CF5
+#		define GL_MAX_TEXTURE_SIZE                 0x0D33
+#		define GL_VIEWPORT                         0x0BA2
+
+		// GL winding / face
+#		define GL_CW                               0x0900
+#		define GL_CCW                              0x0901
+#		define GL_FRONT                            0x0404
+#		define GL_BACK                             0x0405
+#		define GL_FRONT_AND_BACK                   0x0408
+#		define GL_LINE                             0x1B01
+#		define GL_FILL                             0x1B02
+
+		// GL clear bits
+#		define GL_DEPTH_BUFFER_BIT                 0x00000100
+#		define GL_STENCIL_BUFFER_BIT               0x00000400
+#		define GL_COLOR_BUFFER_BIT                 0x00004000
+
+		// GL textures
+#		define GL_TEXTURE_2D                       0x0DE1
+#		define GL_TEXTURE_CUBE_MAP                 0x8513
+#		define GL_TEXTURE_CUBE_MAP_POSITIVE_X      0x8515
+#		define GL_TEXTURE_MIN_FILTER               0x2801
+#		define GL_TEXTURE_MAG_FILTER               0x2800
+#		define GL_TEXTURE_WRAP_S                   0x2802
+#		define GL_TEXTURE_WRAP_T                   0x2803
+#		define GL_NEAREST                          0x2600
+#		define GL_LINEAR                           0x2601
+#		define GL_NEAREST_MIPMAP_NEAREST           0x2700
+#		define GL_LINEAR_MIPMAP_LINEAR             0x2703
+#		define GL_REPEAT                           0x2901
+
+		// GL formats
+#		define GL_RED                              0x1903
+#		define GL_RG                               0x8227
+#		define GL_RGB                              0x1907
+#		define GL_RGBA                             0x1908
+#		define GL_RG8                              0x822B
+#		define GL_RG16F                            0x822F
+#		define GL_RG32F                            0x8230
+#		define GL_RGB8                             0x8051
+#		define GL_RGBA8                            0x8058
+#		define GL_DEPTH_COMPONENT                  0x1902
+
+		// GL buffers / usage
+#		define GL_STREAM_DRAW                      0x88E0
+
+		// GL_VERSION_1_2
+#		define GL_TEXTURE_3D                     0x806F
+#		define GL_BGR                            0x80E0
+#		define GL_BGRA                           0x80E1
+#		define GL_CLAMP_TO_EDGE                  0x812F
+		// GL_VERSION_1_3
+#		define GL_TEXTURE0                       0x84C0
+		// GL_VERSION_1_4
+#		define GL_DEPTH_COMPONENT16              0x81A5
+		// GL_VERSION_1_5
+#		define GL_ARRAY_BUFFER                   0x8892
+#		define GL_ELEMENT_ARRAY_BUFFER           0x8893
+#		define GL_STATIC_DRAW                    0x88E4
+#		define GL_DYNAMIC_DRAW                   0x88E8
+		// GL_VERSION_2_0
+#		define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
+#		define GL_FRAGMENT_SHADER                0x8B30
+#		define GL_VERTEX_SHADER                  0x8B31
+#		define GL_FLOAT_VEC2                     0x8B50
+#		define GL_FLOAT_VEC3                     0x8B51
+#		define GL_FLOAT_VEC4                     0x8B52
+#		define GL_FLOAT_MAT4                     0x8B5C
+#		define GL_SAMPLER_2D                     0x8B5E
+#		define GL_SAMPLER_3D                     0x8B5F
+#		define GL_COMPILE_STATUS                 0x8B81
+#		define GL_LINK_STATUS                    0x8B82
+#		define GL_INFO_LOG_LENGTH                0x8B84
+#		define GL_ACTIVE_UNIFORMS                0x8B86
+#		define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
+#		define GL_ACTIVE_ATTRIBUTES              0x8B89
+#		define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
+		// GL_VERSION_2_1
+#		define GL_SRGB8                          0x8C41
+#		define GL_SRGB8_ALPHA8                   0x8C43
+		// GL_VERSION_3_0
+#		define GL_RGBA32F                        0x8814
+#		define GL_RGB32F                         0x8815
+#		define GL_RGBA16F                        0x881A
+#		define GL_RGB16F                         0x881B
+#		define GL_DEPTH_COMPONENT32F             0x8CAC
+#		define GL_FRAMEBUFFER_UNDEFINED          0x8219
+#		define GL_FRAMEBUFFER_BINDING            0x8CA6
+#		define GL_READ_FRAMEBUFFER               0x8CA8
+#		define GL_DRAW_FRAMEBUFFER               0x8CA9
+#		define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#		define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
+#		define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+#		define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
+#		define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
+#		define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
+#		define GL_COLOR_ATTACHMENT0              0x8CE0
+#		define GL_DEPTH_ATTACHMENT               0x8D00
+#		define GL_FRAMEBUFFER                    0x8D40
+#		define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
+#		define GL_FRAMEBUFFER_SRGB               0x8DB9
+#		define GL_HALF_FLOAT                     0x140B
+#		define GL_R8                             0x8229
+#		define GL_R16F                           0x822D
+#		define GL_R32F                           0x822E
+#		define GL_R16UI                          0x8234
+		// GL_VERSION_3_2
+#		define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
+		// GL_VERSION_4_3
+		typedef void ( *GLDEBUGPROC )( GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam );
+#		define GL_DEBUG_SEVERITY_HIGH            0x9146
+#		define GL_DEBUG_SEVERITY_MEDIUM          0x9147
+#		define GL_DEBUG_SEVERITY_LOW             0x9148
+#	endif
+
+#	define _AE_EACH_GL_FUNC \
+		_AE_GL_FUNC( void,   glClear,                   ( GLbitfield mask ) ) \
+		_AE_GL_FUNC( void,   glClearColor,              ( GLfloat r, GLfloat g, GLfloat b, GLfloat a ) ) \
+		_AE_GL_FUNC( void,   glClearDepthf,             ( GLfloat depth ) ) \
+		_AE_GL_FUNC( void,   glViewport,                ( GLint x, GLint y, GLsizei width, GLsizei height ) ) \
+		_AE_GL_FUNC( void,   glEnable,                  ( GLenum cap ) ) \
+		_AE_GL_FUNC( void,   glDisable,                 ( GLenum cap ) ) \
+		_AE_GL_FUNC( void,   glDepthMask,               ( GLboolean flag ) ) \
+		_AE_GL_FUNC( void,   glDepthFunc,               ( GLenum func ) ) \
+		_AE_GL_FUNC( void,   glBlendFunc,               ( GLenum sfactor, GLenum dfactor ) ) \
+		_AE_GL_FUNC( void,   glFrontFace,               ( GLenum mode ) ) \
+		_AE_GL_FUNC( void,   glGetIntegerv,             ( GLenum pname, GLint* data ) ) \
+		_AE_GL_FUNC( void,   glPixelStorei,             ( GLenum pname, GLint param ) ) \
+		_AE_GL_FUNC( GLenum, glGetError,                () ) \
+		_AE_GL_FUNC( void,   glBindTexture,             ( GLenum target, GLuint texture ) ) \
+		_AE_GL_FUNC( void,   glGenTextures,             ( GLsizei n, GLuint* textures ) ) \
+		_AE_GL_FUNC( void,   glDeleteTextures,          ( GLsizei n, const GLuint* textures ) ) \
+		_AE_GL_FUNC( void,   glTexParameteri,           ( GLenum target, GLenum pname, GLint param ) ) \
+		_AE_GL_FUNC( void,   glDrawArrays,              ( GLenum mode, GLint first, GLsizei count ) ) \
+		_AE_GL_FUNC( void,   glDrawElements,            ( GLenum mode, GLsizei count, GLenum type, const void* indices ) ) \
+		_AE_GL_FUNC( void,   glPolygonMode,             ( GLenum face, GLenum mode ) ) \
+		_AE_GL_FUNC( GLuint, glCreateProgram,           () ) \
+		_AE_GL_FUNC( void,   glAttachShader,            ( GLuint program, GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glLinkProgram,             ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glGetProgramiv,            ( GLuint program, GLenum pname, GLint* params ) ) \
+		_AE_GL_FUNC( void,   glGetProgramInfoLog,       ( GLuint program, GLsizei bufSize, GLsizei* length, GLchar* infoLog ) ) \
+		_AE_GL_FUNC( void,   glGetActiveAttrib,         ( GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name ) ) \
+		_AE_GL_FUNC( GLint,  glGetAttribLocation,       ( GLuint program, const GLchar* name ) ) \
+		_AE_GL_FUNC( void,   glGetActiveUniform,        ( GLuint program, GLuint index, GLsizei bufSize, GLsizei* length, GLint* size, GLenum* type, GLchar* name ) ) \
+		_AE_GL_FUNC( GLint,  glGetUniformLocation,      ( GLuint program, const GLchar* name ) ) \
+		_AE_GL_FUNC( void,   glDeleteShader,            ( GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glDeleteProgram,           ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glUseProgram,              ( GLuint program ) ) \
+		_AE_GL_FUNC( void,   glBlendFuncSeparate,       ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) ) \
+		_AE_GL_FUNC( GLuint, glCreateShader,            ( GLenum type ) ) \
+		_AE_GL_FUNC( void,   glShaderSource,            ( GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length ) ) \
+		_AE_GL_FUNC( void,   glCompileShader,           ( GLuint shader ) ) \
+		_AE_GL_FUNC( void,   glGetShaderiv,             ( GLuint shader, GLenum pname, GLint* params ) ) \
+		_AE_GL_FUNC( void,   glGetShaderInfoLog,        ( GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* infoLog ) ) \
+		_AE_GL_FUNC( void,   glActiveTexture,           ( GLenum texture ) ) \
+		_AE_GL_FUNC( void,   glUniform1i,               ( GLint location, GLint v0 ) ) \
+		_AE_GL_FUNC( void,   glUniform1fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform2fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform3fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniform4fv,              ( GLint location, GLsizei count, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glUniformMatrix4fv,        ( GLint location, GLsizei count, GLboolean transpose, const GLfloat* value ) ) \
+		_AE_GL_FUNC( void,   glGenerateMipmap,          ( GLenum target ) ) \
+		_AE_GL_FUNC( void,   glBindFramebuffer,         ( GLenum target, GLuint framebuffer ) ) \
+		_AE_GL_FUNC( void,   glFramebufferTexture2D,    ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) ) \
+		_AE_GL_FUNC( void,   glGenFramebuffers,         ( GLsizei n, GLuint* framebuffers ) ) \
+		_AE_GL_FUNC( void,   glDeleteFramebuffers,      ( GLsizei n, const GLuint* framebuffers ) ) \
+		_AE_GL_FUNC( GLenum, glCheckFramebufferStatus,  ( GLenum target ) ) \
+		_AE_GL_FUNC( void,   glDrawBuffers,             ( GLsizei n, const GLenum* bufs ) ) \
+		_AE_GL_FUNC( void,   glTextureBarrierNV,        () ) \
+		_AE_GL_FUNC( void,   glGenVertexArrays,         ( GLsizei n, GLuint* arrays ) ) \
+		_AE_GL_FUNC( void,   glBindVertexArray,         ( GLuint array ) ) \
+		_AE_GL_FUNC( void,   glDeleteVertexArrays,      ( GLsizei n, const GLuint* arrays ) ) \
+		_AE_GL_FUNC( void,   glDeleteBuffers,           ( GLsizei n, const GLuint* buffers ) ) \
+		_AE_GL_FUNC( void,   glBindBuffer,              ( GLenum target, GLuint buffer ) ) \
+		_AE_GL_FUNC( void,   glGenBuffers,              ( GLsizei n, GLuint* buffers ) ) \
+		_AE_GL_FUNC( void,   glBufferData,              ( GLenum target, GLsizeiptr size, const void* data, GLenum usage ) ) \
+		_AE_GL_FUNC( void,   glBufferSubData,           ( GLenum target, GLintptr offset, GLsizeiptr size, const void* data ) ) \
+		_AE_GL_FUNC( void,   glEnableVertexAttribArray, ( GLuint index ) ) \
+		_AE_GL_FUNC( void,   glVertexAttribPointer,     ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer ) ) \
+		_AE_GL_FUNC( void,   glVertexAttribDivisor,     ( GLuint index, GLuint divisor ) ) \
+		_AE_GL_FUNC( void,   glDrawElementsInstanced,   ( GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount ) ) \
+		_AE_GL_FUNC( void,   glDrawArraysInstanced,     ( GLenum mode, GLint first, GLsizei count, GLsizei instancecount ) ) \
+		_AE_GL_FUNC( void,   glTexImage2D,              ( GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels ) ) \
+		_AE_GL_FUNC( void,   glTexSubImage2D,           ( GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels ) ) \
+		_AE_GL_FUNC( void,   glTexStorage2D,            ( GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height ) ) \
+		_AE_GL_FUNC( void,   glDebugMessageCallback,    ( GLDEBUGPROC callback, const void* userParam ) )
+
+#	if _AE_WINDOWS_
+
+		// WGL extensions
+		HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList ) = nullptr;
+		bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
+		int ( *wglGetSwapIntervalEXT ) () = nullptr;
+#		define _AE_GL_FUNC( ret, name, params ) ret ( *name ) params = nullptr;
+		_AE_EACH_GL_FUNC
+#		undef _AE_GL_FUNC
+
+#	elif _AE_WASM_
+
+#		ifdef AE_GL_IMPORT
+#			define _AE_GL_IMPORT_ATTRIBUTE __attribute__(( AE_GL_IMPORT ))
+#		else
+#			define _AE_GL_IMPORT_ATTRIBUTE
+#		endif
+#		define _AE_GL_FUNC( ret, name, params ) _AE_GL_IMPORT_ATTRIBUTE __attribute__(( import_name( #name ) )) extern ret name params;
+		_AE_EACH_GL_FUNC
+#		undef _AE_GL_FUNC
+#		undef _AE_GL_IMPORT_ATTRIBUTE
+
+#	else
+		// Native macOS/Linux: system GL headers provide all declarations.
+#	endif
+
+#	undef _AE_EACH_GL_FUNC
+#endif // AE_ENABLE_OPENGL
 
 #if AE_ENABLE_OPENGL
-//------------------------------------------------------------------------------
-// OpenGL includes
-//------------------------------------------------------------------------------
-#if _AE_WINDOWS_
-	#pragma comment (lib, "opengl32.lib")
-	#pragma comment (lib, "glu32.lib")
-	#include <GL/gl.h>
-	#include <GL/glu.h>
-#elif _AE_EMSCRIPTEN_
-	#include <GLES3/gl3.h>
-#elif _AE_LINUX_
-	#define GL_GLEXT_PROTOTYPES 1
-	#include <GL/glcorearb.h>
-#elif _AE_IOS_
-	#include <OpenGLES/ES3/gl.h>
-#else
-	#include <OpenGL/glext.h>
-	#include <OpenGL/gl3.h>
-	#include <OpenGL/gl3ext.h>
-#endif
 
-namespace ae
-{
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	int32_t GLMajorVersion = 3;
-	int32_t GLMinorVersion = 0;
-#else
-	int32_t GLMajorVersion = 4;
-	int32_t GLMinorVersion = 1;
-#endif
-bool ReverseZ = false;
-}  // ae end
+#	if _AE_EMSCRIPTEN_ || _AE_IOS_ || _AE_WASM_ || _AE_WINDOWS_
+#		define glClearDepth glClearDepthf
+#	endif
 
-#ifndef AE_GL_DEBUG_MODE
-	#define AE_GL_DEBUG_MODE 0
-#endif
-
-#if _AE_WINDOWS_
-// OpenGL function pointers
-typedef char GLchar;
-typedef intptr_t GLsizeiptr;
-typedef intptr_t GLintptr;
-
-#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
-#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
-#define WGL_CONTEXT_PROFILE_MASK_ARB 0x9126
-#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB 0x00000001
-#define WGL_CONTEXT_FLAGS_ARB 0x2094
-#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB 0x0002
-
-// GL_VERSION_1_2
-#define GL_TEXTURE_3D                     0x806F
-#define GL_BGR                            0x80E0
-#define GL_BGRA                           0x80E1
-#define GL_CLAMP_TO_EDGE                  0x812F
-// GL_VERSION_1_3
-#define GL_TEXTURE0                       0x84C0
-// GL_VERSION_1_4
-#define GL_DEPTH_COMPONENT16              0x81A5
-// GL_VERSION_1_5
-#define GL_ARRAY_BUFFER                   0x8892
-#define GL_ELEMENT_ARRAY_BUFFER           0x8893
-#define GL_STATIC_DRAW                    0x88E4
-#define GL_DYNAMIC_DRAW                   0x88E8
-// GL_VERSION_2_0
-#define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
-#define GL_FRAGMENT_SHADER                0x8B30
-#define GL_VERTEX_SHADER                  0x8B31
-#define GL_FLOAT_VEC2                     0x8B50
-#define GL_FLOAT_VEC3                     0x8B51
-#define GL_FLOAT_VEC4                     0x8B52
-#define GL_FLOAT_MAT4                     0x8B5C
-#define GL_SAMPLER_2D                     0x8B5E
-#define GL_SAMPLER_3D                     0x8B5F
-#define GL_COMPILE_STATUS                 0x8B81
-#define GL_LINK_STATUS                    0x8B82
-#define GL_INFO_LOG_LENGTH                0x8B84
-#define GL_ACTIVE_UNIFORMS                0x8B86
-#define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
-#define GL_ACTIVE_ATTRIBUTES              0x8B89
-#define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
-// GL_VERSION_2_1
-#define GL_SRGB8                          0x8C41
-#define GL_SRGB8_ALPHA8                   0x8C43
-// GL_VERSION_3_0
-#define GL_RGBA32F                        0x8814
-#define GL_RGB32F                         0x8815
-#define GL_RGBA16F                        0x881A
-#define GL_RGB16F                         0x881B
-#define GL_DEPTH_COMPONENT32F             0x8CAC
-#define GL_FRAMEBUFFER_UNDEFINED          0x8219
-#define GL_FRAMEBUFFER_BINDING            0x8CA6
-#define GL_READ_FRAMEBUFFER               0x8CA8
-#define GL_DRAW_FRAMEBUFFER               0x8CA9
-#define GL_FRAMEBUFFER_COMPLETE           0x8CD5
-#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
-#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
-#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
-#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
-#define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
-#define GL_COLOR_ATTACHMENT0              0x8CE0
-#define GL_DEPTH_ATTACHMENT               0x8D00
-#define GL_FRAMEBUFFER                    0x8D40
-#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
-#define GL_FRAMEBUFFER_SRGB               0x8DB9
-#define GL_HALF_FLOAT                     0x140B
-#define GL_R8                             0x8229
-#define GL_R16F                           0x822D
-#define GL_R32F                           0x822E
-#define GL_R16UI                          0x8234
-// GL_VERSION_3_2
-#define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
-// GL_VERSION_4_3
-typedef void ( *GLDEBUGPROC )(GLenum source,GLenum type,GLuint id,GLenum severity,GLsizei length,const GLchar *message,const void *userParam);
-#define GL_DEBUG_SEVERITY_HIGH            0x9146
-#define GL_DEBUG_SEVERITY_MEDIUM          0x9147
-#define GL_DEBUG_SEVERITY_LOW             0x9148
-// WGL extensions
-HGLRC ( *wglCreateContextAttribsARB ) ( HDC hDC, HGLRC hShareContext, const int *attribList ) = nullptr;
-bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
-int ( *wglGetSwapIntervalEXT ) () = nullptr;
-// OpenGL Shader Functions
-GLuint ( *glCreateProgram ) () = nullptr;
-void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
-void ( *glLinkProgram ) ( GLuint program ) = nullptr;
-void ( *glGetProgramiv ) ( GLuint program, GLenum pname, GLint *params ) = nullptr;
-void ( *glGetProgramInfoLog ) ( GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
-void ( *glGetActiveAttrib ) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name ) = nullptr;
-GLint (*glGetAttribLocation) ( GLuint program, const GLchar *name ) = nullptr;
-void (*glGetActiveUniform) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name );
-GLint (*glGetUniformLocation) ( GLuint program, const GLchar *name ) = nullptr;
-void (*glDeleteShader) ( GLuint shader ) = nullptr;
-void ( *glDeleteProgram) ( GLuint program ) = nullptr;
-void ( *glUseProgram) ( GLuint program ) = nullptr;
-void ( *glBlendFuncSeparate ) ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) = nullptr;
-GLuint( *glCreateShader) ( GLenum type ) = nullptr;
-void (*glShaderSource) ( GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length ) = nullptr;
-void (*glCompileShader)( GLuint shader ) = nullptr;
-void ( *glGetShaderiv)( GLuint shader, GLenum pname, GLint *params );
-void ( *glGetShaderInfoLog)( GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
-void ( *glActiveTexture) ( GLenum texture ) = nullptr;
-void ( *glUniform1i ) ( GLint location, GLint v0 ) = nullptr;
-void ( *glUniform1fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform2fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform3fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniform4fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-void ( *glUniformMatrix4fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
-// OpenGL Texture Functions
-void ( *glGenerateMipmap ) ( GLenum target ) = nullptr;
-void ( *glBindFramebuffer ) ( GLenum target, GLuint framebuffer ) = nullptr;
-void ( *glFramebufferTexture2D ) ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) = nullptr;
-void ( *glGenFramebuffers ) ( GLsizei n, GLuint *framebuffers ) = nullptr;
-void ( *glDeleteFramebuffers ) ( GLsizei n, const GLuint *framebuffers ) = nullptr;
-GLenum ( *glCheckFramebufferStatus ) ( GLenum target ) = nullptr;
-void ( *glDrawBuffers ) ( GLsizei n, const GLenum *bufs ) = nullptr;
-void ( *glTextureBarrierNV ) () = nullptr;
-// OpenGL Vertex Functions
-void ( *glGenVertexArrays ) (GLsizei n, GLuint *arrays ) = nullptr;
-void ( *glBindVertexArray ) ( GLuint array ) = nullptr;
-void ( *glDeleteVertexArrays ) ( GLsizei n, const GLuint *arrays ) = nullptr;
-void ( *glDeleteBuffers ) ( GLsizei n, const GLuint *buffers ) = nullptr;
-void ( *glBindBuffer ) ( GLenum target, GLuint buffer ) = nullptr;
-void ( *glGenBuffers ) ( GLsizei n, GLuint *buffers ) = nullptr;
-void ( *glBufferData ) ( GLenum target, GLsizeiptr size, const void *data, GLenum usage ) = nullptr;
-void ( *glBufferSubData ) ( GLenum target, GLintptr offset, GLsizeiptr size, const void *data ) = nullptr;
-void ( *glEnableVertexAttribArray ) ( GLuint index ) = nullptr;
-void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer ) = nullptr;
-void ( *glVertexAttribDivisor )( GLuint index, GLuint divisor ) = nullptr;
-void ( *glDrawElementsInstanced )( GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount ) = nullptr;
-void ( *glDrawArraysInstanced )( GLenum mode, GLint first, GLsizei count, GLsizei instancecount ) = nullptr;
-// Debug functions
-void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void* userParam ) = nullptr;
-#endif
-
-#if _AE_EMSCRIPTEN_ || _AE_IOS_
-#define glClearDepth glClearDepthf
-#endif
-
-// Helpers
-// clang-format off
-#if _AE_DEBUG_
-	#define AE_CHECK_GL_ERROR() do { if( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while( 0 )
-#else
-	#define AE_CHECK_GL_ERROR() do {} while( 0 )
-#endif
+#	if _AE_DEBUG_
+		#define AE_CHECK_GL_ERROR() do { if( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while( 0 )
+	#else
+		#define AE_CHECK_GL_ERROR() do {} while( 0 )
+#	endif
 // clang-format on
 
 namespace ae {
+
+int32_t GLMajorVersion() { return _ae_GLMajorVersion(); }
+int32_t GLMinorVersion() { return _ae_GLMinorVersion(); }
+const char* GLProfile()
+{
+	switch( _ae_GLProfileEnum() )
+	{
+		case _AE_GLProfile_Core: return "core";
+		case _AE_GLProfile_ES: return "es";
+		default: return "";
+	}
+}
+bool ReverseZ = false;
+
+uint32_t _ae_GetCurrentFramebuffer()
+{
+#if AE_ENABLE_OPENGL
+	GLint framebuffer = 0;
+	glGetIntegerv( GL_FRAMEBUFFER_BINDING, &framebuffer );
+	return (uint32_t)framebuffer;
+#else
+	return 0;
+#endif
+}
 
 int32_t _GLGetTypeCount( uint32_t glType )
 {
@@ -23762,7 +25492,7 @@ void UniformList::Set( const char* name, float value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 1;
 	uniform.value.data[ 0 ] = value;
@@ -23774,7 +25504,7 @@ void UniformList::Set( const char* name, Vec2 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 2;
 	uniform.value.data[ 0 ] = value.x;
@@ -23787,7 +25517,7 @@ void UniformList::Set( const char* name, Vec3 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 3;
 	uniform.value.data[ 0 ] = value.x;
@@ -23801,7 +25531,7 @@ void UniformList::Set( const char* name, Vec4 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 4;
 	uniform.value.data[ 0 ] = value.x;
@@ -23816,7 +25546,7 @@ void UniformList::Set( const char* name, const Matrix4& value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 16;
 	uniform.value = value;
@@ -23830,7 +25560,7 @@ void UniformList::Set( const char* name, const Texture* tex )
 	AE_ASSERT( name[ 0 ] );
 	AE_ASSERT_MSG( tex, "Texture uniform value '#' is invalid", name );
 	AE_ASSERT_MSG( tex->GetTexture(), "Texture uniform value '#' is invalid", name );
-	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Capacity() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Capacity() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.sampler = tex->GetTexture();
 	uniform.target = tex->GetTarget();
@@ -23847,8 +25577,25 @@ const UniformList::Value* UniformList::Get( const char* name ) const
 //------------------------------------------------------------------------------
 // ae::Shader member functions
 //------------------------------------------------------------------------------
-ae::Hash32 s_shaderHash;
-ae::Hash32 s_uniformHash;
+} // ae end
+#if _AE_WASM_
+
+AE_WASM_IMPORT( ae ) void _ae_SetShaderHash( uint32_t hash );
+AE_WASM_IMPORT( ae ) void _ae_SetUniformHash( uint32_t hash );
+AE_WASM_IMPORT( ae ) uint32_t _ae_GetShaderHash();
+AE_WASM_IMPORT( ae ) uint32_t _ae_GetUniformHash();
+
+#else
+
+static uint32_t s_shaderHash;
+static uint32_t s_uniformHash;
+void _ae_SetShaderHash( uint32_t hash ) { s_shaderHash = hash; }
+void _ae_SetUniformHash( uint32_t hash ) { s_uniformHash = hash; }
+uint32_t _ae_GetShaderHash() { return s_shaderHash; }
+uint32_t _ae_GetUniformHash() { return s_uniformHash; }
+
+#endif
+namespace ae {
 
 Shader::~Shader()
 {
@@ -23865,10 +25612,7 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 	m_vertexShader = m_LoadShader( vertexStr, Type::Vertex, defines, defineCount );
 	m_fragmentShader = m_LoadShader( fragStr, Type::Fragment, defines, defineCount );
 
-	if( !m_vertexShader || !m_fragmentShader )
-	{
-		AE_FAIL();
-	}
+	AE_ASSERT_MSG( m_vertexShader && m_fragmentShader, "Shader compilation failed: v:# f:#", vertexStr, fragStr );
 
 	glAttachShader( m_program, m_vertexShader );
 	glAttachShader( m_program, m_fragmentShader );
@@ -24000,10 +25744,10 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 	shaderHash.HashType( m_depthTest );
 	shaderHash.HashType( m_culling );
 	shaderHash.HashType( m_wireframe );
-	bool shaderDirty = ( s_shaderHash != shaderHash );
+	const bool shaderDirty = ( _ae_GetShaderHash() != shaderHash.Get() );
 	if( shaderDirty )
 	{
-		s_shaderHash = shaderHash;
+		_ae_SetShaderHash( shaderHash.Get() );
 		
 		AE_CHECK_GL_ERROR();
 
@@ -24057,7 +25801,7 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 		}
 
 		// Wireframe
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_ || _AE_WASM_
 		AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on this platform" );
 #else
 		glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
@@ -24068,11 +25812,11 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 	}
 	
 	// Always update uniforms after a shader change
-	if( !shaderDirty && s_uniformHash == uniforms.GetHash() )
+	if( !shaderDirty && _ae_GetUniformHash() == uniforms.GetHash().Get() )
 	{
 		return;
 	}
-	s_uniformHash = uniforms.GetHash();
+	_ae_SetUniformHash( uniforms.GetHash().Get() );
 	
 	// Set shader uniforms
 	bool missingUniforms = false;
@@ -24166,23 +25910,17 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
 	// Version
 	ae::Str32 glVersionStr = "#version ";
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
-#else
-	glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
-#endif
-	glVersionStr += "\n";
+	glVersionStr += ae::Str16::Format( "##0 #\n", ae::GLMajorVersion(), ae::GLMinorVersion(), ae::GLProfile() );
 	if( glVersionStr.Length() )
 	{
 		shaderSource.Append( glVersionStr.c_str() );
 	}
 
-	// Precision
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
-	shaderSource.Append( "precision highp float;\n" );
-#else
-	// No default precision specified
-#endif
+	// GLES requires explicit precision qualifiers in fragment shaders
+	if( _ae_GLProfileEnum() == _AE_GLProfile_ES )
+	{
+		shaderSource.Append( "precision highp float;\n" );
+	}
 
 	// Input/output
 //	#if _AE_EMSCRIPTEN_
@@ -25151,7 +26889,14 @@ void Texture2D::Initialize( const TextureParams& params )
 	m_height = params.height;
 	glBindTexture( GetTarget(), GetTexture() );
 
-	const bool mipmapsEnabled = _AE_EMSCRIPTEN_ ? false : params.autoGenerateMipmaps;
+#if _AE_IOS_
+	// GLES3.0: SRGB8 (3-channel) is filterable but not color-renderable, so
+	// glGenerateMipmap returns GL_INVALID_OPERATION. SRGB8_ALPHA8 is fine.
+	const bool formatSupportsAutoMipmaps = ( params.format != Format::RGB8_SRGB );
+#else
+	const bool formatSupportsAutoMipmaps = true;
+#endif
+	const bool mipmapsEnabled = !_AE_EMSCRIPTEN_ && params.autoGenerateMipmaps && formatSupportsAutoMipmaps;
 	if( mipmapsEnabled )
 	{
 		glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
@@ -25363,7 +27108,9 @@ void Texture2D::Initialize( const TextureParams& params )
 	
 	// Handle vertical flip and/or BGR conversion if needed
 	const bool needsFlip = !params.bottomToTopData; // UV 0,0 corresponds to the bottom-left corner in OpenGL
-#if _AE_EMSCRIPTEN_
+#if _AE_EMSCRIPTEN_ || _AE_IOS_
+	// GLES has no GL_BGR/GL_BGRA — those are aliased to GL_RGB/GL_RGBA above,
+	// so the bytes must be swizzled in software before upload.
 	const bool needsBGRConversion = ( params.bgrData && components >= 3 );
 #else
 	const bool needsBGRConversion = false;
@@ -25454,6 +27201,7 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 	Terminate();
 
 	AE_ASSERT( m_fbo == 0 );
+	m_externalFramebuffer = false;
 
 	if( width * height == 0 )
 	{
@@ -25472,15 +27220,31 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 	AE_CHECK_GL_ERROR();
 }
 
+void RenderTarget::m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer )
+{
+	if( m_externalFramebuffer && m_width == width && m_height == height && m_fbo == framebuffer )
+	{
+		return;
+	}
+
+	Terminate();
+
+	m_width = width;
+	m_height = height;
+	m_fbo = framebuffer;
+	m_externalFramebuffer = true;
+}
+
 void RenderTarget::Terminate()
 {
-	if( m_fbo )
+	if( m_fbo && !m_externalFramebuffer )
 	{
 		// With WebGL it seems to matter that the framebuffer is deleted
 		// first so it's not referencing its textures.
 		glDeleteFramebuffers( 1, (uint32_t*)&m_fbo );
-		m_fbo = 0;
 	}
+	m_fbo = 0;
+	m_externalFramebuffer = false;
 	
 	for( uint32_t i = 0; i < m_targets.Length(); i++ )
 	{
@@ -25496,6 +27260,7 @@ void RenderTarget::Terminate()
 
 void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 {
+	AE_ASSERT_MSG( !m_externalFramebuffer, "Cannot add textures to an externally owned ae::RenderTarget" );
 	AE_ASSERT( m_targets.Length() < _kMaxFrameBufferAttachments );
 	if( m_width * m_height == 0 )
 	{
@@ -25523,6 +27288,7 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 
 void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 {
+	AE_ASSERT_MSG( !m_externalFramebuffer, "Cannot add depth to an externally owned ae::RenderTarget" );
 	AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
 	if( m_width * m_height == 0 )
 	{
@@ -25546,6 +27312,14 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 void RenderTarget::Activate()
 {
 	AE_ASSERT_MSG( GetWidth() && GetHeight(), "ae::RenderTarget is not initialized" );
+	if( m_externalFramebuffer )
+	{
+		glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+		glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+		glViewport( 0, 0, GetWidth(), GetHeight() );
+		AE_CHECK_GL_ERROR();
+		return;
+	}
 	AE_ASSERT_MSG( m_targets.Length() || m_depth.GetTexture(), "ae::RenderTarget is not complete. Call AddTexture() and/or AddDepth() before Activate()." );
 	AE_CHECK_GL_ERROR();
 	
@@ -25712,6 +27486,11 @@ GraphicsDevice::~GraphicsDevice()
 	#define LOAD_OPENGL_FN( _glfn )\
 		_glfn = (decltype(_glfn))wglGetProcAddress( #_glfn );\
 		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
+	// wglGetProcAddress returns null for GL 1.1 entries on Microsoft's ICD;
+	// those live in opengl32.dll and must be resolved with GetProcAddress.
+	#define LOAD_OPENGL11_FN( _glfn )\
+		_glfn = (decltype(_glfn))GetProcAddress( opengl32Module, #_glfn );\
+		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
 #endif
 
 void GraphicsDevice::Initialize( class Window* window )
@@ -25728,61 +27507,41 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT( !window->graphicsDevice );
 	window->graphicsDevice = this;
 
-#if !_AE_EMSCRIPTEN_
+#if !_AE_EMSCRIPTEN_ && !_AE_IOS_
 	AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
 #endif
 
+	window->ActivateContext();
+	m_context = window->m_context;
+	AE_ASSERT( m_context );
+
 #if _AE_WINDOWS_
 	uint32_t glFnLoadFailed = 0;
-	// Create OpenGL context
-	HWND hWnd = (HWND)m_window->window;
-	AE_ASSERT_MSG( hWnd, "ae::Window must be initialized" );
-	HDC hdc = GetDC( hWnd );
-	AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
-
-	HGLRC dummyCtx = wglCreateContext( hdc );
-	AE_ASSERT_MSG( dummyCtx, "Failed to create dummy OpenGL Rendering Context" );
-	wglMakeCurrent( hdc, dummyCtx );
-	
-	int attribs[] = 
-	{
-		WGL_CONTEXT_MAJOR_VERSION_ARB, ae::GLMajorVersion,
-		WGL_CONTEXT_MINOR_VERSION_ARB, ae::GLMinorVersion,
-		WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-		WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
-		0
-	};
-	LOAD_OPENGL_FN( wglCreateContextAttribsARB );
-	HGLRC ctx = wglCreateContextAttribsARB( hdc, 0, attribs );
-	AE_ASSERT_MSG( ctx, "Failed to create extended OpenGL Rendering Context" );
-
-	wglMakeCurrent( nullptr, nullptr );
-	wglDeleteContext( dummyCtx );
-	wglMakeCurrent( hdc, ctx );
-	
-	AE_ASSERT_MSG( ctx, "Failed to create the OpenGL Rendering Context" );
-	if( !wglMakeCurrent( hdc, ctx ) )
-	{
-		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
-	}
-	m_context = ctx;
-#elif _AE_OSX_ 
-	m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
-#elif _AE_EMSCRIPTEN_
-	EmscriptenWebGLContextAttributes attrs;
-	emscripten_webgl_init_context_attributes( &attrs );
-	attrs.alpha = 0;
-	attrs.majorVersion = ae::GLMajorVersion;
-	attrs.minorVersion = ae::GLMinorVersion;
-	m_context = emscripten_webgl_create_context( "canvas", &attrs );
-	AE_ASSERT( m_context > 0 );
-	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
-	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
 #endif
 	
 	AE_CHECK_GL_ERROR();
 
 #if _AE_WINDOWS_
+	const HMODULE opengl32Module = LoadLibraryA( "opengl32.dll" );
+	AE_ASSERT_MSG( opengl32Module, "Failed to load opengl32.dll" );
+	// GL 1.1 entries — resolved against opengl32.dll, not wglGetProcAddress.
+	LOAD_OPENGL11_FN( glClear );
+	LOAD_OPENGL11_FN( glClearColor );
+	LOAD_OPENGL11_FN( glViewport );
+	LOAD_OPENGL11_FN( glEnable );
+	LOAD_OPENGL11_FN( glDisable );
+	LOAD_OPENGL11_FN( glGetIntegerv );
+	LOAD_OPENGL11_FN( glGetError );
+	LOAD_OPENGL11_FN( glGenTextures );
+	LOAD_OPENGL11_FN( glBindTexture );
+	LOAD_OPENGL11_FN( glDeleteTextures );
+	LOAD_OPENGL11_FN( glTexParameteri );
+	LOAD_OPENGL11_FN( glTexImage2D );
+	LOAD_OPENGL11_FN( glTexSubImage2D );
+	LOAD_OPENGL11_FN( glDrawArrays );
+	LOAD_OPENGL11_FN( glDrawElements );
+	LOAD_OPENGL11_FN( glPolygonMode );
+	// WGL extensions and GL 2.0+ entries.
 	LOAD_OPENGL_FN( wglSwapIntervalEXT );
 	LOAD_OPENGL_FN( wglGetSwapIntervalEXT );
 	// Shader functions
@@ -25849,9 +27608,6 @@ void GraphicsDevice::Initialize( class Window* window )
 	glDebugMessageCallback( ae::OpenGLDebugCallback, nullptr );
 #endif
 
-	glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
-	AE_CHECK_GL_ERROR();
-	
 	// Initialize shared RenderTarget resources
 	struct Vertex
 	{
@@ -25874,19 +27630,19 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_CHECK_GL_ERROR();
 
 	// @NOTE: GL_FRAMEBUFFER_SRGB is not completely reliable on every platform (web, wide color
-	// display targets, etc), mostly because of limited control over the backbuffer format.
-	// On web its not possible to specify the backbuffer format, but browsers typically expect SRGB anyway.
+	// display targets, etc), mostly because of limited control over the back buffer format.
+	// On web its not possible to specify the back buffer format, but browsers typically expect SRGB anyway.
 	// On OpenGLES GL_FRAMEBUFFER_SRGB is always enabled.
 	// Because of all of this it's easiest to convert to SRGB manually on non-OpenGLES platforms.
 	const char* vertexStr = R"(
 		AE_UNIFORM_HIGHP mat4 u_localToNdc;
-		AE_IN_HIGHP vec3 a_position;
 		AE_IN_HIGHP vec2 a_uv;
 		AE_OUT_HIGHP vec2 v_uv;
 		void main()
 		{
 			v_uv = a_uv;
-			gl_Position = u_localToNdc * vec4( a_position, 1.0 );
+			vec2 localPos = a_uv - vec2( 0.5 );
+			gl_Position = u_localToNdc * vec4( localPos, 0.0, 1.0 );
 		})";
 	const char* fragStr = R"(
 		uniform sampler2D u_tex;
@@ -25916,7 +27672,7 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT( m_context );
 }
 
-void GraphicsDevice::SetVsyncEnbled( bool enabled )
+void GraphicsDevice::SetVsyncEnabled( bool enabled )
 {
 #if _AE_WINDOWS_
 	wglSwapIntervalEXT( enabled ? 1 : 0 );
@@ -25951,10 +27707,10 @@ void GraphicsDevice::Activate()
 {
 	AE_ASSERT( m_window );
 	AE_ASSERT( m_context );
+	m_window->ActivateContext();
 
-	const float scaleFactor = m_window->GetScaleFactor();
-	const int32_t contentWidth = m_window->GetWidth() * scaleFactor;
-	const int32_t contentHeight = m_window->GetHeight() * scaleFactor;
+	const int32_t contentWidth = m_window->GetDrawWidth();
+	const int32_t contentHeight = m_window->GetDrawHeight();
 	if( contentWidth != m_canvas.GetWidth() || contentHeight != m_canvas.GetHeight() )
 	{
 #if _AE_EMSCRIPTEN_
@@ -25970,7 +27726,7 @@ void GraphicsDevice::Activate()
 		{
 			// @NOTE: The window size is the 'real' size of the canvas dom, which
 			// is determined by the web page. This function sets the emscripten
-			// managed backbuffer size.
+			// managed back buffer size.
 			if( m_window->GetLoggingEnabled() ) { AE_INFO( "resize #x#", contentWidth, contentHeight ); }
 			emscripten_set_canvas_element_size( "canvas", contentWidth, contentHeight );
 			m_HandleResize( contentWidth, contentHeight );
@@ -26005,46 +27761,31 @@ void GraphicsDevice::Present()
 
 	AE_ASSERT( m_context );
 	AE_CHECK_GL_ERROR();
-
-#if _AE_EMSCRIPTEN_
-	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
-	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
-#endif
-	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-	glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() );
+	m_window->BindBackBuffer();
 
 	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
 	glClearDepth( 1.0f );
 
 	glDepthMask( GL_TRUE );
 
+	glDisable( GL_SCISSOR_TEST );
 	glDisable( GL_DEPTH_TEST );
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	AE_CHECK_GL_ERROR();
 	
-	// @NOTE: Conversion to srgb is only needed for the backbuffer. The rest of the pipeline should be implemented as linear.
+	// @NOTE: Conversion to srgb is only needed for the back buffer. The rest of the pipeline should be implemented as linear.
 #if _AE_IOS_
 	// SRGB conversion is automatic on ios/OpenGLES because GL_FRAMEBUFFER_SRGB is always on
 	m_rgbToSrgb = false;
 #else
-	// Currently all platforms expect the backbuffer contents to be in sRGB space
+	// Currently all platforms expect the back buffer contents to be in sRGB space
 	m_rgbToSrgb = true;
 #endif
 	m_canvas.Render2D( 0, ae::Rect::FromCenterAndSize( ae::Vec2( 0.0f ), ae::Vec2( 2.0f ) ), 0.5f );
 	m_rgbToSrgb = false;
 	
 	AE_CHECK_GL_ERROR();
-
-	// Swap Buffers
-#if _AE_OSX_
-	[(NSOpenGLContext*)m_context flushBuffer];
-#elif _AE_WINDOWS_
-	AE_ASSERT( m_window );
-	HWND hWnd = (HWND)m_window->window;
-	AE_ASSERT( hWnd );
-	HDC hdc = GetDC( hWnd );
-	SwapBuffers( hdc );
-#endif
+	m_window->Present();
 }
 
 float GraphicsDevice::GetAspectRatio() const
@@ -26069,8 +27810,8 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 	m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
 	
 	// Force refresh uniforms for new canvas
-	s_shaderHash = ae::Hash32();
-	s_uniformHash = ae::Hash32();
+	_ae_SetShaderHash( ae::Hash32().Get() );
+	_ae_SetUniformHash( ae::Hash32().Get() );
 }
 
 //------------------------------------------------------------------------------
@@ -27024,8 +28765,6 @@ void SpriteRenderer::Clear()
 #else // !AE_ENABLE_OPENGL
 namespace ae
 {
-int32_t GLMajorVersion = 0;
-int32_t GLMinorVersion = 0;
 bool ReverseZ = false;
 
 //------------------------------------------------------------------------------
@@ -27116,6 +28855,7 @@ void Texture2D::Terminate() {}
 //------------------------------------------------------------------------------
 RenderTarget::~RenderTarget() {}
 void RenderTarget::Initialize( uint32_t width, uint32_t height ) {}
+void RenderTarget::m_Initialize( uint32_t width, uint32_t height, uint32_t framebuffer ) {}
 void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap ) {}
 void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap ) {}
 void RenderTarget::Terminate() {}
@@ -27140,7 +28880,7 @@ Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z ) { return Matrix
 GraphicsDevice::~GraphicsDevice() {}
 void GraphicsDevice::Initialize( class Window* window ) {}
 void GraphicsDevice::Terminate() {}
-void GraphicsDevice::SetVsyncEnbled( bool enabled ) {}
+void GraphicsDevice::SetVsyncEnabled( bool enabled ) {}
 bool GraphicsDevice::GetVsyncEnabled() const { return false; }
 void GraphicsDevice::Activate() {}
 void GraphicsDevice::Clear( Color color ) {}
@@ -27851,12 +29591,11 @@ float Spline::Segment::GetMinDistance( ae::Vec3 p, ae::Vec3* pOut, float* tOut )
 //------------------------------------------------------------------------------
 bool RaycastResult::EarlyOut( const RaycastParams& params, ae::Sphere sphere ) const
 {
-	float t = 0.0f;
-	if( !sphere.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
+	float distance = 0.0f;
+	if( !sphere.Raycast( params.source, params.ray, nullptr, nullptr, &distance ) )
 	{
 		return true; // Early out if ray doesn't touch sphere
 	}
-	const float distance = params.ray.Length() * t;
 	if( ( params.maxHits == hits.Length() ) && hits.Length() && hits.Last().distance < distance )
 	{
 		return true; // Early out if sphere is farther away than previous hits
@@ -27866,12 +29605,11 @@ bool RaycastResult::EarlyOut( const RaycastParams& params, ae::Sphere sphere ) c
 
 bool RaycastResult::EarlyOut( const RaycastParams& params, ae::OBB obb ) const
 {
-	float t = 0.0f;
-	if( !obb.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
+	float distance = 0.0f;
+	if( !obb.Raycast( params.source, params.ray, nullptr, nullptr, &distance ) )
 	{
 		return true; // Early out if ray doesn't touch obb
 	}
-	const float distance = params.ray.Length() * t;
 	if( ( params.maxHits == hits.Length() ) && hits.Length() && hits.Last().distance < distance )
 	{
 		return true; // Early out if obb is farther away than previous hits
@@ -27893,9 +29631,9 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 	{
 		return;
 	}
-	constexpr uint32_t hitsSize = decltype(next->hits)::Size();
+	constexpr uint32_t hitsCapacity = decltype(next->hits)::Capacity();
 	uint32_t accumHitCount = 0;
-	Hit accumHits[ hitsSize * 2 ];
+	Hit accumHits[ hitsCapacity * 2 ];
 	
 	for( uint32_t i = 0; i < next->hits.Length(); i++ )
 	{
@@ -27910,11 +29648,89 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 	std::sort( accumHits, accumHits + accumHitCount, []( const Hit& h0, const Hit& h1 ){ return h0.distance < h1.distance; } );
 	
 	next->hits.Clear();
-	accumHitCount = ae::Min( accumHitCount, params.maxHits, hitsSize );
+	accumHitCount = ae::Min( accumHitCount, params.maxHits, hitsCapacity );
 	for( uint32_t i = 0; i < accumHitCount; i++ )
 	{
 		next->hits.Append( accumHits[ i ] );
 	}
+}
+
+//------------------------------------------------------------------------------
+// ae::Raycast free functions
+//------------------------------------------------------------------------------
+RaycastResult Raycast( const Triangle& tri, const RaycastParams& params, const TriangleRaycastParams& triParams, RaycastResult result )
+{
+	ae::Vec3 p, n;
+	if( tri.Raycast( params.source, params.ray, triParams.hitCounterclockwise, triParams.hitClockwise, &p, &n, nullptr ) )
+	{
+		RaycastResult::Hit hit;
+		hit.position = p;
+		hit.normal = n;
+		hit.distance = ( p - params.source ).Length();
+		hit.userData = params.userData;
+		result.Accumulate( params, hit );
+	}
+	return result;
+}
+
+RaycastResult Raycast( const Sphere& sphere, const RaycastParams& params, RaycastResult result )
+{
+	ae::Vec3 p, n;
+	if( sphere.Raycast( params.source, params.ray, &p, &n, nullptr ) )
+	{
+		RaycastResult::Hit hit;
+		hit.position = p;
+		hit.normal = n;
+		hit.distance = ( p - params.source ).Length();
+		hit.userData = params.userData;
+		result.Accumulate( params, hit );
+	}
+	return result;
+}
+
+RaycastResult Raycast( const Plane& plane, const RaycastParams& params, RaycastResult result )
+{
+	ae::Vec3 p;
+	if( plane.Raycast( params.source, params.ray, &p, nullptr ) )
+	{
+		RaycastResult::Hit hit;
+		hit.position = p;
+		hit.normal = plane.GetNormal();
+		hit.distance = ( p - params.source ).Length();
+		hit.userData = params.userData;
+		result.Accumulate( params, hit );
+	}
+	return result;
+}
+
+RaycastResult Raycast( const AABB& aabb, const RaycastParams& params, RaycastResult result )
+{
+	ae::Vec3 p, n;
+	if( aabb.Raycast( params.source, params.ray, &p, &n, nullptr ) )
+	{
+		RaycastResult::Hit hit;
+		hit.position = p;
+		hit.normal = n;
+		hit.distance = ( p - params.source ).Length();
+		hit.userData = params.userData;
+		result.Accumulate( params, hit );
+	}
+	return result;
+}
+
+RaycastResult Raycast( const OBB& obb, const RaycastParams& params, RaycastResult result )
+{
+	ae::Vec3 p, n;
+	if( obb.Raycast( params.source, params.ray, &p, &n, nullptr ) )
+	{
+		RaycastResult::Hit hit;
+		hit.position = p;
+		hit.normal = n;
+		hit.distance = ( p - params.source ).Length();
+		hit.userData = params.userData;
+		result.Accumulate( params, hit );
+	}
+	return result;
 }
 
 //------------------------------------------------------------------------------
@@ -27931,7 +29747,7 @@ void PushOutInfo::Accumulate( const PushOutParams& params, const PushOutInfo& pr
 	auto&& nHits = next->hits;
 	for( auto&& hit : prev.hits )
 	{
-		if( nHits.Length() < nHits.Size() )
+		if( nHits.Length() < nHits.Capacity() )
 		{
 			nHits.Append( hit );
 		}
@@ -28075,9 +29891,9 @@ void Skeleton::Initialize( const Skeleton* otherPose )
 const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::Matrix4& parentToChild )
 {
 	Bone* parent = const_cast< Bone* >( _parent );
-	AE_ASSERT_MSG( m_bones.Size(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
+	AE_ASSERT_MSG( m_bones.Capacity(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
 	AE_ASSERT_MSG( m_bones.begin() <= parent && parent < m_bones.end(), "ae::Bones must have a parent from the same ae::Skeleton" );
-	if( !parent || m_bones.Length() == m_bones.Size() )
+	if( !parent || m_bones.Length() == m_bones.Capacity() )
 	{
 		return nullptr;
 	}
@@ -29505,7 +31321,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 //------------------------------------------------------------------------------
 void _CheckALError()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	const char* errStr = "UNKNOWN_ERROR";
 	switch( alGetError() )
 	{
@@ -29524,7 +31340,7 @@ void _CheckALError()
 
 void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* bufferOut, float* lengthOut )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	struct ChunkHeader
 	{
 		char chunkId[ 4 ];
@@ -29661,7 +31477,7 @@ Audio::Channel::Channel()
 //------------------------------------------------------------------------------
 void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels, uint32_t maxAudioDatas )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	ALCdevice* device = alcOpenDevice( nullptr );
 	AE_ASSERT( device );
 	ALCcontext* ctx = alcCreateContext( device, nullptr );
@@ -29723,7 +31539,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 
 void Audio::Terminate()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_musicChannels.Length(); i++ )
 	{
 		Channel* channel = &m_musicChannels[ i ];
@@ -29761,7 +31577,7 @@ void Audio::Terminate()
 
 void Audio::SetVolume( float volume )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	volume = ae::Clip01( volume );
 	alListenerf( AL_GAIN, volume );
 #endif
@@ -29769,7 +31585,7 @@ void Audio::SetVolume( float volume )
 
 void Audio::SetMusicVolume( float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel >= m_musicChannels.Length() )
 	{
 		return;
@@ -29782,7 +31598,7 @@ void Audio::SetMusicVolume( float volume, uint32_t channel )
 
 void Audio::SetSfxLoopVolume( float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel >= m_sfxLoopChannels.Length() )
 	{
 		return;
@@ -29795,7 +31611,7 @@ void Audio::SetSfxLoopVolume( float volume, uint32_t channel )
 
 void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	AE_ASSERT( audioFile );
 	if( channel >= m_musicChannels.Length() )
 	{
@@ -29827,7 +31643,7 @@ void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channe
 
 void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	ALint state;
 	AE_ASSERT( audioFile );
 
@@ -29885,7 +31701,7 @@ void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority 
 
 void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	AE_ASSERT( audioFile );
 	if( channel >= m_sfxLoopChannels.Length() )
 	{
@@ -29919,7 +31735,7 @@ void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t chan
 
 void Audio::StopMusic( uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel < m_musicChannels.Length() )
 	{
 		alSourceStop( m_musicChannels[ channel ].source );
@@ -29930,7 +31746,7 @@ void Audio::StopMusic( uint32_t channel )
 
 void Audio::StopSfxLoop( uint32_t channel )
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	if( channel < m_sfxLoopChannels.Length() )
 	{
 		alSourceStop( m_sfxLoopChannels[ channel ].source );
@@ -29941,7 +31757,7 @@ void Audio::StopSfxLoop( uint32_t channel )
 
 void Audio::StopAllSfx()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxChannels[ i ].source );
@@ -29952,7 +31768,7 @@ void Audio::StopAllSfx()
 
 void Audio::StopAllSfxLoops()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_sfxLoopChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxLoopChannels[ i ].source );
@@ -29979,7 +31795,7 @@ uint32_t Audio::GetSfxLoopChannelCount() const
 // @TODO: Should return a string with current state of audio channels
 void Audio::Log()
 {
-#if AE_USE_OPENAL
+#if AE_ENABLE_OPENAL
 	for( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		ALint state = 0;
@@ -30040,7 +31856,7 @@ BinaryStream::BinaryStream( Array< uint8_t >* array )
 	{
 		m_extArray = array;
 		m_offset = m_extArray->Length();
-		m_length = m_extArray->Size();
+		m_length = m_extArray->Capacity();
 		m_isValid = true;
 	}
 }
@@ -30254,7 +32070,7 @@ void BinaryStream::SerializeRaw( void* data, uint32_t length )
 			AE_ASSERT( m_extArray );
 			m_extArray->AppendArray( (uint8_t*)data, length );
 			m_offset = m_extArray->Length();
-			m_length = m_extArray->Size();
+			m_length = m_extArray->Capacity();
 		}
 	}
 }
@@ -31786,7 +33602,9 @@ bool IsosurfaceExtractor::Generate( const ae::IsosurfaceParams& _params )
 //------------------------------------------------------------------------------
 // Meta register base objects
 //------------------------------------------------------------------------------
+// #if AE_DEPRECATED
 AE_REGISTER_NAMESPACECLASS( (ae, Object) );
+// #endif
 AE_REGISTER_NAMESPACECLASS( (ae, Attribute) );
 AE_REGISTER_NAMESPACECLASS( (ae, SourceFileAttribute) );
 
@@ -31812,20 +33630,10 @@ const ae::ClassType* ae::GetClassTypeByName( const char* typeName )
 	return _Globals::Get()->classTypes.Get( typeId, nullptr );
 }
 
-const ae::ClassType* ae::GetClassTypeFromObject( const ae::Object& obj )
-{
-	return GetClassTypeById( GetObjectTypeId( &obj ) );
-}
-
 const ae::EnumType* ae::GetEnumType( const char* enumName )
 {
 	const ae::TypeId typeId = (ae::TypeId)ae::GetTypeIdFromName( enumName );
 	return ae::_Globals::Get()->enumTypes.Get( typeId, nullptr );
-}
-
-const ae::ClassType* ae::GetClassTypeFromObject( const ae::Object* obj )
-{
-	return obj ? GetClassTypeFromObject( *obj ) : nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -31840,24 +33648,6 @@ ae::DataPointer::DataPointer( const ae::Type& varType, void* data )
 {
 	m_varType = data ? &varType : nullptr;
 	m_data = data;
-}
-ae::DataPointer::DataPointer( const ae::ClassVar* var, ae::Object* object )
-{
-	if( var && object )
-	{
-		m_varType = &var->GetOuterVarType();
-		m_data = ( (uint8_t*)object + var->GetOffset() );
-		if constexpr( _AE_DEBUG_ )
-		{
-			const ae::ClassType* type = ae::GetClassTypeFromObject( object );
-			AE_ASSERT_MSG( !object || type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
-		}
-	}
-	else
-	{
-		m_varType = nullptr;
-		m_data = nullptr;
-	}
 }
 ae::DataPointer::operator bool() const
 {
@@ -31914,24 +33704,6 @@ ae::ConstDataPointer::ConstDataPointer( DataPointer varData )
 	m_varType = varData.m_varType;
 	m_data = varData.m_data;
 }
-ae::ConstDataPointer::ConstDataPointer( const ae::ClassVar* var, const ae::Object* object )
-{
-	if( var && object )
-	{
-		m_varType = &var->GetOuterVarType();
-		m_data = (uint8_t*)object + var->GetOffset();
-		if constexpr( _AE_DEBUG_ )
-		{
-			const ae::ClassType* type = ae::GetClassTypeFromObject( object );
-			AE_ASSERT_MSG( type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
-		}
-	}
-	else
-	{
-		m_varType = nullptr;
-		m_data = nullptr;
-	}
-}
 ae::ConstDataPointer::operator bool() const
 {
 	return m_data != nullptr;
@@ -31986,152 +33758,6 @@ const ae::Type& ae::ClassVar::GetOuterVarType() const
 	AE_ASSERT( m_varType.Get() );
 	return *m_varType.Get();
 }
-
-#if AE_DEPRECATED
-ae::ClassVar::Serializer::~Serializer()
-{
-	if( _Globals::Get()->varSerializer == this )
-	{
-		_Globals::Get()->varSerializer = nullptr;
-	}
-}
-
-void ae::ClassVar::SetSerializer( const ae::ClassVar::Serializer* serializer )
-{
-	if( serializer )
-	{
-		_Globals::Get()->varSerializerInitialized = true;
-	}
-	_Globals::Get()->varSerializer = serializer;
-}
-
-std::string ae::ClassVar::GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx ) const
-{
-	if( !obj )
-	{
-		return "";
-	}
-	ae::ConstDataPointer varData( this, obj );
-	const ae::Type* varType = &GetOuterVarType();
-	if( const ae::ArrayType* arrayType = varType->AsVarType< ae::ArrayType >() )
-	{
-		if( arrayIdx < 0 )
-		{
-			return "";
-		}
-		varData = arrayType->GetElement( varData, arrayIdx );
-		varType = &arrayType->GetInnerVarType();
-	}
-	else if( arrayIdx >= 0 )
-	{
-		return "";
-	}
-
-	if( varData )
-	{
-		if( const ae::BasicType* basicVarType = varType->AsVarType< ae::BasicType >() )
-		{
-			return basicVarType->GetVarDataAsString( varData );
-		}
-		else if( const ae::EnumType* enumVarType = varType->AsVarType< ae::EnumType >() )
-		{
-			return enumVarType->GetVarDataAsString( varData );
-		}
-		else if( const ae::PointerType* pointerVarType = varType->AsVarType< ae::PointerType >() )
-		{
-			ObjectPointerToStringFn fn = []( const void* userData, const ae::Object* obj ) -> std::string
-			{
-				const ae::ClassVar::Serializer* serializer = (const ae::ClassVar::Serializer*)userData;
-				AE_ASSERT( serializer );
-				return serializer->ObjectPointerToString( obj );
-			};
-			return pointerVarType->ToString( varData, fn, _Globals::Get()->varSerializer );
-		}
-	}
-	return "";
-}
-
-bool ae::ClassVar::SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx ) const
-{
-	if( !obj )
-	{
-		return false;
-	}
-	
-	// Safety check to make sure 'this' Var belongs to 'obj' ae::ClassType
-	const ae::ClassType* objType = ae::GetClassTypeFromObject( obj );
-	AE_ASSERT( objType );
-	AE_ASSERT_MSG( objType->IsType( m_owner.GetClassType() ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner.GetClassType()->GetName(), GetName() );
-	
-	const ae::Type* varType = &GetOuterVarType();
-	ae::DataPointer varData( this, obj );
-	if( const ae::ArrayType* arrayType = varType->AsVarType< ae::ArrayType >() )
-	{
-		if( arrayIdx < 0 )
-		{
-			return false;
-		}
-		varType = &arrayType->GetInnerVarType();
-		varData = arrayType->GetElement( varData, arrayIdx );
-	}
-	else if( arrayIdx >= 0 )
-	{
-		return false;
-	}
-
-	if( varData )
-	{
-		if( const ae::BasicType* basicVarType = varType->AsVarType< ae::BasicType >() )
-		{
-			return basicVarType->SetVarDataFromString( varData, value );
-		}
-		else if( const ae::EnumType* enumVarType = varType->AsVarType< ae::EnumType >() )
-		{
-			return enumVarType->SetVarDataFromString( varData, value );
-		}
-		else if( const ae::PointerType* pointerVarType = varType->AsVarType< ae::PointerType >() )
-		{
-			StringToObjectPointerFn fn = []( const void* userData, const char* pointerVal, ae::Object** objOut ) -> bool
-			{
-				const ae::ClassVar::Serializer* serializer = (const ae::ClassVar::Serializer*)userData;
-				AE_ASSERT( serializer );
-				return serializer->StringToObjectPointer( pointerVal, objOut );
-			};
-			return pointerVarType->FromString( varData, value, fn, _Globals::Get()->varSerializer );
-		}
-	}
-	return false;
-}
-bool ae::ClassVar::HasProperty( const char* prop ) const { return GetPropertyIndex( prop ) >= 0; }
-int32_t ae::ClassVar::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
-int32_t ae::ClassVar::GetPropertyCount() const { return m_props.Length(); }
-const char* ae::ClassVar::GetPropertyName( int32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
-uint32_t ae::ClassVar::GetPropertyValueCount( int32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
-uint32_t ae::ClassVar::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
-const char* ae::ClassVar::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const
-{
-	const auto* vals = ( propIndex < m_props.Length() ) ? &m_props.GetValue( propIndex ) : nullptr;
-	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
-}
-const char* ae::ClassVar::GetPropertyValue( const char* propName, uint32_t valueIndex ) const
-{
-	const auto* vals = m_props.TryGet( propName );
-	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
-}
-void ae::ClassVar::m_AddProp( const char* prop, const char* value )
-{
-	AE_ASSERT_MSG( m_props.Length() < m_props.Size(), "Set/increase AE_MAX_META_PROP_LIST_LENGTH_CONFIG (Currently: #)", m_props.Size() );
-	auto* props = m_props.TryGet( prop );
-	if( !props )
-	{
-		props = &m_props.Set( prop, {} );
-	}
-	if( value && value[ 0 ] ) // 'm_props' will have an empty array for properties when no value is specified
-	{
-		props->Append( value );
-	}
-}
-#endif // AE_DEPRECATED
 
 ae::ClassVar::_TypePointer::_TypePointer( const ae::Type& _varType )
 {
@@ -32226,176 +33852,26 @@ bool ae::ClassType::IsType( const ae::ClassType* otherType ) const
 	return false;
 }
 
-#if AE_DEPRECATED
-ae::BasicType::Type ae::ClassVar::GetType() const
-{
-	if( const ae::BasicType* basicType = m_HACK_FindInnerVarType< ae::BasicType >() )
-	{
-		return basicType->GetType();
-	}
-	else if( m_HACK_FindInnerVarType< ae::EnumType >() )
-	{
-		return ae::BasicType::Enum;
-	}
-	else if( const ae::PointerType* pointerType = m_HACK_FindInnerVarType< ae::PointerType >() )
-	{
-		return pointerType->GetBasicType();
-	}
-	else if( m_HACK_FindInnerVarType< ae::ClassType >() )
-	{
-		return ae::BasicType::Class;
-	}
-	return ae::BasicType::None;
-}
-
-const char* ae::ClassVar::GetTypeName() const
-{
-	switch( GetType() )
-	{
-		case ae::BasicType::UInt8: return "uint8_t";
-		case ae::BasicType::UInt16: return "uint16_t";
-		case ae::BasicType::UInt32: return "uint32_t";
-		case ae::BasicType::UInt64: return "uint64_t";
-		case ae::BasicType::Int8: return "int8_t";
-		case ae::BasicType::Int16: return "int16_t";
-		case ae::BasicType::Int32: return "int32_t";
-		case ae::BasicType::Int64: return "int64_t";
-		case ae::BasicType::Int2: return "ae::Int2";
-		case ae::BasicType::Int3: return "ae::Int3";
-		case ae::BasicType::Bool: return "bool";
-		case ae::BasicType::Float: return "float";
-		case ae::BasicType::Double: return "double";
-		case ae::BasicType::Vec2: return "ae::Vec2";
-		case ae::BasicType::Vec3: return "ae::Vec3";
-		case ae::BasicType::Vec4: return "ae::Vec4";
-		case ae::BasicType::Quaternion: return "ae::Quaternion";
-		case ae::BasicType::Color: return "ae::Color";
-		case ae::BasicType::Matrix4: return "ae::Matrix4";
-		case ae::BasicType::UUID: return "ae::UUID";
-		case ae::BasicType::String: return "String";
-		case ae::BasicType::Class:
-		{
-			const ae::ClassType* type = GetSubType();
-			AE_ASSERT( type );
-			return type->GetName();
-		}
-		case ae::BasicType::Enum:
-		{
-			const ae::EnumType* enumType = GetEnumType();
-			AE_ASSERT( enumType );
-			return enumType->GetName();
-		}
-		case ae::BasicType::Pointer:
-		case ae::BasicType::CustomRef:
-		{
-			return "ref";
-		}
-		case ae::BasicType::None:
-		{
-			return "none_type";
-		}
-	}
-	AE_FAIL();
-	return "unknown_type";
-}
-
-// @TODO: Remove
-const class ae::EnumType* ae::ClassVar::GetEnumType() const
-{
-	const ae::EnumType* enumType = m_HACK_FindInnerVarType< ae::EnumType >();
-	return enumType ? ae::GetEnumType( enumType->GetName() ) : nullptr;
-}
-
-// @TODO: Remove
-const ae::ClassType* ae::ClassVar::GetSubType() const
-{
-	const ae::ClassType* classVarType = m_HACK_FindInnerVarType< ae::ClassType >();
-	return classVarType ? ae::GetClassTypeById( classVarType->GetTypeId() ) : nullptr;
-}
-
-// @TODO: Remove
-bool ae::ClassVar::IsArray() const
-{
-	return GetOuterVarType().AsVarType< ae::ArrayType >();
-}
-
-// @TODO: Remove
-bool ae::ClassVar::IsArrayFixedLength() const
-{
-	const ae::ArrayType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayType >();
-	return arrayAdapter && arrayAdapter->IsFixedLength();
-}
-
-// @TODO: Remove
-uint32_t ae::ClassVar::SetArrayLength( ae::Object* obj, uint32_t length ) const
-{
-	AE_ASSERT( length != ae::MaxValue< uint32_t >() );
-	if( !obj )
-	{
-		return 0;
-	}
-	const ae::ArrayType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayType >();
-	return arrayAdapter ? arrayAdapter->Resize( { this, obj }, length ) : 0;
-}
-
-// @TODO: Remove
-uint32_t ae::ClassVar::GetArrayLength( const ae::Object* obj ) const
-{
-	if( !obj )
-	{
-		return 0;
-	}
-	const ae::ArrayType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayType >();
-	return arrayAdapter ? arrayAdapter->GetLength( { this, obj } ) : 0;
-}
-
-// @TODO: Remove
-uint32_t ae::ClassVar::GetArrayMaxLength() const
-{
-	const ae::ArrayType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayType >();
-	return arrayAdapter ? arrayAdapter->GetMaxLength() : 0;
-}
-#endif // AE_DEPRECATED
-
-//------------------------------------------------------------------------------
-// Internal ae::Object functions
-//------------------------------------------------------------------------------
-ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
-{
-	if( obj )
-	{
-		AE_DEBUG_ASSERT_MSG( obj->_metaTypeId, "Object has no meta type, it's possible this object has not been constructed." );
-		return obj->_metaTypeId;
-	}
-	return ae::kInvalidTypeId;
-}
-
-ae::TypeId ae::GetTypeIdFromName( const char* name )
-{
-	// @TODO: constexpr
-	// @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
-	return name[ 0 ] ? ae::Hash32().HashString( name ).Get() : ae::kInvalidTypeId;
-}
-
 //------------------------------------------------------------------------------
 // ae::EnumType member functions
 //------------------------------------------------------------------------------
-ae::EnumType::EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned ) :
+ae::EnumType::EnumType( const char* name, const char* prefix, uint32_t size, bool isSigned, bool isBitField ) :
 	m_name( name ),
 	m_prefix( prefix ),
 	m_size( size ),
-	m_isSigned( isSigned )
+	m_isSigned( isSigned ),
+	m_isBitField( isBitField )
 {}
-int32_t ae::EnumType::GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
-std::string ae::EnumType::GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
-uint32_t ae::EnumType::Length() const { return m_enumValueToName.Length(); }
 
-void ae::EnumType::m_AddValue( const char* name, int32_t value )
+std::string ae::EnumType::GetNameByIndex( int32_t index ) const
 {
-	AE_ASSERT_MSG( m_enumValueToName.Length() < m_enumValueToName.Size(), "Set/increase AE_MAX_META_ENUM_VALUES_CONFIG (Currently: #)", m_enumValueToName.Size() );
-	m_enumValueToName.Set( value, name );
-	m_enumNameToValue.Set( name, value );
+	if( index < 0 || index >= (int32_t)m_enumValueToName.Length() )
+	{
+		return "";
+	}
+	return m_enumValueToName.GetValue( index );
 }
+uint32_t ae::EnumType::Length() const { return m_enumValueToName.Length(); }
 
 //------------------------------------------------------------------------------
 // ae::Type member functions
@@ -32453,13 +33929,6 @@ std::string ae::BasicType::GetVarDataAsString( ae::ConstDataPointer _varData ) c
 		case BasicType::Matrix4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
 		case BasicType::Color: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
 		case BasicType::UUID: return ae::Str64::Format( "#", *reinterpret_cast< const ae::UUID* >( varData ) ).c_str();
-#if AE_DEPRECATED
-		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::Enum: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::Pointer: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::CustomRef: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::None: AE_FAIL(); break; // @TODO: Remove
-#endif // AE_DEPRECATED
 	}
 	return "";
 }
@@ -32506,132 +33975,167 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 		case BasicType::UInt8:
 		{
 			AE_ASSERT( typeSize == sizeof(uint8_t) );
-			*(uint8_t*)varData = ae::FromString< uint8_t >( value, 0 );
+			uint8_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(uint8_t*)varData = v;
 			return true;
 		}
 		case BasicType::UInt16:
 		{
 			AE_ASSERT( typeSize == sizeof(uint16_t) );
-			*(uint16_t*)varData = ae::FromString< uint16_t >( value, 0 );
+			uint16_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(uint16_t*)varData = v;
 			return true;
 		}
 		case BasicType::UInt32:
 		{
 			AE_ASSERT( typeSize == sizeof(uint32_t) );
-			*(uint32_t*)varData = ae::FromString< uint32_t >( value, 0 );
+			uint32_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(uint32_t*)varData = v;
 			return true;
 		}
 		case BasicType::UInt64:
 		{
 			AE_ASSERT( typeSize == sizeof(uint64_t) );
-			*(uint64_t*)varData = ae::FromString< uint64_t >( value, 0 );
+			uint64_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(uint64_t*)varData = v;
 			return true;
 		}
 		case BasicType::Int8:
 		{
 			AE_ASSERT( typeSize == sizeof(int8_t) );
-			*(int8_t*)varData = ae::FromString< int8_t >( value, 0 );
+			int8_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(int8_t*)varData = v;
 			return true;
 		}
 		case BasicType::Int16:
 		{
 			AE_ASSERT( typeSize == sizeof(int16_t) );
-			*(int16_t*)varData = ae::FromString< int16_t >( value, 0 );
+			int16_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(int16_t*)varData = v;
 			return true;
 		}
 		case BasicType::Int32:
 		{
 			AE_ASSERT( typeSize == sizeof(int32_t) );
-			*(int32_t*)varData = ae::FromString< int32_t >( value, 0 );
+			int32_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(int32_t*)varData = v;
 			return true;
 		}
 		case BasicType::Int64:
 		{
 			AE_ASSERT( typeSize == sizeof(int64_t) );
-			*(int64_t*)varData = ae::FromString< int64_t >( value, 0 );
+			int64_t v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(int64_t*)varData = v;
 			return true;
 		}
 		case BasicType::Int2:
 		{
 			AE_ASSERT( typeSize == sizeof( ae::Int2 ) );
-			*(ae::Int2*)varData = ae::FromString< ae::Int2 >( value, ae::Int2( 0.0f ) );
+			ae::Int2 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Int2*)varData = v;
 			return true;
 		}
 		case BasicType::Int3:
 		{
 			AE_ASSERT( typeSize == sizeof( ae::Int3 ) );
-			*(ae::Int3*)varData = ae::FromString< ae::Int3 >( value, ae::Int3( 0.0f ) );
+			ae::Int3 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Int3*)varData = v;
 			return true;
 		}
 		case BasicType::Bool:
 		{
-			*(bool*)varData = ae::FromString< bool >( value, false );
+			bool v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(bool*)varData = v;
 			return true;
 		}
 		case BasicType::Float:
 		{
 			AE_ASSERT( typeSize == sizeof(float) );
-			*(float*)varData = ae::FromString< float >( value, 0.0f );
+			float v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(float*)varData = v;
 			return true;
 		}
 		case BasicType::Double:
 		{
 			AE_ASSERT( typeSize == sizeof(double) );
-			*(double*)varData = ae::FromString< double >( value, 0.0 );
+			double v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(double*)varData = v;
 			return true;
 		}
 		case BasicType::Vec2:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Vec2) );
-			*(ae::Vec2*)varData = ae::FromString< ae::Vec2 >( value, ae::Vec2( 0.0f ) );
+			ae::Vec2 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Vec2*)varData = v;
 			return true;
 		}
 		case BasicType::Vec3:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Vec3) );
-			*(ae::Vec3*)varData = ae::FromString< ae::Vec3 >( value, ae::Vec3( 0.0f ) );
+			ae::Vec3 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Vec3*)varData = v;
 			return true;
 		}
 		case BasicType::Vec4:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Vec4) );
-			*(ae::Vec4*)varData = ae::FromString< ae::Vec4 >( value, ae::Vec4( 0.0f ) );
+			ae::Vec4 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Vec4*)varData = v;
 			return true;
 		}
 		case BasicType::Quaternion:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Quaternion) );
-			*(ae::Quaternion*)varData = ae::FromString< ae::Quaternion >( value, ae::Quaternion::Identity() );
+			ae::Quaternion v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Quaternion*)varData = v;
 			return true;
 		}
 		case BasicType::Matrix4:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Matrix4) );
-			*(ae::Matrix4*)varData = ae::FromString< ae::Matrix4 >( value, ae::Matrix4::Identity() );
+			ae::Matrix4 v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Matrix4*)varData = v;
 			return true;
 		}
 		case BasicType::Color:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Color) );
-			*(ae::Color*)varData = ae::FromString( value, ae::Color::Black() );
+			ae::Color v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::Color*)varData = v;
 			return true;
 		}
 		case BasicType::UUID:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::UUID) );
-			*(ae::UUID*)varData = ae::FromString< ae::UUID >( value, ae::UUID() );
+			ae::UUID v;
+			if( !ae::TryFromString( value, &v ) ) { return false; }
+			*(ae::UUID*)varData = v;
 			return true;
 		}
-#if AE_DEPRECATED
-		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::Enum: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::Pointer: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::CustomRef: AE_FAIL(); break; // @TODO: Remove
-		case BasicType::None: AE_FAIL(); break; // @TODO: Remove
-#endif // AE_DEPRECATED
 	}
 	return false;
 }
+
+ae::TypeId ae::BasicType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< BasicType >(); }
 
 //------------------------------------------------------------------------------
 // ae::EnumType member functions
@@ -32643,24 +34147,16 @@ std::string ae::EnumType::GetVarDataAsString( ae::ConstDataPointer _varData ) co
 	{
 		return "";
 	}
-	
-	// @NOTE: Enums with very large or small values (outside the range of int32) are not currently supported
-	int32_t value = 0;
+
+	uint64_t storedValue = 0;
 	if( TypeIsSigned() )
 	{
 		switch( TypeSize() )
 		{
-			case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
-			case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
-			case 4: value = *reinterpret_cast< const int32_t* >( varData ); break;
-			case 8:
-			{
-				auto v = *reinterpret_cast< const int64_t* >( varData );
-				AE_DEBUG_ASSERT( v <= (int64_t)INT32_MAX );
-				AE_DEBUG_ASSERT( v >= (int64_t)INT32_MIN );
-				value = (int32_t)v;
-				break;
-			}
+			case 1: storedValue = static_cast< uint64_t >( *reinterpret_cast< const int8_t* >( varData ) ); break;
+			case 2: storedValue = static_cast< uint64_t >( *reinterpret_cast< const int16_t* >( varData ) ); break;
+			case 4: storedValue = static_cast< uint64_t >( *reinterpret_cast< const int32_t* >( varData ) ); break;
+			case 8: storedValue = static_cast< uint64_t >( *reinterpret_cast< const int64_t* >( varData ) ); break;
 			default: AE_FAIL();
 		}
 	}
@@ -32668,26 +34164,14 @@ std::string ae::EnumType::GetVarDataAsString( ae::ConstDataPointer _varData ) co
 	{
 		switch( TypeSize() )
 		{
-			case 1: value = *reinterpret_cast< const uint8_t* >( varData ); break;
-			case 2: value = *reinterpret_cast< const uint16_t* >( varData ); break;
-			case 4:
-			{
-				auto v = *reinterpret_cast< const uint32_t* >( varData );
-				AE_DEBUG_ASSERT( v <= (uint32_t)INT32_MAX );
-				value = v;
-				break;
-			}
-			case 8:
-			{
-				auto v = *reinterpret_cast< const uint64_t* >( varData );
-				AE_DEBUG_ASSERT( v <= (uint64_t)INT32_MAX );
-				value = (int32_t)v;
-				break;
-			}
+			case 1: storedValue = static_cast< uint64_t >( *reinterpret_cast< const uint8_t* >( varData ) ); break;
+			case 2: storedValue = static_cast< uint64_t >( *reinterpret_cast< const uint16_t* >( varData ) ); break;
+			case 4: storedValue = static_cast< uint64_t >( *reinterpret_cast< const uint32_t* >( varData ) ); break;
+			case 8: storedValue = static_cast< uint64_t >( *reinterpret_cast< const uint64_t* >( varData ) ); break;
 			default: AE_FAIL();
 		}
 	}
-	return GetNameByValue( value );
+	return m_isBitField ? GetNameByValue( storedValue ) : m_enumValueToName.Get( storedValue, "" );
 }
 
 bool ae::EnumType::SetVarDataFromString( ae::DataPointer _varData, const char* value ) const
@@ -32722,10 +34206,12 @@ bool ae::EnumType::SetVarDataFromString( ae::DataPointer _varData, const char* v
 	return false;
 }
 
+ae::TypeId ae::EnumType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< EnumType >(); }
+
 //------------------------------------------------------------------------------
-// ae::PointerType
+// ae::ObjectPointerType member functions
 //------------------------------------------------------------------------------
-ae::DataPointer ae::PointerType::Dereference( ae::ConstDataPointer varData ) const
+ae::DataPointer ae::ObjectPointerType::Dereference( ae::ConstDataPointer varData ) const
 {
 	if( void*const* data = static_cast< void*const* >( varData.Get( this ) ) )
 	{
@@ -32733,6 +34219,85 @@ ae::DataPointer ae::PointerType::Dereference( ae::ConstDataPointer varData ) con
 	}
 	return {};
 }
+
+bool ae::ObjectPointerType::Set( ae::DataPointer _varData, ae::Object* value ) const
+{
+	if( ae::Object** varData = static_cast< ae::Object** >( _varData.Get( this ) ) )
+	{
+		if( !value )
+		{
+			*varData = nullptr;
+			return true;
+		}
+		else
+		{
+			const ae::ClassType* varType = GetInnerVarType().AsVarType< ae::ClassType >();
+			const ae::ClassType* valueType = ae::GetClassTypeFromObject( value );
+			if( varType && valueType && valueType->IsType( varType ) )
+			{
+				*varData = value;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool ae::ObjectPointerType::FromString( ae::DataPointer _varData, const char* value, const StringToObjectPointerFn& fn ) const
+{
+	if( ae::Object** varData = static_cast< ae::Object** >( _varData.Get( this ) ) )
+	{
+		ae::Optional< ae::Object* > result = fn ? fn( value ) : ae::Optional< ae::Object* >();
+		if( result.TryGet() )
+		{
+			ae::Object* obj = result.Get( nullptr );
+			if( !obj )
+			{
+				// When fn return true and null, clear pointer value
+				*varData = nullptr;
+				return true;
+			}
+			const ae::ClassType* varType = GetInnerVarType().AsVarType< ae::ClassType >();
+			const ae::ClassType* valueType = ae::GetClassTypeFromObject( obj );
+			if( varType && valueType && valueType->IsType( varType ) )
+			{
+				*varData = obj;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+std::string ae::ObjectPointerType::ToString( ae::ConstDataPointer _varData, const ObjectPointerToStringFn& fn ) const
+{
+	if( fn )
+	{
+		// @TODO: Type compatibility checks
+		if( ae::Object* const* varData = static_cast< ae::Object* const* >( _varData.Get( this ) ) )
+		{
+			return fn( *varData );
+		}
+	}
+	return "";
+}
+
+ae::TypeId ae::ObjectPointerType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< ObjectPointerType >(); }
+
+//------------------------------------------------------------------------------
+// ae::OptionalType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::OptionalType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< OptionalType >(); }
+
+//------------------------------------------------------------------------------
+// ae::ArrayType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::ArrayType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< ArrayType >(); }
+
+//------------------------------------------------------------------------------
+// ae::MapType member functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::MapType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< MapType >(); }
 
 //------------------------------------------------------------------------------
 // ae::ClassType member functions
@@ -32750,63 +34315,21 @@ const ae::ClassType* ae::ClassType::GetClassType( ae::ConstDataPointer varData )
 
 ae::DataPointer ae::ClassType::GetVarData( const ae::ClassVar* var, ae::DataPointer varData ) const
 {
-	if( ae::Object* data = static_cast< ae::Object* >( varData.Get( this ) ) )
+	if( void* data = varData.Get( this ) )
 	{
-		return { var, data };
+		return { var->GetOuterVarType(), (uint8_t*)data + var->GetOffset() };
 	}
 	return {};
 }
 
 ae::ConstDataPointer ae::ClassType::GetVarData( const ae::ClassVar* var, ae::ConstDataPointer varData ) const
 {
-	if( const ae::Object* data = static_cast< const ae::Object* >( varData.Get( this ) ) )
+	if( const void* data = varData.Get( this ) )
 	{
-		return { var, data };
+		return { var->GetOuterVarType(), (const uint8_t*)data + var->GetOffset() };
 	}
 	return {};
 }
-
-#if AE_DEPRECATED
-
-bool ae::ClassType::HasProperty( const char* property ) const { return GetPropertyIndex( property ) >= 0; }
-const ae::ClassType* ae::ClassType::GetTypeWithProperty( const char* property ) const
-{
-	const ae::ClassType* result = this;
-	while( result )
-	{
-		if( result->HasProperty( property ) )
-		{
-			break;
-		}
-		result = result->GetParentType();
-	}
-	return result;
-}
-int32_t ae::ClassType::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
-int32_t ae::ClassType::GetPropertyCount() const { return m_props.Length(); }
-const char* ae::ClassType::GetPropertyName( int32_t propIndex ) const
-{
-	AE_ASSERT( 0 <= propIndex && propIndex < m_props.Length() );
-	return m_props.GetKey( propIndex ).c_str();
-}
-uint32_t ae::ClassType::GetPropertyValueCount( int32_t propIndex ) const
-{
-	AE_ASSERT( 0 <= propIndex && propIndex < m_props.Length() );
-	return m_props.GetValue( propIndex ).Length();
-}
-uint32_t ae::ClassType::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
-const char* ae::ClassType::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const
-{
-	const auto* vals = ( propIndex < m_props.Length() ) ? &m_props.GetValue( propIndex ) : nullptr;
-	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
-}
-const char* ae::ClassType::GetPropertyValue( const char* propName, uint32_t valueIndex ) const
-{
-	const auto* vals = m_props.TryGet( propName );
-	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
-}
-
-#endif // AE_DEPRECATED
 
 void ae::ClassType::PatchVTable( ae::Object* obj ) const
 {
@@ -32825,31 +34348,15 @@ void ae::ClassType::PatchVTable( ae::Object* obj ) const
 uint32_t ae::ClassType::GetSize() const { return m_size; }
 uint32_t ae::ClassType::GetAlignment() const { return m_align; }
 const char* ae::ClassType::GetName() const { return m_name.c_str(); }
-bool ae::ClassType::HasNew() const { return m_placementNew; }
 bool ae::ClassType::IsAbstract() const { return m_isAbstract; }
 bool ae::ClassType::IsPolymorphic() const { return m_isPolymorphic; }
 bool ae::ClassType::IsDefaultConstructible() const { return m_isDefaultConstructible; }
 bool ae::ClassType::IsFinal() const { return m_isFinal; }
 const char* ae::ClassType::GetParentTypeName() const { return m_parent.c_str(); }
 
-#if AE_DEPRECATED
-void ae::ClassType::m_AddProp( const char* prop, const char* value )
-{
-	auto* props = m_props.TryGet( prop );
-	if( !props )
-	{
-		props = &m_props.Set( prop, {} );
-	}
-	if( value && value[ 0 ] ) // 'm_props' will have an empty array for properties when no value is specified
-	{
-		props->Append( value );
-	}
-}
-#endif // AE_DEPRECATED
-
 void ae::ClassType::m_AddVar( const ae::ClassVar* var )
 {
-	AE_ASSERT_MSG( m_vars.Length() < m_vars.Size(), "Set/increase AE_MAX_META_VARS_CONFIG (Currently: #)", m_vars.Size() );
+	AE_ASSERT_MSG( m_vars.Length() < m_vars.Capacity(), "Set/increase AE_MAX_META_VARS_CONFIG (Currently: #)", m_vars.Capacity() );
 	m_vars.Append( var );
 	std::sort( m_vars.begin(), m_vars.end(), []( const ae::ClassVar* a, const ae::ClassVar* b )
 	{
@@ -32857,17 +34364,19 @@ void ae::ClassType::m_AddVar( const ae::ClassVar* var )
 	} );
 }
 
+ae::TypeId ae::ClassType::GetBaseVarTypeId() const { return ae::GetTypeIdWithoutQualifiers< ClassType >(); }
+
 //------------------------------------------------------------------------------
 // ae::AttributeList member functions
 //------------------------------------------------------------------------------
 void ae::AttributeList::m_Add( Attribute* attribute )
 {
-	AE_ASSERT_MSG( m_attributes.Length() < m_attributes.Size(), "Set/increase AE_MAX_META_ATTRIBUTES_CONFIG (Currently: #)", m_attributes.Size() );
+	AE_ASSERT_MSG( m_attributes.Length() < m_attributes.Capacity(), "Set/increase AE_MAX_META_ATTRIBUTES_CONFIG (Currently: #)", m_attributes.Capacity() );
 	
 	m_attributes.Append( attribute );
 	std::stable_sort( m_attributes.begin(), m_attributes.end(), []( const ae::Attribute* a, const ae::Attribute* b )
 	{
-		return a->_metaTypeId < b->_metaTypeId;
+		return a->GetTypeId() < b->GetTypeId();
 	} );
 
 	m_attributeTypes.Clear();

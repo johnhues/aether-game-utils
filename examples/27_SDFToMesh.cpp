@@ -222,10 +222,8 @@ void LogStatus( const ae::IsosurfaceStatus& status )
 	}
 }
 
-int main()
+int main( int argc, char* argv[] )
 {
-	AE_LOG( "Initialize (debug #)", (int)_AE_DEBUG_ );
-
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
@@ -233,51 +231,6 @@ int main()
 	ae::DebugLines debugLines = TAG_ISOSURFACE;
 	ae::DebugCamera camera = ae::Axis::Z;
 	ae::Shader shader;
-	if( ae::IsDebuggerAttached() )
-	{
-		ae::Int2 windowPos( 0, 0 );
-		ae::Int2 windowSize( 1280, 720 );
-		const auto screens = ae::GetScreens();
-		if( screens.Length() )
-		{
-			const ae::Screen* targetScreen = [&]() -> const ae::Screen*
-			{
-				const ae::Screen* result = nullptr;
-				for( const ae::Screen& screen : screens )
-				{
-					// Smallest screen
-					if( !result || screen.size.x * screen.scaleFactor <= result->size.x * result->scaleFactor )
-					{
-						result = &screen;
-					}
-				}
-				return result;
-			}();
-			windowPos = targetScreen->position + targetScreen->size / 2;
-			windowPos -= windowSize / 2;
-			if( screens.Length() >= 2 )
-			{
-				windowSize = targetScreen->size;
-			}
-		}
-		window.Initialize( windowPos, windowSize.x, windowSize.y, true, false );
-		if( screens.Length() == 1 )
-		{
-			window.SetAlwaysOnTop( true );
-		}
-	}
-	else
-	{
-		window.Initialize( 1280, 720, false, true, true );
-	}
-	render.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-	debugLines.Initialize( ae::NextPowerOfTwo( 4000000 ) );
-	debugLines.SetXRayEnabled( false );
-	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 500.0f ) );
-	shader.Initialize( kVertShader, kFragShader );
-
 	ae::VertexBuffer sdfVertexBuffer;
 	ae::Array< ae::AABB > octree = TAG_ISOSURFACE;
 	ae::Array< ae::AABB > brickMap = TAG_ISOSURFACE;
@@ -306,7 +259,57 @@ int main()
 		rotation = ae::Vec3( 0.0f );
 		scale = ae::Vec3( 600.0f, 150.0f, 150.0f );
 	};
-	ResetTransform();
+
+	auto Initialize = [&]()
+	{
+		AE_LOG( "Initialize (debug #)", (int)_AE_DEBUG_ );
+		if( ae::IsDebuggerAttached() )
+		{
+			ae::Int2 windowPos( 0, 0 );
+			ae::Int2 windowSize( 1280, 720 );
+			const auto screens = ae::GetScreens();
+			if( screens.Length() )
+			{
+				const ae::Screen* targetScreen = [&]() -> const ae::Screen*
+				{
+					const ae::Screen* result = nullptr;
+					for( const ae::Screen& screen : screens )
+					{
+						// Smallest screen
+						if( !result || screen.size.x * screen.scaleFactor <= result->size.x * result->scaleFactor )
+						{
+							result = &screen;
+						}
+					}
+					return result;
+				}();
+				windowPos = targetScreen->position + targetScreen->size / 2;
+				windowPos -= windowSize / 2;
+				if( screens.Length() >= 2 )
+				{
+					windowSize = targetScreen->size;
+				}
+			}
+			window.Initialize( windowPos, windowSize.x, windowSize.y, true, false );
+			if( screens.Length() == 1 )
+			{
+				window.SetAlwaysOnTop( true );
+			}
+		}
+		else
+		{
+			window.Initialize( 1280, 720, false, true, true );
+		}
+		render.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+		debugLines.Initialize( ae::NextPowerOfTwo( 4000000 ) );
+		debugLines.SetXRayEnabled( false );
+		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 500.0f ) );
+		shader.Initialize( kVertShader, kFragShader );
+		ResetTransform();
+		return true;
+	};
 
 	auto Update = [&]() -> bool
 	{
@@ -534,13 +537,12 @@ int main()
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
+	auto Terminate = [&]() -> int32_t
+	{
+		ae::Delete( extractor );
+		AE_LOG( "Terminate" );
+		return 0;
+	};
 
-	ae::Delete( extractor );
-	AE_LOG( "Terminate" );
-	return 0;
+	return ae::Application( argc, argv, Initialize, Update, Terminate );
 }

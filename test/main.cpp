@@ -38,6 +38,8 @@ bool s_intentionalAssert = false;
 int main( int argc, char* argv[] )
 {
 	AE_STATIC_ASSERT_MSG( AE_MEMORY_CHECKS, "Unit tests are intended to run with AE_MEMORY_CHECKS enabled" );
-	const int result = Catch::Session().run( argc, argv );
+	Catch::Session session;
+	session.configData().shouldDebugBreak = ae::IsDebuggerAttached();
+	const int result = session.run( argc, argv );
 	return result;
 }

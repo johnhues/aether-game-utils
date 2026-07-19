@@ -46,14 +46,17 @@
 #endif
 #if _AE_APPLE_
 	#define GL_SILENCE_DEPRECATION
+	#define GLES_SILENCE_DEPRECATION
 #elif _AE_LINUX_
 	#define GL_GLEXT_PROTOTYPES 1
 #endif
 
 // Include imgui
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnontrivial-memcall" // @TODO: Update imgui to fix this warning
 #include "imgui.h"
 #include "imgui_internal.h" // For advanced imgui features like docking
-#include "imgui_impl_opengl3.h"
+#pragma GCC diagnostic pop
 
 // Pop warning disables for imgui includes
 #if _AE_EMSCRIPTEN_
