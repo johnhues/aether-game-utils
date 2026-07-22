@@ -448,13 +448,13 @@ uint32_t GetPID();
 uint32_t GetMaxConcurrentThreads();
 //! Returns true if attached to Visual Studio or Xcode.
 bool IsDebuggerAttached();
-//! Returns the name of the given class or basic type from an instance. Note
-//! that this does not return the name of the derived class if the instance is
-//! a base class (get the ae::ClassType of an ae::Object in that case).
+//! Returns the name of the given class or basic type. Note that this does not
+//! return the name of a derived class if the given type is a base class (get
+//! the ae::ClassType of an AE_BASE_TYPE type in that case).
 template< typename T > constexpr const char* GetTypeName();
 //! Returns the name of the given class or basic type from an instance. Note
-//! that this does not return the name of the derived class if the instance is
-//! a base class (get the ae::ClassType of an ae::Object in that case).
+//! that this does not return the name of a derived class if the instance is a
+//! base class (get the ae::ClassType of an AE_BASE_TYPE type in that case).
 template< typename T > constexpr const char* GetTypeName( const T& );
 //! TODO
 constexpr uint32_t NormalizedWhiteSpaceTypeName( const char* str, char* out, uint32_t outSize );
@@ -6502,6 +6502,11 @@ private:
 //! \defgroup Meta
 //! @{
 // clang-format off
+using TypeName = ae::Str64;
+class Type;
+class ClassType;
+class ClassVar;
+class EnumType;
 
 //------------------------------------------------------------------------------
 // Macros to force module linking
@@ -6509,20 +6514,92 @@ private:
 //! Call signature: AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
 #define AE_FORCE_LINK_CLASS( ... ) AE_FORCE_LINK_CLASS_IMPL( __VA_ARGS__ )
 
+#if 0
+//------------------------------------------------------------------------------
+// ae::ClassType reflection example
+//------------------------------------------------------------------------------
+#define AE_MAIN
+#include "aether.h"
+const ae::Tag TAG = "test";
+
+class MySuperEngineObject
+{
+public:
+	AE_BASE_TYPE;
+};
+
+class MySuperEnginePlayer : public ae::Inheritor< MySuperEngineObject, MySuperEnginePlayer >
+{
+public:
+	ae::Vec3 position;
+};
+
+AE_REGISTER_CLASS( MySuperEngineObject );
+AE_REGISTER_CLASS( MySuperEnginePlayer );
+AE_REGISTER_CLASS_VAR( MySuperEnginePlayer, position );
+
+int main()
+{
+	// Data strings from json etc
+	const char* typeName = "MySuperEnginePlayer";
+	const char* varName = "position";
+	const char* valueStr = "1.0 2.0 3.0";
+
+	// Allocate and construct types opaquely
+	const ae::ClassType* type = ae::GetClassTypeByName( typeName );
+	MySuperEngineObject* obj = (MySuperEngineObject*)ae::Allocate( TAG, type->GetSize(), type->GetAlignment() );
+	type->New( obj );
+
+	// Member variable manipulation
+	const ae::ClassVar* var = type->GetVarByName( varName, true );
+	var->GetOuterVarType< ae::BasicType >()->SetVarDataFromString( { var, obj }, valueStr );
+
+	// Game logic here
+	AE_INFO( "pos: [#]", ae::Cast< MySuperEnginePlayer >( obj )->position );
+
+	// Delete registered types opaquely (with or without a v-table)
+	type->Delete( obj );
+
+	return 0;
+}
+
+#endif
+
+//------------------------------------------------------------------------------
+// ae::ClassType reflection utilities
+//------------------------------------------------------------------------------
+//! The initial building block for the ae::ClassType reflection system. Add this
+//! as a member to any base type to make it useable with the type reflection
+//! system, and then derive classes from it using ae::Inheritor. Only single
+//! inheritance is supported. All AE_BASE_TYPE's and derived classes must be
+//! registered with AE_REGISTER_CLASS or AE_REGISTER_NAMESPACECLASS. Regular C++
+//! reminders: Types that need to be destroyed "opaquely" -- through a pointer,
+//! without knowing the exact derived type (void*, etc) -- must derive from a
+//! type with a virtual destructor. See ae::ClassType::IsVirtuallyDestructible().
+//! Extreme caution must be taken if adding a virtual function to a non-virtual
+//! hierarchy, and is generally discouraged. It may be valuable to have multiple
+//! unrelated AE_BASE_TYPE's, with and without a v-table.
 #define AE_BASE_TYPE\
 	static const char* GetParentTypeName() { return ""; }\
 	static const ae::ClassType* GetParentType() { return nullptr; }\
 	ae::TypeId GetTypeId() const { return _metaTypeId; }\
-	ae::TypeId _metaTypeId = ae::kInvalidTypeId;\
+	ae::TypeId _metaTypeId = ae::kInvalidTypeId;
 
-//------------------------------------------------------------------------------
-// Meta class registration macros
-//------------------------------------------------------------------------------
-//! Registers a new type that can be retrieved with ae::GetClassType( "Namespace0::NameSpace1::MyType" )
-//! or ae::GetClassType< Namespace0::NameSpace1::MyType >(). Call this once in the
-//! global scope of any cpp file. The class (or a type it inherits from, see
-//! ae::Inheritor) must use the AE_BASE_TYPE macro. ae::Object does this, but is
-//! not required -- any struct can root its own hierarchy this way.
+//! See AE_BASE_TYPE and AE_REGISTER_CLASS() for usage.
+template< typename Parent, typename This >
+class Inheritor : public Parent
+{
+public:
+	Inheritor();
+	typedef Parent aeBaseType;
+	static const char* GetParentTypeName();
+	static const ae::ClassType* GetParentType();
+};
+
+//! Registers a new type that can be retrieved with ae::GetClassTypeByName( "MyType" )
+//! or ae::GetClassType< MyType >(). Call this once in the global scope of any
+//! cpp file. The class (or a type it inherits from, see ae::Inheritor) must use
+//! the AE_BASE_TYPE macro.
 #define AE_REGISTER_CLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE(_CLASS), AE_GLUE_TYPE(_CLASS) )
 //! Registers the class variable 'MyType::classVar'
 #define AE_REGISTER_CLASS_VAR( _CLASS, _V ) AE_REGISTER_NAMESPACECLASS_VAR( (_CLASS), _V )
@@ -6533,12 +6610,11 @@ private:
 //! must be registered with AE_REGISTER_CLASS() before this is called.
 #define AE_REGISTER_CLASS_VAR_ATTRIBUTE( _CLASS, _V, _A, _ARGS ) AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (_CLASS), _V, (_A), _ARGS )
 
-//! Registers a new type that can be retrieved with ae::GetClassType( "Namespace0::NameSpace1::MyType" )
-//! or ae::GetClassType< Namespace0::NameSpace1::MyType >(). Call this once in the
-//! global scope of any cpp file. The class (or a type it inherits from, see
-//! ae::Inheritor) must use the AE_BASE_TYPE macro. ae::Object does this, but is
-//! not required -- any struct can root its own hierarchy this way.
-//! Call signature: AE_REGISTER_NAMESPACECLASS( (Namespace0, ..., NameSpaceN, MyType) );
+//! Registers a new type that can be retrieved with ae::GetClassTypeByName( "Namespace0::NameSpace1::MyType" )
+//! or ae::GetClassType< Namespace0::NameSpace1::MyType >(). Call this once in
+//! the global scope of any cpp file. The class (or a type it inherits from, see
+//! ae::Inheritor) must use the AE_BASE_TYPE macro. Call signature:
+//! AE_REGISTER_NAMESPACECLASS( (Namespace0, ..., NameSpaceN, MyType) );
 #define AE_REGISTER_NAMESPACECLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS )
 //! Registers the class variable 'Namespace0::...::NamespaceN::MyType::classVar'
 //! Call signature: AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, ..., NameSpaceN, MyType), classVar );
@@ -6609,11 +6685,6 @@ struct TypeId
 private:
 	uint32_t m_id;
 };
-using TypeName = ae::Str64;
-class Type;
-class ClassType;
-class ClassVar;
-class EnumType;
 constexpr TypeId kInvalidTypeId;
 
 //------------------------------------------------------------------------------
@@ -6658,34 +6729,6 @@ const uint32_t kMaxMetaEnumValues = AE_MAX_META_ENUM_VALUES_CONFIG;
 const uint32_t kMaxMetaAttributes = AE_MAX_META_ATTRIBUTES_CONFIG;
 
 //------------------------------------------------------------------------------
-// ae::Object
-//! Base class for all meta registered objects. Inherit from this using
-//! ae::Inheritor and register your classes with AE_REGISTER_CLASS.
-//------------------------------------------------------------------------------
-// #if AE_DEPRECATED
-class Object
-{
-public:
-	virtual ~Object() {}
-	AE_BASE_TYPE;
-};
-// #endif
-
-//------------------------------------------------------------------------------
-// ae::Inheritor
-//! See ae::Object and AE_REGISTER_CLASS() for usage.
-//------------------------------------------------------------------------------
-template< typename Parent, typename This >
-class Inheritor : public Parent
-{
-public:
-	Inheritor();
-	typedef Parent aeBaseType;
-	static const char* GetParentTypeName();
-	static const ae::ClassType* GetParentType();
-};
-
-//------------------------------------------------------------------------------
 // External meta functions
 //------------------------------------------------------------------------------
 //! Get the number of registered ae::ClassType's
@@ -6718,7 +6761,12 @@ template< typename T > constexpr ae::TypeId GetTypeIdWithQualifiers();
 
 //------------------------------------------------------------------------------
 // ae::Attribute class
-//! Register with AE_REGISTER_CLASS()
+//------------------------------------------------------------------------------
+//! Derived types (like ae::SourceFileAttribute, or types you've defined) can be
+//! used with AE_REGISTER_*_ATTRIBUTE() macros to decorate variables, classes,
+//! and enums with extra information. These can hold strings, lambdas or
+//! whatever is useful to statically declare about a given type. Derived classes
+//! must be registered with AE_REGISTER_CLASS().
 //------------------------------------------------------------------------------
 class Attribute
 {
@@ -6739,6 +6787,7 @@ inline std::ostream& operator << ( std::ostream& os, const ae::SourceFileAttribu
 
 //------------------------------------------------------------------------------
 // ae::AttributeList class
+//------------------------------------------------------------------------------
 //! Contains attributes registered with AE_REGISTER_CLASS_ATTRIBUTE(),
 //! AE_REGISTER_CLASS_VAR_ATTRIBUTE(), or AE_REGISTER_ENUM_ATTRIBUTE()
 //! functions. Define AE_MAX_META_ATTRIBUTES_CONFIG in aeConfig.h to change the
@@ -6776,6 +6825,8 @@ public:
 	explicit operator bool() const;
 	//! Returns the ae::Type of the data. Must have valid data.
 	const ae::Type& GetVarType() const;
+	//! Returns GetVarType().AsVarType< T >(). See ae::Type::AsVarType().
+	template< typename T > const T* AsVarType() const;
 	//! Returns data pointer, optionally provide the type of the caller to
 	//! perform a type check.
 	void* Get( const ae::Type* caller = nullptr ) const;
@@ -6806,6 +6857,8 @@ public:
 	explicit operator bool() const;
 	//! Returns the ae::Type of the data. Must have valid data.
 	const ae::Type& GetVarType() const;
+	//! Returns GetVarType().AsVarType< T >(). See ae::Type::AsVarType().
+	template< typename T > const T* AsVarType() const;
 	//! Returns data pointer, optionally provide the type of the caller to
 	//! perform a type check.
 	const void* Get( const ae::Type* caller = nullptr ) const;
@@ -6819,42 +6872,33 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::ObjectPointerToStringFn
-//! Used with ae::ObjectPointerType to convert object pointers to strings, most useful
-//! when serializing references to game objects to json etc. Should be
-//! implemented with an encoding that matches ae::StringToObjectPointerFn. Note
-//! that "null" object references should be a distinct pattern like 'NULL' or
-//! '0' so that the ae::ObjectPointerToStringFn can fail properly on bad
-//! formatting.
-//------------------------------------------------------------------------------
-using ObjectPointerToStringFn = ae::Function< std::string( const ae::Object* obj ), 64 >;
-
-//------------------------------------------------------------------------------
-// ae::StringToObjectPointerFn
-//! Used with ae::ObjectPointerType to convert strings to object pointers, most useful
-//! when serializing game objects from json etc. Should be implemented with a
-//! lookup into the game object system. The encoding of the given string should
-//! match ae::ObjectPointerToStringFn. Note that a nullptr should be returned
-//! when a reference to a "null" object is serialized, only return an empty
-//! optional type when an error occurs: bad string formatting, type mismatch, a
-//! failed reference lookup etc.
-//------------------------------------------------------------------------------
-using StringToObjectPointerFn = ae::Function< ae::Optional< ae::Object* >( const char* str ), 64 >;
-
-//------------------------------------------------------------------------------
 // ae::Type
 //------------------------------------------------------------------------------
 class Type
 {
 public:
 	virtual ~Type() {}
+	//! Returns this cast to \p T if \p T is the same Type family as this (see
+	//! IsSameBaseVarType< T >()), otherwise null.
 	template< typename T > const T* AsVarType() const;
+	//! Returns true if \p T is the same Type family as this, eg. any
+	//! ae::ArrayType regardless of element type or length. Always true for
+	//! \p T == ae::Type.
 	template< typename T > bool IsSameBaseVarType() const;
+	//! Returns true if \p T is the exact templated/qualified type wrapped by
+	//! this, eg. ae::Array< int, 5 > does not match ae::Array< float, 5 >.
 	template< typename T > bool IsSameExactVarType() const;
+	//! Returns true if \p other is the same Type family as this. See
+	//! IsSameBaseVarType< T >().
 	bool IsSameBaseVarType( const Type& other ) const;
+	//! Returns true if \p other wraps the exact same templated/qualified type
+	//! as this. See IsSameExactVarType< T >().
 	bool IsSameExactVarType( const Type& other ) const;
 
+	//! Identifies the Type family (eg. ae::ArrayType, ae::BasicType), shared
+	//! by all of its template instantiations.
 	virtual ae::TypeId GetBaseVarTypeId() const = 0;
+	//! Identifies the exact templated/qualified type wrapped by this.
 	virtual ae::TypeId GetExactVarTypeId() const = 0;
 
 	AE_BASE_TYPE;
@@ -7015,43 +7059,6 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::ObjectPointerType
-// @TODO: Move this. It's too specialized for ae::Object to be part of the core
-// meta system API.
-//------------------------------------------------------------------------------
-class ObjectPointerType : public ae::Type
-{
-public:
-	//! Returns the type pointed to by this type
-	virtual const ae::Type& GetInnerVarType() const = 0;
-
-	//! Returns a pointer to the data referenced by the given \p varData. Note
-	//! that like a normal C-pointer dereference, the const-ness of the
-	//! referenced value is separate from the const-ness of the pointer.
-	ae::DataPointer Dereference( ae::ConstDataPointer pointer ) const;
-	//! Writes \p value to the given \p pointer, returning true on success.
-	//! Fails when \p value is non-null and type-incompatible, or when
-	//! \p pointer has the wrong type.
-	bool Set( ae::DataPointer pointer, ae::Object* value ) const;
-	//! Returns a pointer to the inner value of \p pointer, unless given null.
-	template< typename T > T** Get( ae::DataPointer pointer ) const;
-	//! Returns a pointer to the inner value of \p pointer, unless given null.
-	template< typename T > T*const* Get( ae::ConstDataPointer pointer ) const;
-
-	//! Parses \p value as a reference to an object and writes the result to
-	//! \p pointer, returning true on success. The encoding of \p value should
-	//! match the encoding used by ObjectPointerToStringFn.
-	bool FromString( ae::DataPointer pointer, const char* value, const StringToObjectPointerFn& fn ) const;
-	//! Returns a string representation of the object pointer at \p pointer. The
-	//! encoding of the returned string should match the encoding expected by
-	//! StringToObjectPointerFn.
-	std::string ToString( ae::ConstDataPointer pointer, const ObjectPointerToStringFn& fn ) const;
-
-	// Internal
-	ae::TypeId GetBaseVarTypeId() const override;
-};
-
-//------------------------------------------------------------------------------
 // ae::OptionalType
 //------------------------------------------------------------------------------
 class OptionalType : public ae::Type
@@ -7183,8 +7190,11 @@ public:
 	//! Returns the class type that this member variable belongs too.
 	const ae::ClassType& GetClassType() const;
 	//! Returns the 'outermost' type of this var, eg. if this is an array of
-	//! integers the outer type would be ArrayType
+	//! integers the outer type would be ae::ArrayType.
 	const ae::Type& GetOuterVarType() const;
+	//! Returns the 'outermost' type of this var, eg. if this is an array of
+	//! integers the outer type would be ae::ArrayType.
+	template< typename T > const T* GetOuterVarType() const;
 
 	//--------------------------------------------------------------------------
 	// ae::AttributeList
@@ -7238,15 +7248,30 @@ public:
 	template< typename T > T* New( T* obj ) const;
 	//! See New(T*). This is a convenience function that takes a void*.
 	template< typename T > T* New( void* obj ) const { return New( static_cast< T* >( obj ) ); }
+	//! Placement-destructs the instance of this type at \p obj using this
+	//! type's exact registered destructor. Safe even if this type is not
+	//! IsVirtuallyDestructible(), since it doesn't rely on virtual dispatch.
+	template< typename T > void Delete( T* obj ) const;
+	//! See Delete(T*). This is a convenience function that takes a void*.
+	template< typename T > void Delete( void* obj ) const { Delete( static_cast< T* >( obj ) ); }
 	//! Creates a temporary instance of this type and copies the vtable from
-	//! the instance. This type must be default constructible.
-	void PatchVTable( ae::Object* obj ) const;
+	//! the instance into the object addressed by \p varData. This type must
+	//! be default constructible.
+	void PatchVTable( ae::DataPointer varData ) const;
 	uint32_t GetSize() const;
 	uint32_t GetAlignment() const;
 	const char* GetName() const;
 	bool IsAbstract() const;
+	//! True for any type with at least one virtual function
 	bool IsPolymorphic() const;
 	bool IsDefaultConstructible() const;
+	//! Returns true if this type has a virtual destructor, and an instance of
+	//! this type can be safely destroyed "opaquely" without knowing its exact
+	//! derived type. A type that is not virtually destructible must be
+	//! destroyed through its own exact type, or via ClassType::Delete().
+	//! Destroying it any other way through a base/void pointer is undefined
+	//! behavior.
+	bool IsVirtuallyDestructible() const;
 	bool IsFinal() const;
 
 	//--------------------------------------------------------------------------
@@ -7266,7 +7291,9 @@ public:
 	//--------------------------------------------------------------------------
 	// ae::DataPointer
 	//--------------------------------------------------------------------------
-	//! Gets the class type of the given DataPointer if possible.
+	//! Gets the class type of the given ae::ConstDataPointer if possible. The type
+	//! pointed to by \p varData must be a related type for the return type to
+	//! resolve.
 	const ae::ClassType* GetClassType( ae::ConstDataPointer varData ) const;
 	//! Returns a typed pointer to the object at \p varData if \p varData is
 	//! non-null and the runtime type of the object is T or inherits from T.
@@ -7302,6 +7329,8 @@ public:
 	//------------------------------------------------------------------------------
 private:
 	void* ( *m_placementNew )( void* ) = nullptr;
+	void ( *m_placementDelete )( void* ) = nullptr;
+	ae::TypeId ( *m_getTypeId )( const ae::ClassType&, ae::ConstDataPointer ) = nullptr;
 	ae::TypeName m_name;
 	ae::TypeId m_id = ae::kInvalidTypeId;
 	uint32_t m_size = 0;
@@ -7310,6 +7339,7 @@ private:
 	ae::TypeName m_parent;
 	bool m_isAbstract = false;
 	bool m_isPolymorphic = false;
+	bool m_isVirtuallyDestructible = false;
 	bool m_isDefaultConstructible = false;
 	bool m_isFinal = false;
 public:
@@ -7346,6 +7376,83 @@ void PatchVTable( T* obj, Args... ctorArgs )
 	void* vtable = *(void**)&temp;
 	memcpy( (void*)obj, &vtable, sizeof(void*) );
 }
+
+//------------------------------------------------------------------------------
+// ae::Object
+//------------------------------------------------------------------------------
+//! A potential base class for meta registered objects, although any type that
+//! declares an 'AE_BASE_TYPE' member can be registered. Inherit from this using
+//! ae::Inheritor and register your classes with AE_REGISTER_CLASS.
+//------------------------------------------------------------------------------
+class Object
+{
+public:
+	virtual ~Object() {}
+	AE_BASE_TYPE;
+};
+
+//------------------------------------------------------------------------------
+// ae::ObjectPointerToStringFn
+//------------------------------------------------------------------------------
+//! Used with ae::ObjectPointerType to convert object pointers to strings, most useful
+//! when serializing references to game objects to json etc. Should be
+//! implemented with an encoding that matches ae::StringToObjectPointerFn. Note
+//! that "null" object references should be a distinct pattern like 'NULL' or
+//! '0' so that the ae::ObjectPointerToStringFn can fail properly on bad
+//! formatting.
+//------------------------------------------------------------------------------
+using ObjectPointerToStringFn = ae::Function< std::string( const ae::Object* obj ), 64 >;
+
+//------------------------------------------------------------------------------
+// ae::StringToObjectPointerFn
+//------------------------------------------------------------------------------
+//! Used with ae::ObjectPointerType to convert strings to object pointers, most useful
+//! when serializing game objects from json etc. Should be implemented with a
+//! lookup into the game object system. The encoding of the given string should
+//! match ae::ObjectPointerToStringFn. Note that a nullptr should be returned
+//! when a reference to a "null" object is serialized, only return an empty
+//! optional type when an error occurs: bad string formatting, type mismatch, a
+//! failed reference lookup etc.
+//------------------------------------------------------------------------------
+using StringToObjectPointerFn = ae::Function< ae::Optional< ae::Object* >( const char* str ), 64 >;
+
+//------------------------------------------------------------------------------
+// ae::ObjectPointerType
+//------------------------------------------------------------------------------
+// @TODO: Move this. It's too specialized for ae::Object to be part of the core
+// meta system API.
+//------------------------------------------------------------------------------
+class ObjectPointerType : public ae::Type
+{
+public:
+	//! Returns the type pointed to by this type
+	virtual const ae::Type& GetInnerVarType() const = 0;
+
+	//! Returns a pointer to the data referenced by the given \p varData. Note
+	//! that like a normal C-pointer dereference, the const-ness of the
+	//! referenced value is separate from the const-ness of the pointer.
+	ae::DataPointer Dereference( ae::ConstDataPointer pointer ) const;
+	//! Writes \p value to the given \p pointer, returning true on success.
+	//! Fails when \p value is non-null and type-incompatible, or when
+	//! \p pointer has the wrong type.
+	bool Set( ae::DataPointer pointer, ae::Object* value ) const;
+	//! Returns a pointer to the inner value of \p pointer, unless given null.
+	template< typename T > T** Get( ae::DataPointer pointer ) const;
+	//! Returns a pointer to the inner value of \p pointer, unless given null.
+	template< typename T > T*const* Get( ae::ConstDataPointer pointer ) const;
+
+	//! Parses \p value as a reference to an object and writes the result to
+	//! \p pointer, returning true on success. The encoding of \p value should
+	//! match the encoding used by ObjectPointerToStringFn.
+	bool FromString( ae::DataPointer pointer, const char* value, const StringToObjectPointerFn& fn ) const;
+	//! Returns a string representation of the object pointer at \p pointer. The
+	//! encoding of the returned string should match the encoding expected by
+	//! StringToObjectPointerFn.
+	std::string ToString( ae::ConstDataPointer pointer, const ObjectPointerToStringFn& fn ) const;
+
+	// Internal
+	ae::TypeId GetBaseVarTypeId() const override;
+};
 
 //! @}
 
@@ -13935,9 +14042,25 @@ void BinaryWriter::SerializeObject( const T& v )
 }
 
 //------------------------------------------------------------------------------
-// Internal helpers
+// Internal meta helpers
 //------------------------------------------------------------------------------
-template< typename T > void* _PlacementNew( void* d ) { return new( d ) T(); }
+template< typename T > void* _ClassType_PlacementNew( void* d ) { return new( d ) T(); }
+template< typename T > void _ClassType_PlacementDelete( void* d ) { ( (T*)d )->~T(); }
+template< typename T >
+ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer d )
+{
+	const ae::ClassType* actualType = d ? d.AsVarType< ae::ClassType >() : nullptr;
+	if( !actualType )
+	{
+		return ae::kInvalidTypeId;
+	}
+	else if( !actualType->IsType( &self ) && !self.IsType( actualType ) )
+	{
+		AE_DEBUG_FAIL_MSG( "Unrelated types '#' and '#'", self.GetName(), actualType->GetName() );
+		return ae::kInvalidTypeId;
+	}
+	return static_cast< const T* >( d.Get() )->GetTypeId();
+}
 #define AE_EVAL(...) __VA_ARGS__
 #define AE_STRINGIFY_IMPL(S) #S
 #define AE_VA_ARGS_COUNT_IMPL(_,_9,_8,_7,_6,_5,_4,_3,_2,X_,...) X_
@@ -14833,11 +14956,27 @@ struct ae::TypeT< ae::Map< K, V, N, H > > : public ae::MapType
 	}
 };
 
+//------------------------------------------------------------------------------
+// ae::ClassVar template implementation
+//------------------------------------------------------------------------------
+template< typename T >
+const T* ae::ClassVar::GetOuterVarType() const
+{
+	return GetOuterVarType().AsVarType< T >();
+}
+
+//------------------------------------------------------------------------------
+// ae::ClassType template implementation
+//------------------------------------------------------------------------------
 template< typename T >
 bool ae::ClassType::IsType() const
 {
 	const ae::ClassType* type = ::ae::GetClassType< T >();
-	AE_ASSERT( type );
+	if( !type )
+	{
+		AE_DEBUG_FAIL();
+		return false;
+	}
 	return IsType( type );
 }
 
@@ -14865,8 +15004,6 @@ const ae::ClassType* ae::GetClassType()
 	{
 		using T = ae::RemoveTypeQualifiers< _T >;
 		_Globals* globals = _Globals::Get();
-		// @TODO: Conditionally enable this check when T is not a forward declaration
-		//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
 		s_type = globals->classTypes.Get( ae::GetTypeIdWithoutQualifiers< T >(), nullptr );
 		AE_ASSERT_MSG( s_type, "No meta info for type name: #", ae::GetTypeName< T >() );
 		return s_type;
@@ -15156,6 +15293,18 @@ const T* ae::Type::AsVarType() const
 }
 
 template< typename T >
+const T* ae::DataPointer::AsVarType() const
+{
+	return GetVarType().AsVarType< T >();
+}
+
+template< typename T >
+const T* ae::ConstDataPointer::AsVarType() const
+{
+	return GetVarType().AsVarType< T >();
+}
+
+template< typename T >
 bool ae::Type::IsSameBaseVarType() const
 {
 	using U = typename ae::RemoveTypeQualifiers< T >;
@@ -15325,20 +15474,55 @@ const T* ae::ClassType::TryGet( ae::ConstDataPointer varData ) const
 template< typename T >
 T* ae::ClassType::New( T* obj ) const
 {
-	AE_ASSERT( obj );
-	AE_ASSERT_MSG( !m_isAbstract, "Placement new not available for abstract type: #", m_name.c_str() );
-	AE_ASSERT_MSG( m_isDefaultConstructible, "Placement new not available for type without default constructor: #", m_name.c_str() );
-	AE_ASSERT( m_placementNew );
-	AE_ASSERT( IsType< T >() );
-	AE_ASSERT( (uint64_t)obj % GetAlignment() == 0 );
+	if( !obj )
+	{
+		return nullptr;
+	}
+	else if( m_isAbstract )
+	{
+		AE_DEBUG_FAIL_MSG( "Placement new not available for abstract type: #", m_name.c_str() );
+		return nullptr;
+	}
+	else if( !m_isDefaultConstructible )
+	{
+		AE_DEBUG_FAIL_MSG( "Placement new not available for type without default constructor: #", m_name.c_str() );
+		return nullptr;
+	}
+	else if( !m_placementNew || !IsType< T >() )
+	{
+		AE_DEBUG_FAIL();
+		return nullptr;
+	}
+	else if( (uint64_t)obj % GetAlignment() != 0 )
+	{
+		AE_DEBUG_FAIL();
+		return nullptr;
+	}
 	return (T*)m_placementNew( (T*)obj );
+}
+
+template< typename T >
+void ae::ClassType::Delete( T* obj ) const
+{
+	if( !obj )
+	{
+		return;
+	}
+	else if( !m_placementDelete || !IsType< T >() )
+	{
+		AE_DEBUG_FAIL();
+		return;
+	}
+	m_placementDelete( (void*)obj );
 }
 
 template< typename T >
 typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
 ae::ClassType::Init( const char* name )
 {
-	m_placementNew = &( _PlacementNew< T > );
+	m_placementNew = &( _ClassType_PlacementNew< T > );
+	m_placementDelete = &( _ClassType_PlacementDelete< T > );
+	m_getTypeId = &( _ClassType_GetTypeId< T > );
 	m_name = name;
 	m_id = GetTypeIdFromName( name );
 	m_size = sizeof( T );
@@ -15346,6 +15530,7 @@ ae::ClassType::Init( const char* name )
 	m_parent = T::GetParentTypeName();
 	m_isAbstract = false;
 	m_isPolymorphic = std::is_polymorphic< T >::value;
+	m_isVirtuallyDestructible = std::has_virtual_destructor< T >::value;
 	m_isDefaultConstructible = true;
 	m_isFinal = std::is_final< T >::value;
 }
@@ -15354,6 +15539,8 @@ typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constr
 ae::ClassType::Init( const char* name )
 {
 	m_placementNew = nullptr;
+	m_placementDelete = nullptr;
+	m_getTypeId = &( _ClassType_GetTypeId< T > );
 	m_name = name;
 	m_id = GetTypeIdFromName( name );
 	m_size = sizeof( T );
@@ -15361,6 +15548,7 @@ ae::ClassType::Init( const char* name )
 	m_parent = T::GetParentTypeName();
 	m_isAbstract = std::is_abstract< T >::value;
 	m_isPolymorphic = std::is_polymorphic< T >::value;
+	m_isVirtuallyDestructible = std::has_virtual_destructor< T >::value;
 	m_isDefaultConstructible = false;
 	m_isFinal = std::is_final< T >::value;
 }
@@ -33273,7 +33461,11 @@ const ae::ClassType* ae::ClassType::GetParentType() const
 
 bool ae::ClassType::IsType( const ae::ClassType* otherType ) const
 {
-	AE_ASSERT( otherType );
+	if( !otherType )
+	{
+		AE_DEBUG_FAIL();
+		return false;
+	}
 	for( const ae::ClassType* baseType = this; baseType; baseType = baseType->GetParentType() )
 	{
 		if( baseType == otherType )
@@ -33647,6 +33839,16 @@ ae::DataPointer ae::ObjectPointerType::Dereference( ae::ConstDataPointer varData
 {
 	if( void*const* data = static_cast< void*const* >( varData.Get( this ) ) )
 	{
+		if( void* obj = *data )
+		{
+			if( const ae::ClassType* declaredType = GetInnerVarType().AsVarType< ae::ClassType >() )
+			{
+				if( const ae::ClassType* runtimeType = declaredType->GetClassType( { *declaredType, obj } ) )
+				{
+					return { *runtimeType, obj };
+				}
+			}
+		}
 		return { GetInnerVarType(), *data };
 	}
 	return {};
@@ -33738,11 +33940,7 @@ ae::TypeId ae::ClassType::GetId() const { return m_id; }
 
 const ae::ClassType* ae::ClassType::GetClassType( ae::ConstDataPointer varData ) const
 {
-	if( const ae::Object* data = static_cast< const ae::Object* >( varData.Get( this ) ) )
-	{
-		return ae::GetClassTypeFromObject( data );
-	}
-	return nullptr;
+	return ae::GetClassTypeById( m_getTypeId( *this, varData ) );
 }
 
 ae::DataPointer ae::ClassType::GetVarData( const ae::ClassVar* var, ae::DataPointer varData ) const
@@ -33763,18 +33961,37 @@ ae::ConstDataPointer ae::ClassType::GetVarData( const ae::ClassVar* var, ae::Con
 	return {};
 }
 
-void ae::ClassType::PatchVTable( ae::Object* obj ) const
+void ae::ClassType::PatchVTable( ae::DataPointer varData ) const
 {
-	if( obj )
+	if( void* obj = varData.Get( this ) )
 	{
+		if( m_isAbstract )
+		{
+			AE_DEBUG_FAIL_MSG( "PatchVTable() not available for abstract type: #", m_name.c_str() );
+			return;
+		}
+		if( !m_isDefaultConstructible )
+		{
+			AE_DEBUG_FAIL_MSG( "PatchVTable() not available for type without default constructor: #", m_name.c_str() );
+			return;
+		}
+		if( !m_placementNew || !m_placementDelete )
+		{
+			AE_DEBUG_FAIL();
+			return;
+		}
 		// @TODO: Get this without instantiating? At least cache it...
-		AE_ASSERT( obj->GetTypeId() == GetId() );
-		ae::Object* temp = (ae::Object*)ae::Allocate( AE_ALLOC_TAG_FIXME, GetSize(), GetAlignment() );
-		New( temp );
+		if( m_getTypeId( *this, varData ) != GetId() )
+		{
+			AE_DEBUG_FAIL();
+			return;
+		}
+		void* temp = ae::Allocate( AE_ALLOC_TAG_FIXME, GetSize(), GetAlignment() );
+		m_placementNew( temp );
 		void* vtable = *(void**)temp;
-		temp->~Object();
+		m_placementDelete( temp );
 		ae::Free( temp );
-		memcpy( (void*)obj, &vtable, sizeof(void*) );
+		memcpy( obj, &vtable, sizeof(void*) );
 	}
 }
 uint32_t ae::ClassType::GetSize() const { return m_size; }
@@ -33782,6 +33999,7 @@ uint32_t ae::ClassType::GetAlignment() const { return m_align; }
 const char* ae::ClassType::GetName() const { return m_name.c_str(); }
 bool ae::ClassType::IsAbstract() const { return m_isAbstract; }
 bool ae::ClassType::IsPolymorphic() const { return m_isPolymorphic; }
+bool ae::ClassType::IsVirtuallyDestructible() const { return m_isVirtuallyDestructible; }
 bool ae::ClassType::IsDefaultConstructible() const { return m_isDefaultConstructible; }
 bool ae::ClassType::IsFinal() const { return m_isFinal; }
 const char* ae::ClassType::GetParentTypeName() const { return m_parent.c_str(); }

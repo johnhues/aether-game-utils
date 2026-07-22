@@ -194,7 +194,7 @@ void ae::ResourceManager::HotLoad()
 	for( const auto& resource : m_resources )
 	{
 		const ae::ClassType* type = ae::GetClassTypeFromObject( resource.value );
-		type->PatchVTable( resource.value );
+		type->PatchVTable( ae::DataPointer( resource.value ) );
 	}
 }
 

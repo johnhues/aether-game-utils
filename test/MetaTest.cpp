@@ -355,6 +355,29 @@ TEST_CASE( "Aggregate vars", "[aeMeta]" )
 	}
 }
 
+TEST_CASE( "ClassVar::GetOuterVarType< T >()", "[aeMeta]" )
+{
+	SomeClass c;
+	const ae::ClassType* type = ae::GetClassTypeFromObject( &c );
+	REQUIRE( type );
+
+	const ae::ClassVar* intVar = type->GetVarByName( "intMember", false );
+	REQUIRE( intVar );
+	const ae::BasicType* intVarType = intVar->GetOuterVarType< ae::BasicType >();
+	REQUIRE( intVarType == intVar->GetOuterVarType().AsVarType< ae::BasicType >() );
+	REQUIRE( intVarType );
+	REQUIRE( intVarType->GetType() == ae::BasicType::Int32 );
+	// Wrong Type family returns null, same as GetOuterVarType().AsVarType< T >()
+	REQUIRE( intVar->GetOuterVarType< ae::EnumType >() == nullptr );
+
+	const ae::ClassVar* enumVar = type->GetVarByName( "enumTest", false );
+	REQUIRE( enumVar );
+	const ae::EnumType* enumVarType = enumVar->GetOuterVarType< ae::EnumType >();
+	REQUIRE( enumVarType == enumVar->GetOuterVarType().AsVarType< ae::EnumType >() );
+	REQUIRE( enumVarType );
+	REQUIRE( enumVar->GetOuterVarType< ae::BasicType >() == nullptr );
+}
+
 TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
 {
 	const SomeClass c = []()
@@ -1320,6 +1343,65 @@ TEST_CASE( "PointerType can read and write pointer values via DataPointer", "[ae
 	REQUIRE( objB.ref == nullptr );
 }
 
+TEST_CASE( "ObjectPointerType::Dereference() resolves the pointee's runtime type, not its declared type", "[aeMeta]" )
+{
+	RefTesterA objA;
+	RefTesterB objB;
+
+	const ae::ClassType* typeRefTester = ae::GetClassType< RefTester >();
+	const ae::ClassType* typeRefTesterA = ae::GetClassType< RefTesterA >();
+	REQUIRE( typeRefTester );
+	REQUIRE( typeRefTesterA );
+
+	const ae::ClassVar* varRef = ae::GetClassType< RefTesterB >()->GetVarByName( "ref", false );
+	REQUIRE( varRef );
+	const ae::ObjectPointerType* refType = varRef->GetOuterVarType().AsVarType< ae::ObjectPointerType >();
+	REQUIRE( refType );
+
+	// ref's declared inner type is RefTester, the base class
+	REQUIRE( refType->GetInnerVarType().AsVarType< ae::ClassType >() == typeRefTester );
+
+	// Point ref at a RefTesterA instance, a more-derived type
+	ae::DataPointer ptrRef( varRef, &objB );
+	REQUIRE( refType->Set( ptrRef, &objA ) );
+
+	// Dereferencing must resolve the pointee's runtime type ( RefTesterA ),
+	// not the field's declared type ( RefTester )
+	ae::DataPointer derefed = refType->Dereference( ae::ConstDataPointer( ptrRef ) );
+	REQUIRE( derefed );
+	REQUIRE( derefed.AsVarType< ae::ClassType >() == typeRefTesterA );
+	REQUIRE( derefed.Get() == &objA );
+}
+
+TEST_CASE( "ClassType::GetClassType(ConstDataPointer) rejects a mismatched declared type", "[aeMeta]" )
+{
+	const ae::ClassType* typeSomeClass = ae::GetClassType< SomeClass >();
+	const ae::ClassType* typeCustom = ae::GetClassType< CustomBaseTypeTest >();
+	REQUIRE( typeSomeClass );
+	REQUIRE( typeCustom );
+
+	CustomBaseTypeTest unrelatedObj;
+
+	// mismatched's declared type doesn't IsType<SomeClass>(), so this must
+	// be rejected rather than reinterpreted as a SomeClass.
+	ae::ConstDataPointer mismatched( *typeCustom, &unrelatedObj );
+	AE_REQUIRE_THROWS( typeSomeClass->GetClassType( mismatched ) );
+}
+
+TEST_CASE( "ClassType::GetClassType(ConstDataPointer) returns null for a null pointer, without asserting", "[aeMeta]" )
+{
+	const ae::ClassType* typeSomeClass = ae::GetClassType< SomeClass >();
+	REQUIRE( typeSomeClass );
+
+	// A default-constructed ( "no object" ) ConstDataPointer is a normal,
+	// expected case ( eg. dereferencing an unset object-reference field ),
+	// not a programmer error, so this must resolve gracefully to null
+	// instead of asserting.
+	ae::ConstDataPointer nullData;
+	REQUIRE( !nullData );
+	REQUIRE( typeSomeClass->GetClassType( nullData ) == nullptr );
+}
+
 TEST_CASE( "ObjectPointerType composes with ArrayType for array-of-pointer members", "[aeMeta]" )
 {
 	RefTesterA objA;
@@ -1616,6 +1698,77 @@ TEST_CASE( "ClassType hierarchy and DataPointer operations", "[aeMeta]" )
 	REQUIRE( typeSomeClass->IsType( ae::GetClassTypeFromObject( newObj ) ) );
 	newObj->~SomeClass();
 	ae::Free( storage );
+}
+
+TEST_CASE( "ClassType::Delete() destructs through the exact registered type, safe even when not virtually destructible", "[aeMeta]" )
+{
+	const ae::ClassType* typeSomeClass = ae::GetClassType< SomeClass >();
+	REQUIRE( typeSomeClass );
+	REQUIRE( typeSomeClass->IsVirtuallyDestructible() ); // ae::Object has a virtual destructor
+
+	const ae::ClassType* typeCustom = ae::GetClassType< CustomBaseTypeDestructTest >();
+	REQUIRE( typeCustom );
+	REQUIRE( !typeCustom->IsVirtuallyDestructible() ); // AE_BASE_TYPE does not add one
+
+	void* storage = ae::Allocate( AE_ALLOC_TAG_META_TEST, typeCustom->GetSize(),
+		typeCustom->GetAlignment() );
+	CustomBaseTypeDestructTest* obj = typeCustom->New< CustomBaseTypeDestructTest >( storage );
+	REQUIRE( obj );
+	bool destructed = false;
+	obj->destructedFlag = &destructed;
+
+	// `delete (CustomBaseType*)obj` would be UB here ( no virtual destructor );
+	// Delete() must still run the correct destructor via the type captured
+	// at registration.
+	CustomBaseType* base = obj;
+	typeCustom->Delete( base );
+	REQUIRE( destructed );
+
+	ae::Free( storage );
+}
+
+TEST_CASE( "ClassType::New()/Delete()/PatchVTable() safely reject a mismatched type", "[aeMeta]" )
+{
+	const ae::ClassType* typeSomeClass = ae::GetClassType< SomeClass >();
+	REQUIRE( typeSomeClass );
+
+	// T unrelated to this ClassType's hierarchy must be rejected by
+	// IsType<T>(), not placement new/delete the wrong type.
+	int dummy = 0;
+	AE_REQUIRE_THROWS( typeSomeClass->New< CustomBaseTypeTest >( (void*)&dummy ) );
+	AE_REQUIRE_THROWS( typeSomeClass->Delete< CustomBaseTypeTest >( (void*)&dummy ) );
+
+	// mismatched is tagged as SomeClass but addresses a NamespaceClass
+	// ( a subtype ); this must be detected, not corrupt the vtable.
+	Namespace0::Namespace1::NamespaceClass nsObj;
+	ae::DataPointer mismatched( *typeSomeClass, &nsObj );
+	AE_REQUIRE_THROWS( typeSomeClass->PatchVTable( mismatched ) );
+}
+
+TEST_CASE( "ClassType::PatchVTable() works when called through a base-typed pointer, as in resource hot-reload", "[aeMeta]" )
+{
+	// Resources are stored behind a base-typed pointer ( eg. Resource* ), the
+	// runtime ClassType is looked up from the object, and PatchVTable() is
+	// called on that runtime type using a DataPointer built from the base-typed
+	// pointer. The DataPointer's declared type ( SomeClass, an ancestor of the
+	// runtime type ) must not cause PatchVTable() to reject the call.
+	const ae::ClassType* typeNamespaceClass = ae::GetClassType< Namespace0::Namespace1::NamespaceClass >();
+	REQUIRE( typeNamespaceClass );
+
+	Namespace0::Namespace1::NamespaceClass derivedObj;
+	void* goodVTable = *(void**)&derivedObj;
+
+	SomeClass* baseTypedPtr = &derivedObj; // static type SomeClass, like Resource*
+	const ae::ClassType* runtimeType = ae::GetClassTypeFromObject( baseTypedPtr );
+	REQUIRE( runtimeType == typeNamespaceClass );
+
+	// Corrupt the vtable, as if the owning module was reloaded
+	*(void**)&derivedObj = nullptr;
+	REQUIRE( *(void**)baseTypedPtr == nullptr );
+
+	runtimeType->PatchVTable( ae::DataPointer( baseTypedPtr ) );
+
+	REQUIRE( *(void**)baseTypedPtr == goodVTable );
 }
 
 TEST_CASE( "can register an existing c-style bit field enum (AE_REGISTER_BIT_FIELD_ENUM)", "[aeMeta]" )

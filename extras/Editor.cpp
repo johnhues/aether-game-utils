@@ -3092,7 +3092,7 @@ bool EditorServer::GetRenderDisabled( ae::Entity entity ) const
 	// 	if( var->attributes.TryGet< ae::EditorVisibilityAttribute >() )
 	// 	{
 	// 		const ae::ConstDataPointer varData( var, meshComponent );
-	// 		const ae::BasicType* basicType = varData.GetVarType().AsVarType< ae::BasicType >();
+	// 		const ae::BasicType* basicType = varData.AsVarType< ae::BasicType >();
 	// 		if( basicType && basicType->GetType() == ae::BasicType::Type::Bool )
 	// 		{
 	// 			bool visible = true;

@@ -44,6 +44,12 @@ struct CustomBaseTypeTest : public ae::Inheritor< CustomBaseType, CustomBaseType
 	int testInt = 0;
 };
 
+struct CustomBaseTypeDestructTest : public ae::Inheritor< CustomBaseType, CustomBaseTypeDestructTest >
+{
+	~CustomBaseTypeDestructTest() { if( destructedFlag ) { *destructedFlag = true; } }
+	bool* destructedFlag = nullptr;
+};
+
 //------------------------------------------------------------------------------
 // TestEnumClass
 //------------------------------------------------------------------------------
