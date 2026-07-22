@@ -63,7 +63,7 @@ private:
 	friend class EditorServer;
 	friend class EditorServerObject;
 	class EditorServerMesh* m_mesh = nullptr;
-	ae::Entity m_selectEntity = kNullEntity;
+	ae::Entity m_selectEntity = kNullEntity; // Null is valid. The entity that this references will be selected when this mesh instance is picked.
 	ae::ListNode< EditorMeshInstance > m_entityInstance = this;
 };
 
@@ -137,6 +137,18 @@ enum class EditorEventType
 };
 
 //------------------------------------------------------------------------------
+// ae::EditorComponent
+//------------------------------------------------------------------------------
+struct EditorComponent
+{
+	virtual ~EditorComponent() = default;
+	virtual ae::DocumentValue* GetDocumentValue() = 0; // @TODO: This can be removed when variables are exposed here
+	virtual const ae::DocumentValue* GetDocumentValue() const = 0; // @TODO: This can be removed when variables are exposed here
+	ae::Entity entity = kNullEntity;
+	const char* typeName = "";
+};
+
+//------------------------------------------------------------------------------
 // ae::EditorEvent
 //------------------------------------------------------------------------------
 struct EditorEvent
@@ -145,7 +157,7 @@ struct EditorEvent
 	const char* path = "";
 	ae::Entity entity = kNullEntity;
 	ae::Matrix4 transform = ae::Matrix4::Identity();
-	const ae::Component* component = nullptr;
+	const EditorComponent* component = nullptr;
 	const ae::ClassVar* var = nullptr;
 };
 
@@ -169,7 +181,7 @@ public:
 	virtual EditorPluginConfig GetConfig() = 0;
 	virtual void OnEvent( const ae::EditorEvent& event ) = 0; // @TODO: Should this return an enum code?
 
-	EditorMeshInstance* CreateMesh( const EditorMesh& mesh, ae::Entity selectEntity = kNullEntity );
+	EditorMeshInstance* CreateMesh( const EditorMesh& mesh, const char* info = "", ae::Entity selectEntity = kNullEntity );
 	EditorMeshInstance* CloneMesh( const EditorMeshInstance* mesh, ae::Entity selectEntity = kNullEntity );
 	void DestroyMesh( EditorMeshInstance* mesh );
 
@@ -214,6 +226,9 @@ struct EditorParams
 	//! paths. This field will be ignored if a level is specified on the command
 	//! line with '--level'.
 	ae::Str256 levelPath;
+
+	// @TODO: Add "Require unique entity names" setting
+	// @TODO: Add "Require unique component type instance per entity" setting
 };
 
 //------------------------------------------------------------------------------

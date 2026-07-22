@@ -54,8 +54,11 @@ public:
 	virtual ae::Optional< ae::EditorMesh > TryLoad( const char* resourceStr ) = 0;
 
 private:
+	void m_UpdateInstance( const ae::EditorComponent& comp, const ae::Matrix4& transform );
+	void m_DestroyInstance( const ae::EditorComponent& comp );
+	void m_Unload();
 	ae::Map< std::string, ae::EditorMeshInstance* > m_resources;
-	ae::Map< const ae::Component*, ae::EditorMeshInstance* > m_components;
+	ae::Map< const ae::EditorComponent*, ae::EditorMeshInstance* > m_components;
 };
 
 } // namespace ae

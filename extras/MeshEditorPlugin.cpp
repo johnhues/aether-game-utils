@@ -22,9 +22,9 @@ namespace ae {
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-std::pair< std::string, float > GetMeshResource( const ae::Object* object )
+std::pair< std::string, float > GetMeshResource( const ae::EditorComponent& comp )
 {
-	const ae::ClassType* currentType = ae::GetClassTypeFromObject( object );
+	const ae::ClassType* currentType = ae::GetClassTypeByName( comp.typeName );
 	while( currentType )
 	{
 		if( const MeshAttrib* classAttribute = currentType->attributes.TryGet< MeshAttrib >() )
@@ -41,8 +41,8 @@ std::pair< std::string, float > GetMeshResource( const ae::Object* object )
 			{
 				if( basicType->GetType() == ae::BasicType::String )
 				{
-					const ae::ConstDataPointer varPointer( var, object );
-					return { basicType->GetVarDataAsString( varPointer ).c_str(), varAttribute->transparent ? 0.7f : 1.0f };
+					const ae::DocumentValue* varDoc = comp.GetDocumentValue()->ObjectTryGet( var->GetName() );
+					return { varDoc ? varDoc->StringGet() : "", varAttribute->transparent ? 0.7f : 1.0f };
 				}
 				else
 				{
@@ -109,62 +109,19 @@ void MeshEditorPlugin::OnEvent( const ae::EditorEvent& event )
 		case ae::EditorEventType::ComponentCreate:
 		case ae::EditorEventType::ComponentEdit:
 		{
-			const auto[ resourceId, opacity ] = GetMeshResource( event.component );
-			ae::EditorMeshInstance* oldInstance = m_components.Get( event.component, nullptr );
-			ae::EditorMeshInstance* newInstance = nullptr;
-			if( !resourceId.empty() )
-			{
-				ae::EditorMeshInstance* resource = m_resources.Get( resourceId, nullptr );
-				if( !resource )
-				{
-					const ae::Optional< ae::EditorMesh > mesh = TryLoad( resourceId.c_str() );
-					resource = mesh.TryGet() ? CreateMesh( *mesh.TryGet(), kNullEntity ) : nullptr;
-					if( resource )
-					{
-						//AE_DEBUG( "Create mesh resource-># id:#", resource, resourceId );
-						resource->color = ae::Color::Magenta().SetA( 0.0f ); // Disable resource object rendering
-						m_resources.Set( resourceId, resource );
-					}
-				}
-				newInstance = CloneMesh( resource, event.entity );
-				AE_ASSERT( !oldInstance || oldInstance != newInstance );
-				if( newInstance )
-				{
-					newInstance->transform = event.transform;
-					newInstance->color = ae::Color::White().SetA( opacity );
-				}
-			}
-			if( newInstance )
-			{
-				m_components.Set( event.component, newInstance );
-				//AE_DEBUG( "Create mesh instance-># entity:# component:#", newInstance, event.entity, event.component );
-			}
-			else if( oldInstance )
-			{
-				m_components.Remove( event.component );
-			}
-			// Do this last in case it's the same resource as the old one
-			DestroyMesh( oldInstance );
+			AE_ASSERT( event.component );
+			m_UpdateInstance( *event.component, event.transform );
 			break;
 		}
 		case ae::EditorEventType::ComponentDestroy:
 		{
-			if( ae::EditorMeshInstance* instance = m_components.Get( event.component, nullptr ) )
-			{
-				//AE_DEBUG( "Destroy mesh instance-># entity:# component:#", instance, event.entity, event.component );
-				DestroyMesh( instance );
-				m_components.Remove( event.component );
-			}
+			AE_ASSERT( event.component );
+			m_DestroyInstance( *event.component );
 			break;
 		}
-		case ae::EditorEventType::Terminate:
+		case ae::EditorEventType::LevelUnload:
 		{
-			AE_DEBUG_ASSERT( !m_components.Length() );
-			for( auto& [ _, instance ] : m_resources )
-			{
-				DestroyMesh( instance );
-			}
-			m_resources.Clear();
+			m_Unload();
 			break;
 		}
 		default:
@@ -172,6 +129,70 @@ void MeshEditorPlugin::OnEvent( const ae::EditorEvent& event )
 			break;
 		}
 	}
+}
+
+void MeshEditorPlugin::m_UpdateInstance( const ae::EditorComponent& comp, const ae::Matrix4& transform )
+{
+	const auto[ resourceId, opacity ] = GetMeshResource( comp );
+	ae::EditorMeshInstance* oldInstance = m_components.Get( &comp, nullptr );
+	ae::EditorMeshInstance* newInstance = nullptr;
+	if( !resourceId.empty() )
+	{
+		ae::EditorMeshInstance* resource = m_resources.Get( resourceId, nullptr );
+		if( !resource )
+		{
+			const ae::Optional< ae::EditorMesh > mesh = TryLoad( resourceId.c_str() );
+			resource = mesh.TryGet() ? CreateMesh( *mesh.TryGet(), resourceId.c_str(), kNullEntity ) : nullptr;
+			if( resource )
+			{
+				AE_DEBUG( "Create mesh resource-># id:#", resource, resourceId );
+				resource->color = ae::Color::Magenta().SetA( 0.0f ); // Disable resource object rendering
+				m_resources.Set( resourceId, resource );
+			}
+		}
+		newInstance = CloneMesh( resource, comp.entity );
+		AE_ASSERT( !oldInstance || oldInstance != newInstance );
+		if( newInstance )
+		{
+			newInstance->transform = transform;
+			newInstance->color = ae::Color::White().SetA( opacity );
+		}
+	}
+
+	if( newInstance )
+	{
+		m_components.Set( &comp, newInstance );
+		AE_DEBUG( "Set component reference-># entity:# type:# resource:#", newInstance, comp.entity, comp.typeName, resourceId );
+	}
+	else if( oldInstance )
+	{
+		m_components.Remove( &comp );
+		AE_DEBUG( "Clear component reference-># entity:# type:# resource:#", oldInstance, comp.entity, comp.typeName, resourceId );
+	}
+
+	// Always free the old instance. A new instance is always created if the
+	// resource id is valid.
+	DestroyMesh( oldInstance );
+}
+
+void MeshEditorPlugin::m_DestroyInstance( const ae::EditorComponent& comp )
+{
+	if( ae::EditorMeshInstance* instance = m_components.Get( &comp, nullptr ) )
+	{
+		AE_DEBUG( "Destroy mesh instance-># entity:# type:#", instance, comp.entity, comp.typeName );
+		DestroyMesh( instance );
+		m_components.Remove( &comp );
+		AE_DEBUG( "Remove component reference entity:# remaining:#", comp.entity, m_components.Length() );
+	}
+}
+void MeshEditorPlugin::m_Unload()
+{
+	AE_DEBUG_ASSERT( !m_components.Length() );
+	for( auto& [ _, instance ] : m_resources )
+	{
+		DestroyMesh( instance );
+	}
+	m_resources.Clear();
 }
 
 } // namespace ae

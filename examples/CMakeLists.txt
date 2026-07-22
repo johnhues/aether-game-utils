@@ -334,21 +334,16 @@ if(AE_LOADERS_OFBX)
 endif()
 
 # Small Engine
-# Disabled on AE_BASE_TYPE: extras/Editor.cpp still calls ae::ClassVar::SetObjectValue()/
-# SetObjectValueFromString(), which this branch deleted outright (not gated by AE_DEPRECATED
-# anymore). Re-enable once Editor.cpp is migrated off the removed API.
-if(FALSE)
-	ae_add_bundle("Small Engine"
-		TARGET_NAME "18_SmallEngine"
-		BUNDLE_ID "io.aether.SmallEngine"
-		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
-		MAJOR_MINOR_PATCH_VERSION "0.0.0"
-		ICNS_FILE "data/Icon.icns"
-		SRC_FILES "18_SmallEngine.h;18_SmallEngine.cpp;18_Game.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/MeshEditorPlugin.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
-		RESOURCES "${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/tall_tree.obj;data/BlobCube.obj;data/level.tga;data/font.tga"
-		LIBS "ae;ae_extras;imgui;imguizmo;rapidjson"
-	)
-endif()
+ae_add_bundle("Small Engine"
+	TARGET_NAME "18_SmallEngine"
+	BUNDLE_ID "io.aether.SmallEngine"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "18_SmallEngine.h;18_SmallEngine.cpp;18_Game.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/MeshEditorPlugin.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/tall_tree.obj;data/BlobCube.obj;data/level.tga;data/font.tga"
+	LIBS "ae;ae_extras;imgui;imguizmo;rapidjson"
+)
 
 # Mouse
 ae_add_bundle("Mouse"

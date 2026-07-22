@@ -33,6 +33,7 @@
 AE_REGISTER_CLASS( CustomBaseType );
 AE_REGISTER_CLASS( CustomBaseTypeTest );
 AE_REGISTER_CLASS_VAR( CustomBaseTypeTest, testInt );
+AE_REGISTER_CLASS( CustomBaseTypeDestructTest );
 
 //------------------------------------------------------------------------------
 // PlayerState

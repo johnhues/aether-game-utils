@@ -40,7 +40,7 @@ TEST_CASE( "ClassType", "[aeMeta]" )
 	SomeClass someClass;
 	ae::DataPointer someClassPointer( &someClass );
 	REQUIRE( &someClassPointer.GetVarType() == ae::GetClassType< SomeClass >() );
-	REQUIRE( someClassPointer.GetVarType().AsVarType< ae::ClassType >() == ae::GetClassType< SomeClass >() );
+	REQUIRE( someClassPointer.AsVarType< ae::ClassType >() == ae::GetClassType< SomeClass >() );
 	REQUIRE( someClassPointer.GetVarType().GetExactVarTypeId() == ae::GetClassType< SomeClass >()->GetId() );
 }
 
@@ -49,7 +49,7 @@ TEST_CASE( "StaticArrayVarType", "[aeMeta]" )
 	ae::Array< int32_t, 5 > _array;
 	ae::DataPointer array( &_array );
 	REQUIRE( array.GetVarType().IsSameBaseVarType< ae::ArrayType >() );
-	const ae::ArrayType* varType = array.GetVarType().AsVarType< ae::ArrayType >();
+	const ae::ArrayType* varType = array.AsVarType< ae::ArrayType >();
 	REQUIRE( varType );
 	REQUIRE( varType->GetInnerVarType().IsSameBaseVarType< ae::BasicType >() );
 	const ae::BasicType* innerVarType = varType->GetInnerVarType().AsVarType< ae::BasicType >();
@@ -91,7 +91,7 @@ TEST_CASE( "MapType Static", "[aeMeta]" )
 	ae::DataPointer map( &_map );
 
 	REQUIRE( map.GetVarType().IsSameBaseVarType< ae::MapType >() );
-	const ae::MapType* mapVarType = map.GetVarType().AsVarType< ae::MapType >();
+	const ae::MapType* mapVarType = map.AsVarType< ae::MapType >();
 	REQUIRE( mapVarType );
 	REQUIRE( mapVarType->GetMaxLength() == 3 );
 	
@@ -183,7 +183,7 @@ TEST_CASE( "MapType Dynamic", "[aeMeta]" )
 	ae::DataPointer map( &_map );
 
 	REQUIRE( map.GetVarType().IsSameBaseVarType< ae::MapType >() );
-	const ae::MapType* mapVarType = map.GetVarType().AsVarType< ae::MapType >();
+	const ae::MapType* mapVarType = map.AsVarType< ae::MapType >();
 	REQUIRE( mapVarType );
 	REQUIRE( mapVarType->GetMaxLength() == UINT32_MAX );
 	REQUIRE( _map.Capacity() == 2 );
@@ -284,7 +284,7 @@ TEST_CASE( "MapType Iteration", "[aeMeta]" )
 
 	ae::DataPointer map( &_map );
 	ae::ConstDataPointer constMap( &_map );
-	const ae::MapType* mapVarType = map.GetVarType().AsVarType< ae::MapType >();
+	const ae::MapType* mapVarType = map.AsVarType< ae::MapType >();
 	REQUIRE( mapVarType );
 
 	const int32_t mapLength = mapVarType->GetLength( map );
