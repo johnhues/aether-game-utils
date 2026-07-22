@@ -86,7 +86,7 @@ PY
         return 0
     fi
     dir="$( ls -d ~/Library/Developer/Xcode/iOS\ DeviceSupport/*"($build)" \
-        2>/dev/null | head -1 )"
+        2>/dev/null | head -1 || true )"
     if [[ -z "$dir" ]]; then
         echo "==> WARNING: no extracted symbols for iOS build $build." >&2
         echo "    Debugging will be slow until Xcode finishes preparing the" >&2

@@ -3097,7 +3097,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 			ae::DocumentValue* selectedDocObject = GetDocumentObject( firstEntity );
 			{
 				char name[ 128 ];
-				strlcpy( name, selectedObject->GetName(), countof(name) );
+				ae::_strlcpy( name, selectedObject->GetName(), countof(name) );
 				if( ImGui::InputText( "Name", name, countof(name), ImGuiInputTextFlags_EnterReturnsTrue ) )
 				{
 					AE_INFO( "Set object name: #", name );
