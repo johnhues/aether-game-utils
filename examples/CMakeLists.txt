@@ -31,7 +31,10 @@ if(NOT imgui_FOUND)
 		${imgui_SOURCE_DIR}
 		${imgui_SOURCE_DIR}/backends
 	)
-	target_compile_options(imgui PRIVATE -Wno-nontrivial-memcall) # @TODO: Update imgui to fix this warning
+	target_compile_options(imgui PRIVATE
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nontrivial-memaccess>
+		$<$<CXX_COMPILER_ID:GNU>:-Wno-class-memaccess>
+	) # @TODO: Update imgui to fix this warning
 endif()
 
 # imguizmo
@@ -45,7 +48,10 @@ if(NOT imguizmo_FOUND)
 	FetchContent_MakeAvailable(imguizmo)
 	cmake_policy(SET CMP0079 NEW) # Allow linking imgui (defined here) into imguizmo (defined in fetched subdirectory)
 	target_link_libraries(imguizmo PUBLIC imgui)
-	target_compile_options(imguizmo PRIVATE -Wno-nontrivial-memcall) # @TODO: Update imgui to fix this warning
+	target_compile_options(imguizmo PRIVATE
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nontrivial-memaccess>
+		$<$<CXX_COMPILER_ID:GNU>:-Wno-class-memaccess>
+	) # @TODO: Update imgui to fix this warning
 endif()
 
 # rapidjson
