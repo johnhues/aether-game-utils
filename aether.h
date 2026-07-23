@@ -378,11 +378,16 @@ namespace ae {
 #endif
 
 //------------------------------------------------------------------------------
-//! AE_PUSH_DISABLE_ALL_WARNINGS/AE_POP_DISABLE_ALL_WARNINGS utility macros
+//! AE_*_DISABLE_ALL_WARNINGS utility macros
+//------------------------------------------------------------------------------
 //! To disable warnings from external headers. Usage:
-//! AE_PUSH_DISABLE_ALL_WARNINGS
-//! #include "external_header.h"
-//! AE_POP_DISABLE_ALL_WARNINGS
+#if 0 // Start example
+
+AE_PUSH_DISABLE_ALL_WARNINGS
+#include "external_header.h"
+AE_POP_DISABLE_ALL_WARNINGS
+
+#endif // End example
 //------------------------------------------------------------------------------
 #if defined( _MSC_VER )
 	#define AE_PUSH_DISABLE_ALL_WARNINGS() #pragma warning( push, 0 )
@@ -408,18 +413,31 @@ template< typename T, int N > char( &_CountOfHelper( T(&)[ N ] ) )[ N ];
 //! using U = typename ae::RemoveTypeQualifiers< T >;
 template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< T > > > >;
 
-//! AE_CALL_CONST_MEMBER_FUNCTION usage:
-//!	const Value* DataStructure::Find( Key key ) const
-//!	{
-//!		// Complicated logic here that shouldn't be duplicated
-//!		return ...;
-//!	}
-//!
-//!	// Call the const version above to avoid duplicating logic
-//!	Value* DataStructure::Find( Key key )
-//!	{
-//!		return AE_CALL_CONST_MEMBER_FUNCTION( Find( key ) ); // <----HERE
-//!	}
+//------------------------------------------------------------------------------
+// AE_CALL_CONST_MEMBER_FUNCTION
+//------------------------------------------------------------------------------
+//! A utility macro to easily call the const overload of a member function
+//! from within a non-const member function of the same class, encouraging
+//! const correctness and shared 
+#if 0
+//------------------------------------------------------------------------------
+
+const Value* DataStructure::Find( Key key ) const
+{
+	// Complicated logic here that shouldn't be duplicated
+	return ...;
+}
+
+Value* DataStructure::Find( Key key )
+{
+	// Const member function called within macro to avoid duplicating logic,
+	// returning the result with any const removed
+	return AE_CALL_CONST_MEMBER_FUNCTION( Find( key ) );
+}
+
+//------------------------------------------------------------------------------
+#endif // End example
+//------------------------------------------------------------------------------
 #define AE_CALL_CONST_MEMBER_FUNCTION( _mem_fn_call )\
 	[&]()\
 	{\
@@ -436,8 +454,7 @@ template< typename T > using RemoveTypeQualifiers = std::remove_cv_t< std::remov
 	}()
 
 //------------------------------------------------------------------------------
-// Internal Helpers
-//------------------------------------------------------------------------------
+// Internal Start
 #define _AE_STATIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
 #define _AE_DYNAMIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
@@ -458,6 +475,8 @@ template< typename T > using _EnableIfFractional = std::enable_if_t< std::is_flo
 #	define AE_WASM_IMPORT( _m )
 #	define AE_WASM_EXPORT
 #endif
+// Internal End
+//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //! \defgroup Platform
@@ -1282,7 +1301,7 @@ class Sphere
 {
 public:
 	Sphere() = default;
-	Sphere( ae::Vec3 center, float radius ) : center( center ), radius( radius ) {}
+	Sphere( ae::Vec3 center, float radius );
 	explicit Sphere( const class OBB& obb );
 	void Expand( ae::Vec3 p );
 
@@ -3430,7 +3449,7 @@ namespace ae {
 // AE_EXPORT
 //------------------------------------------------------------------------------
 //! When building a hot loadable shared library for use with ae::HotLoader it is
-//! recommended to use the the following compiler flags when building, and this
+//! recommended to use the the following compiler flags when building and this
 //! macro with any functions that will be called with ae::HotLoader::CallFn().
 //! This will stop the compiler from unintentionally exporting functions that
 //! could prevent the dynamic library from unloading.
@@ -3467,7 +3486,7 @@ class HotLoader
 public:
 	~HotLoader();
 	void Initialize( const char* buildCmd, const char* postBuildCmd, const char* libPath );
-	void Reload();
+	bool Reload();
 	void Close();
 	bool IsLoaded() const { return m_dylib != nullptr; }
 
@@ -6898,7 +6917,7 @@ class DataPointer
 {
 public:
 	DataPointer();
-	template< typename T > explicit DataPointer( T* data );
+	template< typename T > DataPointer( T* data );
 	template< typename T > DataPointer( const ae::ClassVar* var, T* object );
 	DataPointer( const ae::Type& varType, void* data );
 	DataPointer( const ae::ClassVar* var, std::nullptr_t ) : DataPointer() {}
@@ -6930,7 +6949,7 @@ class ConstDataPointer
 public:
 	ConstDataPointer();
 	ConstDataPointer( DataPointer varData );
-	template< typename T > explicit ConstDataPointer( const T* data );
+	template< typename T > ConstDataPointer( const T* data );
 	template< typename T > ConstDataPointer( const ae::ClassVar* var, const T* object );
 	ConstDataPointer( const ae::Type& varType, const void* data );
 	ConstDataPointer( const ae::ClassVar* var, std::nullptr_t ) : ConstDataPointer() {}
@@ -17255,6 +17274,13 @@ void Quaternion::GetTwistSwing( Vec3 axis, Quaternion* twistOut, Quaternion* swi
 //------------------------------------------------------------------------------
 // ae::Sphere member functions
 //------------------------------------------------------------------------------
+Sphere::Sphere( ae::Vec3 center, float radius ) :
+	center( center ),
+	radius( radius )
+{
+	AE_DEBUG_ASSERT_MSG( radius > 0.0f, "Invalid Sphere radius #", radius );
+}
+
 Sphere::Sphere( const OBB& obb )
 {
 	center = obb.GetCenter();
@@ -19892,48 +19918,59 @@ void HotLoader::Initialize( const char* buildCmd, const char* postBuildCmd, cons
 	Reload();
 }
 
-void HotLoader::Reload()
+bool HotLoader::Reload()
 {
-	bool reload = true;
 #if _AE_IOS_
-	reload = false;
+	return false;
 #else
 	if( m_buildCmd.Length() )
 	{
-		AE_INFO( m_buildCmd.c_str() );
-		reload = reload && ( system( m_buildCmd.c_str() ) == 0 );
+		AE_INFO( "Build command: #", m_buildCmd.c_str() );
+		const int32_t result = system( m_buildCmd.c_str() );
+		if( result )
+		{
+			AE_ERROR( "Build command failed with error code: #", result );
+			return false;
+		}
 	}
 	if( m_postBuildCmd.Length() )
 	{
-		AE_INFO( m_postBuildCmd.c_str() );
-		reload = reload && ( system( m_postBuildCmd.c_str() ) == 0 );
-	}
-#endif
-
-	if( reload )
-	{
-		Close();
-
-		AE_INFO( "Loading: '#'", m_libPath );
-#if _AE_APPLE_
-		m_dylib = dlopen( m_libPath.c_str(), RTLD_NOW | RTLD_LOCAL );
-		AE_ASSERT_MSG( m_dylib, "dlopen() failed: #", dlerror() );
-#else
-		AE_FAIL_MSG( "HotLoader not implemented for this platform" );
-#endif
-
-		for( auto& fn : m_fns )
+		AE_INFO( "Post-build command: #", m_postBuildCmd.c_str() );
+		const int32_t result = system( m_postBuildCmd.c_str() );
+		if( result )
 		{
-#if _AE_APPLE_
-			fn.value = dlsym( m_dylib, fn.key.c_str() );
-			AE_ASSERT_MSG( fn.value, "dlsym( \"#\" ) failed: #", fn.key, dlerror() );
-#endif
+			AE_ERROR( "Post-build command failed with error code: #", result );
+			return false;
 		}
 	}
-	else
+#endif
+
+	Close();
+	AE_INFO( "Loading: '#'", m_libPath );
+
+	#if _AE_APPLE_
+		m_dylib = dlopen( m_libPath.c_str(), RTLD_NOW | RTLD_LOCAL );
+		if( !m_dylib )
+		{
+			AE_ERROR( "dlopen() failed: #", dlerror() );
+			return false;
+		}
+	#else
+		AE_ERROR( "HotLoader not implemented for this platform" );
+		return false;
+	#endif
+
+	for( auto& fn : m_fns )
 	{
-		AE_WARN( "Reload aborted" );
+		#if _AE_APPLE_
+			fn.value = dlsym( m_dylib, fn.key.c_str() );
+			if( !fn.value )
+			{
+				AE_WARN( "dlsym( \"#\" ) failed: #", fn.key, dlerror() );
+			}
+		#endif
 	}
+	return true;
 }
 
 void HotLoader::Close()

@@ -34,7 +34,11 @@
 // Push warning disables for imgui includes
 #if _AE_EMSCRIPTEN_
 	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wnontrivial-memcall"
+	#if defined(__clang__) && __clang_major__ >= 15
+		#pragma GCC diagnostic ignored "-Wnontrivial-memaccess"
+	#elif !defined(__clang__) && defined(__GNUC__) && __GNUC__ >= 11
+		#pragma GCC diagnostic ignored "-Wclass-memaccess"
+	#endif
 #elif _AE_WINDOWS_
 	#pragma warning( push )
 	#pragma warning( disable : 4244 ) // conversion from 'float' to 'int32_t'
@@ -53,7 +57,11 @@
 
 // Include imgui
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wnontrivial-memcall" // @TODO: Update imgui to fix this warning
+#if defined(__clang__) && __clang_major__ >= 15
+	#pragma GCC diagnostic ignored "-Wnontrivial-memaccess" // @TODO: Update imgui to fix this warning
+#elif !defined(__clang__) && defined(__GNUC__) && __GNUC__ >= 11
+	#pragma GCC diagnostic ignored "-Wclass-memaccess" // @TODO: Update imgui to fix this warning
+#endif
 #include "imgui.h"
 #include "imgui_internal.h" // For advanced imgui features like docking
 #pragma GCC diagnostic pop
