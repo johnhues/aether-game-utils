@@ -28923,15 +28923,20 @@ void SpriteRenderer::Render()
 	m_vertexArray.Upload();
 
 	const uint32_t spriteCount = m_spriteGroups.Length();
-	for( uint32_t i = 0; i < spriteCount; i++ )
+	for( uint32_t startIdx = 0; startIdx < spriteCount; )
 	{
-		const uint32_t group = m_spriteGroups[ i ];
+		const uint32_t group = m_spriteGroups[ startIdx ];
+		uint32_t endIdx = startIdx + 1;
+		while( endIdx < spriteCount && m_spriteGroups[ endIdx ] == group )
+		{
+			endIdx++;
+		}
 		const GroupParams& params = m_params[ group ];
-		// @TODO: Combine draw calls when consecutive sprites are the same group
 		if( params.shader )
 		{
-			m_vertexArray.Draw( params.shader, params.uniforms, i * 2, 2 );
+			m_vertexArray.Draw( params.shader, params.uniforms, startIdx * 2, ( endIdx - startIdx ) * 2 );
 		}
+		startIdx = endIdx;
 	}
 
 	Clear();
