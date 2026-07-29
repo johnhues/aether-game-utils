@@ -3612,12 +3612,13 @@ public:
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
 	void SetSize( uint32_t width, uint32_t height );
 	void SetMaximized( bool maximized );
+	void SetMinimized( bool minimized );
 	void SetAlwaysOnTop( bool alwaysOnTop );
-	// void SetMode( ae::WindowMode mode ); // @TODO: Replace SetFullScreen() and SetMaximized() with this
 
 	const char* GetTitle() const { return m_windowTitle.c_str(); }
-	bool GetFullScreen() const { return m_fullScreen; }
-	bool GetMaximized() const { return m_maximized; }
+	bool GetFullScreen() const { return m_mode == Mode::Fullscreen; }
+	bool GetMaximized() const { return m_mode == Mode::Maximized; }
+	bool GetMinimized() const { return m_mode == Mode::Minimized; }
 	//! True if the user is currently working with this window
 	bool GetFocused() const { return m_focused; }
 	//! Top left window position in virtual DPI units @TODO: Content or window width in dpi units?
@@ -3655,14 +3656,16 @@ public:
 	bool GetLoggingEnabled() const { return m_debugLog; }
 
 private:
+	enum class Mode { Windowed, Minimized, Maximized, Fullscreen };
 	Window( const Window& ) = delete;
 	void m_Initialize( bool rememberPosition );
+	void m_SetMode( Mode mode );
+	Mode m_QueryMode() const; // Reads the actual OS window state. The single source of truth for m_mode.
 	Int2 m_pos = Int2( 0 );
 	int32_t m_width = 0;
 	int32_t m_height = 0;
 	RectInt m_restoreRect; // Last pos/size before fullscreen
-	bool m_fullScreen = false;
-	bool m_maximized = false;
+	Mode m_mode = Mode::Windowed;
 	bool m_focused = false;
 	float m_scaleFactor = 1.0f;
 	Str256 m_windowTitle;
@@ -3671,8 +3674,7 @@ public:
 	// Internal
 	void m_UpdatePos( Int2 pos ) { m_pos = pos; }
 	void m_UpdateSize( int32_t width, int32_t height, float scaleFactor );
-	void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
-	void m_UpdateFullScreen( bool fullScreen ) { m_fullScreen = fullScreen; }
+	void m_SyncMode() { m_mode = m_QueryMode(); } // Sole writer of m_mode, from actual OS window state
 	void m_UpdateFocused( bool focused );
 	void m_UpdateBackBuffer();
 	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
@@ -20006,17 +20008,6 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 			uint32_t width = LOWORD( lParam );
 			uint32_t height = HIWORD( lParam );
 			window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor with PROCESS_DPI_AWARENESS
-			switch( wParam )
-			{
-				case SIZE_MAXIMIZED:
-					window->m_UpdateMaximized( true );
-					if( window->GetLoggingEnabled() ) { AE_INFO( "maximize # #", width, height ); }
-					break;
-				default:
-					if( window->GetLoggingEnabled() ) { AE_INFO( "unmaximize # #", width, height ); }
-					window->m_UpdateMaximized( false );
-					break;
-			}
 			break;
 		}
 		case WM_CLOSE:
@@ -20494,8 +20485,7 @@ Window::Window()
 	m_pos = Int2( 0 );
 	m_width = 0;
 	m_height = 0;
-	m_fullScreen = false;
-	m_maximized = false;
+	m_mode = Mode::Windowed;
 	m_focused = false;
 	m_scaleFactor = 1.0f;
 }
@@ -20506,7 +20496,7 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 
 	m_width = width;
 	m_height = height;
-	m_fullScreen = false;
+	m_mode = Mode::Windowed;
 
 #if !_AE_IOS_
 	// Center window on primary screen
@@ -20533,7 +20523,7 @@ bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCur
 	m_pos = pos;
 	m_width = width;
 	m_height = height;
-	m_fullScreen = false;
+	m_mode = Mode::Windowed;
 
 	m_Initialize( rememberPosition );
 
@@ -21034,60 +21024,125 @@ void Window::SetTitle( const char* title )
 	}
 }
 
+Window::Mode Window::m_QueryMode() const
+{
+#if _AE_WINDOWS_
+	if( !window )
+	{
+		return m_mode;
+	}
+	HWND hwnd = (HWND)window;
+	WINDOWPLACEMENT wp;
+	memset( &wp, 0, sizeof( wp ) );
+	wp.length = sizeof( wp );
+	GetWindowPlacement( hwnd, &wp );
+	// Check minimized first. A minimized fullscreen window still has WS_POPUP set.
+	if( wp.showCmd == SW_SHOWMINIMIZED )
+	{
+		return Mode::Minimized;
+	}
+	if( GetWindowLongPtr( hwnd, GWL_STYLE ) & WS_POPUP )
+	{
+		return Mode::Fullscreen;
+	}
+	if( wp.showCmd == SW_SHOWMAXIMIZED )
+	{
+		return Mode::Maximized;
+	}
+	return Mode::Windowed;
+#elif _AE_OSX_
+	if( !window )
+	{
+		return m_mode;
+	}
+	NSWindow* nsWindow = (NSWindow*)window;
+	if( [nsWindow isMiniaturized] )
+	{
+		return Mode::Minimized;
+	}
+	if( ( [nsWindow styleMask] & NSFullScreenWindowMask ) == NSFullScreenWindowMask )
+	{
+		return Mode::Fullscreen;
+	}
+	if( [nsWindow isZoomed] )
+	{
+		return Mode::Maximized;
+	}
+	return Mode::Windowed;
+#elif _AE_EMSCRIPTEN_
+	EmscriptenFullscreenChangeEvent s;
+	emscripten_get_fullscreen_status( &s );
+	return s.isFullscreen ? Mode::Fullscreen : Mode::Windowed;
+#else
+	return m_mode;
+#endif
+}
+
 void Window::SetFullScreen( bool fullScreen )
 {
-	if( GetLoggingEnabled() ) { AE_INFO( "fullscreen #", fullScreen ); }
+	m_SetMode( fullScreen ? Mode::Fullscreen : Mode::Windowed );
+}
+
+void Window::SetMaximized( bool maximized )
+{
+	m_SetMode( maximized ? Mode::Maximized : Mode::Windowed );
+}
+
+void Window::SetMinimized( bool minimized )
+{
+	m_SetMode( minimized ? Mode::Minimized : Mode::Windowed );
+}
+
+void Window::m_SetMode( ae::Window::Mode mode )
+{
+	if( mode == m_mode )
+	{
+		return;
+	}
+	if( GetLoggingEnabled() ) { AE_INFO( "window mode #", (int)mode ); }
 #if _AE_OSX_
 	if( window )
 	{
-		m_fullScreen = fullScreen;
 		NSWindow* nsWindow = (NSWindow*)window;
 		const bool isFullScreen = ( ( [nsWindow styleMask] & NSFullScreenWindowMask ) == NSFullScreenWindowMask );
-		if( m_fullScreen != isFullScreen )
+		if( isFullScreen && mode != Mode::Fullscreen )
 		{
 			[nsWindow toggleFullScreen:[NSApplication sharedApplication]];
+		}
+		switch( mode )
+		{
+			case Mode::Fullscreen:
+				if( !isFullScreen )
+				{
+					[nsWindow toggleFullScreen:[NSApplication sharedApplication]];
+				}
+				break;
+			case Mode::Maximized:
+				if( ![nsWindow isZoomed] )
+				{
+					[nsWindow zoom:nil];
+				}
+				break;
+			case Mode::Minimized:
+				[nsWindow miniaturize:nil];
+				break;
+			case Mode::Windowed:
+				if( [nsWindow isZoomed] )
+				{
+					[nsWindow zoom:nil];
+				}
+				if( [nsWindow isMiniaturized] )
+				{
+					[nsWindow deminiaturize:nil];
+				}
+				break;
 		}
 	}
 #elif _AE_WINDOWS_
 	if( window )
 	{
-		m_fullScreen = fullScreen; // First so triggered events can use this value
 		HWND hwnd = (HWND)window;
-		if( fullScreen )
-		{
-			WINDOWPLACEMENT wp;
-			memset( &wp, 0, sizeof( wp ) );
-			wp.length = sizeof( wp );
-			if( GetWindowPlacement( hwnd, &wp ) )
-			{
-				const ae::Int2 restoreSize( wp.rcNormalPosition.right - wp.rcNormalPosition.left, wp.rcNormalPosition.bottom - wp.rcNormalPosition.top );
-				const ae::Int2 aeRestorePos = m_nativeToAe( ae::Int2( wp.rcNormalPosition.left, wp.rcNormalPosition.top ), restoreSize );
-				m_restoreRect = ae::RectInt::FromPointAndSize( aeRestorePos, restoreSize );
-			}
-			if( GetLoggingEnabled() )
-			{
-				const ae::Int2 restorePos = m_restoreRect.GetPos();
-				const ae::Int2 restoreSize = m_restoreRect.GetSize();
-				if( GetLoggingEnabled() ) { AE_INFO( "restore rect # # # #", restorePos.x, restorePos.y, restoreSize.x, restoreSize.y ); }
-			}
-
-			RECT windowRect;
-			GetWindowRect( hwnd, &windowRect );
-			if( HMONITOR hMonitor = MonitorFromRect( &windowRect, MONITOR_DEFAULTTOPRIMARY ) )
-			{
-				MONITORINFO monitorInfo;
-				memset( &monitorInfo, 0, sizeof( MONITORINFO ) );
-				monitorInfo.cbSize = sizeof( MONITORINFO );
-				if( GetMonitorInfo( hMonitor, &monitorInfo ) )
-				{
-					const RECT monitorRect = monitorInfo.rcMonitor;
-					const ae::Int2 size( monitorRect.right - monitorRect.left, monitorRect.bottom - monitorRect.top );
-					SetWindowLongPtr( hwnd, GWL_STYLE, WS_VISIBLE | WS_POPUP );
-					SetWindowPos( hwnd, HWND_TOP, monitorRect.left, monitorRect.top, size.x, size.y, SWP_FRAMECHANGED );
-				}
-			}
-		}
-		else 
+		if( m_mode == Mode::Fullscreen && mode != Mode::Fullscreen )
 		{
 			const ae::Int2 aeRestorePos = m_restoreRect.GetPos();
 			const ae::Int2 restoreSize = m_restoreRect.GetSize();
@@ -21096,27 +21151,72 @@ void Window::SetFullScreen( bool fullScreen )
 			SetWindowPos( hwnd, nullptr, nativeRestorePos.x, nativeRestorePos.y, restoreSize.x, restoreSize.y, SWP_FRAMECHANGED );
 			if( GetLoggingEnabled() ) { AE_INFO( "unfullscreen # # # #", aeRestorePos.x, aeRestorePos.y, restoreSize.x, restoreSize.y ); }
 		}
+		switch( mode )
+		{
+			case Mode::Fullscreen:
+			{
+				WINDOWPLACEMENT wp;
+				memset( &wp, 0, sizeof( wp ) );
+				wp.length = sizeof( wp );
+				if( GetWindowPlacement( hwnd, &wp ) )
+				{
+					const ae::Int2 restoreSize( wp.rcNormalPosition.right - wp.rcNormalPosition.left, wp.rcNormalPosition.bottom - wp.rcNormalPosition.top );
+					const ae::Int2 aeRestorePos = m_nativeToAe( ae::Int2( wp.rcNormalPosition.left, wp.rcNormalPosition.top ), restoreSize );
+					m_restoreRect = ae::RectInt::FromPointAndSize( aeRestorePos, restoreSize );
+				}
+				if( GetLoggingEnabled() )
+				{
+					const ae::Int2 restorePos = m_restoreRect.GetPos();
+					const ae::Int2 restoreSize = m_restoreRect.GetSize();
+					AE_INFO( "restore rect # # # #", restorePos.x, restorePos.y, restoreSize.x, restoreSize.y );
+				}
+
+				RECT windowRect;
+				GetWindowRect( hwnd, &windowRect );
+				if( HMONITOR hMonitor = MonitorFromRect( &windowRect, MONITOR_DEFAULTTOPRIMARY ) )
+				{
+					MONITORINFO monitorInfo;
+					memset( &monitorInfo, 0, sizeof( MONITORINFO ) );
+					monitorInfo.cbSize = sizeof( MONITORINFO );
+					if( GetMonitorInfo( hMonitor, &monitorInfo ) )
+					{
+						const RECT monitorRect = monitorInfo.rcMonitor;
+						const ae::Int2 size( monitorRect.right - monitorRect.left, monitorRect.bottom - monitorRect.top );
+						SetWindowLongPtr( hwnd, GWL_STYLE, WS_VISIBLE | WS_POPUP );
+						SetWindowPos( hwnd, HWND_TOP, monitorRect.left, monitorRect.top, size.x, size.y, SWP_FRAMECHANGED );
+					}
+				}
+				break;
+			}
+			case Mode::Maximized:
+				ShowWindow( hwnd, SW_MAXIMIZE );
+				break;
+			case Mode::Minimized:
+				ShowWindow( hwnd, SW_MINIMIZE );
+				break;
+			case Mode::Windowed:
+				ShowWindow( hwnd, SW_RESTORE );
+				break;
+		}
 	}
 #elif _AE_EMSCRIPTEN_
-	if( m_fullScreen != fullScreen )
+	if( mode == Mode::Fullscreen )
 	{
-		if( fullScreen )
-		{
-			if( GetLoggingEnabled() ) { AE_INFO( "request full screen" ); }
-			EmscriptenFullscreenStrategy strategy;
-			memset( &strategy, 0, sizeof(strategy) );
-			strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_DEFAULT;
-			strategy.canvasResolutionScaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF;
-			strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
-			emscripten_request_fullscreen_strategy( "canvas", true, &strategy );
-		}
-		else
-		{
-			if( GetLoggingEnabled() ) { AE_INFO( "exit full screen" ); }
-			emscripten_exit_fullscreen();
-		}
+		if( GetLoggingEnabled() ) { AE_INFO( "request full screen" ); }
+		EmscriptenFullscreenStrategy strategy;
+		memset( &strategy, 0, sizeof(strategy) );
+		strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_DEFAULT;
+		strategy.canvasResolutionScaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF;
+		strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
+		emscripten_request_fullscreen_strategy( "canvas", true, &strategy );
+	}
+	else
+	{
+		if( GetLoggingEnabled() ) { AE_INFO( "exit full screen" ); }
+		emscripten_exit_fullscreen();
 	}
 #endif
+	m_SyncMode();
 }
 
 void Window::SetPosition( Int2 pos )
@@ -21136,21 +21236,6 @@ void Window::SetSize( uint32_t width, uint32_t height )
 //		m_width = width;
 //		m_height = height;
 //	}
-}
-
-void Window::SetMaximized( bool maximized )
-{
-#if _AE_WINDOWS_
-	if( maximized )
-	{
-		ShowWindow( (HWND)window, SW_MAXIMIZE );
-	}
-	else
-	{
-		ShowWindow( (HWND)window, SW_RESTORE );
-	}
-	m_maximized = maximized;
-#endif
 }
 
 void Window::SetAlwaysOnTop( bool alwaysOnTop )
@@ -21516,8 +21601,7 @@ EM_BOOL _aeEmscriptenHandleFullScreen( int eventType, const EmscriptenFullscreen
 	AE_ASSERT( userData );
 	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_FULLSCREENCHANGE );
 	ae::Window* window = ( (Input*)userData )->m_window;
-	if( window->GetLoggingEnabled() ) { AE_INFO( "full screen # -> #", ( window->GetFullScreen() ? "true" : "false" ), ( fullscreenChangeEvent->isFullscreen ? "true" : "false" ) ); }
-	window->m_UpdateFullScreen( fullscreenChangeEvent->isFullscreen );
+	if( window->GetLoggingEnabled() ) { AE_INFO( "full screen -> #", ( fullscreenChangeEvent->isFullscreen ? "true" : "false" ) ); }
 	return true;
 }
 
@@ -21698,6 +21782,7 @@ void Input::Pump()
 		TranslateMessage( &msg );
 		DispatchMessage( &msg );
 	}
+	m_window->m_SyncMode();
 	// Update mouse pos
 	bool mouseJustSet = false; // Don't enable m_mousePosSet because m_SetMousePos() checks it
 	if( m_window )
@@ -21843,6 +21928,7 @@ void Input::Pump()
 			[NSApp sendEvent:event];
 		}
 	}
+	m_window->m_SyncMode();
 #elif _AE_EMSCRIPTEN_
 	{
 		if( m_window->m_fixCanvasStyle )
@@ -21870,6 +21956,7 @@ void Input::Pump()
 		float scale;
 		_aeEmscriptenGetCanvasInfo( &width, &height, &scale );
 		m_window->m_UpdateSize( width, height, scale );
+		m_window->m_SyncMode();
 	}
 #endif
 
