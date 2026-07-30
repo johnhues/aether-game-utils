@@ -20033,20 +20033,60 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 @implementation aeApplicationDelegate
 - (void)applicationWillFinishLaunching:(NSNotification*)notification
 {
+	// Setting the correct activation policy is required for the menu bar
+	// shortcuts to work correctly. Must precede menu construction below.
+	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+
+	NSString* appName = [[NSProcessInfo processInfo] processName];
+
 	// Create the application menu bar
 	NSMenu* menubar = [NSMenu new];
 	[NSApp setMainMenu:menubar];
-	
+
 	// Create the button in the menu bar
 	NSMenuItem* menuBarItem = [NSMenuItem new];
 	[menubar addItem:menuBarItem];
-	
-	// Create the menu and its contents
-	// @TODO: Currently this menu must be open for cmd+q to work, fix this
+
+	// App menu
 	NSMenu* appMenu = [NSMenu new];
-	NSMenuItem* quitMenuItem = [[NSMenuItem alloc] initWithTitle:@"Quit" action:@selector(terminate:) keyEquivalent:@"q"];
+	NSMenuItem* aboutMenuItem = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"About %@", appName] action:@selector(ae_orderFrontStandardAboutPanel:) keyEquivalent:@""];
+	// Make this application delegate available from the About menu item
+	[aboutMenuItem setTarget:self];
+	[appMenu addItem:aboutMenuItem];
+	[appMenu addItem:[NSMenuItem separatorItem]];
+	NSMenu* servicesMenu = [NSMenu new];
+	NSMenuItem* servicesMenuItem = [[NSMenuItem alloc] initWithTitle:@"Services" action:nil keyEquivalent:@""];
+	[servicesMenuItem setSubmenu:servicesMenu];
+	[appMenu addItem:servicesMenuItem];
+	[NSApp setServicesMenu:servicesMenu];
+	[appMenu addItem:[NSMenuItem separatorItem]];
+	NSMenuItem* hideMenuItem = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"Hide %@", appName] action:@selector(hide:) keyEquivalent:@"h"];
+	[appMenu addItem:hideMenuItem];
+	NSMenuItem* hideOthersMenuItem = [[NSMenuItem alloc] initWithTitle:@"Hide Others" action:@selector(hideOtherApplications:) keyEquivalent:@"h"];
+	[hideOthersMenuItem setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagOption];
+	[appMenu addItem:hideOthersMenuItem];
+	NSMenuItem* showAllMenuItem = [[NSMenuItem alloc] initWithTitle:@"Show All" action:@selector(unhideAllApplications:) keyEquivalent:@""];
+	[appMenu addItem:showAllMenuItem];
+	[appMenu addItem:[NSMenuItem separatorItem]];
+	NSMenuItem* quitMenuItem = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"Quit %@", appName] action:@selector(terminate:) keyEquivalent:@"q"];
 	[appMenu addItem:quitMenuItem];
 	[menuBarItem setSubmenu:appMenu];
+
+	// Window menu
+	NSMenuItem* windowMenuBarItem = [NSMenuItem new];
+	[menubar addItem:windowMenuBarItem];
+	NSMenu* windowMenu = [[NSMenu alloc] initWithTitle:@"Window"];
+	NSMenuItem* fullScreenMenuItem = [[NSMenuItem alloc] initWithTitle:@"Enter Full Screen" action:@selector(toggleFullScreen:) keyEquivalent:@"f"];
+	[fullScreenMenuItem setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagControl];
+	[windowMenu addItem:fullScreenMenuItem];
+	[windowMenu addItem:[NSMenuItem separatorItem]];
+	NSMenuItem* minimizeMenuItem = [[NSMenuItem alloc] initWithTitle:@"Minimize" action:@selector(performMiniaturize:) keyEquivalent:@"m"];
+	[windowMenu addItem:minimizeMenuItem];
+	NSMenuItem* zoomMenuItem = [[NSMenuItem alloc] initWithTitle:@"Zoom" action:@selector(performZoom:) keyEquivalent:@""];
+	[windowMenu addItem:zoomMenuItem];
+	[windowMenu addItem:[NSMenuItem separatorItem]];
+	[windowMenuBarItem setSubmenu:windowMenu];
+	[NSApp setWindowsMenu:windowMenu];
 }
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
@@ -20054,7 +20094,14 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	NSProcessInfo* processInfo = [NSProcessInfo processInfo];
 	processInfo.automaticTerminationSupportEnabled = false;
 	[processInfo disableSuddenTermination];
-	
+
+	// Registers the window with the Window menu so a minimized window has an entry to restore it
+	if( _aeWindow && _aeWindow->window )
+	{
+		NSWindow* nsWindow = (NSWindow*)_aeWindow->window;
+		[NSApp addWindowsItem:nsWindow title:[nsWindow title] filename:NO];
+	}
+
 	// Prevents app run from blocking
 	[NSApp stop:nil];
 }
@@ -20065,6 +20112,17 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	// @TODO: Prevent Q from being sent to the window?
 	_aeWindow->input->quit = true;
 	return NSTerminateCancel;
+}
+- (void)ae_orderFrontStandardAboutPanel:(id)sender
+{
+	NSString* appName = [[NSProcessInfo processInfo] processName];
+	NSMutableDictionary* options = [NSMutableDictionary dictionaryWithObject:appName forKey:NSAboutPanelOptionApplicationName];
+	NSString* appVersion = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+	if( appVersion.length )
+	{
+		options[ NSAboutPanelOptionApplicationVersion ] = appVersion;
+	}
+	[NSApp orderFrontStandardAboutPanelWithOptions:options];
 }
 @end
 
@@ -20731,10 +20789,15 @@ void Window::m_Initialize( bool rememberPosition )
 		defer:YES
 	];
 	[nsWindow setRestorable:NO];
+	// Disable window tabbing behavior, enabled by default on macOS 10.12+
+	[nsWindow setTabbingMode:NSWindowTabbingModeDisallowed];
 	nsWindow.delegate = windowDelegate;
 	[nsWindow setColorSpace:[NSColorSpace sRGBColorSpace]];
 	this->window = nsWindow;
-	
+	// NSWindow has no default title, which causes issues with the "Window" menu
+	// and minimized windows. Set the title to the default title for a bundled app.
+	SetTitle( [[[NSProcessInfo processInfo] processName] UTF8String] );
+
 	NSRect initFrame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
 	NSRect frame = NSMakeRect( m_pos.x, m_pos.y, m_width, m_height );
 	if( !CGRectEqualToRect( initFrame, frame ) )
@@ -20807,10 +20870,6 @@ void Window::m_Initialize( bool rememberPosition )
 	m_width = contentScreenRect.size.width;
 	m_height = contentScreenRect.size.height;
 	m_scaleFactor = nsWindow.backingScaleFactor;
-	
-	// This prevents keystrokes from being output to the terminal when running
-	// as a console app.
-	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #elif _AE_EMSCRIPTEN_
 #if AE_ENABLE_OPENGL
 	EmscriptenWebGLContextAttributes attrs;
@@ -21016,7 +21075,13 @@ void Window::SetTitle( const char* title )
 #if _AE_WINDOWS_
 		if( window ) { SetWindowTextA( (HWND)window, title ); }
 #elif _AE_OSX_
-		if( window ) { ((NSWindow*)window).title = [NSString stringWithUTF8String:title]; }
+		if( window )
+		{
+			NSWindow* nsWindow = (NSWindow*)window;
+			nsWindow.title = [NSString stringWithUTF8String:title];
+			// Keeps the Windows menu's window-list entry in sync with the new title.
+			[NSApp updateWindowsItem:nsWindow];
+		}
 #elif _AE_EMSCRIPTEN_
 		emscripten_set_window_title( title );
 #endif
@@ -21661,6 +21726,7 @@ void Input::Initialize( Window* window )
 	[nsWindow orderFrontRegardless];
 	[GCController setShouldMonitorBackgroundEvents: YES];
 	m_naturalScroll = [[NSUserDefaults standardUserDefaults] boolForKey:@"com.apple.swipescrolldirection"];
+	// Triggers applicationWillFinishLaunching/applicationDidFinishLaunching.
 	[[NSApplication sharedApplication] run];
 #endif
 
@@ -21927,6 +21993,12 @@ void Input::Pump()
 			}
 			[NSApp sendEvent:event];
 		}
+	}
+	// Keeps the auto-managed Windows menu's window-list entry and enabled
+	// state in sync.
+	if( NSWindow* nsWindow = (NSWindow*)m_window->window )
+	{
+		[NSApp updateWindowsItem:nsWindow];
 	}
 	m_window->m_SyncMode();
 #elif _AE_EMSCRIPTEN_
