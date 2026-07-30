@@ -3617,12 +3617,13 @@ public:
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
 	void SetSize( uint32_t width, uint32_t height );
 	void SetMaximized( bool maximized );
+	void SetMinimized( bool minimized );
 	void SetAlwaysOnTop( bool alwaysOnTop );
-	// void SetMode( ae::WindowMode mode ); // @TODO: Replace SetFullScreen() and SetMaximized() with this
 
 	const char* GetTitle() const { return m_windowTitle.c_str(); }
-	bool GetFullScreen() const { return m_fullScreen; }
-	bool GetMaximized() const { return m_maximized; }
+	bool GetFullScreen() const { return m_mode == Mode::Fullscreen; }
+	bool GetMaximized() const { return m_mode == Mode::Maximized; }
+	bool GetMinimized() const { return m_mode == Mode::Minimized; }
 	//! True if the user is currently working with this window
 	bool GetFocused() const { return m_focused; }
 	//! Top left window position in virtual DPI units @TODO: Content or window width in dpi units?
@@ -3660,14 +3661,16 @@ public:
 	bool GetLoggingEnabled() const { return m_debugLog; }
 
 private:
+	enum class Mode { Windowed, Minimized, Maximized, Fullscreen };
 	Window( const Window& ) = delete;
 	void m_Initialize( bool rememberPosition );
+	void m_SetMode( Mode mode );
+	Mode m_QueryMode() const; // Reads the actual OS window state. The single source of truth for m_mode.
 	Int2 m_pos = Int2( 0 );
 	int32_t m_width = 0;
 	int32_t m_height = 0;
 	RectInt m_restoreRect; // Last pos/size before fullscreen
-	bool m_fullScreen = false;
-	bool m_maximized = false;
+	Mode m_mode = Mode::Windowed;
 	bool m_focused = false;
 	float m_scaleFactor = 1.0f;
 	Str256 m_windowTitle;
@@ -3676,8 +3679,7 @@ public:
 	// Internal
 	void m_UpdatePos( Int2 pos ) { m_pos = pos; }
 	void m_UpdateSize( int32_t width, int32_t height, float scaleFactor );
-	void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
-	void m_UpdateFullScreen( bool fullScreen ) { m_fullScreen = fullScreen; }
+	void m_SyncMode() { m_mode = m_QueryMode(); } // Sole writer of m_mode, from actual OS window state
 	void m_UpdateFocused( bool focused );
 	void m_UpdateBackBuffer();
 	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
@@ -20065,17 +20067,6 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 			uint32_t width = LOWORD( lParam );
 			uint32_t height = HIWORD( lParam );
 			window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor with PROCESS_DPI_AWARENESS
-			switch( wParam )
-			{
-				case SIZE_MAXIMIZED:
-					window->m_UpdateMaximized( true );
-					if( window->GetLoggingEnabled() ) { AE_INFO( "maximize # #", width, height ); }
-					break;
-				default:
-					if( window->GetLoggingEnabled() ) { AE_INFO( "unmaximize # #", width, height ); }
-					window->m_UpdateMaximized( false );
-					break;
-			}
 			break;
 		}
 		case WM_CLOSE:
@@ -20101,20 +20092,60 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 @implementation aeApplicationDelegate
 - (void)applicationWillFinishLaunching:(NSNotification*)notification
 {
+	// Setting the correct activation policy is required for the menu bar
+	// shortcuts to work correctly. Must precede menu construction below.
+	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+
+	NSString* appName = [[NSProcessInfo processInfo] processName];
+
 	// Create the application menu bar
 	NSMenu* menubar = [NSMenu new];
 	[NSApp setMainMenu:menubar];
-	
+
 	// Create the button in the menu bar
 	NSMenuItem* menuBarItem = [NSMenuItem new];
 	[menubar addItem:menuBarItem];
-	
-	// Create the menu and its contents
-	// @TODO: Currently this menu must be open for cmd+q to work, fix this
+
+	// App menu
 	NSMenu* appMenu = [NSMenu new];
-	NSMenuItem* quitMenuItem = [[NSMenuItem alloc] initWithTitle:@"Quit" action:@selector(terminate:) keyEquivalent:@"q"];
+	NSMenuItem* aboutMenuItem = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"About %@", appName] action:@selector(ae_orderFrontStandardAboutPanel:) keyEquivalent:@""];
+	// Make this application delegate available from the About menu item
+	[aboutMenuItem setTarget:self];
+	[appMenu addItem:aboutMenuItem];
+	[appMenu addItem:[NSMenuItem separatorItem]];
+	NSMenu* servicesMenu = [NSMenu new];
+	NSMenuItem* servicesMenuItem = [[NSMenuItem alloc] initWithTitle:@"Services" action:nil keyEquivalent:@""];
+	[servicesMenuItem setSubmenu:servicesMenu];
+	[appMenu addItem:servicesMenuItem];
+	[NSApp setServicesMenu:servicesMenu];
+	[appMenu addItem:[NSMenuItem separatorItem]];
+	NSMenuItem* hideMenuItem = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"Hide %@", appName] action:@selector(hide:) keyEquivalent:@"h"];
+	[appMenu addItem:hideMenuItem];
+	NSMenuItem* hideOthersMenuItem = [[NSMenuItem alloc] initWithTitle:@"Hide Others" action:@selector(hideOtherApplications:) keyEquivalent:@"h"];
+	[hideOthersMenuItem setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagOption];
+	[appMenu addItem:hideOthersMenuItem];
+	NSMenuItem* showAllMenuItem = [[NSMenuItem alloc] initWithTitle:@"Show All" action:@selector(unhideAllApplications:) keyEquivalent:@""];
+	[appMenu addItem:showAllMenuItem];
+	[appMenu addItem:[NSMenuItem separatorItem]];
+	NSMenuItem* quitMenuItem = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"Quit %@", appName] action:@selector(terminate:) keyEquivalent:@"q"];
 	[appMenu addItem:quitMenuItem];
 	[menuBarItem setSubmenu:appMenu];
+
+	// Window menu
+	NSMenuItem* windowMenuBarItem = [NSMenuItem new];
+	[menubar addItem:windowMenuBarItem];
+	NSMenu* windowMenu = [[NSMenu alloc] initWithTitle:@"Window"];
+	NSMenuItem* fullScreenMenuItem = [[NSMenuItem alloc] initWithTitle:@"Enter Full Screen" action:@selector(toggleFullScreen:) keyEquivalent:@"f"];
+	[fullScreenMenuItem setKeyEquivalentModifierMask:NSEventModifierFlagCommand | NSEventModifierFlagControl];
+	[windowMenu addItem:fullScreenMenuItem];
+	[windowMenu addItem:[NSMenuItem separatorItem]];
+	NSMenuItem* minimizeMenuItem = [[NSMenuItem alloc] initWithTitle:@"Minimize" action:@selector(performMiniaturize:) keyEquivalent:@"m"];
+	[windowMenu addItem:minimizeMenuItem];
+	NSMenuItem* zoomMenuItem = [[NSMenuItem alloc] initWithTitle:@"Zoom" action:@selector(performZoom:) keyEquivalent:@""];
+	[windowMenu addItem:zoomMenuItem];
+	[windowMenu addItem:[NSMenuItem separatorItem]];
+	[windowMenuBarItem setSubmenu:windowMenu];
+	[NSApp setWindowsMenu:windowMenu];
 }
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
@@ -20122,7 +20153,14 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	NSProcessInfo* processInfo = [NSProcessInfo processInfo];
 	processInfo.automaticTerminationSupportEnabled = false;
 	[processInfo disableSuddenTermination];
-	
+
+	// Registers the window with the Window menu so a minimized window has an entry to restore it
+	if( _aeWindow && _aeWindow->window )
+	{
+		NSWindow* nsWindow = (NSWindow*)_aeWindow->window;
+		[NSApp addWindowsItem:nsWindow title:[nsWindow title] filename:NO];
+	}
+
 	// Prevents app run from blocking
 	[NSApp stop:nil];
 }
@@ -20133,6 +20171,17 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	// @TODO: Prevent Q from being sent to the window?
 	_aeWindow->input->quit = true;
 	return NSTerminateCancel;
+}
+- (void)ae_orderFrontStandardAboutPanel:(id)sender
+{
+	NSString* appName = [[NSProcessInfo processInfo] processName];
+	NSMutableDictionary* options = [NSMutableDictionary dictionaryWithObject:appName forKey:NSAboutPanelOptionApplicationName];
+	NSString* appVersion = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+	if( appVersion.length )
+	{
+		options[ NSAboutPanelOptionApplicationVersion ] = appVersion;
+	}
+	[NSApp orderFrontStandardAboutPanelWithOptions:options];
 }
 @end
 
@@ -20553,8 +20602,7 @@ Window::Window()
 	m_pos = Int2( 0 );
 	m_width = 0;
 	m_height = 0;
-	m_fullScreen = false;
-	m_maximized = false;
+	m_mode = Mode::Windowed;
 	m_focused = false;
 	m_scaleFactor = 1.0f;
 }
@@ -20565,7 +20613,7 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 
 	m_width = width;
 	m_height = height;
-	m_fullScreen = false;
+	m_mode = Mode::Windowed;
 
 #if !_AE_IOS_
 	// Center window on primary screen
@@ -20592,7 +20640,7 @@ bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCur
 	m_pos = pos;
 	m_width = width;
 	m_height = height;
-	m_fullScreen = false;
+	m_mode = Mode::Windowed;
 
 	m_Initialize( rememberPosition );
 
@@ -20800,10 +20848,15 @@ void Window::m_Initialize( bool rememberPosition )
 		defer:YES
 	];
 	[nsWindow setRestorable:NO];
+	// Disable window tabbing behavior, enabled by default on macOS 10.12+
+	[nsWindow setTabbingMode:NSWindowTabbingModeDisallowed];
 	nsWindow.delegate = windowDelegate;
 	[nsWindow setColorSpace:[NSColorSpace sRGBColorSpace]];
 	this->window = nsWindow;
-	
+	// NSWindow has no default title, which causes issues with the "Window" menu
+	// and minimized windows. Set the title to the default title for a bundled app.
+	SetTitle( [[[NSProcessInfo processInfo] processName] UTF8String] );
+
 	NSRect initFrame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
 	NSRect frame = NSMakeRect( m_pos.x, m_pos.y, m_width, m_height );
 	if( !CGRectEqualToRect( initFrame, frame ) )
@@ -20876,10 +20929,6 @@ void Window::m_Initialize( bool rememberPosition )
 	m_width = contentScreenRect.size.width;
 	m_height = contentScreenRect.size.height;
 	m_scaleFactor = nsWindow.backingScaleFactor;
-	
-	// This prevents keystrokes from being output to the terminal when running
-	// as a console app.
-	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #elif _AE_EMSCRIPTEN_
 #if AE_ENABLE_OPENGL
 	EmscriptenWebGLContextAttributes attrs;
@@ -21085,7 +21134,13 @@ void Window::SetTitle( const char* title )
 #if _AE_WINDOWS_
 		if( window ) { SetWindowTextA( (HWND)window, title ); }
 #elif _AE_OSX_
-		if( window ) { ((NSWindow*)window).title = [NSString stringWithUTF8String:title]; }
+		if( window )
+		{
+			NSWindow* nsWindow = (NSWindow*)window;
+			nsWindow.title = [NSString stringWithUTF8String:title];
+			// Keeps the Windows menu's window-list entry in sync with the new title.
+			[NSApp updateWindowsItem:nsWindow];
+		}
 #elif _AE_EMSCRIPTEN_
 		emscripten_set_window_title( title );
 #endif
@@ -21093,60 +21148,125 @@ void Window::SetTitle( const char* title )
 	}
 }
 
+Window::Mode Window::m_QueryMode() const
+{
+#if _AE_WINDOWS_
+	if( !window )
+	{
+		return m_mode;
+	}
+	HWND hwnd = (HWND)window;
+	WINDOWPLACEMENT wp;
+	memset( &wp, 0, sizeof( wp ) );
+	wp.length = sizeof( wp );
+	GetWindowPlacement( hwnd, &wp );
+	// Check minimized first. A minimized fullscreen window still has WS_POPUP set.
+	if( wp.showCmd == SW_SHOWMINIMIZED )
+	{
+		return Mode::Minimized;
+	}
+	if( GetWindowLongPtr( hwnd, GWL_STYLE ) & WS_POPUP )
+	{
+		return Mode::Fullscreen;
+	}
+	if( wp.showCmd == SW_SHOWMAXIMIZED )
+	{
+		return Mode::Maximized;
+	}
+	return Mode::Windowed;
+#elif _AE_OSX_
+	if( !window )
+	{
+		return m_mode;
+	}
+	NSWindow* nsWindow = (NSWindow*)window;
+	if( [nsWindow isMiniaturized] )
+	{
+		return Mode::Minimized;
+	}
+	if( ( [nsWindow styleMask] & NSFullScreenWindowMask ) == NSFullScreenWindowMask )
+	{
+		return Mode::Fullscreen;
+	}
+	if( [nsWindow isZoomed] )
+	{
+		return Mode::Maximized;
+	}
+	return Mode::Windowed;
+#elif _AE_EMSCRIPTEN_
+	EmscriptenFullscreenChangeEvent s;
+	emscripten_get_fullscreen_status( &s );
+	return s.isFullscreen ? Mode::Fullscreen : Mode::Windowed;
+#else
+	return m_mode;
+#endif
+}
+
 void Window::SetFullScreen( bool fullScreen )
 {
-	if( GetLoggingEnabled() ) { AE_INFO( "fullscreen #", fullScreen ); }
+	m_SetMode( fullScreen ? Mode::Fullscreen : Mode::Windowed );
+}
+
+void Window::SetMaximized( bool maximized )
+{
+	m_SetMode( maximized ? Mode::Maximized : Mode::Windowed );
+}
+
+void Window::SetMinimized( bool minimized )
+{
+	m_SetMode( minimized ? Mode::Minimized : Mode::Windowed );
+}
+
+void Window::m_SetMode( ae::Window::Mode mode )
+{
+	if( mode == m_mode )
+	{
+		return;
+	}
+	if( GetLoggingEnabled() ) { AE_INFO( "window mode #", (int)mode ); }
 #if _AE_OSX_
 	if( window )
 	{
-		m_fullScreen = fullScreen;
 		NSWindow* nsWindow = (NSWindow*)window;
 		const bool isFullScreen = ( ( [nsWindow styleMask] & NSFullScreenWindowMask ) == NSFullScreenWindowMask );
-		if( m_fullScreen != isFullScreen )
+		if( isFullScreen && mode != Mode::Fullscreen )
 		{
 			[nsWindow toggleFullScreen:[NSApplication sharedApplication]];
+		}
+		switch( mode )
+		{
+			case Mode::Fullscreen:
+				if( !isFullScreen )
+				{
+					[nsWindow toggleFullScreen:[NSApplication sharedApplication]];
+				}
+				break;
+			case Mode::Maximized:
+				if( ![nsWindow isZoomed] )
+				{
+					[nsWindow zoom:nil];
+				}
+				break;
+			case Mode::Minimized:
+				[nsWindow miniaturize:nil];
+				break;
+			case Mode::Windowed:
+				if( [nsWindow isZoomed] )
+				{
+					[nsWindow zoom:nil];
+				}
+				if( [nsWindow isMiniaturized] )
+				{
+					[nsWindow deminiaturize:nil];
+				}
+				break;
 		}
 	}
 #elif _AE_WINDOWS_
 	if( window )
 	{
-		m_fullScreen = fullScreen; // First so triggered events can use this value
 		HWND hwnd = (HWND)window;
-		if( fullScreen )
-		{
-			WINDOWPLACEMENT wp;
-			memset( &wp, 0, sizeof( wp ) );
-			wp.length = sizeof( wp );
-			if( GetWindowPlacement( hwnd, &wp ) )
-			{
-				const ae::Int2 restoreSize( wp.rcNormalPosition.right - wp.rcNormalPosition.left, wp.rcNormalPosition.bottom - wp.rcNormalPosition.top );
-				const ae::Int2 aeRestorePos = m_nativeToAe( ae::Int2( wp.rcNormalPosition.left, wp.rcNormalPosition.top ), restoreSize );
-				m_restoreRect = ae::RectInt::FromPointAndSize( aeRestorePos, restoreSize );
-			}
-			if( GetLoggingEnabled() )
-			{
-				const ae::Int2 restorePos = m_restoreRect.GetPos();
-				const ae::Int2 restoreSize = m_restoreRect.GetSize();
-				if( GetLoggingEnabled() ) { AE_INFO( "restore rect # # # #", restorePos.x, restorePos.y, restoreSize.x, restoreSize.y ); }
-			}
-
-			RECT windowRect;
-			GetWindowRect( hwnd, &windowRect );
-			if( HMONITOR hMonitor = MonitorFromRect( &windowRect, MONITOR_DEFAULTTOPRIMARY ) )
-			{
-				MONITORINFO monitorInfo;
-				memset( &monitorInfo, 0, sizeof( MONITORINFO ) );
-				monitorInfo.cbSize = sizeof( MONITORINFO );
-				if( GetMonitorInfo( hMonitor, &monitorInfo ) )
-				{
-					const RECT monitorRect = monitorInfo.rcMonitor;
-					const ae::Int2 size( monitorRect.right - monitorRect.left, monitorRect.bottom - monitorRect.top );
-					SetWindowLongPtr( hwnd, GWL_STYLE, WS_VISIBLE | WS_POPUP );
-					SetWindowPos( hwnd, HWND_TOP, monitorRect.left, monitorRect.top, size.x, size.y, SWP_FRAMECHANGED );
-				}
-			}
-		}
-		else 
+		if( m_mode == Mode::Fullscreen && mode != Mode::Fullscreen )
 		{
 			const ae::Int2 aeRestorePos = m_restoreRect.GetPos();
 			const ae::Int2 restoreSize = m_restoreRect.GetSize();
@@ -21155,27 +21275,72 @@ void Window::SetFullScreen( bool fullScreen )
 			SetWindowPos( hwnd, nullptr, nativeRestorePos.x, nativeRestorePos.y, restoreSize.x, restoreSize.y, SWP_FRAMECHANGED );
 			if( GetLoggingEnabled() ) { AE_INFO( "unfullscreen # # # #", aeRestorePos.x, aeRestorePos.y, restoreSize.x, restoreSize.y ); }
 		}
+		switch( mode )
+		{
+			case Mode::Fullscreen:
+			{
+				WINDOWPLACEMENT wp;
+				memset( &wp, 0, sizeof( wp ) );
+				wp.length = sizeof( wp );
+				if( GetWindowPlacement( hwnd, &wp ) )
+				{
+					const ae::Int2 restoreSize( wp.rcNormalPosition.right - wp.rcNormalPosition.left, wp.rcNormalPosition.bottom - wp.rcNormalPosition.top );
+					const ae::Int2 aeRestorePos = m_nativeToAe( ae::Int2( wp.rcNormalPosition.left, wp.rcNormalPosition.top ), restoreSize );
+					m_restoreRect = ae::RectInt::FromPointAndSize( aeRestorePos, restoreSize );
+				}
+				if( GetLoggingEnabled() )
+				{
+					const ae::Int2 restorePos = m_restoreRect.GetPos();
+					const ae::Int2 restoreSize = m_restoreRect.GetSize();
+					AE_INFO( "restore rect # # # #", restorePos.x, restorePos.y, restoreSize.x, restoreSize.y );
+				}
+
+				RECT windowRect;
+				GetWindowRect( hwnd, &windowRect );
+				if( HMONITOR hMonitor = MonitorFromRect( &windowRect, MONITOR_DEFAULTTOPRIMARY ) )
+				{
+					MONITORINFO monitorInfo;
+					memset( &monitorInfo, 0, sizeof( MONITORINFO ) );
+					monitorInfo.cbSize = sizeof( MONITORINFO );
+					if( GetMonitorInfo( hMonitor, &monitorInfo ) )
+					{
+						const RECT monitorRect = monitorInfo.rcMonitor;
+						const ae::Int2 size( monitorRect.right - monitorRect.left, monitorRect.bottom - monitorRect.top );
+						SetWindowLongPtr( hwnd, GWL_STYLE, WS_VISIBLE | WS_POPUP );
+						SetWindowPos( hwnd, HWND_TOP, monitorRect.left, monitorRect.top, size.x, size.y, SWP_FRAMECHANGED );
+					}
+				}
+				break;
+			}
+			case Mode::Maximized:
+				ShowWindow( hwnd, SW_MAXIMIZE );
+				break;
+			case Mode::Minimized:
+				ShowWindow( hwnd, SW_MINIMIZE );
+				break;
+			case Mode::Windowed:
+				ShowWindow( hwnd, SW_RESTORE );
+				break;
+		}
 	}
 #elif _AE_EMSCRIPTEN_
-	if( m_fullScreen != fullScreen )
+	if( mode == Mode::Fullscreen )
 	{
-		if( fullScreen )
-		{
-			if( GetLoggingEnabled() ) { AE_INFO( "request full screen" ); }
-			EmscriptenFullscreenStrategy strategy;
-			memset( &strategy, 0, sizeof(strategy) );
-			strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_DEFAULT;
-			strategy.canvasResolutionScaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF;
-			strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
-			emscripten_request_fullscreen_strategy( "canvas", true, &strategy );
-		}
-		else
-		{
-			if( GetLoggingEnabled() ) { AE_INFO( "exit full screen" ); }
-			emscripten_exit_fullscreen();
-		}
+		if( GetLoggingEnabled() ) { AE_INFO( "request full screen" ); }
+		EmscriptenFullscreenStrategy strategy;
+		memset( &strategy, 0, sizeof(strategy) );
+		strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_DEFAULT;
+		strategy.canvasResolutionScaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF;
+		strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
+		emscripten_request_fullscreen_strategy( "canvas", true, &strategy );
+	}
+	else
+	{
+		if( GetLoggingEnabled() ) { AE_INFO( "exit full screen" ); }
+		emscripten_exit_fullscreen();
 	}
 #endif
+	m_SyncMode();
 }
 
 void Window::SetPosition( Int2 pos )
@@ -21195,21 +21360,6 @@ void Window::SetSize( uint32_t width, uint32_t height )
 //		m_width = width;
 //		m_height = height;
 //	}
-}
-
-void Window::SetMaximized( bool maximized )
-{
-#if _AE_WINDOWS_
-	if( maximized )
-	{
-		ShowWindow( (HWND)window, SW_MAXIMIZE );
-	}
-	else
-	{
-		ShowWindow( (HWND)window, SW_RESTORE );
-	}
-	m_maximized = maximized;
-#endif
 }
 
 void Window::SetAlwaysOnTop( bool alwaysOnTop )
@@ -21575,8 +21725,7 @@ EM_BOOL _aeEmscriptenHandleFullScreen( int eventType, const EmscriptenFullscreen
 	AE_ASSERT( userData );
 	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_FULLSCREENCHANGE );
 	ae::Window* window = ( (Input*)userData )->m_window;
-	if( window->GetLoggingEnabled() ) { AE_INFO( "full screen # -> #", ( window->GetFullScreen() ? "true" : "false" ), ( fullscreenChangeEvent->isFullscreen ? "true" : "false" ) ); }
-	window->m_UpdateFullScreen( fullscreenChangeEvent->isFullscreen );
+	if( window->GetLoggingEnabled() ) { AE_INFO( "full screen -> #", ( fullscreenChangeEvent->isFullscreen ? "true" : "false" ) ); }
 	return true;
 }
 
@@ -21636,6 +21785,7 @@ void Input::Initialize( Window* window )
 	[nsWindow orderFrontRegardless];
 	[GCController setShouldMonitorBackgroundEvents: YES];
 	m_naturalScroll = [[NSUserDefaults standardUserDefaults] boolForKey:@"com.apple.swipescrolldirection"];
+	// Triggers applicationWillFinishLaunching/applicationDidFinishLaunching.
 	[[NSApplication sharedApplication] run];
 #endif
 
@@ -21757,6 +21907,7 @@ void Input::Pump()
 		TranslateMessage( &msg );
 		DispatchMessage( &msg );
 	}
+	m_window->m_SyncMode();
 	// Update mouse pos
 	bool mouseJustSet = false; // Don't enable m_mousePosSet because m_SetMousePos() checks it
 	if( m_window )
@@ -21902,6 +22053,13 @@ void Input::Pump()
 			[NSApp sendEvent:event];
 		}
 	}
+	// Keeps the auto-managed Windows menu's window-list entry and enabled
+	// state in sync.
+	if( NSWindow* nsWindow = (NSWindow*)m_window->window )
+	{
+		[NSApp updateWindowsItem:nsWindow];
+	}
+	m_window->m_SyncMode();
 #elif _AE_EMSCRIPTEN_
 	{
 		if( m_window->m_fixCanvasStyle )
@@ -21929,6 +22087,7 @@ void Input::Pump()
 		float scale;
 		_aeEmscriptenGetCanvasInfo( &width, &height, &scale );
 		m_window->m_UpdateSize( width, height, scale );
+		m_window->m_SyncMode();
 	}
 #endif
 
