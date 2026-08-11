@@ -6852,6 +6852,8 @@ template< typename T > const ae::ClassType* GetClassTypeFromObject( const T* obj
 template< typename T > const ae::ClassType* GetClassType();
 //! Get a registered ae::EnumType by name
 const class ae::EnumType* GetEnumType( const char* enumName );
+//! Get a registered ae::EnumType from a type \p T
+template< typename T > const ae::EnumType* GetEnumType();
 //! Get a registered ae::TypeId from a \p T type.
 template< typename T > ae::TypeId GetObjectTypeId( const T* obj );
 //! Get a registered ae::TypeId from a type name. Can be evaluated at compile time when given a string literal.
@@ -14503,11 +14505,6 @@ const ae::ClassType* Inheritor< Parent, This >::GetParentType()
 //------------------------------------------------------------------------------
 // Internal meta initialization functions
 //------------------------------------------------------------------------------
-// @NOTE: Internal. Non-specialized GetEnumType() has no implementation so templated GetEnumType() calls (defined
-// with AE_DEFINE_ENUM_CLASS, AE_META_ENUM, and AE_META_ENUM_PREFIX) will call the specialized function.
-template< typename T >
-const ae::EnumType* GetEnumType();
-	
 template< typename E >
 class _RegisterEnum
 {

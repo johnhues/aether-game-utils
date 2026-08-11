@@ -21,8 +21,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AE_EDITOR_CLIENT_H
-#define AE_EDITOR_CLIENT_H
+#ifndef AE_EDITOR_H
+#define AE_EDITOR_H
 
 //------------------------------------------------------------------------------
 // Headers
@@ -37,6 +37,20 @@ namespace ae {
 
 const uint32_t kMaxEditorMessageSize = 1024;
 class Editor;
+
+//------------------------------------------------------------------------------
+// Plugin registration
+//------------------------------------------------------------------------------
+//! Required for any plugin given to ae::Editor::AddPlugin(). Allows
+//! ae::Editor::HotLoad() to repair the v-table of \p _T after a hot load. Use at
+//! global scope in a module \p _T is declared in. A temporary instance is
+//! constructed from \p ctorArgs, which must not refer to game state.
+//! Call signature: AE_REGISTER_EDITOR_PLUGIN( MyPlugin, ctorArgs... );
+#define AE_REGISTER_EDITOR_PLUGIN( _T, ... ) _AE_REGISTER_EDITOR_PLUGIN_IMPL( _T, _T, ##__VA_ARGS__ )
+//! Registers the plugin 'Namespace0::...::NamespaceN::MyPlugin'. See
+//! AE_REGISTER_EDITOR_PLUGIN() for more information.
+//! Call signature: AE_REGISTER_NAMESPACEEDITORPLUGIN( (Namespace0, ..., NamespaceN, MyPlugin), ctorArgs... );
+#define AE_REGISTER_NAMESPACEEDITORPLUGIN( _T, ... ) _AE_REGISTER_EDITOR_PLUGIN_IMPL( AE_GLUE_UNDERSCORE _T, AE_GLUE_TYPE _T, ##__VA_ARGS__ )
 
 //------------------------------------------------------------------------------
 // ae::EditorMesh class
@@ -169,6 +183,9 @@ struct EditorPluginConfig
 	EditorPluginConfig( ae::Tag tag ) {}
 	ae::Str64 name;
 };
+// clang-format off
+/* @NOTE: Internal */ struct _EditorPluginInfo { _EditorPluginInfo( ae::Tag tag ) : config( tag ) {} EditorPluginConfig config; ae::TypeId typeId = ae::kInvalidTypeId; };
+// clang-format on
 
 //------------------------------------------------------------------------------
 // ae::EditorPlugin class
@@ -246,9 +263,15 @@ public:
 	bool Initialize( const ae::EditorParams& params );
 	void Terminate();
 	void Update();
+
 	void Launch();
-	bool IsConnected() const { return m_sock.IsConnected(); }
 	void QueueRead( const char* levelPath );
+	//! Repairs the v-table of all added plugins. Call this from the reloaded
+	//! library after a hot load. All plugins must be registered with
+	//! AE_REGISTER_EDITOR_PLUGIN().
+	void HotLoad();
+
+	bool IsConnected() const { return m_sock.IsConnected(); }
 
 private:
 	friend class EditorServer;
@@ -263,9 +286,29 @@ private:
 	const ae::File* m_pendingLevel = nullptr;
 	ae::Socket m_sock;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
-	ae::Array< std::pair< EditorPluginConfig, EditorPlugin* > > m_plugins;
+	ae::Array< std::pair< _EditorPluginInfo, EditorPlugin* > > m_plugins;
 	ae::Map< ae::Entity, bool > m_editorEntities; // Filter out entities created since last level load
 };
+
+//------------------------------------------------------------------------------
+// ae::EditorPlugin registration
+//------------------------------------------------------------------------------
+// @NOTE: Internal. Plugin v-table repair functions, registered by type id.
+// Repopulated by static initialization each time the library is loaded.
+using _EditorPluginPatchFn = void (*)( void* plugin );
+struct _EditorPluginRegistrar
+{
+	_EditorPluginRegistrar( ae::TypeId typeId, _EditorPluginPatchFn fn ) { RegisterEditorPluginPatchFn( typeId, fn ); }
+	static void RegisterEditorPluginPatchFn( ae::TypeId typeId, _EditorPluginPatchFn fn );
+	static _EditorPluginPatchFn GetEditorPluginPatchFn( ae::TypeId typeId );
+};
+#define _AE_REGISTER_EDITOR_PLUGIN_IMPL( _NAME, _TYPE, ... )\
+	static void AE_GLUE( _ae_PatchEditorPlugin_, _NAME )( void* plugin )\
+	{\
+		AE_STATIC_ASSERT_MSG( !std::is_abstract< _TYPE >::value, "Only register plugin types which are given to ae::Editor::AddPlugin(), not the abstract classes they are derived from" );\
+		ae::PatchVTable( static_cast< _TYPE* >( plugin ), ##__VA_ARGS__ );\
+	}\
+	static ae::_EditorPluginRegistrar AE_GLUE( _ae_editorPluginRegistrar_, _NAME )( ae::GetTypeIdWithoutQualifiers< _TYPE >(), &AE_GLUE( _ae_PatchEditorPlugin_, _NAME ) );
 
 //------------------------------------------------------------------------------
 // ae::Editor class
@@ -274,15 +317,18 @@ template< typename T, typename ... Args >
 T* Editor::AddPlugin( Args&& ... args )
 {
 	AE_STATIC_ASSERT_MSG( (std::is_base_of< ae::EditorPlugin, T >::value), "T must be derived from ae::EditorPlugin" );
+	const ae::TypeId typeId = ae::GetTypeIdWithoutQualifiers< T >();
+	AE_ASSERT_MSG( _EditorPluginRegistrar::GetEditorPluginPatchFn( typeId ), "Editor plugin type must be registered with 'AE_REGISTER_EDITOR_PLUGIN( #, ARGS )'", ae::GetTypeName< T >() );
 	auto& plugin = m_plugins.Append( { m_tag, {} } );
 	plugin.second = ae::New< T >( m_tag, std::forward< Args >( args )... );
-	plugin.first = plugin.second->GetConfig();
-	if( plugin.first.name.Empty() )
+	plugin.first.config = plugin.second->GetConfig();
+	plugin.first.typeId = typeId;
+	if( plugin.first.config.name.Empty() )
 	{
 		AE_ERROR( "EditorPluginConfig must provide a name" );
 		return nullptr;
 	}
-	AE_INFO( "Registered plugin '#'", plugin.first.name );
+	AE_INFO( "Registered plugin '#'", plugin.first.config.name );
 	return static_cast< T* >( plugin.second );
 }
 

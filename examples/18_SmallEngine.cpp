@@ -53,6 +53,7 @@ public:
 private:
 	SmallEngine* m_engine = nullptr;
 };
+AE_REGISTER_EDITOR_PLUGIN( SmallEngineEditorPlugin, nullptr );
 
 //------------------------------------------------------------------------------
 // Engine member functions

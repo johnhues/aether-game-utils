@@ -33,6 +33,11 @@
 #include "rapidjson/stringbuffer.h"
 
 //------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const uint32_t kMaxEditorPlugins = 64;
+
+//------------------------------------------------------------------------------
 // Registration
 //------------------------------------------------------------------------------
 AE_REGISTER_NAMESPACECLASS( (ae, EditorTypeAttribute) );
@@ -80,8 +85,31 @@ void ae::EditorMesh::Load( const ae::OBJLoader& file )
 namespace ae {
 
 class EditorServer;
-using EditorPluginArray = ae::Array< std::pair< EditorPluginConfig, EditorPlugin* > >;
+using EditorPluginArray = ae::Array< std::pair< _EditorPluginInfo, EditorPlugin* > >;
 
+//------------------------------------------------------------------------------
+// EditorPlugin v-table registry
+//------------------------------------------------------------------------------
+using _EditorPluginPatchFnMap = ae::Map< ae::TypeId, _EditorPluginPatchFn, kMaxEditorPlugins, ae::Hash32, ae::MapMode::Stable >;
+_EditorPluginPatchFnMap& _GetEditorPluginPatchFns()
+{
+	static _EditorPluginPatchFnMap s_fns;
+	return s_fns;
+}
+
+void _EditorPluginRegistrar::RegisterEditorPluginPatchFn( ae::TypeId typeId, _EditorPluginPatchFn fn )
+{
+	_GetEditorPluginPatchFns().Set( typeId, fn );
+}
+
+_EditorPluginPatchFn _EditorPluginRegistrar::GetEditorPluginPatchFn( ae::TypeId typeId )
+{
+	return _GetEditorPluginPatchFns().Get( typeId, nullptr );
+}
+
+//------------------------------------------------------------------------------
+// Cog texture data
+//------------------------------------------------------------------------------
 const uint32_t kCogTextureDataSize = 32;
 const uint8_t kCogTextureData[] =
 {
@@ -972,11 +1000,11 @@ void EditorProgram::Terminate()
 		event.type = EditorEventType::Terminate;
 		SendPluginEvent( plugins, event );
 	}
-	for( auto& [ config, plugin ] : plugins )
+	for( auto& [ info, plugin ] : plugins )
 	{
-		AE_ASSERT_MSG( !plugin->m_meshRefs.Length(), "Plugin '#' still has mesh refs on level unload", config.name );
-		AE_ASSERT_MSG( !plugin->m_instances.Length(), "Plugin '#' still has instances on level unload", config.name );
-		AE_ASSERT_MSG( !plugin->m_entityInstances.Length(), "Plugin '#' still has entity instances on level unload", config.name );
+		AE_ASSERT_MSG( !plugin->m_meshRefs.Length(), "Plugin '#' still has mesh refs on level unload", info.config.name );
+		AE_ASSERT_MSG( !plugin->m_instances.Length(), "Plugin '#' still has instances on level unload", info.config.name );
+		AE_ASSERT_MSG( !plugin->m_entityInstances.Length(), "Plugin '#' still has entity instances on level unload", info.config.name );
 	}
 	
 	m_gameTarget.Terminate();
@@ -1420,6 +1448,18 @@ void Editor::QueueRead( const char* levelPath )
 	}
 	m_pendingLevel = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
 	AE_INFO( "Queuing level load '#'", m_pendingLevel->GetURL() );
+}
+
+void Editor::HotLoad()
+{
+	for( auto& [ info, plugin ] : m_plugins )
+	{
+		const _EditorPluginPatchFn fn = _EditorPluginRegistrar::GetEditorPluginPatchFn( info.typeId );
+		AE_ASSERT_MSG( fn, "No v-table repair function registered for plugin '#'", info.config.name );
+		fn( plugin );
+		// The config may have changed with the reloaded code
+		info.config = plugin->GetConfig();
+	}
 }
 
 // @TODO: Combine with EditorServer::m_LoadLevel() / m_PasteFromClipboard() (which share
@@ -3979,16 +4019,16 @@ void EditorServer::Unload( EditorProgram* program )
 	event.path = m_levelPath.c_str();
 	SendPluginEvent( program->plugins, event );
 	bool pluginUnloadError = false;
-	for( auto& [ config, plugin ] : program->plugins )
+	for( auto& [ info, plugin ] : program->plugins )
 	{
 		if( plugin->m_instances.Length() )
 		{
-			AE_ERROR( "Plugin '#' has # unfreed mesh instances on level unload", config.name, plugin->m_instances.Length() );
+			AE_ERROR( "Plugin '#' has # unfreed mesh instances on level unload", info.config.name, plugin->m_instances.Length() );
 			pluginUnloadError = true;
 		}
 		if( plugin->m_entityInstances.Length() )
 		{
-			AE_ERROR( "Plugin '#' has # entity references remaining on level unload", config.name, plugin->m_entityInstances.Length() );
+			AE_ERROR( "Plugin '#' has # entity references remaining on level unload", info.config.name, plugin->m_entityInstances.Length() );
 			pluginUnloadError = true;
 		}
 	}
