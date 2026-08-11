@@ -5811,9 +5811,10 @@ struct IK
 	//! that ae::IKRotationConstraint rotation limits are expressed in.
 	//! \p primary is the bind-pose bone direction in the parent's local frame.
 	static void GetLimitBasis( ae::Vec3 primary, ae::Vec3* basisXOut, ae::Vec3* basisYOut );
-	//! Returns a rotation that aligns \p localPrimary with \p worldDir, while
-	//! keeping \p localSecondary as close as possible to \p worldUpHint.
-	static ae::Quaternion LookAlongAxis( ae::Vec3 localPrimary, ae::Vec3 localSecondary, ae::Vec3 worldDir, ae::Vec3 worldUpHint );
+	//! Returns a rotation that aligns \p localPrimary with \p worldDir, adding
+	//! no twist about \p worldDir relative to \p prevRot. \p prevRot is the
+	//! orientation being updated, and is returned when \p worldDir is zero.
+	static ae::Quaternion LookAlongAxis( ae::Vec3 localPrimary, ae::Vec3 worldDir, ae::Quaternion prevRot );
 	//! Clips \p j1Pos to the rotational limits of the joint at \p j0Pos, and
 	//! returns the world space offset that satisfies the constraint. The local
 	//! frame ( \p primary, \p basisX, \p basisY ) is the joint's bind-pose bone
@@ -30481,31 +30482,19 @@ void IK::GetLimitBasis( ae::Vec3 primary, ae::Vec3* basisXOut, ae::Vec3* basisYO
 	}
 }
 
-ae::Quaternion IK::LookAlongAxis( ae::Vec3 localPrimary, ae::Vec3 localSecondary, ae::Vec3 worldDir, ae::Vec3 worldUpHint )
+ae::Quaternion IK::LookAlongAxis( ae::Vec3 localPrimary, ae::Vec3 worldDir, ae::Quaternion prevRot )
 {
 	if( worldDir.SafeNormalize() < 0.0001f )
 	{
-		return ae::Quaternion::Identity(); // No direction to align to
+		return prevRot; // No direction to align to
 	}
-	// Align localPrimary with worldDir. When they are antiparallel the arc
-	// axis RotationTo() picks is arbitrary, but the ambiguity is exactly a
-	// twist around worldDir, which the twist correction below re-fixes
-	// against the up hint.
-	const ae::Quaternion q0 = localPrimary.RotationTo( worldDir );
-	// Find where localSecondary ended up after q0
-	const ae::Vec3 rotatedSecondary = q0.Rotate( localSecondary );
-	// Project worldUpHint perpendicular to worldDir (to keep the primary axis aligned)
-	const ae::Vec3 upPerp = worldUpHint - worldDir * worldUpHint.Dot( worldDir );
-	if( upPerp.Length() < 0.0001f )
-	{
-		return q0; // The hint carries no twist information
-	}
-	// Signed twist angle around worldDir from rotatedSecondary to upPerp.
-	// Unlike a shortest-arc rotation, atan2 stays stable when the two are
-	// nearly antiparallel, where the arc axis would flip frame to frame.
-	const ae::Vec3 upPerpDir = upPerp.NormalizeCopy();
-	const float twistAngle = ae::Atan2( worldDir.Dot( rotatedSecondary.Cross( upPerpDir ) ), rotatedSecondary.Dot( upPerpDir ) );
-	return ae::Quaternion( worldDir, twistAngle ) * q0;
+	// Swing the whole previous frame onto worldDir. The shortest arc between
+	// the previous bone direction and worldDir carries no twist about either,
+	// so the twist prevRot already holds is transported unchanged. Remaining
+	// ambiguity is a half turn, where the previous direction and worldDir are
+	// antiparallel and Vec3::RotationTo() picks the arc axis.
+	const ae::Vec3 prevAxis = prevRot.Rotate( localPrimary );
+	return prevAxis.RotationTo( worldDir ) * prevRot;
 }
 
 ae::Vec3 IK::ClipJoint(
@@ -30752,8 +30741,11 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		}
 		if( colinear )
 		{
+			// Fold in the plane normal to basisX. Orientation up hints are
+			// bind basisX vectors, so folding along basisX would sweep the
+			// bone direction through its own hint and flip the twist by pi.
 			ae::Vec3 perpDir;
-			GetLimitBasis( lineDir, &perpDir, nullptr );
+			GetLimitBasis( lineDir, nullptr, &perpDir );
 			for( const Bone* j = pose.GetBoneByIndex( target.key )->parent; j->index != rootBoneIndex; j = j->parent )
 			{
 				ikBones[ j->index ].modelPos += perpDir * ( ikBones[ j->index ].length * 0.02f );
@@ -30936,9 +30928,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				// the average carries no signal at any threshold, so such
 				// bones deterministically track their first child instead.
 				// The decision comes from the bind pose alone and cannot pop
-				// between frames. The up hint from the previous orientation
-				// preserves twist continuity instead of accumulating spin
-				// across iterations.
+				// between frames.
 				const _IKBone* ikChild = &ikBones[ poseBone->firstChild->index ];
 				ae::Vec3 localAlignDir = ae::Vec3( 0.0f );
 				ae::Vec3 worldAlignDir = ae::Vec3( 0.0f );
@@ -30954,10 +30944,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				}
 				if( worldAlignDir.SafeNormalize() > 0.05f ) // Keep the current orientation when transiently degenerate
 				{
-					ae::Vec3 alignBasisX;
-					GetLimitBasis( localAlignDir, &alignBasisX, nullptr );
-					const ae::Vec3 upHint = ikBone->boneToModelRot.Rotate( alignBasisX );
-					ikBone->boneToModelRot = LookAlongAxis( localAlignDir, alignBasisX, worldAlignDir, upHint );
+					ikBone->boneToModelRot = LookAlongAxis( localAlignDir, worldAlignDir, ikBone->boneToModelRot );
 				}
 			}
 			else
@@ -30982,8 +30969,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					ae::Vec3 worldTargetDir = ( ikBone->modelPos - ikBones[ poseBone->parent->index ].modelPos );
 					if( worldTargetDir.SafeNormalize() > 0.0001f )
 					{
-						const ae::Vec3 upHint = ikBone->boneToModelRot.Rotate( ikBone->selfBasisX );
-						ikBone->boneToModelRot = LookAlongAxis( ikBone->selfBindDir, ikBone->selfBasisX, worldTargetDir, upHint );
+						ikBone->boneToModelRot = LookAlongAxis( ikBone->selfBindDir, worldTargetDir, ikBone->boneToModelRot );
 					}
 				}
 			}
@@ -31218,8 +31204,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					ae::Vec3 worldTargetDir = ( ikChild->modelPos - ikBone->modelPos );
 					if( worldTargetDir.SafeNormalize() > 0.0001f )
 					{
-						const ae::Vec3 upHint = ikBone->boneToModelRot.Rotate( ikChild->basisX );
-						ikBone->boneToModelRot = LookAlongAxis( ikChild->parentBindDir, ikChild->basisX, worldTargetDir, upHint );
+						ikBone->boneToModelRot = LookAlongAxis( ikChild->parentBindDir, worldTargetDir, ikBone->boneToModelRot );
 						ikChild->modelPos = ikBone->modelPos + ikBone->boneToModelRot.Rotate( ikChild->parentBindDir ) * ikChild->length;
 					}
 				}
