@@ -75,7 +75,9 @@ int main()
       params.filters.Append( ae::FileFilter( "JSON Files", "json" ) );
       params.window = &window;
       params.windowTitle = "Open Some File To Do Things With";
-      params.allowMultiselect = true;
+      params.allowMultipleSelection = true;
+      params.allowFileSelection = true;
+      params.allowFolderSelection = true;
       ae::Array< std::string > result = fs.OpenDialog( params );
       if( result.Length() )
       {

@@ -4148,10 +4148,14 @@ struct FileDialogParams
 	ae::Array< FileFilter, 8 > filters; //!< Leave empty for { ae::FileFilter( "All Files", "*" ) }
 	Window* window = nullptr; //!< Recommended. Setting this will create a modal dialog.
 	const char* defaultPath = ""; //!< The path that the dialog will default to.
-	//! Only used with OpenDialog. If true, the dialog will allow multiple files to be selected.
-	//! The files names will be returned in an ae::Array. If false the ae::Array will have 1 or
-	//! 0 elements.
-	bool allowMultiselect = false;
+	//! Only used with OpenDialog. If true, the dialog will allow multiple files
+	//! to be selected. The files names will be returned in an ae::Array. If
+	//! false the ae::Array will have 1 or 0 elements.
+	bool allowMultipleSelection = false;
+	//! Only used with OpenDialog. If true, the dialog will allow files to be selected.
+	bool allowFileSelection = true;
+	//! Only used with OpenDialog. If true, the dialog will allow folders to be selected.
+	bool allowFolderSelection = false;
 };
 
 //------------------------------------------------------------------------------
@@ -21362,6 +21366,7 @@ void Window::SetSize( uint32_t width, uint32_t height )
 
 void Window::SetAlwaysOnTop( bool alwaysOnTop )
 {
+	m_alwaysOnTop = alwaysOnTop;
 #if _AE_WINDOWS_
 	SetWindowPos( (HWND)window, alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
 #elif _AE_OSX_
@@ -24398,9 +24403,9 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 		AE_ERR( "Failed to create NSOpenPanel" );
 		return ae::Array< std::string >( AE_ALLOC_TAG_FILE );
 	}
-	dialog.canChooseFiles = YES;
-	dialog.canChooseDirectories = NO;
-	dialog.allowsMultipleSelection = params.allowMultiselect;
+	dialog.canChooseFiles = params.allowFileSelection;
+	dialog.canChooseDirectories = params.allowFolderSelection;
+	dialog.allowsMultipleSelection = params.allowMultipleSelection;
 	if( params.windowTitle && params.windowTitle[ 0 ] )
 	{
 		dialog.message = [NSString stringWithUTF8String:params.windowTitle];
