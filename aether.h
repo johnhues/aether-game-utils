@@ -3624,6 +3624,8 @@ public:
 	bool GetFullScreen() const { return m_mode == Mode::Fullscreen; }
 	bool GetMaximized() const { return m_mode == Mode::Maximized; }
 	bool GetMinimized() const { return m_mode == Mode::Minimized; }
+	//! True while the window is set to float above other windows
+	bool GetAlwaysOnTop() const;
 	//! True if the user is currently working with this window
 	bool GetFocused() const { return m_focused; }
 	//! Top left window position in virtual DPI units @TODO: Content or window width in dpi units?
@@ -21098,6 +21100,19 @@ void Window::m_UpdateBackBuffer()
 #endif
 }
 
+bool Window::GetAlwaysOnTop() const
+{
+	if( window )
+	{
+		#if _AE_WINDOWS_
+			return ( GetWindowLongPtr( (HWND)window, GWL_EXSTYLE ) & WS_EX_TOPMOST ) != 0;
+		#elif _AE_OSX_
+			return [(NSWindow*)window level] == NSFloatingWindowLevel;
+		#endif
+	}
+	return false;
+}
+
 int32_t Window::GetWidth() const
 {
 	return m_width;
@@ -21366,13 +21381,14 @@ void Window::SetSize( uint32_t width, uint32_t height )
 
 void Window::SetAlwaysOnTop( bool alwaysOnTop )
 {
-	m_alwaysOnTop = alwaysOnTop;
-#if _AE_WINDOWS_
-	SetWindowPos( (HWND)window, alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
-#elif _AE_OSX_
-	NSWindow* nsWindow = (NSWindow*)window;
-	[nsWindow setLevel:( alwaysOnTop ? NSFloatingWindowLevel : NSNormalWindowLevel )];
-#endif
+	if( window )
+	{
+		#if _AE_WINDOWS_
+			SetWindowPos( (HWND)window, alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
+		#elif _AE_OSX_
+			[(NSWindow*)window setLevel:( alwaysOnTop ? NSFloatingWindowLevel : NSNormalWindowLevel )];
+		#endif
+	}
 }
 
 //------------------------------------------------------------------------------
