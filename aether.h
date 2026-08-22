@@ -3843,28 +3843,34 @@ struct MouseState
 	bool leftButton = false;
 	bool middleButton = false;
 	bool rightButton = false;
-	//! Window space coordinates in points (ie. not affected by window scale factor). This
-	//! value should be used for cursors etc. and not for calculating changes in
-	//! position. In other words don't subtract mouse position from a previous
-	//! frame. Use ae::MouseState::movement for changes in position.
+	//! This value is useful for cursors. In window space coordinates in points
+	//! (are not affected by window scale factor). Do not use it for calculating
+	//! cursor movement, as the values can jump due to OS control; ie. don't
+	//! subtract mouse position values across frames. ae::MouseState::movement
+	//! should be used for changes in cursor position.
 	ae::Vec2 position = ae::Vec2( 0.0f );
-	//! Window space coordinates in points (ie. not affected by window scale factor). This
-	//! value should be used for detecting how much the mouse cursor is moved.
-	//! Cursor jumps are filtered when the mouse is captured and when the window
-	//! becomes active. Preserves sub-pixel precision for consistent behavior across
-	//! browsers that report movement at different frequencies.
+	//! Describes the change in cursor position since the last frame. Useful for
+	//! drag input, flicks, gestures etc. Window space coordinates in points
+	//! (are not affected by window scale factor). Cursor jumps are filtered
+	//! when the mouse is captured and when the window becomes active, so this
+	//! always represents true user interaction.
 	ae::Vec2 movement = ae::Vec2( 0.0f );
-	//! Raw scroll input only (no momentum). Wheel gives ~1.0 per notch, and
-	//! uses sub-line float precision if possible. Is reset each frame. Physical
-	//! direction regardless of OS natural scrolling setting, see
-	//! ae::Input::RequestsNaturalScrolling().
+	//! Scroll driven directly by a mouse wheel or a trackpad. In virtual DPI
+	//! points. Is reset each frame. Excludes trackpad momentum, so this has the
+	//! same characteristics on all platforms. Add this and \p scrollInertia
+	//! when momentum is wanted. A wheel detent produces
+	//! ae::Input::GetScrollPointsPerNotch() points. Follows the OS natural
+	//! scrolling direction, so it matches the affordance the user expects from
+	//! their device; negate it when ae::Input::GetScrollDirectionInverted() to
+	//! work in physical direction instead.
 	ae::Vec2 scroll = ae::Vec2( 0.0f );
-	//! Raw scroll input plus trackpad momentum continuation. Wheel gives ~1.0
-	//! per notch, and uses sub-line float precision if possible. Use for smooth
-	//! camera, zoom, and UI input. Is reset each frame. Physical direction
-	//! regardless of OS natural scrolling setting, see
-	//! ae::Input::RequestsNaturalScrolling().
-	ae::Vec2 scrollMomentum = ae::Vec2( 0.0f );
+	//! The simulated trackpad momentum continuation that follows \p scroll once
+	//! the user lifts their finger. In virtual DPI points. Is reset each frame.
+	//! Is always zero on platforms without OS momentum (all others than MacOS).
+	//! Add it to \p scroll for a native feeling glide in an editor or other
+	//! tool UI; leave it out where behavior must match across platforms and
+	//! instead supply your own smoothing.
+	ae::Vec2 scrollInertia = ae::Vec2( 0.0f );
 	bool usingTouch = false;
 };
 
@@ -3879,8 +3885,8 @@ struct GamepadState // @TODO: Rename Gamepad
 	bool anyInput = false;
 	bool anyButton = false;
 	
-	ae::Vec2 leftAnalog = Vec2( 0.0f );
-	ae::Vec2 rightAnalog = Vec2( 0.0f );
+	ae::Vec2 leftAnalog = ae::Vec2( 0.0f );
+	ae::Vec2 rightAnalog = ae::Vec2( 0.0f );
 	
 	ae::Int2 dpad = ae::Int2( 0 );
 	bool up = false;
@@ -3981,10 +3987,17 @@ public:
 	void SetCursorHidden( bool hidden ) { m_hideCursor = hidden; }
 	//! Returns true if the cursor is hidden
 	bool GetCursorHidden() const { return m_hideCursor; }
-	//! Returns true if the OS natural scrolling setting is enabled (macOS only,
-	//! always false on other platforms). UI callers who want to match OS scroll
-	//! direction: multiply scrollMomentum by RequestsNaturalScrolling() ? -1.0f : 1.0f
-	bool RequestsNaturalScrolling() const { return m_naturalScroll; }
+	//! Returns true when ae::MouseState::scroll runs opposite to the physical
+	//! motion of the device, because the OS natural scrolling setting is on
+	//! (macOS only, always false elsewhere). Scroll values already account for
+	//! this, so most callers can ignore it. Negate them when you need to follow
+	//! the hardware rather than the user's preference.
+	bool GetScrollDirectionInverted() const { return m_naturalScroll; }
+	//! Virtual DPI points produced by one wheel detent. Fixed per platform so a
+	//! detent feels the same everywhere rather than tracking each OS. Divide
+	//! ae::MouseState::scroll by this to work in whole notches, which suits
+	//! stepping through a list; prefer the raw points for anything continuous.
+	float GetScrollPointsPerNotch() const;
 	
 	void SetTextMode( bool enabled );
 	bool GetTextMode() const { return m_textMode; }
@@ -21507,6 +21520,10 @@ namespace ae {
 //------------------------------------------------------------------------------
 // ae::Input member functions
 //------------------------------------------------------------------------------
+// Three text lines, the convention shared by Windows and browsers. Fixed rather
+// than read from OS settings so a detent produces the same travel everywhere
+const float _kScrollPointsPerNotch = 48.0f;
+
 #if _AE_EMSCRIPTEN_
 EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
@@ -21606,18 +21623,19 @@ EM_BOOL _aeEmscriptenHandleWheel( int eventType, const EmscriptenWheelEvent* whe
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
 	input->m_TryNewFrame();
-	// DOM_DELTA_PIXEL (0) is the trackpad path; DOM_DELTA_LINE (1) is the mouse wheel path.
+	// DOM_DELTA_PIXEL (0) is the trackpad path, already in virtual DPI points.
+	// DOM_DELTA_LINE (1) is the mouse wheel path, three lines to a detent.
 	// DOM_DELTA_PAGE (2) is not handled — too coarse for camera/UI input.
 	if( wheelEvent->deltaMode != DOM_DELTA_PAGE )
 	{
-		const float scale = ( wheelEvent->deltaMode == DOM_DELTA_LINE ) ? 40.0f : 1.0f;
+		const float scale = ( wheelEvent->deltaMode == DOM_DELTA_LINE ) ? ( _kScrollPointsPerNotch / 3.0f ) : 1.0f;
 		const float dx = (float)wheelEvent->deltaX * scale;
 		const float dy = -(float)wheelEvent->deltaY * scale; // Negate Y: browser positive=down, aether positive=up
 		input->mouse.usingTouch = ( wheelEvent->deltaMode == DOM_DELTA_PIXEL );
+		// Browsers report deltas the OS scroll direction has already been applied
+		// to, and expose no momentum phase, so everything is user driven scroll
 		input->mouse.scroll.x += dx;
 		input->mouse.scroll.y += dy;
-		input->mouse.scrollMomentum.x += dx;
-		input->mouse.scrollMomentum.y += dy;
 	}
 	return true;
 }
@@ -21811,6 +21829,11 @@ void Input::Initialize( Window* window )
 	Pump(); // Pump once to process any system window creation events
 }
 
+float Input::GetScrollPointsPerNotch() const
+{
+	return _kScrollPointsPerNotch;
+}
+
 void Input::Terminate()
 {
 	if( ae::_Globals::Get()->input == this )
@@ -21827,7 +21850,7 @@ void Input::m_TryNewFrame()
 		mousePrev = mouse;
 		mouse.movement = ae::Vec2( 0.0f );
 		mouse.scroll = ae::Vec2( 0.0f );
-		mouse.scrollMomentum = ae::Vec2( 0.0f );
+		mouse.scrollInertia = ae::Vec2( 0.0f );
 		// Discard touches that ended before they were adopted via PumpTouches().
 		// Per the staged API contract, ended touches are never returned.
 		for( int32_t i = (int32_t)m_newTouches.Length() - 1; i >= 0; i-- )
@@ -21887,12 +21910,12 @@ void Input::Pump()
 					mouse.rightButton = false;
 					break;
 				case WM_MOUSEWHEEL:
-					mouse.scroll.y += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
-					mouse.scrollMomentum.y += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
+					// Detents, converted to points. Windows has no OS scroll
+					// direction setting and no momentum phase
+					mouse.scroll.y += ( GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA ) * _kScrollPointsPerNotch;
 					break;
 				case WM_MOUSEHWHEEL:
-					mouse.scroll.x += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
-					mouse.scrollMomentum.x += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
+					mouse.scroll.x += ( GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA ) * _kScrollPointsPerNotch;
 					break;
 				case WM_CHAR:
 				{
@@ -22031,16 +22054,20 @@ void Input::Pump()
 					if( cursorWithinWindow )
 					{
 						mouse.usingTouch = [event hasPreciseScrollingDeltas]; // @NOTE: Scroll is never NSEventSubtypeTouch
-						const float flip = m_naturalScroll ? -1.0f : 1.0f;
-						const float dx = (float)event.scrollingDeltaX * flip;
-						const float dy = (float)event.scrollingDeltaY * flip;
+						// Precise devices report points already, wheels report detents
+						const float scale = mouse.usingTouch ? 1.0f : _kScrollPointsPerNotch;
+						const float dx = (float)event.scrollingDeltaX * scale;
+						const float dy = (float)event.scrollingDeltaY * scale;
 						if( event.momentumPhase == NSEventPhaseNone )
 						{
 							mouse.scroll.x += dx;
 							mouse.scroll.y += dy;
 						}
-						mouse.scrollMomentum.x += dx;
-						mouse.scrollMomentum.y += dy;
+						else
+						{
+							mouse.scrollInertia.x += dx;
+							mouse.scrollInertia.y += dy;
+						}
 					}
 					break;
 				default:
@@ -29416,7 +29443,9 @@ void DebugCamera::Update( ae::Input* input, float dt )
 
 	// Input
 	const ae::Vec2 movement = m_inputEnabled ? ae::Vec2( input->mouse.movement ) : ae::Vec2( 0.0f );
-	const ae::Vec2 scroll = m_inputEnabled ? input->mouse.scrollMomentum * 0.01f : ae::Vec2( 0.0f );
+	// Momentum included so trackpad panning and zooming glide as expected
+	const ae::Vec2 scrollPoints = input->mouse.scroll + input->mouse.scrollInertia;
+	const ae::Vec2 scroll = m_inputEnabled ? ( scrollPoints * 0.01f ) : ae::Vec2( 0.0f );
 	const bool alt = m_inputEnabled ? input->Get( ae::Key::LeftAlt ) : false;
 	const bool shift = m_inputEnabled ? input->Get( ae::Key::LeftShift ) : false;
 	const bool control = m_inputEnabled ? input->Get( ae::Key::LeftControl ) : false;

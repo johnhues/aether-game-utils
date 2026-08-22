@@ -35,9 +35,9 @@ struct Vertex
 };
 
 const Vertex kTriangleVerts[] = {
-	{ ae::Vec4( -0.5f, -0.4f, 0.0f, 1.0f ), ae::Color::PicoRed().GetLinearRGBA() },
-	{ ae::Vec4( 0.5f, -0.4f, 0.0f, 1.0f ), ae::Color::PicoGreen().GetLinearRGBA() },
-	{ ae::Vec4( 0.0f, 0.4f, 0.0f, 1.0f ), ae::Color::PicoBlue().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, -0.5f, 0.0f, 1.0f ), ae::Color::AetherRed().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), ae::Color::AetherGreen().GetLinearRGBA() },
+	{ ae::Vec4( 0.0f, 0.5f, 0.0f, 1.0f ), ae::Color::AetherBlue().GetLinearRGBA() },
 };
 
 const uint16_t kTriangleIndices[] = { 0, 1, 2 };
@@ -53,9 +53,11 @@ int main( int argc, char* argv[] )
 	ae::TimeStep timeStep;
 	ae::Shader shader;
 	ae::VertexBuffer vertexData;
-	ae::Vec3 pos = ae::Vec3( 0.0f );
-	float scale = 1.0f;
+	ae::Vec2 position( 0.0f );
+	ae::Vec2 velocity( 0.0f );
+	float facing = ae::HalfPi;
 	float rotation = 0.0f;
+	float zoom = 0.25f;
 
 	auto Initialize = [ & ]()
 	{
@@ -93,9 +95,8 @@ int main( int argc, char* argv[] )
 	};
 	auto Update = [ & ]() -> bool
 	{
+		// Update input
 		input.Pump();
-		rotation += timeStep.GetDt();
-
 		if( input.GetMousePressLeft() )
 		{
 			input.SetMouseCaptured( !input.GetMouseCaptured() );
@@ -105,54 +106,45 @@ int main( int argc, char* argv[] )
 			input.SetMouseCaptured( false );
 		}
 
-		ae::Vec3 dir( 0.0f );
-		if( input.Get( ae::Key::Up ) )
-		{
-			dir.y += 1.0f;
-		}
-		if( input.Get( ae::Key::Down ) )
-		{
-			dir.y -= 1.0f;
-		}
-		if( input.Get( ae::Key::Left ) )
-		{
-			dir.x -= 1.0f;
-		}
-		if( input.Get( ae::Key::Right ) )
-		{
-			dir.x += 1.0f;
-		}
-		dir.SafeNormalize();
-		pos += dir * 0.01f;
-
+		// Keyboard and mouse movement
+		const ae::Vec2 keyDir = ae::Vec2( ( input.Get( ae::Key::Right ) - input.Get( ae::Key::Left ) ), ( input.Get( ae::Key::Up ) - input.Get( ae::Key::Down ) ) ).SafeNormalizeCopy();
+		ae::Vec2 mouseDir( 0.0f );
 		if( input.GetMouseCaptured() )
 		{
-			pos.x += input.mouse.movement.x * 0.001f;
-			pos.y += input.mouse.movement.y * 0.001f;
+			mouseDir += input.mouse.movement * 0.5f;
 		}
-		else if( input.mouse.usingTouch )
+		// Scroll wheel
+		if( input.mouse.usingTouch )
 		{
-			pos.x += input.mouse.scrollMomentum.x * 0.01f;
-			pos.y += input.mouse.scrollMomentum.y * -0.01f;
+			mouseDir += input.mouse.scroll * ae::Vec2( 0.5f, -0.5f );
 		}
 		else
 		{
-			scale += input.mouse.scrollMomentum.y * 0.01f;
-			scale = ae::Clip( scale, 0.1f, 2.0f );
+			zoom += ( input.mouse.scroll.y + input.mouse.scrollInertia.y ) * 0.01f;
+			zoom = ae::Clip( zoom, 0.1f, 2.0f );
 		}
+		mouseDir.Trim( 1.0f );
+		const ae::Vec2 dir = ( keyDir + mouseDir ).SafeNormalizeCopy();
+		velocity += dir * timeStep.GetDt() * 20.0f;
+		position += velocity * timeStep.GetDt();
+		velocity = ae::DtLerp( velocity, 1.5f, timeStep.GetDt(), ae::Vec2( 0.0f ) );
+		
+		if( velocity.LengthSquared() > 0.0001f )
+		{
+			facing = ae::DtLerpAngle( facing, 4.0f, timeStep.GetDt(), velocity.NormalizeCopy().GetAngle() );
+		}
+		rotation += timeStep.GetDt(); // Rotation effect
 
+		// Start rendering
 		render.Activate();
-		render.Clear( ae::Color::PicoDarkPurple() );
-
-		ae::Matrix4 transform = ae::Matrix4::Translation( pos );
-		transform *= ae::Matrix4::RotationY( rotation );
-		transform *= ae::Matrix4::Scaling( ae::Vec3( scale / render.GetAspectRatio(), scale, scale ) );
-
+		render.Clear( ae::Color::AetherBlack() );
+		// Transform
+		const ae::Matrix4 transform = ae::Matrix4::Scaling( zoom / render.GetAspectRatio(), zoom, 1.0f ) * ae::Matrix4::Translation( position.x, position.y, 0.0f ) * ae::Matrix4::RotationZ( facing - ae::HalfPi ) * ae::Matrix4::RotationY( rotation );
 		ae::UniformList uniformList;
 		uniformList.Set( "u_modelToNdc", transform );
 		vertexData.Bind( &shader, uniformList );
 		vertexData.Draw();
-
+		// Finish rendering
 		render.Present();
 		timeStep.Tick();
 

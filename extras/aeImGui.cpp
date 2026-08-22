@@ -185,7 +185,11 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 	io.MouseDown[ 0 ] = input->mouse.leftButton;
 	io.MouseDown[ 1 ] = input->mouse.rightButton;
 	io.MouseDown[ 2 ] = input->mouse.middleButton;
-	io.MouseWheel += input->mouse.scrollMomentum.y * ( input->RequestsNaturalScrolling() ? -0.025f : 0.025f );
+	// ImGui measures a wheel unit as roughly five text lines, so convert from
+	// points using its own metrics. Momentum included for a native feeling glide
+	const float lineHeight = ( ImGui::GetTextLineHeight() > 0.0f ) ? ImGui::GetTextLineHeight() : 13.0f;
+	const float scrollPoints = input->mouse.scroll.y + input->mouse.scrollInertia.y;
+	io.MouseWheel += scrollPoints / ( 5.0f * lineHeight );
 	ae::Vec2 mousePos( input->mouse.position.x, windowHeight - input->mouse.position.y );
 	io.MousePos = ImVec2( mousePos.x, mousePos.y );
 	
