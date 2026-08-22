@@ -24,67 +24,97 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/loaders.h"
-#define STB_IMAGE_IMPLEMENTATION
 AE_PUSH_DISABLE_ALL_WARNINGS()
+#define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 AE_POP_DISABLE_ALL_WARNINGS()
 
-namespace ae {
-
-//------------------------------------------------------------------------------
-// stb_LoadPng
-//------------------------------------------------------------------------------
-void stbLoadPng( ae::Texture2D* texture, const uint8_t* data, uint32_t dataLen, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB )
+namespace ae
 {
-  int32_t width = 0;
-  int32_t height = 0;
-  int32_t channels = 0;
-  stbi_set_flip_vertically_on_load( 1 );
+
+//------------------------------------------------------------------------------
+// stbLoadPng
+//------------------------------------------------------------------------------
+bool stbLoadPng( ae::Texture2D* texture, const uint8_t* data, uint32_t dataLen, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB )
+{
+	if( !texture || !data || !dataLen )
+	{
+		return false;
+	}
+	stbi_set_flip_vertically_on_load( 1 );
 #if _AE_IOS_
-  stbi_convert_iphone_png_to_rgb( 1 );
+	stbi_convert_iphone_png_to_rgb( 1 );
 #endif
-  bool is16BitImage = stbi_is_16_bit_from_memory( data, dataLen );
 
-  uint8_t* image;
-  if (is16BitImage)
-  {
-     image = (uint8_t*)stbi_load_16_from_memory( data, dataLen, &width, &height, &channels, STBI_default );
-  }
-  else
-  {
-    image = stbi_load_from_memory( data, dataLen, &width, &height, &channels, STBI_default );
-  }
-  AE_ASSERT( image );
+	uint8_t* image = nullptr;
+	int32_t width = 0;
+	int32_t height = 0;
+	int32_t channels = 0;
+	if( !stbi_info_from_memory( data, dataLen, &width, &height, &channels ) )
+	{
+		return false;
+	}
+	const bool is16BitImage = stbi_is_16_bit_from_memory( data, dataLen );
+	// Grey+alpha has no matching texture format, so expand it to RGBA on load
+	const int32_t reqChannels = ( channels == STBI_grey_alpha ) ? STBI_rgb_alpha : channels;
+	// @TODO: For now 16 bit images only support R16Unorm
+	if( is16BitImage && reqChannels != STBI_grey )
+	{
+		return false;
+	}
+	if( is16BitImage )
+	{
+		image = (uint8_t*)stbi_load_16_from_memory( data, dataLen, &width, &height, &channels, reqChannels );
+	}
+	else
+	{
+		image = stbi_load_from_memory( data, dataLen, &width, &height, &channels, reqChannels );
+	}
+	if( !image )
+	{
+		return false;
+	}
+	const ae::RunOnDestroy cleanupSTBImage( [ image ]() { stbi_image_free( image ); } );
 
-  ae::Texture::Format format;
-  auto type = ae::Texture::Type::UInt8;
-  switch ( channels )
-  {
-    case STBI_grey:
-      format = ae::Texture::Format::R8;
-        
-      // for now only support R16Unorm
-      if (is16BitImage)
-      {
-        format = ae::Texture::Format::R16_UNORM;
-        type = ae::Texture::Type::UInt16;
-      }
-      break;
-    case STBI_grey_alpha:
-      // @TODO: Better support for this case
-      format = isSRGB ? ae::Texture::Format::RGBA8_SRGB : ae::Texture::Format::RGBA8;
-      break;
-    case STBI_rgb:
-      format = isSRGB ? ae::Texture::Format::RGB8_SRGB : ae::Texture::Format::RGB8;
-      break;
-    case STBI_rgb_alpha:
-      format = isSRGB ? ae::Texture::Format::RGBA8_SRGB : ae::Texture::Format::RGBA8;
-      break;
-  }
-  
-  texture->Initialize( image, width, height, format, type, filter, wrap, autoGenerateMipmaps );
-  
-  stbi_image_free( image );
+	ae::Texture::Format format;
+	ae::Texture::Type type;
+	switch( reqChannels )
+	{
+		case STBI_grey:
+		{
+			if( is16BitImage )
+			{
+				format = ae::Texture::Format::R16_UNORM;
+				type = ae::Texture::Type::UInt16;
+			}
+			else
+			{
+				format = ae::Texture::Format::R8;
+				type = ae::Texture::Type::UInt8;
+			}
+			break;
+		}
+		case STBI_rgb:
+		{
+			format = isSRGB ? ae::Texture::Format::RGB8_SRGB : ae::Texture::Format::RGB8;
+			type = ae::Texture::Type::UInt8;
+			break;
+		}
+		case STBI_rgb_alpha:
+		{
+			format = isSRGB ? ae::Texture::Format::RGBA8_SRGB : ae::Texture::Format::RGBA8;
+			type = ae::Texture::Type::UInt8;
+			break;
+		}
+		default:
+		{
+			texture->Terminate();
+			return false;
+		}
+	}
+	// @TODO: Return value from texture->Initialize() to indicate failure
+	texture->Initialize( image, width, height, format, type, filter, wrap, autoGenerateMipmaps );
+	return true;
 }
 
 } // End ae namespace

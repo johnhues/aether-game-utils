@@ -621,10 +621,10 @@ private:
 //! \defgroup Math
 //! @{
 //------------------------------------------------------------------------------
-constexpr float PI = 3.14159265358979323846f;
-constexpr float TWO_PI = 2.0f * PI;
-constexpr float HALF_PI = 0.5f * PI;
-constexpr float QUARTER_PI = 0.25f * PI;
+constexpr float PI = 3.14159265358979323846f; // @TODO: Remove
+constexpr float TWO_PI = 2.0f * PI; // @TODO: Remove
+constexpr float HALF_PI = 0.5f * PI; // @TODO: Remove
+constexpr float QUARTER_PI = 0.25f * PI; // @TODO: Remove
 constexpr float Pi = 3.14159265358979323846f;
 constexpr float TwoPi = 2.0f * PI;
 constexpr float HalfPi = 0.5f * PI;
@@ -24321,7 +24321,7 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 	winParams.lpstrFilter = filterStr.Length() ? &filterStr[ 0 ] : "All Files (*.*)\0*.*\0";
 	winParams.nFilterIndex = 1;
 	winParams.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
-	if( params.allowMultiselect )
+	if( params.allowMultipleSelection )
 	{
 		winParams.Flags |= OFN_ALLOWMULTISELECT;
 	}
@@ -24329,7 +24329,7 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 	// Open window
 	if( GetOpenFileNameA( &winParams ) )
 	{
-		if( !params.allowMultiselect )
+		if( !params.allowMultipleSelection )
 		{
 			return ae::Array< std::string >( AE_ALLOC_TAG_FILE, winParams.lpstrFile, 1 );
 		}
@@ -27357,7 +27357,7 @@ void Texture2D::Initialize( const TextureParams& params )
 			break;
 		case Type::HalfFloat:
 			glType = GL_HALF_FLOAT;
-			bytesPerComponent = 3;
+			bytesPerComponent = 2;
 			break;
 		case Type::Float:
 			glType = GL_FLOAT;
