@@ -5,6 +5,11 @@ message("")
 message("aether-game-utils test")
 message("")
 
+# Define aeAssertImpl to throw exceptions for REQUIRE_THROWS() tests
+if(EMSCRIPTEN)
+	add_compile_options(-sDISABLE_EXCEPTION_CATCHING=0)
+endif()
+
 # Catch2
 set(CMAKE_CATCH_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 FetchContent_Declare(
@@ -25,12 +30,8 @@ target_include_directories(ae_test PUBLIC
 	"${AE_ROOT_DIR}/extras/include"
 	"${CURRENT_SOURCE_DIR}"
 )
-# Define aeAssertImpl to throw exceptions for REQUIRE_THROWS() tests
 target_compile_definitions(ae_test PUBLIC AE_CONFIG_FILE="TestConfig.h")
 if(EMSCRIPTEN)
-	target_compile_options(ae_test PUBLIC
-		-sDISABLE_EXCEPTION_CATCHING=0 # Needed for callstack traces on asserts with node
-	)
 	target_link_options(ae_test PUBLIC
 		-sALLOW_MEMORY_GROWTH
 		-sINITIAL_MEMORY=26214400
