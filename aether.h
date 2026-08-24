@@ -455,6 +455,7 @@ Value* DataStructure::Find( Key key )
 
 //------------------------------------------------------------------------------
 // Internal Start
+// clang-format off
 #define _AE_STATIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
 #define _AE_DYNAMIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
@@ -475,6 +476,7 @@ template< typename T > using _EnableIfFractional = std::enable_if_t< std::is_flo
 #	define AE_WASM_IMPORT( _m )
 #	define AE_WASM_EXPORT
 #endif
+// clang-format on
 // Internal End
 //------------------------------------------------------------------------------
 
@@ -643,31 +645,31 @@ inline float Acos( float x );
 inline float Asin( float x );
 inline float Atan( float x );
 inline float Atan2( float y, float x );
-
 inline float Sqrt( float x );
 
-inline uint32_t Mod( uint32_t i, uint32_t n );
 //! A mathematical modulo operation. Identical to C++ remainder operator '%' for
-//! positive values, but returns a "clock arithmetic" result for negative values.
-//! Eg. `ae::Mod( -3, 12 ) == 9`. Always returns a non-negative result in [0, n),
-//! regardless of the sign of \p i.
-inline int Mod( int32_t i, int32_t n );
-//! A mathematical modulo operation. Identical to C++ remainder operator '%' for
-//! positive values, but returns a "clock arithmetic" result for negative values.
-//! Eg. `ae::Mod( -2.5, 12 ) == 9.5`. Always returns a non-negative result in
-//! [0, n), regardless of the sign of \p f.
-inline float Mod( float f, float n );
+//! positive values, but returns a "clock arithmetic" result for negative values,
+//! eg. `ae::Mod( -3, 12 ) == 9` and `ae::Mod( -2.5f, 12.0f ) == 9.5f`. The result
+//! takes the sign of \p n, so it is in [0, n) for positive \p n and (n, 0] for
+//! negative \p n, satisfying `i == ae::Floor( i, n ) * n + ae::Mod( i, n )`.
+//! \p i and \p n are converted to their common type following the usual
+//! arithmetic conversions.
+template< typename T0, typename T1 >
+inline std::common_type_t< T0, T1 > Mod( T0 i, T1 n );
 
 inline int32_t Ceil( float f );
 inline int32_t Floor( float f );
-//! A true mathematical floor division toward negative infinity. Unlike C++
-//! operator/ (which truncates toward zero), `Floor( -7, 2 ) == -4` not -3.
-inline int32_t Floor( int32_t value, int32_t divisor );
-inline int32_t Round( float f );
 
+//! A true mathematical floor division toward negative infinity. Unlike C++
+//! operator/ (which truncates toward zero), `Floor( -7, 2 ) == -4` not -3, and
+//! `Floor( 7, -2 ) == -4` not -3. \p value and \p divisor are converted to their
+//! common type following the usual arithmetic conversions.
+template< typename T0, typename T1 >
+inline std::common_type_t< T0, T1 > Floor( T0 value, T1 divisor );
+
+inline int32_t Round( float f );
 inline float Abs( float x );
 inline int32_t Abs( int32_t x );
-
 constexpr uint32_t NextPowerOfTwo( uint32_t x );
 
 //------------------------------------------------------------------------------
@@ -679,8 +681,18 @@ constexpr auto Min( const T0& v0, const T1& v1, const TTT&... tail );
 template< typename T0, typename T1, typename... TTT >
 constexpr auto Max( const T0& v0, const T1& v1, const TTT&... tail );
 
-template< typename T > inline T Clip( T x, T min, T max );
+//! Clamps \p x to the closed range [ \p min, \p max ]. Arguments are converted
+//! to their common type following the usual arithmetic conversions.
+template< typename T0, typename T1, typename T2 >
+inline std::common_type_t< T0, T1, T2 > Clip( T0 x, T1 min, T2 max );
+
 inline float Clip01( float x );
+
+//! Wraps \p x into the half open range [ \p min, \p max ), so values past an
+//! edge reappear at the opposite edge. Eg. `ae::Wrap( 1, 2, 5 ) == 4`. Arguments
+//! are converted to their common type following the usual arithmetic conversions.
+template< typename T0, typename T1, typename T2 >
+inline std::common_type_t< T0, T1, T2 > Wrap( T0 x, T1 min, T2 max );
 
 //------------------------------------------------------------------------------
 // Interpolation
@@ -3176,6 +3188,7 @@ public:
 	float GetHeight() const { return m_max.y - m_min.y; }
 	bool Contains( Vec2 pos ) const;
 	Vec2 Clip( Vec2 pos ) const;
+	Vec2 Wrap( Vec2 pos ) const;
 	void ExpandPoint( Vec2 pos );
 	void ExpandEdge( Vec2 amount );
 	bool GetIntersection( const Rect& other, Rect* intersectionOut = nullptr ) const;
@@ -6589,7 +6602,7 @@ private:
 	struct Brick
 	{
 		void Initialize( Index index, const struct IsosurfaceParams& params, struct IsosurfaceStatus* status );
-		static inline Index MakeIndex( int32_t x, int32_t y, int32_t z ) { return { ae::Floor( x, kBrickMapSize ), ae::Floor( y, kBrickMapSize ), ae::Floor( z, kBrickMapSize ) }; }
+		static inline Index MakeIndex( int32_t x, int32_t y, int32_t z ) { return { ae::Floor( x, (int32_t)kBrickMapSize ), ae::Floor( y, (int32_t)kBrickMapSize ), ae::Floor( z, (int32_t)kBrickMapSize ) }; }
 		static inline std::pair< IsosurfaceExtractor::Index, ae::Vec3 > MakeIndex( ae::Vec3 v )
 		{
 			const ae::Int3 brick = ( v / kBrickMapSize ).FloorCopy();
@@ -8279,15 +8292,24 @@ constexpr auto Max( const T0& v0, const T1& v1, const TTT&... tail )
 	else { return Max( Max( v0, v1 ), tail... ); }
 }
 
-template< typename T >
-inline T Clip( T x, T min, T max )
+template< typename T0, typename T1, typename T2 >
+inline std::common_type_t< T0, T1, T2 > Clip( T0 x, T1 min, T2 max )
 {
-	return Min( Max( x, min ), max );
+	using T = std::common_type_t< T0, T1, T2 >;
+	return ae::Min( ae::Max( (T)x, (T)min ), (T)max );
 }
 
 inline float Clip01( float x )
 {
 	return Clip( x, 0.0f, 1.0f );
+}
+
+template< typename T0, typename T1, typename T2 >
+inline std::common_type_t< T0, T1, T2 > Wrap( T0 x, T1 min, T2 max )
+{
+	using T = std::common_type_t< T0, T1, T2 >;
+	const T minT = (T)min;
+	return ae::Mod( (T)x - minT, (T)max - minT ) + minT;
 }
 
 template< typename T, typename = decltype( std::declval< T >().data ) >
@@ -8334,6 +8356,17 @@ constexpr T Clip01( const T& v )
 	return result;
 }
 
+template< typename T, typename = decltype( std::declval< T >().data ) >
+constexpr T Wrap( const T& v, const T& min, const T& max )
+{
+	T result;
+	for( uint32_t i = 0; i < countof(T::data); i++ )
+	{
+		result.data[ i ] = ae::Wrap( v.data[ i ], min.data[ i ], max.data[ i ] );
+	}
+	return result;
+}
+
 inline float DegToRad( float degrees )
 {
 	return degrees * PI / 180.0f;
@@ -8368,9 +8401,23 @@ inline int32_t Floor( float f )
 	else return static_cast<int>(f);
 }
 
-inline int32_t Floor( int32_t value, int32_t divisor )
+template< typename T0, typename T1 >
+inline std::common_type_t< T0, T1 > Floor( T0 value, T1 divisor )
 {
-	return ( value >= 0 ) ? ( value / divisor ) : ( ( value - divisor + 1 ) / divisor );
+	using T = std::common_type_t< T0, T1 >;
+	static_assert( std::is_integral_v< T >, "ae::Floor division requires integers, use ae::Floor( value / divisor ) for floating point" );
+	const T a = (T)value;
+	const T b = (T)divisor;
+	const T q = a / b; // Truncates toward zero
+	if constexpr( std::is_signed_v< T > )
+	{
+		const T r = a % b;
+		return ( r && ( ( r < 0 ) != ( b < 0 ) ) ) ? ( q - 1 ) : q;
+	}
+	else
+	{
+		return q;
+	}
 }
 
 inline int32_t Round( float f )
@@ -8379,26 +8426,28 @@ inline int32_t Round( float f )
 	else return (int32_t)( f - 0.5f );
 }
 
-inline uint32_t Mod( uint32_t i, uint32_t n )
+template< typename T0, typename T1 >
+inline std::common_type_t< T0, T1 > Mod( T0 i, T1 n )
 {
-	return i % n;
-}
-
-inline int Mod( int32_t i, int32_t n )
-{
-	if( i < 0 )
+	using T = std::common_type_t< T0, T1 >;
+	const T a = (T)i;
+	const T b = (T)n;
+	if constexpr( std::is_same_v< T, float > )
 	{
-		return ( ( i % n ) + n ) % n;
+		return fmodf( fmodf( a, b ) + b, b );
+	}
+	else if constexpr( std::is_floating_point_v< T > )
+	{
+		return fmod( fmod( a, b ) + b, b );
+	}
+	else if constexpr( std::is_signed_v< T > )
+	{
+		return ( ( a % b ) + b ) % b;
 	}
 	else
 	{
-		return i % n;
+		return a % b;
 	}
-}
-
-inline float Mod( float f, float n )
-{
-	return fmodf( fmodf( f, n ) + n, n );
 }
 
 inline float Pow( float x, float e )
@@ -19729,6 +19778,11 @@ bool Rect::Contains( Vec2 pos ) const
 Vec2 Rect::Clip( Vec2 pos ) const
 {
 	return ae::Vec2( ae::Clip( pos.x, m_min.x, m_max.x ), ae::Clip( pos.y, m_min.y, m_max.y ) );
+}
+
+Vec2 Rect::Wrap( Vec2 pos ) const
+{
+	return ae::Vec2( ae::Wrap( pos.x, m_min.x, m_max.x ), ae::Wrap( pos.y, m_min.y, m_max.y ) );
 }
 
 void Rect::ExpandPoint( Vec2 pos )

@@ -267,11 +267,14 @@ TEST_CASE( "Ceil Floor Round", "[ae::ScalarMath]" )
 	REQUIRE( ae::Ceil( 1.1f ) == 2 );
 	REQUIRE( ae::Ceil( -1.1f ) == -1 );
 	REQUIRE( ae::Ceil( 1.0f ) == 1 );
+	REQUIRE( ae::Ceil( 2.0f ) == 2 );
 	REQUIRE( ae::Floor( 1.9f ) == 1 );
 	REQUIRE( ae::Floor( -1.1f ) == -2 );
 	REQUIRE( ae::Floor( 1.0f ) == 1 );
+	REQUIRE( ae::Floor( 2.0f ) == 2 );
 	REQUIRE( ae::Round( 1.4f ) == 1 );
 	REQUIRE( ae::Round( 1.5f ) == 2 );
+	REQUIRE( ae::Round( -1.4f ) == -1 );
 	REQUIRE( ae::Round( -1.5f ) == -2 ); // (int32_t)(-1.5 - 0.5) = (int32_t)(-2.0) = -2
 	REQUIRE( ae::Round( -1.6f ) == -2 );
 }
@@ -282,18 +285,101 @@ TEST_CASE( "Floor integer division", "[ae::ScalarMath]" )
 	REQUIRE( ae::Floor( int32_t( -7 ), int32_t( 2 ) ) == -4 );
 	REQUIRE( ae::Floor( int32_t( -6 ), int32_t( 2 ) ) == -3 );
 	REQUIRE( ae::Floor( int32_t( 6 ), int32_t( 2 ) ) == 3 );
+	REQUIRE( ae::Floor( 0, 5 ) == 0 );
+	REQUIRE( ae::Floor( 5, 5 ) == 1 );
+	REQUIRE( ae::Floor( 4, 5 ) == 0 );
+	REQUIRE( ae::Floor( -5, 5 ) == -1 );
+}
+
+TEST_CASE( "Floor integer division rounds toward negative infinity", "[ae::ScalarMath]" )
+{
+	// The divisor's sign matters as much as the dividend's
+	REQUIRE( ae::Floor( 7, 2 ) == 3 );
+	REQUIRE( ae::Floor( -7, 2 ) == -4 );
+	REQUIRE( ae::Floor( 7, -2 ) == -4 );
+	REQUIRE( ae::Floor( -7, -2 ) == 3 );
+
+	REQUIRE( ae::Floor( 6, -2 ) == -3 );
+	REQUIRE( ae::Floor( -6, -2 ) == 3 );
+	REQUIRE( ae::Floor( 1, -2 ) == -1 );
+	REQUIRE( ae::Floor( -1, -2 ) == 0 );
+}
+
+TEST_CASE( "Floor integer division widths", "[ae::ScalarMath]" )
+{
+	REQUIRE( ae::Floor( int64_t( -7 ), int64_t( 2 ) ) == -4 );
+	REQUIRE( ae::Floor( uint32_t( 7 ), uint32_t( 2 ) ) == 3u );
+	REQUIRE( ae::Floor( uint64_t( 7 ), uint64_t( 2 ) ) == 3u );
+
+	// Mixed widths of a single signedness promote to the wider type
+	REQUIRE( std::is_same< decltype( ae::Floor( int32_t( 1 ), int64_t( 1 ) ) ), int64_t >() );
+	REQUIRE( ae::Floor( int32_t( -7 ), int64_t( 2 ) ) == -4 );
+
+	// The dividend near INT32_MIN must not overflow before the correction
+	REQUIRE( ae::Floor( ae::MinValue< int32_t >(), 2 ) == -1073741824 );
+	REQUIRE( ae::Floor( ae::MinValue< int32_t >() + 1, 2 ) == -1073741824 );
 }
 
 TEST_CASE( "Mod", "[ae::ScalarMath]" )
 {
 	REQUIRE( ae::Mod( uint32_t( 7 ), uint32_t( 3 ) ) == 1 );
 	REQUIRE( ae::Mod( uint32_t( 6 ), uint32_t( 3 ) ) == 0 );
+	REQUIRE( ae::Mod( uint32_t( 0 ), uint32_t( 5 ) ) == 0 );
 	REQUIRE( ae::Mod( int32_t( -1 ), int32_t( 5 ) ) == 4 );
 	REQUIRE( ae::Mod( int32_t( -7 ), int32_t( 3 ) ) == 2 );
 	REQUIRE( ae::Mod( int32_t( 7 ), int32_t( 3 ) ) == 1 );
+	REQUIRE( ae::Mod( int32_t( 6 ), int32_t( 3 ) ) == 0 );
+	REQUIRE( ae::Mod( int32_t( 0 ), int32_t( 5 ) ) == 0 );
+	REQUIRE( ae::Mod( -3, 12 ) == 9 );
+	REQUIRE( ae::Mod( 7, 1 ) == 0 );
+	REQUIRE( ae::Mod( -7, 1 ) == 0 );
 	REQUIRE( IsCloseEnough( ae::Mod( -0.5f, 1.0f ), 0.5f ) );
 	REQUIRE( IsCloseEnough( ae::Mod( 1.5f, 1.0f ), 0.5f ) );
 	REQUIRE( IsCloseEnough( ae::Mod( -1.0f, 1.0f ), 0.0f ) );
+	REQUIRE( IsCloseEnough( ae::Mod( -1.5f, 1.0f ), 0.5f ) );
+	REQUIRE( IsCloseEnough( ae::Mod( 0.3f, 1.0f ), 0.3f ) );
+	REQUIRE( IsCloseEnough( ae::Mod( 1.3f, 1.0f ), 0.3f ) );
+	REQUIRE( IsCloseEnough( ae::Mod( -2.5f, 12.0f ), 9.5f ) );
+}
+
+TEST_CASE( "Mod takes the sign of the divisor", "[ae::ScalarMath]" )
+{
+	REQUIRE( ae::Mod( 7, 2 ) == 1 );
+	REQUIRE( ae::Mod( -7, 2 ) == 1 );
+	REQUIRE( ae::Mod( 7, -2 ) == -1 );
+	REQUIRE( ae::Mod( -7, -2 ) == -1 );
+
+	// The integer and floating point paths must agree
+	REQUIRE( IsCloseEnough( ae::Mod( 7.0f, -2.0f ), -1.0f ) );
+	REQUIRE( IsCloseEnough( ae::Mod( -7.0f, -2.0f ), -1.0f ) );
+	REQUIRE( IsCloseEnough( ae::Mod( 7.0f, 2.0f ), 1.0f ) );
+	REQUIRE( IsCloseEnough( ae::Mod( -7.0f, 2.0f ), 1.0f ) );
+}
+
+TEST_CASE( "Mod widths", "[ae::ScalarMath]" )
+{
+	REQUIRE( ae::Mod( int64_t( -7 ), int64_t( 3 ) ) == 2 );
+	REQUIRE( ae::Mod( uint64_t( 7 ), uint64_t( 3 ) ) == 1u );
+	REQUIRE( IsCloseEnough( (float)ae::Mod( -0.5, 1.0 ), 0.5f ) );
+
+	// Wider than float can represent exactly
+	REQUIRE( ae::Mod( int64_t( -1 ), int64_t( 1 ) << 40 ) == ( ( int64_t( 1 ) << 40 ) - 1 ) );
+}
+
+TEST_CASE( "Floor and Mod satisfy the division identity", "[ae::ScalarMath]" )
+{
+	// a == Floor( a, b ) * b + Mod( a, b ) for every sign combination
+	for( int32_t b = -13; b <= 13; b++ )
+	{
+		if( b == 0 )
+		{
+			continue;
+		}
+		for( int32_t a = -40; a <= 40; a++ )
+		{
+			REQUIRE( a == ae::Floor( a, b ) * b + ae::Mod( a, b ) );
+		}
+	}
 }
 
 TEST_CASE( "NextPowerOfTwo", "[ae::ScalarMath]" )
@@ -316,6 +402,17 @@ TEST_CASE( "Clip integer and float", "[ae::Clip]" )
 	REQUIRE( ae::Clip( 0.5f, 0.0f, 1.0f ) == 0.5f );
 	REQUIRE( ae::Clip( 0.0f, 0.0f, 1.0f ) == 0.0f );
 	REQUIRE( ae::Clip( 1.0f, 0.0f, 1.0f ) == 1.0f );
+	REQUIRE( IsCloseEnough( ae::Clip( -1.0f, 0.0f, 1.0f ), 0.0f ) );
+	REQUIRE( IsCloseEnough( ae::Clip( 2.0f, 0.0f, 1.0f ), 1.0f ) );
+	REQUIRE( ae::Clip( -5, -10, -1 ) == -5 );
+	REQUIRE( ae::Clip( 0, -10, -1 ) == -1 );
+}
+
+TEST_CASE( "Clip widths", "[ae::Clip]" )
+{
+	REQUIRE( ae::Clip( int64_t( 11 ), int64_t( 0 ), int64_t( 10 ) ) == 10 );
+	REQUIRE( ae::Clip( uint32_t( 11 ), uint32_t( 0 ), uint32_t( 10 ) ) == 10u );
+	REQUIRE( IsCloseEnough( (float)ae::Clip( 2.0, 0.0, 1.0 ), 1.0f ) );
 }
 
 TEST_CASE( "Clip01", "[ae::Clip]" )
@@ -325,6 +422,105 @@ TEST_CASE( "Clip01", "[ae::Clip]" )
 	REQUIRE( ae::Clip01( 1.5f ) == 1.0f );
 	REQUIRE( ae::Clip01( 0.0f ) == 0.0f );
 	REQUIRE( ae::Clip01( 1.0f ) == 1.0f );
+}
+
+//------------------------------------------------------------------------------
+// ae::Wrap tests
+//------------------------------------------------------------------------------
+TEST_CASE( "Wrap integer", "[ae::Wrap]" )
+{
+	REQUIRE( ae::Wrap( 1, 2, 5 ) == 4 );
+	REQUIRE( ae::Wrap( 6, 2, 5 ) == 3 );
+	REQUIRE( ae::Wrap( 3, 2, 5 ) == 3 );
+	REQUIRE( ae::Wrap( -2, 2, 5 ) == 4 );
+	REQUIRE( ae::Wrap( 100, 2, 5 ) == 4 );
+	REQUIRE( ae::Wrap( -100, 2, 5 ) == 2 );
+}
+
+TEST_CASE( "Wrap range is half open", "[ae::Wrap]" )
+{
+	REQUIRE( ae::Wrap( 2, 2, 5 ) == 2 );
+	REQUIRE( ae::Wrap( 5, 2, 5 ) == 2 );
+	REQUIRE( ae::Wrap( 4, 2, 5 ) == 4 );
+	REQUIRE( IsCloseEnough( ae::Wrap( 0.0f, 0.0f, 1.0f ), 0.0f ) );
+	REQUIRE( IsCloseEnough( ae::Wrap( 1.0f, 0.0f, 1.0f ), 0.0f ) );
+}
+
+TEST_CASE( "Wrap float", "[ae::Wrap]" )
+{
+	REQUIRE( IsCloseEnough( ae::Wrap( 0.25f, 0.0f, 1.0f ), 0.25f ) );
+	REQUIRE( IsCloseEnough( ae::Wrap( -0.5f, 0.0f, 1.0f ), 0.5f ) );
+	REQUIRE( IsCloseEnough( ae::Wrap( 1.25f, 0.0f, 1.0f ), 0.25f ) );
+	REQUIRE( IsCloseEnough( ae::Wrap( 3.25f, 0.0f, 1.0f ), 0.25f ) );
+	REQUIRE( IsCloseEnough( ae::Wrap( -2.75f, 0.0f, 1.0f ), 0.25f ) );
+}
+
+TEST_CASE( "Wrap negative range", "[ae::Wrap]" )
+{
+	REQUIRE( ae::Wrap( 7, -5, -2 ) == -5 );
+	REQUIRE( ae::Wrap( -6, -5, -2 ) == -3 );
+	REQUIRE( ae::Wrap( -3, -5, -2 ) == -3 );
+	REQUIRE( IsCloseEnough( ae::Wrap( -0.25f, -1.0f, 1.0f ), -0.25f ) );
+	REQUIRE( IsCloseEnough( ae::Wrap( 1.5f, -1.0f, 1.0f ), -0.5f ) );
+	REQUIRE( IsCloseEnough( ae::Wrap( -3.0f, -1.0f, 1.0f ), -1.0f ) );
+}
+
+TEST_CASE( "Wrap widths", "[ae::Wrap]" )
+{
+	REQUIRE( ae::Wrap( int64_t( 1 ), int64_t( 2 ), int64_t( 5 ) ) == 4 );
+	REQUIRE( ae::Wrap( uint32_t( 7 ), uint32_t( 2 ), uint32_t( 5 ) ) == 4u );
+	REQUIRE( IsCloseEnough( (float)ae::Wrap( -0.5, 0.0, 1.0 ), 0.5f ) );
+}
+
+TEST_CASE( "Wrap vectors", "[ae::Wrap]" )
+{
+	const ae::Vec2 v2 = ae::Wrap( ae::Vec2( -0.5f, 1.25f ), ae::Vec2( 0.0f, 0.0f ), ae::Vec2( 1.0f, 1.0f ) );
+	REQUIRE( IsCloseEnough( v2.x, 0.5f ) );
+	REQUIRE( IsCloseEnough( v2.y, 0.25f ) );
+
+	const ae::Vec3 v3 = ae::Wrap( ae::Vec3( -0.5f, 1.25f, 0.5f ), ae::Vec3( 0.0f ), ae::Vec3( 1.0f ) );
+	REQUIRE( IsCloseEnough( v3.x, 0.5f ) );
+	REQUIRE( IsCloseEnough( v3.y, 0.25f ) );
+	REQUIRE( IsCloseEnough( v3.z, 0.5f ) );
+}
+
+TEST_CASE( "Rect Wrap", "[ae::Wrap]" )
+{
+	const ae::Rect rect = ae::Rect::FromPoints( 0.0f, 0.0f, 10.0f, 4.0f );
+	const ae::Vec2 wrapped = rect.Wrap( ae::Vec2( -1.0f, 5.0f ) );
+	REQUIRE( IsCloseEnough( wrapped.x, 9.0f ) );
+	REQUIRE( IsCloseEnough( wrapped.y, 1.0f ) );
+}
+
+//------------------------------------------------------------------------------
+// Mixed argument type tests
+//------------------------------------------------------------------------------
+TEST_CASE( "Scalar math promotes mixed types", "[ae::ScalarMath]" )
+{
+	REQUIRE( std::is_same< decltype( ae::Mod( 5, 3 ) ), int >() );
+	REQUIRE( std::is_same< decltype( ae::Mod( 5, 3.0f ) ), float >() );
+	REQUIRE( std::is_same< decltype( ae::Mod( 5.0f, 3.0 ) ), double >() );
+	REQUIRE( std::is_same< decltype( ae::Clip( 5, 0, 10.0f ) ), float >() );
+	REQUIRE( std::is_same< decltype( ae::Wrap( 1, 2, int64_t( 5 ) ) ), int64_t >() );
+	REQUIRE( std::is_same< decltype( ae::Floor( int32_t( 1 ), int64_t( 1 ) ) ), int64_t >() );
+
+	REQUIRE( IsCloseEnough( ae::Mod( -5, 3.0f ), 1.0f ) );
+	REQUIRE( IsCloseEnough( ae::Clip( 5, 0, 10.0f ), 5.0f ) );
+	REQUIRE( ae::Wrap( 1, 2, int64_t( 5 ) ) == 4 );
+}
+
+TEST_CASE( "Scalar math mixed signedness follows promotion", "[ae::ScalarMath]" )
+{
+	// The usual arithmetic conversions make the result unsigned, matching the
+	// built in operators rather than signed clock arithmetic
+	REQUIRE( std::is_same< decltype( ae::Mod( -10, 5u ) ), unsigned >() );
+	REQUIRE( ae::Mod( -10, 5u ) == 1u );
+	REQUIRE( ( -10 % 5u ) == 1u );
+	REQUIRE( ae::Mod( -10, 5 ) == 0 );
+
+	REQUIRE( std::is_same< decltype( ae::Clip( -1, 0u, 10u ) ), unsigned >() );
+	REQUIRE( ae::Clip( -1, 0u, 10u ) == 10u );
+	REQUIRE( ae::Clip( -1, 0, 10 ) == 0 );
 }
 
 //------------------------------------------------------------------------------
@@ -1189,45 +1385,6 @@ TEST_CASE( "Scalar math: DegToRad, RadToDeg", "[math]" )
 	REQUIRE( IsCloseEnough( ae::RadToDeg( ae::DegToRad( 45.0f ) ), 45.0f ) );
 }
 
-TEST_CASE( "Scalar math: Mod", "[math]" )
-{
-	REQUIRE( ae::Mod( 7u, 3u ) == 1u );
-	REQUIRE( ae::Mod( 6u, 3u ) == 0u );
-	REQUIRE( ae::Mod( 0u, 5u ) == 0u );
-
-	REQUIRE( ae::Mod( -1, 5 ) == 4 );
-	REQUIRE( ae::Mod( -7, 3 ) == 2 );
-	REQUIRE( ae::Mod( 7, 3 ) == 1 );
-	REQUIRE( ae::Mod( 6, 3 ) == 0 );
-	REQUIRE( ae::Mod( 0, 5 ) == 0 );
-
-	REQUIRE( IsCloseEnough( ae::Mod( -0.5f, 1.0f ), 0.5f ) );
-	REQUIRE( IsCloseEnough( ae::Mod( -1.5f, 1.0f ), 0.5f ) );
-	REQUIRE( IsCloseEnough( ae::Mod( 0.3f, 1.0f ), 0.3f ) );
-	REQUIRE( IsCloseEnough( ae::Mod( 1.3f, 1.0f ), 0.3f ) );
-}
-
-TEST_CASE( "Scalar math: Ceil, Floor, Round", "[math]" )
-{
-	REQUIRE( ae::Ceil( 1.1f ) == 2 );
-	REQUIRE( ae::Ceil( -1.1f ) == -1 );
-	REQUIRE( ae::Ceil( 2.0f ) == 2 );
-
-	REQUIRE( ae::Floor( 1.9f ) == 1 );
-	REQUIRE( ae::Floor( -1.1f ) == -2 );
-	REQUIRE( ae::Floor( 2.0f ) == 2 );
-
-	REQUIRE( ae::Round( 1.4f ) == 1 );
-	REQUIRE( ae::Round( 1.5f ) == 2 );
-	REQUIRE( ae::Round( -1.4f ) == -1 );
-	REQUIRE( ae::Round( -1.5f ) == -2 );
-
-	REQUIRE( ae::Floor( -7, 2 ) == -4 );
-	REQUIRE( ae::Floor( 7, 2 ) == 3 );
-	REQUIRE( ae::Floor( 6, 2 ) == 3 );
-	REQUIRE( ae::Floor( -6, 2 ) == -3 );
-}
-
 TEST_CASE( "Scalar math: NextPowerOfTwo", "[math]" )
 {
 	REQUIRE( ae::NextPowerOfTwo( 0u ) == 0u );
@@ -1239,17 +1396,6 @@ TEST_CASE( "Scalar math: NextPowerOfTwo", "[math]" )
 	REQUIRE( ae::NextPowerOfTwo( 9u ) == 16u );
 	REQUIRE( ae::NextPowerOfTwo( 16u ) == 16u );
 	REQUIRE( ae::NextPowerOfTwo( 17u ) == 32u );
-}
-
-TEST_CASE( "Scalar math: Clip and Clip01", "[math]" )
-{
-	REQUIRE( IsCloseEnough( ae::Clip( 0.5f, 0.0f, 1.0f ), 0.5f ) );
-	REQUIRE( IsCloseEnough( ae::Clip( -1.0f, 0.0f, 1.0f ), 0.0f ) );
-	REQUIRE( IsCloseEnough( ae::Clip( 2.0f, 0.0f, 1.0f ), 1.0f ) );
-
-	REQUIRE( IsCloseEnough( ae::Clip01( 0.5f ), 0.5f ) );
-	REQUIRE( IsCloseEnough( ae::Clip01( -0.5f ), 0.0f ) );
-	REQUIRE( IsCloseEnough( ae::Clip01( 1.5f ), 1.0f ) );
 }
 
 TEST_CASE( "Scalar math: Lerp", "[math]" )
