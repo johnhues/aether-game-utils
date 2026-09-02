@@ -22,14 +22,14 @@ namespace ae {
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-std::pair< std::string, float > GetMeshResource( const ae::EditorComponent& comp )
+std::pair< std::string, const MeshAttrib* > GetMeshResource( const ae::EditorComponent& comp )
 {
 	const ae::ClassType* currentType = ae::GetClassTypeByName( comp.typeName );
 	while( currentType )
 	{
 		if( const MeshAttrib* classAttribute = currentType->attributes.TryGet< MeshAttrib >() )
 		{
-			return { classAttribute->resourceMesh.c_str(), classAttribute->transparent ? 0.7f : 1.0f };
+			return { classAttribute->resourceMesh.c_str(), classAttribute };
 		}
 		const uint32_t varCount = currentType->GetVarCount( false );
 		for( uint32_t i = 0; i < varCount; i++ )
@@ -42,7 +42,7 @@ std::pair< std::string, float > GetMeshResource( const ae::EditorComponent& comp
 				if( basicType->GetType() == ae::BasicType::String )
 				{
 					const ae::DocumentValue* varDoc = comp.GetDocumentValue()->ObjectTryGet( var->GetName() );
-					return { varDoc ? varDoc->StringGet() : "", varAttribute->transparent ? 0.7f : 1.0f };
+					return { varDoc ? varDoc->StringGet() : "", varAttribute };
 				}
 				else
 				{
@@ -52,7 +52,7 @@ std::pair< std::string, float > GetMeshResource( const ae::EditorComponent& comp
 		}
 		currentType = currentType->GetParentType();
 	}
-	return { "", 0.0f };
+	return { "", nullptr };
 }
 
 //------------------------------------------------------------------------------
@@ -133,10 +133,10 @@ void MeshEditorPlugin::OnEvent( const ae::EditorEvent& event )
 
 void MeshEditorPlugin::m_UpdateInstance( const ae::EditorComponent& comp, const ae::Matrix4& transform )
 {
-	const auto[ resourceId, opacity ] = GetMeshResource( comp );
+	const auto[ resourceId, attribute ] = GetMeshResource( comp );
 	ae::EditorMeshInstance* oldInstance = m_components.Get( &comp, nullptr );
 	ae::EditorMeshInstance* newInstance = nullptr;
-	if( !resourceId.empty() )
+	if( !resourceId.empty() && attribute )
 	{
 		ae::EditorMeshInstance* resource = m_resources.Get( resourceId, nullptr );
 		if( !resource )
@@ -146,7 +146,7 @@ void MeshEditorPlugin::m_UpdateInstance( const ae::EditorComponent& comp, const 
 			if( resource )
 			{
 				AE_DEBUG( "Create mesh resource-># id:#", resource, resourceId );
-				resource->color = ae::Color::Magenta().SetA( 0.0f ); // Disable resource object rendering
+				resource->opacity = 0.0f; // Disable resource object rendering
 				m_resources.Set( resourceId, resource );
 			}
 		}
@@ -155,7 +155,11 @@ void MeshEditorPlugin::m_UpdateInstance( const ae::EditorComponent& comp, const 
 		if( newInstance )
 		{
 			newInstance->transform = transform;
-			newInstance->color = ae::Color::White().SetA( opacity );
+			newInstance->linearColor = attribute->linearColor; // Optional to optional assignment
+			if( attribute->transparent )
+			{
+				newInstance->opacity = 0.7f;
+			}
 		}
 	}
 

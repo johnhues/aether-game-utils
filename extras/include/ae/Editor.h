@@ -71,7 +71,8 @@ class EditorMeshInstance
 {
 public:
 	ae::Matrix4 transform = ae::Matrix4::Identity();
-	ae::Color color = ae::Color::AetherGray();
+	ae::Optional< ae::Vec3 > linearColor;
+	float opacity = 1.0f;
 private:
 	friend class EditorPlugin;
 	friend class EditorServer;

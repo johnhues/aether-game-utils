@@ -30,6 +30,8 @@ public:
 	//! be used instead.
 	ae::Str64 resourceMesh;
 
+	ae::Optional< ae::Vec3 > linearColor;
+
 	//! If true, the mesh will be displayed differently in the editor. This
 	//! is useful for triggers, bounding volumes, or water volumes, etc.
 	bool transparent = false;

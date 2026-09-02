@@ -158,6 +158,7 @@ const float kEditorViewDistance = 25000.0f;
 #define JSON_ROTATION_NAME "rotation"
 #define JSON_SCALE_NAME "scale"
 #define JSON_ENTITY_COMPONENTS_NAME "components"
+#define JSON_LEVEL_INDEX_NAME "levelIndex"
 #define DOCUMENT_ENTITY_PARENT_MEMBER "parent"
 #define DOCUMENT_ENTITY_CHILDREN_MEMBER "children"
 #define DOCUMENT_ENTITY_COMPONENTS_MEMBER "components"
@@ -178,23 +179,64 @@ enum class SelectionModifier
 	Remove
 };
 
+//! What a special var is derived from.
+enum class SpecialVarSource
+{
+	None,
+	Initialize, //!< Written once, when the level the component belongs to is loaded
+	Update, //!< Rewritten whenever the object moves
+};
+
+//! Editor owned state that special vars are derived from.
+struct SpecialVarContext
+{
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	ae::Entity entity = kNullEntity;
+	//! Allocation order of the component within its own type, counted from the
+	//! start of the level. Only valid while a level is loading.
+	uint32_t levelIndex = 0;
+};
+
+//! A component var owned by the editor, matched by \p name and \p type. Never
+//! serialized. Written by SpecialVarsToComponent() and SpecialVarsToDoc().
 struct SpecialMemberVar
 {
-	std::string ToString( const ae::Matrix4& transform ) const;
-	
+	SpecialVarSource source;
 	ae::BasicType::Type type;
 	const char* name;
-	bool ( *SetObjectValue )( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var );
+	std::string ( *ToString )( const SpecialVarContext& ctx );
+	bool ( *SetObjectValue )( const SpecialVarContext& ctx, ae::Object* component, const ae::ClassVar* var );
 };
 #define AE_SET_OBJECT_VALUE( _value )\
-	[]( const ae::Matrix4& transform, ae::Object* component, const ae::ClassVar* var ) {\
+	[]( const SpecialVarContext& ctx, ae::Object* component, const ae::ClassVar* var ) {\
 		const ae::BasicType* type = var->GetOuterVarType().AsVarType< ae::BasicType >();\
 		return type ? type->SetVarData( ae::DataPointer( var, component ), _value ) : false; }
 const SpecialMemberVar kSpecialMemberVars[] = {
-	{ ae::BasicType::Matrix4, JSON_TRANSFORM_NAME, AE_SET_OBJECT_VALUE( transform ) },
-	{ ae::BasicType::Vec3, JSON_POSITION_NAME, AE_SET_OBJECT_VALUE( transform.GetTranslation() ) },
-	{ ae::BasicType::Quaternion, JSON_ROTATION_NAME, AE_SET_OBJECT_VALUE( transform.GetRotation() ) },
-	{ ae::BasicType::Vec3, JSON_SCALE_NAME, AE_SET_OBJECT_VALUE( transform.GetScale() ) },
+	{
+		SpecialVarSource::Update, ae::BasicType::Matrix4, JSON_TRANSFORM_NAME,
+		[]( const SpecialVarContext& ctx ) -> std::string { return ae::ToString( ctx.transform ); },
+		AE_SET_OBJECT_VALUE( ctx.transform )
+	},
+	{
+		SpecialVarSource::Update, ae::BasicType::Vec3, JSON_POSITION_NAME,
+		[]( const SpecialVarContext& ctx ) -> std::string { return ae::ToString( ctx.transform.GetTranslation() ); },
+		AE_SET_OBJECT_VALUE( ctx.transform.GetTranslation() )
+	},
+	{
+		SpecialVarSource::Update, ae::BasicType::Quaternion, JSON_ROTATION_NAME,
+		[]( const SpecialVarContext& ctx ) -> std::string { return ae::Str256::Format( "#", ctx.transform.GetRotation() ).c_str(); },
+		AE_SET_OBJECT_VALUE( ctx.transform.GetRotation() )
+	},
+	{
+		SpecialVarSource::Update, ae::BasicType::Vec3, JSON_SCALE_NAME,
+		[]( const SpecialVarContext& ctx ) -> std::string { return ae::ToString( ctx.transform.GetScale() ); },
+		AE_SET_OBJECT_VALUE( ctx.transform.GetScale() )
+	},
+	{
+		SpecialVarSource::Initialize, ae::BasicType::UInt32, JSON_LEVEL_INDEX_NAME,
+		[]( const SpecialVarContext& ctx ) -> std::string { return ae::ToString( ctx.levelIndex ); },
+		AE_SET_OBJECT_VALUE( ctx.levelIndex )
+	},
 };
 #undef AE_SET_OBJECT_VALUE
 const SpecialMemberVar* GetSpecialMemberVar( const ae::ClassVar* var )
@@ -239,20 +281,12 @@ static const ae::ClassType* GetVarClassType( const ae::ClassVar* var )
 	return nullptr;
 }
 
-std::string SpecialMemberVar::ToString( const ae::Matrix4& transform ) const
-{
-	if( strcmp( name, JSON_TRANSFORM_NAME ) == 0 ) { return ae::ToString( transform ); }
-	if( strcmp( name, JSON_POSITION_NAME ) == 0 ) { return ae::ToString( transform.GetTranslation() ); }
-	if( strcmp( name, JSON_ROTATION_NAME ) == 0 ) { return ae::Str256::Format( "#", transform.GetRotation() ).c_str(); }
-	if( strcmp( name, JSON_SCALE_NAME ) == 0 ) { return ae::ToString( transform.GetScale() ); }
-	return "";
-}
-
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
 void GetComponentTypeRequirements( const ae::ClassType* type, ae::Array< const ae::ClassType* >* prereqs );
-// void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component );
+void SpecialVarsToComponent( const SpecialVarContext& ctx, Component* component, SpecialVarSource source = SpecialVarSource::None );
+void SpecialVarsToDoc( const SpecialVarContext& ctx, const ae::ClassType* type, ae::DocumentValue* compDoc, SpecialVarSource source = SpecialVarSource::None );
 void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry );
 void JsonToDoc( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::DocumentValue* docObjects );
 void ComponentToJson( const ae::ClassType* type, const ae::DocumentValue* compDoc, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
@@ -1518,6 +1552,7 @@ void Editor::m_Read()
 	// State for loading
 	ae::Array< const ae::ClassType* > requirements = m_tag;
 	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
+	ae::Map< ae::TypeId, uint32_t > typeCounts = m_tag;
 	
 	for( const JsonEntity& sceneEntity : scene.entities )
 	{
@@ -1527,14 +1562,25 @@ void Editor::m_Read()
 		{
 			entityMap.Set( sceneEntity.id, newId ); // Record which ids have been remapped
 		}
+		const auto initComponent = [&]( ae::Component* component )
+		{
+			if( !component )
+			{
+				return;
+			}
+			const ae::TypeId typeId = ae::GetClassTypeFromObject( component )->GetId();
+			const uint32_t componentIndex = typeCounts.Get( typeId, 0 );
+			typeCounts.Set( typeId, componentIndex + 1 );
+			SpecialVarsToComponent( { sceneEntity.transform, newId, componentIndex }, component );
+		};
 		for( const JsonComponent* sceneComponent : sceneEntity.components )
 		{
 			GetComponentTypeRequirements( sceneComponent->type, &requirements );
 			for( const ae::ClassType* requirement : requirements )
 			{
-				m_params->registry->AddComponent( newId, requirement );
+				initComponent( m_params->registry->AddComponent( newId, requirement ) );
 			}
-			m_params->registry->AddComponent( newId, sceneComponent->type );
+			initComponent( m_params->registry->AddComponent( newId, sceneComponent->type ) );
 		}
 	}
 
@@ -1968,6 +2014,7 @@ void EditorServer::m_LoadScene( EditorProgram* program, const JsonScene& scene, 
 	// Serialize all components (second phase to handle references)
 	JsonToDoc( entityMap, document[ JSON_SCENE_OBJECTS_NAME ], m_docObjects );
 
+	ae::Map< ae::TypeId, uint32_t > typeCounts = m_tag;
 	for( const JsonEntity& sceneEntity : scene.entities )
 	{
 		const ae::Entity entityId = entityMap.Get( sceneEntity.id, sceneEntity.id );
@@ -1978,6 +2025,15 @@ void EditorServer::m_LoadScene( EditorProgram* program, const JsonScene& scene, 
 			EditorServerObject* parentObject = GetObjectAssert( parent );
 			object->SetParent( this, parentObject );
 		}
+		// Re-derive special vars for every component, including those with no json entry
+		const uint32_t componentCount = object->GetComponentCount();
+		for( uint32_t i = 0; i < componentCount; i++ )
+		{
+			const ae::ClassType* componentType = object->GetComponentTypeByIndex( i );
+			const uint32_t componentIndex = typeCounts.Get( componentType->GetId(), 0 );
+			typeCounts.Set( componentType->GetId(), componentIndex + 1 );
+			SpecialVarsToDoc( { object->GetTransform(), entityId, componentIndex }, componentType, &object->GetComponentByIndex( i ) );
+		}
 		for( const JsonComponent* sceneComponent : sceneEntity.components )
 		{
 			const ae::ClassType* type = sceneComponent->type;
@@ -1985,7 +2041,6 @@ void EditorServer::m_LoadScene( EditorProgram* program, const JsonScene& scene, 
 			const ae::DocumentValue* componentDoc = object->GetComponentByType( type );
 			BroadcastDocVarChanges( program, object, entityId, type->GetId(), comp, type, componentDoc );
 		}
-		// @TODO: Explicitly handle setting transform vars?
 	}
 }
 
@@ -2158,7 +2213,7 @@ void EditorServer::Render( EditorProgram* program )
 	{
 		for( auto& [ instance, _ ] : plugin->m_instances )
 		{
-			if( instance->color.a > 0.01f && instance->m_mesh )
+			if( instance->opacity > 0.01f && instance->m_mesh )
 			{
 				// m_selectEntity is allowed to be invalid if the mesh isn't
 				// used for object selection. The lifetime of the mesh instance
@@ -2171,7 +2226,7 @@ void EditorServer::Render( EditorProgram* program )
 				}
 
 				ae::Array< RenderObj >* meshes = nullptr;
-				if( instance->color.a > 0.99f )
+				if( instance->opacity > 0.99f )
 				{
 					meshes = &opaqueObjects;
 				}
@@ -2185,7 +2240,7 @@ void EditorServer::Render( EditorProgram* program )
 					const ae::Color editorColor = m_GetColor( obj->GetEntity(), false );
 					RenderObj& renderObj = meshes->Append( {} );
 					renderObj.transform = instance->transform;
-					renderObj.color = editorColor;//instance->color.SetA( 1.0f ).Lerp( editorColor, editorColor.a ).SetA( instance->color.a );
+					renderObj.color = ae::Color::RGBA( instance->linearColor.Get( editorColor.GetLinearRGB() ), instance->opacity );
 					renderObj.mesh = instance->m_mesh;
 					renderObj.distanceSq = ( camPos - instance->transform.GetTranslation() ).LengthSquared();
 	
@@ -2582,8 +2637,8 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 					{
 						AE_DEBUG_ASSERT( instance->m_mesh );
 						if( !instance->m_mesh ||
-							instance->color.a < 0.01f || // Skip invisible objects
-							( instance->color.a < 0.99f && !GetShowTransparent() ) ) // Skip transparent objects
+							instance->opacity < 0.01f || // Skip invisible objects
+							( instance->opacity < 0.99f && !GetShowTransparent() ) ) // Skip transparent objects
 						{
 							continue;
 						}
@@ -3628,6 +3683,7 @@ void EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj
 	AE_ASSERT( objDocValue );
 	ae::DocumentValue* compDoc = &objDocValue->ObjectSet( DOCUMENT_ENTITY_COMPONENTS_MEMBER ).ObjectSet( type->GetName() );
 	PopulateDocFromVarData( type, ae::ConstDataPointer( *type, m_GetDefault( type ) ), compDoc );
+	SpecialVarsToDoc( { obj->GetTransform(), obj->GetEntity() }, type, compDoc, SpecialVarSource::Update );
 
 	EditorServerComponent* comp = m_componentPool.New( obj->GetEntity(), type->GetName(), compDoc );
 	obj->AddComponent( comp );
@@ -3794,17 +3850,15 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 			event.component = editorComponent;
 			SendPluginEvent( program->plugins, event );
 
-			for( const auto& specialVar : kSpecialMemberVars )
+			SpecialVarsToDoc( { transform, entity }, componentType, componentDoc, SpecialVarSource::Update );
+			const uint32_t varCount = componentType->GetVarCount( true );
+			for( uint32_t j = 0; j < varCount; j++ )
 			{
-				const auto vars = GetTypeVarsByName( componentType, specialVar.name );
-				for( const ae::ClassVar* var : vars )
+				const ae::ClassVar* var = componentType->GetVarByIndex( j, true );
+				if( GetSpecialMemberVar( var ) && componentDoc->ObjectTryGet( var->GetName() ) )
 				{
-					if( ae::DocumentValue* varDoc = componentDoc->ObjectTryGet( var->GetName() ) )
-					{
-						varDoc->StringSet( specialVar.ToString( transform ).c_str() );
-						editorObject->HandleVarChange( program, entity, componentType->GetId(), editorComponent, var, componentDoc );
-						// Note: Undo group for transform changes is managed by the caller (e.g., ImGuizmo manipulation)
-					}
+					// Note: Undo group for transform changes is managed by the caller (e.g., ImGuizmo manipulation)
+					editorObject->HandleVarChange( program, entity, componentType->GetId(), editorComponent, var, componentDoc );
 				}
 			}
 		}
@@ -4660,8 +4714,8 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 		for( auto& [ instance, _ ] : plugin->m_instances )
 		{
 			AE_DEBUG_ASSERT( instance->m_mesh );
-			if( !instance->m_mesh || instance->color.a < 0.01f || // Skip invisible objects
-				( instance->color.a < 0.99f && !GetShowTransparent() ) ) // Skip transparent objects
+			if( !instance->m_mesh || instance->opacity < 0.01f || // Skip invisible objects
+				( instance->opacity < 0.99f && !GetShowTransparent() ) ) // Skip transparent objects
 			{
 				continue;
 			}
@@ -4802,10 +4856,10 @@ void GetComponentTypeRequirements( const ae::ClassType* type, ae::Array< const a
 		{
 			fn( fn, t->GetParentType() );
 		}
-		const uint32_t requiredCount = type->attributes.GetCount< EditorRequiredAttribute >();
+		const uint32_t requiredCount = t->attributes.GetCount< EditorRequiredAttribute >();
 		for( uint32_t i = 0; i < requiredCount; i++ )
 		{
-			const EditorRequiredAttribute* requiredAttribute = type->attributes.TryGet< EditorRequiredAttribute >( i );
+			const EditorRequiredAttribute* requiredAttribute = t->attributes.TryGet< EditorRequiredAttribute >( i );
 			const ae::ClassType* requiredType = ae::GetClassTypeByName( requiredAttribute->className.c_str() );
 			if( requiredType &&
 				type != requiredType &&
@@ -4859,16 +4913,54 @@ void JsonToVar( const rapidjson::Value& jsonVar, ae::DataPointer data, const ae:
 	}
 }
 
-void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component, const ae::StringToObjectPointerFn& pointerFromStringFn )
+//! Writes the special vars of \p component from \p ctx. Restricted to a single
+//! SpecialVarSource when \p source is set.
+void SpecialVarsToComponent( const SpecialVarContext& ctx, Component* component, SpecialVarSource source )
 {
 	const ae::ClassType* type = ae::GetClassTypeFromObject( component );
 	const uint32_t varCount = type->GetVarCount( true );
 	for( uint32_t i = 0; i < varCount; i++ )
 	{
 		const ae::ClassVar* var = type->GetVarByIndex( i, true );
-		if( const SpecialMemberVar* specialVar = GetSpecialMemberVar( var ) )
+		const SpecialMemberVar* specialVar = GetSpecialMemberVar( var );
+		if( !specialVar || ( ( source != SpecialVarSource::None ) && ( specialVar->source != source ) ) )
 		{
-			specialVar->SetObjectValue( transform, component, var );
+			continue;
+		}
+		specialVar->SetObjectValue( ctx, component, var );
+	}
+}
+
+//! Writes the special vars of \p compDoc from \p ctx. Restricted to a single
+//! SpecialVarSource when \p source is set.
+void SpecialVarsToDoc( const SpecialVarContext& ctx, const ae::ClassType* type, ae::DocumentValue* compDoc, SpecialVarSource source )
+{
+	const uint32_t varCount = type->GetVarCount( true );
+	for( uint32_t i = 0; i < varCount; i++ )
+	{
+		const ae::ClassVar* var = type->GetVarByIndex( i, true );
+		const SpecialMemberVar* specialVar = GetSpecialMemberVar( var );
+		if( !specialVar || ( ( source != SpecialVarSource::None ) && ( specialVar->source != source ) ) )
+		{
+			continue;
+		}
+		if( ae::DocumentValue* varDoc = compDoc->ObjectTryGet( var->GetName() ) )
+		{
+			varDoc->StringSet( specialVar->ToString( ctx ).c_str() );
+		}
+	}
+}
+
+void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component, const ae::StringToObjectPointerFn& pointerFromStringFn )
+{
+	SpecialVarsToComponent( { transform, component->GetEntity() }, component, SpecialVarSource::Update );
+	const ae::ClassType* type = ae::GetClassTypeFromObject( component );
+	const uint32_t varCount = type->GetVarCount( true );
+	for( uint32_t i = 0; i < varCount; i++ )
+	{
+		const ae::ClassVar* var = type->GetVarByIndex( i, true );
+		if( GetSpecialMemberVar( var ) )
+		{
 			continue;
 		}
 		if( !jsonComponent.HasMember( var->GetName() ) )
@@ -4943,18 +5035,14 @@ void JsonToDoc( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidj
 			if( !type ) { continue; }
 			ae::DocumentValue* compDoc = componentsDoc->ObjectTryGet( type->GetName() );
 			if( !compDoc ) { continue; }
+			SpecialVarsToDoc( { transform, entity }, type, compDoc, SpecialVarSource::Update );
 			const uint32_t varCount = type->GetVarCount( true );
 			for( uint32_t i = 0; i < varCount; i++ )
 			{
 				const ae::ClassVar* var = type->GetVarByIndex( i, true );
-				const SpecialMemberVar* specialVar = GetSpecialMemberVar( var );
+				if( GetSpecialMemberVar( var ) ) { continue; }
 				ae::DocumentValue* varDoc = compDoc->ObjectTryGet( var->GetName() );
 				if( !varDoc ) { continue; }
-				if( specialVar )
-				{
-					varDoc->StringSet( specialVar->ToString( transform ).c_str() );
-					continue;
-				}
 				if( !componentIter.value.HasMember( var->GetName() ) ) { continue; }
 				const auto& jsonVar = componentIter.value[ var->GetName() ];
 				if( var->GetOuterVarType().AsVarType< ae::ArrayType >() && jsonVar.IsArray() )
