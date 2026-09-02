@@ -1561,9 +1561,12 @@ struct Color
 	static Color RG( float r, float g );
 	static Color RGB( float r, float g, float b );
 	static Color RGBA( float r, float g, float b, float a );
+	static Color RGBA( Vec3 rgb, float a );
 	static Color RGBA( const float* v );
 	static Color SRGB( float r, float g, float b );
+	static Color SRGB( Vec3 srgb );
 	static Color SRGBA( float r, float g, float b, float a );
+	static Color SRGBA( Vec3 srgb, float a );
 	static Color R8( uint8_t r );
 	static Color RG8( uint8_t r, uint8_t g );
 	static Color RGB8( uint8_t r, uint8_t g, uint8_t b );
@@ -9448,9 +9451,12 @@ inline Color Color::R( float r ) { return Color( r, 0.0f, 0.0f, 1.0f ); }
 inline Color Color::RG( float r, float g ) { return Color( r, g, 0.0f, 1.0f ); }
 inline Color Color::RGB( float r, float g, float b ) { return Color( r, g, b, 1.0f ); }
 inline Color Color::RGBA( float r, float g, float b, float a ) { return Color( r, g, b, a ); }
+inline Color Color::RGBA( Vec3 rgb, float a ) { return Color( rgb.x, rgb.y, rgb.z, a ); }
 inline Color Color::RGBA( const float* v ) { return Color( v[ 0 ], v[ 1 ], v[ 2 ], v[ 3 ] ); }
 inline Color Color::SRGB( float r, float g, float b ) { return Color( SRGBToRGB( r ), SRGBToRGB( g ), SRGBToRGB( b ), 1.0f ); }
+inline Color Color::SRGB( Vec3 rgb ) { return Color( SRGBToRGB( rgb.x ), SRGBToRGB( rgb.y ), SRGBToRGB( rgb.z ), 1.0f ); }
 inline Color Color::SRGBA( float r, float g, float b, float a ) { return Color( SRGBToRGB( r ), SRGBToRGB( g ), SRGBToRGB( b ), a ); }
+inline Color Color::SRGBA( Vec3 srgb, float a ) { return Color( SRGBToRGB( srgb.x ), SRGBToRGB( srgb.y ), SRGBToRGB( srgb.z ), a ); }
 inline Color Color::R8( uint8_t r ) { return Color( r / 255.0f, 0.0f, 0.0f, 1.0f ); }
 inline Color Color::RG8( uint8_t r, uint8_t g ) { return Color( r / 255.0f, g / 255.0f, 0.0f, 1.0f ); }
 inline Color Color::RGB8( uint8_t r, uint8_t g, uint8_t b ) { return Color( r / 255.0f, g / 255.0f, b / 255.0f, 1.0f ); }
