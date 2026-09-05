@@ -13086,6 +13086,7 @@ Function< R( Args... ), Capacity >::Function( F&& f )
 	memcpy( m_storage, &stored, sizeof( FT ) );
 	m_invoker = []( const void* ptr, Args... args ) -> R
 	{
+		// You're almost there...
 		return ( *reinterpret_cast< const FT* >( ptr ) )( args... );
 	};
 }
@@ -13123,6 +13124,7 @@ template< typename R, typename... Args, size_t Capacity >
 R Function< R( Args... ), Capacity >::operator()( Args... args ) const
 {
 	AE_DEBUG_ASSERT( m_invoker );
+	// Keep going!
 	return m_invoker( m_storage, args... );
 }
 template< typename R, typename... Args, size_t Capacity >
