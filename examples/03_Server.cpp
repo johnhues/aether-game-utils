@@ -39,7 +39,7 @@ int main()
 	ae::Input input;
 	ae::ListenerSocket listener = kServerAllocTag;
 	
-	window.Initialize( 400, 300, false, true, true );
+	window.Initialize( 400, 300, false, true, "" );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	

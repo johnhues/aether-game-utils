@@ -3621,10 +3621,10 @@ public:
 	Window();
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
 	// @TODO: InitializeFullscreen
-	bool Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor, bool rememberPosition );
+	bool Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor, const char* frameStorageKey );
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
 	// @TODO: InitializeWindowed
-	bool Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor, bool rememberPosition );
+	bool Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor, const char* frameStorageKey );
 	void Terminate();
 
 	void SetTitle( const char* title );
@@ -3681,7 +3681,7 @@ public:
 private:
 	enum class Mode { Windowed, Minimized, Maximized, Fullscreen };
 	Window( const Window& ) = delete;
-	void m_Initialize( bool rememberPosition );
+	void m_Initialize( const char* frameStorageKey );
 	void m_SetMode( Mode mode );
 	Mode m_QueryMode() const; // Reads the actual OS window state. The single source of truth for m_mode.
 	Int2 m_pos = Int2( 0 );
@@ -20686,7 +20686,7 @@ Window::Window()
 	m_scaleFactor = 1.0f;
 }
 
-bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor, bool rememberPosition )
+bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor, const char* frameStorageKey )
 {
 	AE_ASSERT( !window );
 
@@ -20702,7 +20702,7 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 	m_pos += screens[ 0 ].position;
 #endif
 
-	m_Initialize( rememberPosition );
+	m_Initialize( frameStorageKey );
 
 	if( fullScreen )
 	{
@@ -20712,7 +20712,7 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 	return true;
 }
 
-bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor, bool rememberPosition )
+bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor, const char* frameStorageKey )
 {
 	AE_ASSERT( !window );
 
@@ -20721,7 +20721,7 @@ bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCur
 	m_height = height;
 	m_mode = Mode::Windowed;
 
-	m_Initialize( rememberPosition );
+	m_Initialize( frameStorageKey );
 
 	return true;
 }
@@ -20766,7 +20766,7 @@ ae::Int2 Window::m_nativeToAe( ae::Int2 pos, ae::Int2 size )
 #endif
 }
 
-void Window::m_Initialize( bool rememberPosition )
+void Window::m_Initialize( const char* frameStorageKey )
 {
 #if _AE_WINDOWS_
 #define WNDCLASSNAME L"wndclass"
@@ -20993,14 +20993,12 @@ void Window::m_Initialize( bool rememberPosition )
 #endif
 	[nsWindow setOpaque:YES];
 	[nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
-	if( rememberPosition )
+	if( frameStorageKey && frameStorageKey[ 0 ] )
 	{
-		if( NSString* appName = [[NSProcessInfo processInfo] processName] )
-		{
-			// @TODO: Doesn't work on external monitors
-			// https://stackoverflow.com/a/36992518/2423134
-			[nsWindow setFrameAutosaveName:appName];
-		}
+		NSString* autosaveName = [NSString stringWithUTF8String:frameStorageKey];
+		// @TODO: Doesn't work on external monitors
+		// https://stackoverflow.com/a/36992518/2423134
+		[nsWindow setFrameAutosaveName:autosaveName];
 	}
 	
 	NSRect contentScreenRect = [nsWindow convertRectToScreen:[nsWindow contentLayoutRect]];

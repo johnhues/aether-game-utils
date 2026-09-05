@@ -38,7 +38,7 @@ int main( int argc, char* argv[] )
 	auto Initialize = [&]()
 	{
 		AE_LOG( "Initialize" );
-		window.Initialize( 800, 600, false, true, true );
+		window.Initialize( 800, 600, false, true, "" );
 		window.SetTitle( "example" );
 		graphicsDevice.Initialize( &window );
 		input.Initialize( &window );

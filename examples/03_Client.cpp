@@ -42,7 +42,7 @@ int main( int argc, char* argv[] )
 	auto Initialize = [&]()
 	{
 		AE_LOG( "Initialize" );
-		window.Initialize( 400, 300, false, true, true );
+		window.Initialize( 400, 300, false, true, "" );
 		render.Initialize( &window );
 		input.Initialize( &window );
 		timeStep.SetTimeStep( 1.0f / 60.0f );

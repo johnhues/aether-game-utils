@@ -64,7 +64,7 @@ int main()
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::FileSystem fileSystem;
-	window.Initialize( 640, 320, false, true, true );
+	window.Initialize( 640, 320, false, true, "" );
 	window.SetTitle( "Game" );
 	graphicsDevice.Initialize( &window );
 	input.Initialize( &window );

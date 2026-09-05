@@ -78,7 +78,7 @@ bool SmallEngine::Initialize( int argc, char* argv[] )
 	{
 		return false; // Exit, the editor has forked, ran, closed, and returned gracefully
 	}
-	window.Initialize( 1280, 720, false, true, true );
+	window.Initialize( 1280, 720, false, true, "" );
 	window.SetTitle( "Press '~' to Open the Editor" );
 	input.Initialize( &window );
 	gfx.Initialize( &window );

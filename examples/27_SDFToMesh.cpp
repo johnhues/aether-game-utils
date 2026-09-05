@@ -290,7 +290,7 @@ int main( int argc, char* argv[] )
 					windowSize = targetScreen->size;
 				}
 			}
-			window.Initialize( windowPos, windowSize.x, windowSize.y, true, false );
+			window.Initialize( windowPos, windowSize.x, windowSize.y, true, "" );
 			if( screens.Length() == 1 )
 			{
 				window.SetAlwaysOnTop( true );
@@ -298,7 +298,7 @@ int main( int argc, char* argv[] )
 		}
 		else
 		{
-			window.Initialize( 1280, 720, false, true, true );
+			window.Initialize( 1280, 720, false, true, "" );
 		}
 		render.Initialize( &window );
 		input.Initialize( &window );

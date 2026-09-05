@@ -83,7 +83,7 @@ int main( int argc, char* argv[] )
 	{
 		AE_INFO( "Initialize" );
 
-		window.Initialize( 1280, 720, false, true, true );
+		window.Initialize( 1280, 720, false, true, "" );
 		window.SetTitle( "30_IKGallery" );
 		render.Initialize( &window );
 		input.Initialize( &window );

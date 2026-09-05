@@ -62,7 +62,7 @@ int main( int argc, char* argv[] )
 	auto Initialize = [ & ]()
 	{
 		AE_LOG( "Initialize (debug #)", (int)_AE_DEBUG_ );
-		window.Initialize( 1280, 720, false, true, true );
+		window.Initialize( 1280, 720, false, true, "" );
 		window.SetTitle( "triangle" );
 		render.Initialize( &window );
 		input.Initialize( &window );

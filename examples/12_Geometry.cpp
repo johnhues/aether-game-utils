@@ -84,7 +84,7 @@ int main( int argc, char* argv[] )
 	auto Initialize = [&]()
 	{
 		AE_INFO( "Initialize" );
-		window.Initialize( 800, 600, false, true, true );
+		window.Initialize( 800, 600, false, true, "" );
 		window.SetTitle( "geometry" );
 		render.Initialize( &window );
 		input.Initialize( &window );

@@ -44,7 +44,7 @@ int main( int argc, char* argv[] )
 	auto Initialize = [&]()
 	{
 		AE_INFO( "Initialize" );
-		window.Initialize( 640, 640, false, true, true );
+		window.Initialize( 640, 640, false, true, "" );
 		window.SetTitle( "Gamepad" );
 		render.Initialize( &window );
 		input.Initialize( &window );

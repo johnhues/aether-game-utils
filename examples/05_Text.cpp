@@ -83,7 +83,7 @@ int main( int argc, char* argv[] )
 	{
 		AE_LOG( "Initialize" );
 		fileSystem.Initialize( DATA_DIR, "ae", "text_input" );
-		window.Initialize( 1280, 720, false, true, true );
+		window.Initialize( 1280, 720, false, true, "" );
 		window.SetTitle( "example" );
 		render.Initialize( &window );
 		input.Initialize( &window );

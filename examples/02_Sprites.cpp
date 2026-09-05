@@ -81,7 +81,7 @@ int main( int argc, char* argv[] )
 	{
 		AE_LOG( "Initialize" );
 		fileSystem.Initialize( DATA_DIR, "ae", "sprites" );
-		window.Initialize( 800, 600, false, true, true );
+		window.Initialize( 800, 600, false, true, "" );
 		window.SetTitle( "sprites" );
 		render.Initialize( &window );
 		input.Initialize( &window );

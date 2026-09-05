@@ -125,7 +125,7 @@ int main( int argc, char* argv[] )
 
 	auto Initialize = [&]()
 	{
-		window.Initialize( 1280, 1280, false, true, true );
+		window.Initialize( 1280, 1280, false, true, "" );
 		window.SetTitle( "A*: Press arrow keys to move, space to randomize." );
 		render.Initialize( &window );
 		input.Initialize( &window );

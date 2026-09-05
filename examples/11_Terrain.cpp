@@ -285,7 +285,7 @@ int main()
   }
   else
   {
-    window.Initialize( 800, 600, false, true, true );
+    window.Initialize( 800, 600, false, true, "" );
     window.SetTitle( "terrain edit" );
     render.Initialize( &window );
     debug.Initialize( 64 );

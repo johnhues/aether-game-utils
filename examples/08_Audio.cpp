@@ -48,7 +48,7 @@ int main( int argc, char* argv[] )
 	{
 		AE_LOG( "Initialize" );
 		fs.Initialize( "data", "ae", "audio" );
-		window.Initialize( 800, 600, false, true, true );
+		window.Initialize( 800, 600, false, true, "" );
 		window.SetTitle( "audio" );
 		render.Initialize( &window );
 		input.Initialize( &window );
