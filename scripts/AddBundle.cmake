@@ -203,6 +203,13 @@ function(ae_add_bundle BUNDLE_NAME)
 			OUTPUT_NAME "${AEAB_BUNDLE_NAME}"
 		)
 
+		# Reconfigures when a bundle Info.plist goes missing. CMake writes it while
+		# generating, so a build alone can never restore it. Result is unused.
+		file(GLOB AEAB_INFO_PLIST CONFIGURE_DEPENDS
+			"${CMAKE_CURRENT_BINARY_DIR}/${AEAB_BUNDLE_NAME}.app/Contents/Info.plist"
+			"${CMAKE_CURRENT_BINARY_DIR}/*/${AEAB_BUNDLE_NAME}.app/Contents/Info.plist"
+		)
+
 		if(IOS)
 			if(AEAB_APPLE_DEVELOPMENT_TEAM)
 				set(AEAB_IOS_CODE_SIGNING "YES")
