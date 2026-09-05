@@ -81,6 +81,7 @@ void ae::EditorMesh::Load( const ae::OBJLoader& file )
 #include "ae/aeImGui.h"
 #include "ImGuizmo.h"
 #include "imgui.h"
+const ImGuizmo::OPERATION kImGuizmoOperationNone = (ImGuizmo::OPERATION)0;
 
 namespace ae {
 
@@ -592,7 +593,7 @@ private:
 	ae::Vec3 m_mouseHover = ae::Vec3( 0.0f );
 	ae::Vec3 m_mouseHoverNormal = ae::Vec3( 0, 1, 0 );
 	std::optional< ae::Vec2 > m_boxSelectStart;
-	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
+	ImGuizmo::OPERATION gizmoOperation = kImGuizmoOperationNone;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
 	int32_t m_lastCommandIdx = -1;
 	double m_lastCommandTime = 0.0;
@@ -2456,9 +2457,9 @@ void EditorServer::ShowMenuBar( EditorProgram* program )
 
 	if( ImGui::BeginMenu( "Tools" ) )
 	{
-		if( ImGui::RadioButton( "O", gizmoOperation == (ImGuizmo::OPERATION)0 ) )
+		if( ImGui::RadioButton( "O", gizmoOperation == kImGuizmoOperationNone ) )
 		{
-			gizmoOperation = (ImGuizmo::OPERATION)0;
+			gizmoOperation = kImGuizmoOperationNone;
 		}
 		ImGui::SameLine();
 		if( ImGui::RadioButton( "T", gizmoOperation == ImGuizmo::TRANSLATE ) )
