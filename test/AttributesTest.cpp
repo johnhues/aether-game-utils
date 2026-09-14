@@ -80,3 +80,84 @@ AE_REGISTER_NAMESPACECLASS_VAR( (xyz, Util), id );
 AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (xyz, Util), id, (CategoryInfoAttribute), ({ .sortOrder = 1, .name = "General" }) );
 AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (xyz, Util), id, (DisplayName), ({ .name = "ID" }) );
 AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (xyz, Util), id, (DisplayName), ({ .name = "ID2" }) );
+
+//------------------------------------------------------------------------------
+// xyz::EnumLabel
+//------------------------------------------------------------------------------
+AE_REGISTER_NAMESPACECLASS( (xyz, EnumLabel) );
+
+//------------------------------------------------------------------------------
+// AttribEnumClass
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM_CLASS( AttribEnumClass );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribEnumClass, EmptyAttrib, {} );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribEnumClass, RequiresAttrib, ( "Something" ) );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribEnumClass, RequiresAttrib, ( "SomethingElse" ) );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribEnumClass, DisplayName, ({ .name = "Enum Class" }) );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribEnumClass, xyz::EnumLabel, ({ .name = "Qualified" }) );
+
+//------------------------------------------------------------------------------
+// AttribCStyleEnum
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM( AttribCStyleEnum );
+AE_REGISTER_ENUM_VALUE( AttribCStyleEnum, AttribCStyleIdle );
+AE_REGISTER_ENUM_VALUE( AttribCStyleEnum, AttribCStyleWalk );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribCStyleEnum, DisplayName, ({ .name = "C Style" }) );
+
+//------------------------------------------------------------------------------
+// AttribPrefixEnum
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM_PREFIX( AttribPrefixEnum, kAttribPrefixEnum_ );
+AE_REGISTER_ENUM_VALUE( AttribPrefixEnum, kAttribPrefixEnum_Idle );
+AE_REGISTER_ENUM_VALUE( AttribPrefixEnum, kAttribPrefixEnum_Walk );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribPrefixEnum, DisplayName, ({ .name = "Prefix" }) );
+
+//------------------------------------------------------------------------------
+// AttribBitFieldEnum
+//------------------------------------------------------------------------------
+AE_REGISTER_BIT_FIELD_ENUM( AttribBitFieldEnum );
+AE_REGISTER_ENUM_VALUE_NAME( AttribBitFieldEnum, AttribBitFieldNone, None );
+AE_REGISTER_ENUM_VALUE_NAME( AttribBitFieldEnum, AttribBitFieldRead, Read );
+AE_REGISTER_ENUM_VALUE_NAME( AttribBitFieldEnum, AttribBitFieldWrite, Write );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribBitFieldEnum, DisplayName, ({ .name = "Bit Field" }) );
+
+//------------------------------------------------------------------------------
+// AttribBitFieldPrefixEnum
+//------------------------------------------------------------------------------
+AE_REGISTER_BIT_FIELD_ENUM_PREFIX( AttribBitFieldPrefixEnum, kABFPE_ );
+AE_REGISTER_ENUM_VALUE( AttribBitFieldPrefixEnum, kABFPE_None );
+AE_REGISTER_ENUM_VALUE( AttribBitFieldPrefixEnum, kABFPE_Read );
+AE_REGISTER_ENUM_VALUE( AttribBitFieldPrefixEnum, kABFPE_Write );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribBitFieldPrefixEnum, DisplayName, ({ .name = "Bit Field Prefix" }) );
+
+//------------------------------------------------------------------------------
+// AttribEnumClass2
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM_CLASS2( AttribEnumClass2 );
+AE_REGISTER_ENUM_CLASS2_VALUE( AttribEnumClass2, Idle );
+AE_REGISTER_ENUM_CLASS2_VALUE( AttribEnumClass2, Walk );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribEnumClass2, DisplayName, ({ .name = "Enum Class 2" }) );
+
+//------------------------------------------------------------------------------
+// AttribBitFieldEnumClass2
+//------------------------------------------------------------------------------
+AE_REGISTER_BIT_FIELD_ENUM_CLASS2( AttribBitFieldEnumClass2 );
+AE_REGISTER_ENUM_CLASS2_VALUE( AttribBitFieldEnumClass2, None );
+AE_REGISTER_ENUM_CLASS2_VALUE( AttribBitFieldEnumClass2, Read );
+AE_REGISTER_ENUM_CLASS2_VALUE( AttribBitFieldEnumClass2, Write );
+AE_REGISTER_ENUM_ATTRIBUTE( AttribBitFieldEnumClass2, DisplayName, ({ .name = "Bit Field Enum Class 2" }) );
+
+//------------------------------------------------------------------------------
+// xyz::AttribNamespacedEnum
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM_CLASS2( xyz::AttribNamespacedEnum );
+AE_REGISTER_ENUM_CLASS2_VALUE( xyz::AttribNamespacedEnum, Idle );
+AE_REGISTER_ENUM_CLASS2_VALUE( xyz::AttribNamespacedEnum, Walk );
+AE_REGISTER_ENUM_ATTRIBUTE( xyz::AttribNamespacedEnum, DisplayName, ({ .name = "Namespaced" }) );
+
+//------------------------------------------------------------------------------
+// AttribUnattributedEnum
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM_CLASS2( AttribUnattributedEnum );
+AE_REGISTER_ENUM_CLASS2_VALUE( AttribUnattributedEnum, Idle );
+AE_REGISTER_ENUM_CLASS2_VALUE( AttribUnattributedEnum, Walk );

@@ -145,3 +145,63 @@ TEST_CASE( "Registered namespace class attributes", "[Attributes]" )
 	REQUIRE( displayNameAttrib1->name == "ID2" );
 	REQUIRE( displayNameAttrib2 == nullptr );
 }
+
+TEST_CASE( "Registered enum attributes", "[Attributes]" )
+{
+	const ae::EnumType* type = ae::GetEnumType< AttribEnumClass >();
+	REQUIRE( type );
+	REQUIRE( type->attributes.GetCount< ae::Attribute >() == 5 );
+
+	// Enums are not given an ae::SourceFileAttribute
+	REQUIRE( !type->attributes.Has< ae::SourceFileAttribute >() );
+	REQUIRE( type->attributes.GetCount< ae::SourceFileAttribute >() == 0 );
+
+	REQUIRE( type->attributes.Has< EmptyAttrib >() );
+	REQUIRE( type->attributes.GetCount< EmptyAttrib >() == 1 );
+
+	REQUIRE( type->attributes.GetCount< RequiresAttrib >() == 2 );
+	const RequiresAttrib* requiresAttrib0 = type->attributes.TryGet< RequiresAttrib >( 0 );
+	const RequiresAttrib* requiresAttrib1 = type->attributes.TryGet< RequiresAttrib >( 1 );
+	const RequiresAttrib* requiresAttrib2 = type->attributes.TryGet< RequiresAttrib >( 2 );
+	REQUIRE( requiresAttrib0 );
+	REQUIRE( requiresAttrib0->name == "Something" );
+	REQUIRE( requiresAttrib1 );
+	REQUIRE( requiresAttrib1->name == "SomethingElse" );
+	REQUIRE( requiresAttrib2 == nullptr );
+
+	const DisplayName* displayName = type->attributes.TryGet< DisplayName >();
+	REQUIRE( displayName );
+	REQUIRE( displayName->name == "Enum Class" );
+
+	const xyz::EnumLabel* enumLabel = type->attributes.TryGet< xyz::EnumLabel >();
+	REQUIRE( enumLabel );
+	REQUIRE( enumLabel->name == "Qualified" );
+}
+
+TEST_CASE( "Registered enum attributes for every registration macro", "[Attributes]" )
+{
+	const auto requireDisplayName = []( const ae::EnumType* type, const char* name )
+	{
+		REQUIRE( type );
+		REQUIRE( type->attributes.GetCount< ae::Attribute >() == 1 );
+		const DisplayName* displayName = type->attributes.TryGet< DisplayName >();
+		REQUIRE( displayName );
+		REQUIRE( displayName->name == name );
+	};
+	requireDisplayName( ae::GetEnumType< AttribCStyleEnum >(), "C Style" );
+	requireDisplayName( ae::GetEnumType< AttribPrefixEnum >(), "Prefix" );
+	requireDisplayName( ae::GetEnumType< AttribBitFieldEnum >(), "Bit Field" );
+	requireDisplayName( ae::GetEnumType< AttribBitFieldPrefixEnum >(), "Bit Field Prefix" );
+	requireDisplayName( ae::GetEnumType< AttribEnumClass2 >(), "Enum Class 2" );
+	requireDisplayName( ae::GetEnumType< AttribBitFieldEnumClass2 >(), "Bit Field Enum Class 2" );
+	requireDisplayName( ae::GetEnumType< xyz::AttribNamespacedEnum >(), "Namespaced" );
+}
+
+TEST_CASE( "Registered enum without attributes", "[Attributes]" )
+{
+	const ae::EnumType* type = ae::GetEnumType< AttribUnattributedEnum >();
+	REQUIRE( type );
+	REQUIRE( type->attributes.GetCount< ae::Attribute >() == 0 );
+	REQUIRE( !type->attributes.Has< DisplayName >() );
+	REQUIRE( type->attributes.TryGet< DisplayName >() == nullptr );
+}

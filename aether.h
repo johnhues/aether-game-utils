@@ -6803,6 +6803,26 @@ public:
 //! Register enum class value
 #define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##V( #V, E::V ); }
 
+//------------------------------------------------------------------------------
+// External enum attribute registerer
+//------------------------------------------------------------------------------
+//! Registers an instance of an attribute with an enum. The attribute type must
+//! be registered with AE_REGISTER_CLASS(), and \p _E must be registered earlier
+//! in the same file with one of the AE_REGISTER_ENUM*() macros. Call this once
+//! in the global scope of that same file.
+//! Usage:
+//! \code
+//! AE_REGISTER_ENUM_ATTRIBUTE( MyEnum, DefaultCtorAttrib, {} );
+//! AE_REGISTER_ENUM_ATTRIBUTE( MyEnum, ConstructorAttrib, ( "Something" ) );
+//! AE_REGISTER_ENUM_ATTRIBUTE( MyEnum, CStyleStructAttrib, ({ .str = "hello", .count = 3 }) );
+//! \endcode
+#define AE_REGISTER_ENUM_ATTRIBUTE( _E, _A, _ARGS )\
+	/* @TODO: rename '_aeEnums' so it is not referenced by Doxygen */\
+	namespace aeEnums::_##_E {\
+		static ::_A AE_GLUE_UNDERSCORE(ae_enum_attrib, __LINE__) _ARGS;\
+		static ae::_AttributeCreator< ::_E > AE_GLUE_UNDERSCORE(ae_enum_attrib_creator, __LINE__)( _ae_enum_anchor, &AE_GLUE_UNDERSCORE(ae_enum_attrib, __LINE__) );\
+	}
+
 // clang-format on
 
 //------------------------------------------------------------------------------
@@ -14371,6 +14391,7 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 
 #define AE_REGISTER_ENUM_CLASS_IMPL( E )\
 	ae::_RegisterEnum< E > ae_enum_creator_##E( #E, _EnumValues##E().values );\
+	namespace aeEnums::_##E { [[maybe_unused]] static ae::_EnumAnchor< E > _ae_enum_anchor; }\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
 	template<> const ae::EnumType* ae::GetEnumType< E >(){\
 		static _StaticCacheVar< const ae::EnumType* > s_enum = nullptr;\
@@ -14393,6 +14414,7 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	namespace aeEnums::_##E { [[maybe_unused]] static ae::_EnumAnchor< E > _ae_enum_anchor; }\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
 	namespace ae { template<> std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
 	namespace ae { template<> bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }
@@ -14410,6 +14432,7 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	namespace aeEnums::_##E { [[maybe_unused]] static ae::_EnumAnchor< E > _ae_enum_anchor; }\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
 
 #define AE_REGISTER_BIT_FIELD_ENUM_IMPL( E )\
@@ -14425,6 +14448,7 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	namespace aeEnums::_##E { [[maybe_unused]] static ae::_EnumAnchor< E > _ae_enum_anchor; }\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
 	namespace ae { template<> std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } }\
 	namespace ae { template<> bool TryFromString( const char* str, E* out ) { return ae::GetEnumType< E >()->GetValueFromString( str, out ); } }\
@@ -14443,6 +14467,7 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	namespace aeEnums::_##E { [[maybe_unused]] static ae::_EnumAnchor< E > _ae_enum_anchor; }\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
 	_AE_DEFINE_BIT_FIELD_OPS( E )
 
@@ -14462,6 +14487,7 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
+	namespace aeEnums::_##E { [[maybe_unused]] static ae::_EnumAnchor< E > _ae_enum_anchor; }\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }
 	// @NOTE: Nested namespace declaration requires C++17
 
@@ -14478,6 +14504,7 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 		ae::TypeId GetExactVarTypeId() const override { return ae::GetTypeIdWithQualifiers< E >(); }\
 	};\
 	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
+	namespace aeEnums::_##E { [[maybe_unused]] static ae::_EnumAnchor< E > _ae_enum_anchor; }\
 	template<> ae::Type* ae::FindMetaRegistrationFor< E >() { return ae::TypeT< E >::Get(); }\
 	_AE_DEFINE_BIT_FIELD_OPS( E )
 
@@ -15007,6 +15034,18 @@ struct _VarCreator
 };
 
 //------------------------------------------------------------------------------
+// _EnumAnchor class
+//------------------------------------------------------------------------------
+// Internal. Declared with internal linkage by the AE_REGISTER_ENUM*() macros.
+// AE_REGISTER_ENUM_ATTRIBUTE() names it, so an attribute must appear after its
+// enum's registration and in the same translation unit.
+template< typename E >
+struct _EnumAnchor
+{
+	ae::EnumType* Get() const { return const_cast< ae::EnumType* >( ae::TypeT< E >::Get()->template AsVarType< ae::EnumType >() ); }
+};
+
+//------------------------------------------------------------------------------
 // _AttributeCreator class
 //------------------------------------------------------------------------------
 template< typename T >
@@ -15015,7 +15054,7 @@ class _AttributeCreator
 public:
 	_AttributeCreator( ae::_TypeCreator< T >& typeCreator, ae::Attribute* attribute ) { if( attribute ){ typeCreator.Get()->attributes.m_Add( attribute ); } }
 	template< typename T1, uint32_t T2 > _AttributeCreator( ae::_VarCreator< T, T1, T2 >& varCreator, ae::Attribute* attribute ) { if( attribute ){ varCreator.m_var.attributes.m_Add( attribute ); } }
-	// _AttributeCreator( ae::_RegisterEnum< T >& creator, const ae::Attribute* attribute ) { creator.m_enum.attributes.m_Add( attribute ); }
+	_AttributeCreator( const ae::_EnumAnchor< T >& anchor, ae::Attribute* attribute ) { AE_DEBUG_ASSERT_MSG( attribute, "Enum attribute is null" ); anchor.Get()->attributes.m_Add( attribute ); }
 	// @NOTE: No need to remove added attributes on hotload because they must be in the same compilation unit as types etc.
 };
 
