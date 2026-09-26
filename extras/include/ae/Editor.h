@@ -137,18 +137,25 @@ enum class EditorEventType
 	None,
 
 	FileEdit, //!< Received before a file is opened for editing
-	
-	Update, //!< Received once each editor frame
+
 	Terminate, //!< Received when the editor is shutting down
 	LevelLoad, //!< Received right after a level has been loaded
 	LevelUnload, //!< Received right before a level will be unloaded
 	ReloadResources, //!< Received when the user has requested a resource reload
-	
+
 	ComponentCreate, //!< Received when a component has been created
 	ComponentDestroy, //!< Received when a component has been destroyed
 	ComponentEdit, //!< Received when a component variable has been modified
-	ComponentSelect, //!< Received when a component has been selected in the editor
-	ComponentDeselect, //!< Received when a component has been deselected in the editor
+
+	LiveLevelLoad, //!< Received right after a level has been loaded into the registry
+	LiveLevelUnload, //!< Received right before the registry will be cleared
+	//! Received when the editor has modified a registry component variable.
+	//! \p liveComponent and \p var are valid. \p var is owned by
+	//! \p liveComponent, see ae::ClassVar::GetClassType().
+	LiveComponentEdit,
+	//! Received while the editor camera is moving. \p cameraPivot and
+	//! \p cameraPosition are valid.
+	LiveCamera,
 };
 
 //------------------------------------------------------------------------------
@@ -173,7 +180,10 @@ struct EditorEvent
 	ae::Entity entity = kNullEntity;
 	ae::Matrix4 transform = ae::Matrix4::Identity();
 	const EditorComponent* component = nullptr;
+	ae::Component* liveComponent = nullptr;
 	const ae::ClassVar* var = nullptr;
+	ae::Vec3 cameraPivot = ae::Vec3( 0.0f );
+	ae::Vec3 cameraPosition = ae::Vec3( 0.0f );
 };
 
 //------------------------------------------------------------------------------

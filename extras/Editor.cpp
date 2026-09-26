@@ -353,7 +353,8 @@ enum class EditorNetMsg : uint8_t
 	None,
 	Heartbeat,
 	Modification,
-	Load
+	Load,
+	Camera
 };
 
 //------------------------------------------------------------------------------
@@ -619,6 +620,8 @@ private:
 
 	// Connection to client
 	double m_nextHeartbeat = 0.0;
+	ae::Vec3 m_sentCameraPivot = ae::Vec3( 0.0f );
+	ae::Vec3 m_sentCameraPosition = ae::Vec3( 0.0f );
 	ae::Array< EditorConnection* > m_connections;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 
@@ -1451,6 +1454,12 @@ void Editor::Update()
 									if( const ae::BasicType* basicType = var->GetOuterVarType().AsVarType< ae::BasicType >() )
 									{
 										basicType->SetVarDataFromString( ae::DataPointer( var, component ), varValue.c_str() );
+
+										EditorEvent event;
+										event.type = EditorEventType::LiveComponentEdit;
+										event.liveComponent = component;
+										event.var = var;
+										SendPluginEvent( m_plugins, event );
 									}
 								}
 							}
@@ -1464,6 +1473,22 @@ void Editor::Update()
 				ae::Str256 levelPath;
 				rStream.SerializeString( levelPath );
 				QueueRead( levelPath.c_str() );
+				break;
+			}
+			case EditorNetMsg::Camera:
+			{
+				EditorEvent event;
+				event.type = EditorEventType::LiveCamera;
+				rStream.SerializeFloat( event.cameraPivot.x );
+				rStream.SerializeFloat( event.cameraPivot.y );
+				rStream.SerializeFloat( event.cameraPivot.z );
+				rStream.SerializeFloat( event.cameraPosition.x );
+				rStream.SerializeFloat( event.cameraPosition.y );
+				rStream.SerializeFloat( event.cameraPosition.z );
+				if( rStream.IsValid() )
+				{
+					SendPluginEvent( m_plugins, event );
+				}
 				break;
 			}
 			default:
@@ -1538,15 +1563,15 @@ void Editor::m_Read()
 
 	m_lastLoadedLevel = m_pendingLevel->GetURL();
 
-	// @HACK: Currently two LevelUnload are sent
 	{
 		EditorEvent event;
-		event.type = EditorEventType::LevelUnload;
+		event.type = EditorEventType::LiveLevelUnload;
 		event.path = m_lastLoadedLevel.c_str();
 		SendPluginEvent( m_plugins, event );
 	}
 
 	// Clear previous level
+	m_params->registry->Clear();
 	m_editorEntities.Clear();
 
 	// State for loading
@@ -1591,7 +1616,7 @@ void Editor::m_Read()
 
 	{
 		EditorEvent event;
-		event.type = EditorEventType::LevelLoad;
+		event.type = EditorEventType::LiveLevelLoad;
 		event.path = m_pendingLevel->GetURL();
 		SendPluginEvent( m_plugins, event );
 	}
@@ -1988,6 +2013,11 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 	AE_INFO( "Loaded level '#'", m_pendingLevel->GetURL() );
 	m_SetLevelPath( program, m_pendingLevel->GetURL() );
 	m_doc.ClearUndo();
+
+	EditorEvent event;
+	event.type = EditorEventType::LevelLoad;
+	event.path = m_levelPath.c_str();
+	SendPluginEvent( program->plugins, event );
 }
 
 void EditorServer::m_LoadScene( EditorProgram* program, const JsonScene& scene, const rapidjson::Document& document, bool selectRoots )
@@ -2123,7 +2153,32 @@ void EditorServer::Update( EditorProgram* program )
 		}
 		m_nextHeartbeat = currentTime + 0.1;
 	}
-	
+
+	// Only sent while the camera is moving
+	const ae::Vec3 cameraPivot = program->camera.GetPivot();
+	const ae::Vec3 cameraPosition = program->camera.GetPosition();
+	if( cameraPivot != m_sentCameraPivot || cameraPosition != m_sentCameraPosition )
+	{
+		m_sentCameraPivot = cameraPivot;
+		m_sentCameraPosition = cameraPosition;
+		ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
+		wStream.SerializeEnum( EditorNetMsg::Camera );
+		wStream.SerializeFloat( cameraPivot.x );
+		wStream.SerializeFloat( cameraPivot.y );
+		wStream.SerializeFloat( cameraPivot.z );
+		wStream.SerializeFloat( cameraPosition.x );
+		wStream.SerializeFloat( cameraPosition.y );
+		wStream.SerializeFloat( cameraPosition.z );
+		AE_ASSERT( wStream.IsValid() );
+		for( EditorConnection* (&conn) : m_connections )
+		{
+			if( conn->sock->IsConnected() )
+			{
+				conn->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
+			}
+		}
+	}
+
 	for( EditorConnection* (&conn) : m_connections )
 	{
 		if( conn->sock->IsConnected() )

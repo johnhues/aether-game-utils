@@ -258,7 +258,8 @@ ae::Rect SmallEngine::GetUIRegion() const
 void SmallEngineEditorPlugin::OnEvent( const ae::EditorEvent& event )
 {
 	ae::MeshEditorPlugin::OnEvent( event );
-	if( event.type == ae::EditorEventType::LevelUnload )
+	if( event.type == ae::EditorEventType::LevelUnload ||
+		event.type == ae::EditorEventType::LiveLevelUnload )
 	{
 		m_engine->registry.CallFn< Component >( [&]( Component* c ){ c->Terminate( m_engine ); } );
 		m_engine->registry.Clear();
