@@ -121,10 +121,10 @@ int main()
 			const float displaySize = ae::Min( window.GetWidth(), window.GetHeight() );
 			const ae::Vec3 forward( -cosf( yaw ) * cosf( pitch ), sinf( pitch ), sinf( yaw ) * cosf( pitch ) );
 			const ae::Vec3 right( forward.z, 0.0f, -forward.x );
-			if( input.GetMousePressLeft() ) { input.SetMouseCaptured( true ); }
-			if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetMouseCaptured( window.GetFullScreen() ); }
-			if( input.GetPress( ae::Key::Escape ) ) { input.SetMouseCaptured( false ); window.SetFullScreen( false ); }
-			if( input.GetMouseCaptured() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
+			if( input.GetMousePressLeft() ) { input.SetCursorState( ae::CursorState::HiddenAndCaptured ); }
+			if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetCursorState( window.GetFullScreen() ? ae::CursorState::HiddenAndCaptured : ae::CursorState::Normal ); }
+			if( input.GetPress( ae::Key::Escape ) ) { input.SetCursorState( ae::CursorState::Normal ); window.SetFullScreen( false ); }
+			if( input.GetCursorLocked() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
 
 			// Camera input
 			const ae::Touch* lookTouch = input.GetTouchById( lookTouchId );

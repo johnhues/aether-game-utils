@@ -126,7 +126,7 @@ void Player::Update( SmallEngine* engine )
 	const float displaySize = ae::Min( window.GetWidth(), window.GetHeight() );
 	const ae::Vec3 forward( cosf( yaw ) * cosf( pitch ), sinf( yaw ) * cosf( pitch ), sinf( pitch ) );
 	const ae::Vec3 right( forward.y, -forward.x, 0.0f );
-	if( input.GetMouseCaptured() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
+	if( input.GetCursorLocked() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
 	yaw -= input.gamepads[ 0 ].rightAnalog.x * 2.0f * dt;
 	pitch += input.gamepads[ 0 ].rightAnalog.y * 2.0f * dt;
 	if( lookTouch )

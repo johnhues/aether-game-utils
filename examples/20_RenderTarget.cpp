@@ -118,7 +118,7 @@ int main( int argc, char* argv[] )
 		window.SetTitle( "render target" );
 		render.Initialize( &window );
 		input.Initialize( &window );
-		input.SetCursorHidden( true );
+		input.SetCursorState( ae::CursorState::Hidden );
 		timeStep.SetTimeStep( 1.0f / 60.0f );
 
 		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );

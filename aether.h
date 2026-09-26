@@ -3851,6 +3851,14 @@ enum class Key : uint8_t
 };
 // @TODO: ae::Key ToString
 
+enum class CursorState
+{
+	Normal, //!< Default visible state. Automatically set when the app loses focus.
+	HiddenAndCaptured, //!< The cursor will not be visible and only ae::MouseState::movement is tracked.
+	HiddenUntilMoved, //!< The cursor will be hidden until it is moved by the user.
+	Hidden //!< The cursor will not be visible, but ae::MouseState::position is still tracked.
+};
+
 //------------------------------------------------------------------------------
 // ae::MouseState struct
 //------------------------------------------------------------------------------
@@ -3990,19 +3998,30 @@ public:
 	void Initialize( Window* window );
 	void Terminate();
 	void Pump();
-	
-	//! Locks cursor to center of window if it is focused. Use mouse.movement to get input information. Mouse capture is automatically released when the window loses focus. This can be checked with Input::GetMouseCaptured(). Automatically hides the cursor.
-	void SetMouseCaptured( bool enable );
-	//! Returns true if the mouse is currently captured. Always returns false when the window does not have focus.
-	bool GetMouseCaptured() const { return m_captureMouse; }
-	//! Passing true enables gamepad input only when window is focused, otherwise gamepad input is always available. Default is true.
-	void SetGamepadRequiresFocus( bool enable ) { m_gamepadRequiresFocus = enable; }
-	//! Returns the current value of SetGamepadRequiresFocus().
-	bool GetGamepadRequiresFocus() const { return m_gamepadRequiresFocus; }
-	//! Hides the cursor
-	void SetCursorHidden( bool hidden ) { m_hideCursor = hidden; }
-	//! Returns true if the cursor is hidden
-	bool GetCursorHidden() const { return m_hideCursor; }
+	//--------------------------------------------------------------------------
+	// Mouse; Cursor & Scroll
+	//--------------------------------------------------------------------------
+	//! Requests how the cursor is drawn and tracked, see ae::CursorState. The
+	//! request is remembered until changed. ae::CursorState::HiddenAndCaptured
+	//! is granted by the platform, may be refused, and may be revoked at any
+	//! time. Requests are ignored while the window is unfocused.
+	void SetCursorState( ae::CursorState state );
+	//! Returns the cursor state the platform has granted, which may differ from
+	//! the value last given to ae::Input::SetCursorState(). See ae::CursorState.
+	ae::CursorState GetCursorState() const;
+	//! Returns true while the OS cursor is not drawn.
+	bool GetCursorHidden() const;
+	//! Returns true while the cursor is locked to the center of the window and
+	//! ae::MouseState::movement is the only source of cursor input. Locking is
+	//! requested with ae::CursorState::HiddenAndCaptured, and is not immediate
+	//! on all platforms.
+	bool GetCursorLocked() const;
+	inline bool GetMousePressLeft() const { return AE_INPUT_PRESS( mouse, leftButton ); }
+	inline bool GetMousePressMid() const { return AE_INPUT_PRESS( mouse, middleButton ); }
+	inline bool GetMousePressRight() const { return AE_INPUT_PRESS( mouse, rightButton ); }
+	inline bool GetMouseReleaseLeft() const { return AE_INPUT_RELEASE( mouse, leftButton ); }
+	inline bool GetMouseReleaseMid() const { return AE_INPUT_RELEASE( mouse, middleButton ); }
+	inline bool GetMouseReleaseRight() const { return AE_INPUT_RELEASE( mouse, rightButton ); }
 	//! Returns true when ae::MouseState::scroll runs opposite to the physical
 	//! motion of the device, because the OS natural scrolling setting is on
 	//! (macOS only, always false elsewhere). Scroll values already account for
@@ -4014,31 +4033,32 @@ public:
 	//! ae::MouseState::scroll by this to work in whole notches, which suits
 	//! stepping through a list; prefer the raw points for anything continuous.
 	float GetScrollPointsPerNotch() const;
-	
+
+	//--------------------------------------------------------------------------
+	// Keyboard & Text Input
+	//--------------------------------------------------------------------------
+	bool Get( ae::Key key ) const;
+	bool GetPrev( ae::Key key ) const;
+	inline bool GetPress( ae::Key key ) const { return Get( key ) && !GetPrev( key ); }
+	inline bool GetRelease( ae::Key key ) const { return !Get( key ) && GetPrev( key ); }
 	void SetTextMode( bool enabled );
 	bool GetTextMode() const { return m_textMode; }
 	void SetText( const char* text ) { m_text = text; }
 	void AppendText( const char* text ) { m_text += text; }
 	const char* GetText() const { return m_text.c_str(); }
 	const char* GetTextInput() const { return m_textInput.c_str(); }
-	
+
+	//--------------------------------------------------------------------------
+	// Gamepads
+	//--------------------------------------------------------------------------
+	//! Passing true enables gamepad input only when window is focused, otherwise gamepad input is always available. Default is true.
+	void SetGamepadRequiresFocus( bool enable ) { m_gamepadRequiresFocus = enable; }
+	//! Returns the current value of SetGamepadRequiresFocus().
+	bool GetGamepadRequiresFocus() const { return m_gamepadRequiresFocus; }
 	void SetLeftAnalogThreshold( float threshold ) { m_leftAnalogThreshold = threshold; }
 	void SetRightAnalogThreshold( float threshold ) { m_rightAnalogThreshold = threshold; }
 	float GetLeftAnalogThreshold() { return m_leftAnalogThreshold; }
 	float GetRightAnalogThreshold() { return m_rightAnalogThreshold; }
-	
-	bool Get( ae::Key key ) const;
-	bool GetPrev( ae::Key key ) const;
-	inline bool GetPress( ae::Key key ) const { return Get( key ) && !GetPrev( key ); }
-	inline bool GetRelease( ae::Key key ) const { return !Get( key ) && GetPrev( key ); }
-	
-	inline bool GetMousePressLeft() const { return AE_INPUT_PRESS( mouse, leftButton ); }
-	inline bool GetMousePressMid() const { return AE_INPUT_PRESS( mouse, middleButton ); }
-	inline bool GetMousePressRight() const { return AE_INPUT_PRESS( mouse, rightButton ); }
-	inline bool GetMouseReleaseLeft() const { return AE_INPUT_RELEASE( mouse, leftButton ); }
-	inline bool GetMouseReleaseMid() const { return AE_INPUT_RELEASE( mouse, middleButton ); }
-	inline bool GetMouseReleaseRight() const { return AE_INPUT_RELEASE( mouse, rightButton ); }
-	
 	inline bool GetGamepadPressA( uint32_t idx = 0 ) const { return gamepads[ idx ].a && !gamepadsPrev[ idx ].a; }
 	inline bool GetGamepadPressB( uint32_t idx = 0 ) const { return gamepads[ idx ].b && !gamepadsPrev[ idx ].b; }
 	inline bool GetGamepadPressX( uint32_t idx = 0 ) const { return gamepads[ idx ].x && !gamepadsPrev[ idx ].x; }
@@ -4050,6 +4070,9 @@ public:
 	inline bool GetGamepadPressLeft( uint32_t idx = 0 ) const { return gamepads[ idx ].left && !gamepadsPrev[ idx ].left; }
 	inline bool GetGamepadPressRight( uint32_t idx = 0 ) const { return gamepads[ idx ].right && !gamepadsPrev[ idx ].right; }
 
+	//--------------------------------------------------------------------------
+	// Touch Screen
+	//--------------------------------------------------------------------------
 	//! Adopts the oldest un-pumped touch into the tracked set, making it
 	//! visible via ae::Input::GetTouches() until explicitly released with
 	//! ae::Input::ReleaseTouch(). Failure to release pumped touches will result
@@ -4085,6 +4108,8 @@ public:
 	void m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement );
 	void m_WarpCursor( ae::Vec2 pos ); // Attempts to move the OS's cursor to the given position
 	void m_SetMouseCaptured( bool captured );
+	void m_ApplyMouseCapture( bool capture );
+	void m_UpdateCursorHidden();
 	void m_UpdateModifiers();
 	ae::TimeStep m_timeStep;
 	ae::Window* m_window = nullptr;
@@ -4092,9 +4117,7 @@ public:
 	bool m_captureMouse = false;
 	ae::Optional< ae::Vec2 > m_capturedMousePos;
 	bool m_mousePosSet = false;
-#if _AE_EMSCRIPTEN_
-	int m_pendingPointerLock = 0; // -1 = unlock pending, 1 = lock pending
-#endif
+	ae::CursorState m_wantedCursorState = ae::CursorState::Normal;
 	bool m_hideCursor = false;
 	bool m_keys[ 256 ];
 	bool m_keysPrev[ 256 ];
@@ -20778,7 +20801,7 @@ void Window::m_UpdateFocused( bool focused )
 	if( !m_focused && input )
 	{
 		// @TODO: Input::m_UpdateFocused()
-		input->SetMouseCaptured( false );
+		input->SetCursorState( ae::CursorState::Normal );
 		input->m_mousePosSet = false;
 	}
 }
@@ -21759,25 +21782,14 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
 	input->mouse.middleButton = ( mouseEvent->buttons & 4 );
 
-	// Process pending pointer lock request synchronously (required by Safari)
-	if( input->m_pendingPointerLock > 0 )
+	// Pointer lock is only granted from a user activation event, and must be
+	// requested synchronously within it.
+	const bool activation = ( eventType == EMSCRIPTEN_EVENT_MOUSEDOWN ) || ( eventType == EMSCRIPTEN_EVENT_MOUSEUP );
+	if( activation && ( input->m_wantedCursorState == ae::CursorState::HiddenAndCaptured ) && !input->m_captureMouse )
 	{
-		input->m_pendingPointerLock = 0;
-		const ae::Vec2 localCenter( input->m_window->GetWidth() / 2.0f, input->m_window->GetHeight() / 2.0f );
-		input->m_WarpCursor( localCenter );
 		input->m_mousePosSet = false;
 		input->m_capturedMousePos = ae::Optional< ae::Vec2 >( pos );
 		emscripten_request_pointerlock( "canvas", true );
-	}
-	else if( input->m_pendingPointerLock < 0 )
-	{
-		input->m_pendingPointerLock = 0;
-		if( const ae::Vec2* p = input->m_capturedMousePos.TryGet() )
-		{
-			input->m_WarpCursor( *p );
-			input->mouse.position = *p;
-		}
-		emscripten_exit_pointerlock();
 	}
 
 	return true;
@@ -21788,6 +21800,18 @@ EM_BOOL _aeEmscriptenHandleLockChange( int eventType, const EmscriptenPointerloc
 	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_POINTERLOCKCHANGE );
 	Input* input = (Input*)userData;
 	input->m_SetMouseCaptured( pointerlockChangeEvent->isActive );
+	return true;
+}
+
+// Sent when the browser refuses a pointer lock request.
+EM_BOOL _aeEmscriptenHandleLockError( int eventType, const void* reserved, void* userData )
+{
+	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_POINTERLOCKERROR );
+	Input* input = (Input*)userData;
+	if( const ae::Vec2* p = input->m_capturedMousePos.TryGet() )
+	{
+		input->mouse.position = *p;
+	}
 	return true;
 }
 
@@ -21908,6 +21932,7 @@ void Input::Initialize( Window* window )
 	emscripten_set_blur_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
 	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, true, &_aeEmscriptenHandleLockChange );
+	emscripten_set_pointerlockerror_callback( EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, true, &_aeEmscriptenHandleLockError );
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -22219,15 +22244,6 @@ void Input::Pump()
 			EM_ASM( { document.getElementById('canvas').style.aspectRatio = '2 / 1'; } );
 		}
 
-		if( m_hideCursor )
-		{
-			EM_ASM( { document.getElementById('canvas').style.cursor = 'none'; } );
-		}
-		else
-		{
-			EM_ASM( { document.getElementById('canvas').style.cursor = 'auto'; } );
-		}
-
 		int32_t width, height;
 		float scale;
 		_aeEmscriptenGetCanvasInfo( &width, &height, &scale );
@@ -22252,6 +22268,12 @@ void Input::Pump()
 		}
 	}
 #endif
+
+	if( m_wantedCursorState == ae::CursorState::HiddenUntilMoved && mouse.movement != ae::Vec2( 0.0f ) )
+	{
+		m_wantedCursorState = ae::CursorState::Normal;
+	}
+	m_UpdateCursorHidden();
 
 #if _AE_WINDOWS_
 #define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk ] & ( 1 << 7 )
@@ -22818,55 +22840,63 @@ void Input::Pump()
 	}
 }
 
-void Input::SetMouseCaptured( bool enable )
+void Input::SetCursorState( ae::CursorState state )
 {
+	const bool capture = ( state == ae::CursorState::HiddenAndCaptured );
 #if !_AE_EMSCRIPTEN_
 	if( !m_window )
 	{
 		return;
 	}
-	else if( enable && !m_window->GetFocused() )
+	else if( capture && !m_window->GetFocused() )
 	{
 		AE_ASSERT( !m_captureMouse );
 		return;
 	}
 #endif
-	
-	if( enable != m_captureMouse )
+	if( state == m_wantedCursorState )
 	{
-#if _AE_EMSCRIPTEN_
-		m_pendingPointerLock = enable ? 1 : -1;
-#else
-		if( enable )
-		{
-			// Remember original cursor position
-			m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( mouse.position ) : ae::Optional< ae::Vec2 >();
-#if _AE_WINDOWS_
-			ShowCursor( FALSE );
-#elif _AE_OSX_
-			CGDisplayHideCursor( kCGDirectMainDisplay );
-#endif
-			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
-			m_WarpCursor( localCenter );
-			m_mousePosSet = false;
-		}
-		else
-		{
-			// Restore original cursor position
-			if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
-			{
-				m_WarpCursor( *pos );
-				mouse.position = *pos;
-			}
-#if _AE_WINDOWS_
-			ShowCursor( TRUE );
-#elif _AE_OSX_
-			CGDisplayShowCursor( kCGDirectMainDisplay );
-#endif
-		}
-		m_captureMouse = enable;
-#endif
+		return;
 	}
+	m_wantedCursorState = state;
+#if _AE_EMSCRIPTEN_
+	// Releasing the pointer needs no user activation, acquiring it is deferred
+	// to the next mouse button event.
+	if( !capture && m_captureMouse )
+	{
+		emscripten_exit_pointerlock();
+	}
+#else
+	if( capture != m_captureMouse )
+	{
+		m_ApplyMouseCapture( capture );
+	}
+#endif
+	m_UpdateCursorHidden();
+}
+
+ae::CursorState Input::GetCursorState() const
+{
+	if( m_captureMouse )
+	{
+		return ae::CursorState::HiddenAndCaptured;
+	}
+	else if( m_hideCursor )
+	{
+		return ( m_wantedCursorState == ae::CursorState::HiddenUntilMoved ) ?
+			ae::CursorState::HiddenUntilMoved : ae::CursorState::Hidden;
+	}
+	return ae::CursorState::Normal;
+}
+
+bool Input::GetCursorHidden() const
+{
+	return m_hideCursor;
+}
+
+bool Input::GetCursorLocked() const
+{
+	return m_captureMouse;
 }
 
 void Input::SetTextMode( bool enabled )
@@ -23044,7 +23074,80 @@ void Input::m_WarpCursor( ae::Vec2 pos )
 
 void Input::m_SetMouseCaptured( bool captured )
 {
+	if( captured == m_captureMouse )
+	{
+		return;
+	}
 	m_captureMouse = captured;
+	if( !captured )
+	{
+		// Restore the position from before the capture
+		if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
+		{
+			m_WarpCursor( *pos );
+			mouse.position = *pos;
+		}
+	}
+	m_UpdateCursorHidden();
+}
+
+//! Moves the OS cursor and records \p capture as granted. Only for platforms
+//! that grant capture synchronously.
+void Input::m_ApplyMouseCapture( bool capture )
+{
+	AE_DEBUG_ASSERT( m_window );
+	AE_DEBUG_ASSERT( capture != m_captureMouse );
+	m_captureMouse = capture;
+	if( capture )
+	{
+		// Remember original cursor position
+		m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( mouse.position ) : ae::Optional< ae::Vec2 >();
+		m_UpdateCursorHidden();
+		const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
+		m_WarpCursor( localCenter );
+		m_mousePosSet = false;
+	}
+	else if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
+	{
+		// Restore original cursor position
+		m_WarpCursor( *pos );
+		mouse.position = *pos;
+	}
+}
+
+void Input::m_UpdateCursorHidden()
+{
+	// Capture hides the cursor only once the platform has granted it
+	const bool hide =
+		( m_wantedCursorState == ae::CursorState::Hidden ) ||
+		( m_wantedCursorState == ae::CursorState::HiddenUntilMoved ) ||
+		( m_wantedCursorState == ae::CursorState::HiddenAndCaptured && m_captureMouse );
+	if( hide == m_hideCursor )
+	{
+		return;
+	}
+	m_hideCursor = hide;
+#if _AE_WINDOWS_
+	ShowCursor( hide ? FALSE : TRUE );
+#elif _AE_OSX_
+	if( hide )
+	{
+		[ NSCursor hide ];
+	}
+	else
+	{
+		[ NSCursor unhide ];
+	}
+#elif _AE_EMSCRIPTEN_
+	if( hide )
+	{
+		EM_ASM( { document.getElementById('canvas').style.cursor = 'none'; } );
+	}
+	else
+	{
+		EM_ASM( { document.getElementById('canvas').style.cursor = 'auto'; } );
+	}
+#endif
 }
 
 void Input::m_UpdateModifiers()
@@ -29601,7 +29704,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 		if( nextMode != Mode::None )
 		{
 			m_mode = nextMode;
-			input->SetMouseCaptured( true );
+			input->SetCursorState( ae::CursorState::HiddenAndCaptured );
 		}
 		else if( !m_preventModeExitImm )
 		{
@@ -29612,7 +29715,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 			else
 			{
 				m_mode = Mode::None;
-				input->SetMouseCaptured( false );
+				input->SetCursorState( ae::CursorState::HiddenUntilMoved );
 			}
 		}
 		m_moveAccum = 0.0f;

@@ -99,17 +99,17 @@ int main( int argc, char* argv[] )
 		input.Pump();
 		if( input.GetMousePressLeft() )
 		{
-			input.SetMouseCaptured( !input.GetMouseCaptured() );
+			input.SetCursorState( ae::CursorState::HiddenAndCaptured );
 		}
 		if( input.GetPress( ae::Key::Escape ) )
 		{
-			input.SetMouseCaptured( false );
+			input.SetCursorState( ae::CursorState::Normal );
 		}
 
 		// Keyboard and mouse movement
 		const ae::Vec2 keyDir = ae::Vec2( ( input.Get( ae::Key::Right ) - input.Get( ae::Key::Left ) ), ( input.Get( ae::Key::Up ) - input.Get( ae::Key::Down ) ) ).SafeNormalizeCopy();
 		ae::Vec2 mouseDir( 0.0f );
-		if( input.GetMouseCaptured() )
+		if( input.GetCursorLocked() )
 		{
 			mouseDir += input.mouse.movement * 0.5f;
 		}

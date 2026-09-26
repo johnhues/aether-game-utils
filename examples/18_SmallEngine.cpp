@@ -171,9 +171,9 @@ bool SmallEngine::Update()
 		}
 	}
 
-	if( input.GetMousePressLeft() ) { input.SetMouseCaptured( true ); }
-	if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetMouseCaptured( window.GetFullScreen() ); }
-	if( input.GetPress( ae::Key::Escape ) ) { input.SetMouseCaptured( false ); window.SetFullScreen( false ); }
+	if( input.GetMousePressLeft() ) { input.SetCursorState( ae::CursorState::HiddenAndCaptured ); }
+	if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetCursorState( window.GetFullScreen() ? ae::CursorState::HiddenAndCaptured : ae::CursorState::Normal ); }
+	if( input.GetPress( ae::Key::Escape ) ) { input.SetCursorState( ae::CursorState::Normal ); window.SetFullScreen( false ); }
 	if( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) ) { editor.Launch(); }
 	registry.CallFn< Component >( [&]( Component* component )
 	{
