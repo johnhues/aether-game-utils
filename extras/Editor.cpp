@@ -842,6 +842,120 @@ void EditorServerMesh::Initialize( const ae::EditorMesh* _mesh )
 }
 
 //------------------------------------------------------------------------------
+// Editor app icon
+//------------------------------------------------------------------------------
+#if _AE_OSX_
+// Defined in Editor.mm
+void _EditorSetAppIcon( const uint8_t* rgba, uint32_t width, uint32_t height );
+bool _EditorCopyAppIcon( uint8_t* rgbaOut, uint32_t width, uint32_t height );
+
+const uint32_t kEditorIconSize = 256;
+const float kEditorIconCogScale = 0.86f;
+const float kEditorIconCornerRadius = 0.28f;
+const float kEditorIconBadgeCenter = 0.52f;
+const float kEditorIconBadgeRadius = 0.40f;
+
+// Bilinear sample of the cog mask. \p uv is in the 0-1 range, coordinates
+// outside of it return 0.
+static float SampleCogMask( ae::Vec2 uv )
+{
+	const ae::Vec2 texel = uv * (float)kCogTextureDataSize - ae::Vec2( 0.5f );
+	const int32_t x0 = ae::Floor( texel.x );
+	const int32_t y0 = ae::Floor( texel.y );
+	const float tx = texel.x - (float)x0;
+	const float ty = texel.y - (float)y0;
+	float result = 0.0f;
+	for( int32_t i = 0; i < 4; i++ )
+	{
+		const int32_t x = x0 + ( i % 2 );
+		const int32_t y = y0 + ( i / 2 );
+		if( x < 0 || y < 0 || x >= (int32_t)kCogTextureDataSize || y >= (int32_t)kCogTextureDataSize )
+		{
+			continue;
+		}
+		const float weight = ( ( i % 2 ) ? tx : 1.0f - tx ) * ( ( i / 2 ) ? ty : 1.0f - ty );
+		result += weight * ( kCogTextureData[ y * kCogTextureDataSize + x ] / 255.0f );
+	}
+	return result;
+}
+
+// Draws the cog badge over \p rgbaOut, which must be kEditorIconSize squared
+// RGBA pixels.
+static void DrawEditorIconBadge( uint8_t* rgbaOut )
+{
+	const ae::Color discColor = ae::Color::AetherBlack();
+	const ae::Color cogColor = ae::Color::AetherOrange();
+	for( uint32_t y = 0; y < kEditorIconSize; y++ )
+	{
+		for( uint32_t x = 0; x < kEditorIconSize; x++ )
+		{
+			const ae::Vec2 p = ae::Vec2( x + 0.5f, y + 0.5f ) / ( kEditorIconSize * 0.5f ) - ae::Vec2( 1.0f );
+			const ae::Vec2 badge = ( p - ae::Vec2( kEditorIconBadgeCenter ) ) / kEditorIconBadgeRadius;
+			const float disc = ae::Clip01( 0.5f + ( 1.0f - badge.Length() ) * kEditorIconBadgeRadius * kEditorIconSize * 0.5f );
+			if( disc <= 0.0f )
+			{
+				continue;
+			}
+			const float cog = SampleCogMask( badge / kEditorIconCogScale * 0.5f + ae::Vec2( 0.5f ) );
+			uint8_t* pixel = rgbaOut + ( y * kEditorIconSize + x ) * 4;
+			const ae::Color base = ae::Color::SRGBA8( pixel[ 0 ], pixel[ 1 ], pixel[ 2 ], pixel[ 3 ] );
+			const ae::Vec3 color = base.Lerp( discColor.Lerp( cogColor, cog ), disc ).GetSRGB();
+			pixel[ 0 ] = (uint8_t)( ae::Clip01( color.x ) * 255.0f );
+			pixel[ 1 ] = (uint8_t)( ae::Clip01( color.y ) * 255.0f );
+			pixel[ 2 ] = (uint8_t)( ae::Clip01( color.z ) * 255.0f );
+			pixel[ 3 ] = (uint8_t)ae::Max( (float)pixel[ 3 ], disc * 255.0f );
+		}
+	}
+}
+
+// Draws the cog on a rounded tile into \p rgbaOut, which must be
+// kEditorIconSize squared RGBA pixels.
+static void DrawEditorIconTile( uint8_t* rgbaOut )
+{
+	const ae::Color tileColor = ae::Color::AetherBlack();
+	const ae::Color cogColor = ae::Color::AetherOrange();
+	for( uint32_t y = 0; y < kEditorIconSize; y++ )
+	{
+		for( uint32_t x = 0; x < kEditorIconSize; x++ )
+		{
+			const ae::Vec2 p = ae::Vec2( x + 0.5f, y + 0.5f ) / ( kEditorIconSize * 0.5f ) - ae::Vec2( 1.0f );
+			const float dx = ae::Abs( p.x ) - ( 1.0f - kEditorIconCornerRadius );
+			const float dy = ae::Abs( p.y ) - ( 1.0f - kEditorIconCornerRadius );
+			const float outside = ae::Vec2( ae::Max( dx, 0.0f ), ae::Max( dy, 0.0f ) ).Length();
+			const float distance = outside + ae::Min( ae::Max( dx, dy ), 0.0f ) - kEditorIconCornerRadius;
+			const float tile = ae::Clip01( 0.5f - distance * kEditorIconSize * 0.5f );
+			const float cog = SampleCogMask( p / kEditorIconCogScale * 0.5f + ae::Vec2( 0.5f ) );
+			const ae::Vec3 color = tileColor.Lerp( cogColor, cog ).GetSRGB();
+			uint8_t* pixel = rgbaOut + ( y * kEditorIconSize + x ) * 4;
+			pixel[ 0 ] = (uint8_t)( ae::Clip01( color.x ) * 255.0f );
+			pixel[ 1 ] = (uint8_t)( ae::Clip01( color.y ) * 255.0f );
+			pixel[ 2 ] = (uint8_t)( ae::Clip01( color.z ) * 255.0f );
+			pixel[ 3 ] = (uint8_t)( tile * 255.0f );
+		}
+	}
+}
+
+// Badges the cog onto the application icon and shows it in the dock or task
+// bar.
+static void SetEditorAppIcon()
+{
+	ae::Scratch< uint8_t > pixels( kEditorIconSize * kEditorIconSize * 4 );
+	if( _EditorCopyAppIcon( pixels.Data(), kEditorIconSize, kEditorIconSize ) )
+	{
+		DrawEditorIconBadge( pixels.Data() );
+	}
+	else
+	{
+		DrawEditorIconTile( pixels.Data() );
+	}
+	_EditorSetAppIcon( pixels.Data(), kEditorIconSize, kEditorIconSize );
+}
+#else
+// @TODO: Windows, Linux and Emscripten
+static void SetEditorAppIcon() {}
+#endif
+
+//------------------------------------------------------------------------------
 // EditorProgram member functions
 //------------------------------------------------------------------------------
 void EditorProgram::Initialize()
@@ -850,6 +964,7 @@ void EditorProgram::Initialize()
 
 	const ae::Array< ae::Screen, 16 > screens = ae::GetScreens();
 	window.Initialize( screens[ 0 ].position, screens[ 0 ].size.x, screens[ 0 ].size.y, true, "johnhues.ae.editor" );
+	SetEditorAppIcon();
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
