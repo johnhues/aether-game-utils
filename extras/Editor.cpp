@@ -2536,7 +2536,10 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 		ImGui::ShowDemoWindow( &m_imGuiDemoOpen );
 	}
 	
-	if( program->camera.GetMode() != ae::DebugCamera::Mode::None || ImGui::GetIO().WantCaptureMouse )
+	if( ( program->camera.GetMode() != ae::DebugCamera::Mode::None ) ||
+		ImGui::GetIO().WantCaptureMouse ||
+		program->input.GetCursorHidden() ||
+		!program->window.GetFocused() )
 	{
 		// Make sure box select is cleared when interrupted by other UI
 		m_boxSelectStart = std::nullopt;
