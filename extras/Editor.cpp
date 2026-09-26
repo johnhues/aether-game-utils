@@ -4059,6 +4059,8 @@ void EditorServer::Unload( EditorProgram* program )
 	m_selectRef = SelectRef();
 	m_framePickableEntities.Clear();
 
+	// @TODO: Is it important that the path is cleared here?
+	const ae::Str256 unloadingLevelPath = m_levelPath; // Before clearing
 	m_SetLevelPath( program, "" );
 
 	while( m_objects.Length() )
@@ -4067,10 +4069,9 @@ void EditorServer::Unload( EditorProgram* program )
 	}
 	AE_ASSERT( m_objects.Length() == 0 );
 
-	// @HACK: Currently two LevelUnload's are sent
 	EditorEvent event;
 	event.type = EditorEventType::LevelUnload;
-	event.path = m_levelPath.c_str();
+	event.path = unloadingLevelPath.c_str();
 	SendPluginEvent( program->plugins, event );
 	bool pluginUnloadError = false;
 	for( auto& [ info, plugin ] : program->plugins )
