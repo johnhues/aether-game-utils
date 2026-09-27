@@ -274,37 +274,47 @@ function(ae_add_bundle BUNDLE_NAME)
 			"-s MIN_SAFARI_VERSION=180100"
 			"-s MIN_CHROME_VERSION=130"
 		)
-		string(TOLOWER "${CMAKE_BUILD_TYPE}" cmake_build_type_tolower)
-		if (cmake_build_type_tolower STREQUAL "debug")
-			list(APPEND _AE_EM_LINKER_FLAGS
-				"-s SAFE_HEAP=1" # Enable safe heap mode
-				"-s ASSERTIONS=1" # Enable assertions
-				"-s STACK_OVERFLOW_CHECK=1"
-				"-O0"
-				"-frtti"
-				"-fsanitize=undefined"
-				"-g" # Debug symbols (DWARF https://developer.chrome.com/blog/wasm-debugging-2020/)
-			)
-		else()
-			list(APPEND _AE_EM_LINKER_FLAGS
-				"--closure=1" # Enable Closure compiler for aggressive JS size minification
-				"-O3"
-				# "-Wl,-u,htonl" # Workaround for -flto issue
-				# "-flto"
-				# "-fno-exceptions"
-			)
-			# list(APPEND _AE_EM_COMPILER_FLAGS
-			# 	"-flto"
-			# 	"-fno-exceptions"
-			# )
-		endif()
+		# Per-config link flags. CMAKE_BUILD_TYPE is empty for multi-config
+		# generators, so the config must be selected by LINK_FLAGS_<CONFIG>.
+		set(_AE_EM_LINKER_FLAGS_DEBUG
+			"-s SAFE_HEAP=1" # Enable safe heap mode
+			"-s ASSERTIONS=1" # Enable assertions
+			"-s STACK_OVERFLOW_CHECK=1"
+			"-O0"
+			"-frtti"
+			"-fsanitize=undefined"
+			"-g" # Debug symbols (DWARF https://developer.chrome.com/blog/wasm-debugging-2020/)
+		)
+		# Closure mangles the generated JS, so it is release only. DWARF is kept
+		# for browser source level debugging.
+		set(_AE_EM_LINKER_FLAGS_RELWITHDEBINFO
+			"-O2"
+			"-g"
+		)
+		set(_AE_EM_LINKER_FLAGS_RELEASE
+			"--closure=1" # Enable Closure compiler for aggressive JS size minification
+			"-O3"
+			# "-Wl,-u,htonl" # Workaround for -flto issue
+			# "-flto"
+			# "-fno-exceptions"
+		)
+		# list(APPEND _AE_EM_COMPILER_FLAGS
+		# 	"-flto"
+		# 	"-fno-exceptions"
+		# )
 		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
+		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS_DEBUG "${_AE_EM_LINKER_FLAGS_DEBUG}")
+		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS_RELWITHDEBINFO "${_AE_EM_LINKER_FLAGS_RELWITHDEBINFO}")
+		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS_RELEASE "${_AE_EM_LINKER_FLAGS_RELEASE}")
 		string (REPLACE ";" " " _AE_EM_COMPILER_FLAGS "${_AE_EM_COMPILER_FLAGS}")
 
+		# $<CONFIG> is explicit so multi-config generators do not append it after
+		# the target directory. Matches the <config>/<bundle> layout of the other
+		# platforms.
 		set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
-			ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${AEAB_TARGET_NAME}"
-			LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${AEAB_TARGET_NAME}"
-			RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${AEAB_TARGET_NAME}"
+			ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/${AEAB_TARGET_NAME}"
+			LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/${AEAB_TARGET_NAME}"
+			RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/${AEAB_TARGET_NAME}"
 		)
 		
 		set(_AE_EM_OUT_SUFFIX ".html")
@@ -315,6 +325,10 @@ function(ae_add_bundle BUNDLE_NAME)
 
 		set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
 			LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
+			LINK_FLAGS_DEBUG "${_AE_EM_LINKER_FLAGS_DEBUG}"
+			LINK_FLAGS_RELWITHDEBINFO "${_AE_EM_LINKER_FLAGS_RELWITHDEBINFO}"
+			LINK_FLAGS_RELEASE "${_AE_EM_LINKER_FLAGS_RELEASE}"
+			LINK_FLAGS_MINSIZEREL "${_AE_EM_LINKER_FLAGS_RELEASE}"
 			COMPILE_FLAGS "${_AE_EM_COMPILER_FLAGS}"
 			OUTPUT_NAME "index"
 			SUFFIX ${_AE_EM_OUT_SUFFIX}

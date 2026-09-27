@@ -1,0 +1,68 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Em: Debug Test (node)",
+			"type": "node",
+			"request": "launch",
+			"program": "${workspaceFolder}/build_em/test/RelWithDebInfo/test.js",
+			"cwd": "${workspaceFolder}/build_em",
+			"preLaunchTask": "Em: Build Test",
+			"presentation": {
+				"group": "emscripten",
+				"order": 1
+			}
+		},
+		{
+			"name": "Em: Debug Current (Chrome)",
+			"type": "chrome",
+			"request": "launch",
+			"url": "http://localhost:58000/build_em/examples/RelWithDebInfo/${command:cmake.buildTargetName}/",
+			"webRoot": "${workspaceFolder}",
+			"sourceMaps": true,
+			"preLaunchTask": "Em: Build Current",
+			"presentation": {
+				"group": "emscripten",
+				"order": 2
+			}
+		},
+		{
+			"name": "iOS: Debug Current (Launch)",
+			"type": "lldb-dap",
+			"request": "attach",
+			"debugAdapterExecutable": "${workspaceFolder}/scripts/lldb-dap.sh",
+			"program": "${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app/${command:cmake.getLaunchTargetName}",
+			"initCommands": [
+				"settings set target.preload-symbols false",
+				"process handle SIGSTOP -s true -n true"
+			],
+			"attachCommands": [
+				"device process attach --name \"${command:cmake.getLaunchTargetName}\""
+			],
+			"preLaunchTask": "iOS: Launch Current (Paused)",
+			"presentation": {
+				"group": "iOS",
+				"order": 1
+			}
+		},
+		{
+			"name": "iOS: Debug Current (Attach)",
+			"type": "lldb-dap",
+			"request": "attach",
+			"debugAdapterExecutable": "${workspaceFolder}/scripts/lldb-dap.sh",
+			"program": "${workspaceFolder}/build_ios/examples/RelWithDebInfo-iphoneos/${command:cmake.getLaunchTargetName}.app/${command:cmake.getLaunchTargetName}",
+			"initCommands": [
+				"settings set target.preload-symbols false",
+				"settings set symbols.enable-external-lookup false"
+			],
+			"attachCommands": [
+				"device process attach --name \"${command:cmake.getLaunchTargetName}\""
+			],
+			"timeout": 600,
+			"presentation": {
+				"group": "iOS",
+				"order": 2
+			}
+		}
+	]
+}
