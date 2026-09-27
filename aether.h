@@ -4480,7 +4480,7 @@ private:
 	ae::Array< uint8_t > m_sendData;
 	ae::Array< uint8_t > m_recvData;
 public: // Internal
-	Socket( ae::Tag tag, int s, Protocol proto, const char* addr, uint16_t port );
+	Socket( ae::Tag tag, int s, ae::Socket::Protocol proto, const char* addr, uint16_t port );
 };
 
 //------------------------------------------------------------------------------
