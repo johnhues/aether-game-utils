@@ -257,26 +257,26 @@
 //------------------------------------------------------------------------------
 // Macro helpers
 //------------------------------------------------------------------------------
-//! Returns the number of arguments passed to this macro
-#define AE_VA_ARGS_COUNT(...) AE_EVAL(AE_VA_ARGS_COUNT_IMPL(__VA_ARGS__,9,8,7,6,5,4,3,2,1,))
+//! Returns the number of arguments passed to this macro, up to 10
+#define AE_VA_ARGS_COUNT(...) AE_EVAL(AE_VA_ARGS_COUNT_IMPL(__VA_ARGS__,10,9,8,7,6,5,4,3,2,1,))
 //! Combines each argument into a single token
-#define AE_GLUE(...) AE_GLUE_IMPL(AE_GLUE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__)
+#define AE_GLUE(...) AE_EVAL(AE_GLUE_IMPL(AE_GLUE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__))
 //! Combines each argument into a single token, but arguments are separated by
 //! '::' (double colons).
-#define AE_GLUE_TYPE(...) AE_GLUE(AE_GLUE_TYPE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__)
+#define AE_GLUE_TYPE(...) AE_EVAL(AE_GLUE(AE_GLUE_TYPE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__))
 //! Combines each argument into a single token with an underscore between each
 //! argument. This is useful for creating unique names for variables, functions,
 //! etc. from a list of arguments.
-#define AE_GLUE_UNDERSCORE(...) AE_GLUE(AE_GLUE_UNDERSCORE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__)
+#define AE_GLUE_UNDERSCORE(...) AE_EVAL(AE_GLUE(AE_GLUE_UNDERSCORE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__))
 //! Converts the given argument to a string. Useful for converting the result of
 //! another macro invocation into a string.
 #define AE_STRINGIFY(S) AE_STRINGIFY_IMPL(S)
 //! Returns the Nth element of __VA_ARGS__
-#define AE_GET_ELEM(N, ...) AE_GLUE(AE_GET_ELEM_, N)(__VA_ARGS__)
+#define AE_GET_ELEM(N, ...) AE_EVAL(AE_GLUE(AE_GET_ELEM_, N)(__VA_ARGS__))
 //! Returns the last argument passed to this macro
-#define AE_GET_LAST(...) AE_GET_ELEM(AE_VA_ARGS_COUNT(__VA_ARGS__), _, __VA_ARGS__ ,,,,,,,,,,,) // Get last argument - placeholder decrements by one
+#define AE_GET_LAST(...) AE_EVAL(AE_GET_ELEM(AE_VA_ARGS_COUNT(__VA_ARGS__), _, __VA_ARGS__ ,,,,,,,,,,,)) // Get last argument - placeholder decrements by one
 //! Returns all of the arguments passed to this macro except the last one
-#define AE_DROP_LAST(...) AE_GLUE(AE_DROP_LAST_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__)
+#define AE_DROP_LAST(...) AE_EVAL(AE_GLUE(AE_DROP_LAST_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__))
 
 //------------------------------------------------------------------------------
 // System Headers
@@ -713,9 +713,17 @@ constexpr uint32_t NextPowerOfTwo( uint32_t x );
 //------------------------------------------------------------------------------
 // Range functions
 //------------------------------------------------------------------------------
+//! Returns the smallest of \p v0, \p v1 and any number of additional \p tail
+//! arguments. Use instead of std::min(), otherwise NOMINMAX must be defined
+//! consistently everywhere before including windows.h to avoid conflicts with
+//! the min() macro it provides by default.
 template< typename T0, typename T1, typename... TTT >
 constexpr auto Min( const T0& v0, const T1& v1, const TTT&... tail );
 
+//! Returns the largest of \p v0, \p v1 and any number of additional \p tail
+//! arguments. Use instead of std::max(), otherwise NOMINMAX must be defined
+//! consistently everywhere before including windows.h to avoid conflicts with
+//! the max() macro it provides by default.
 template< typename T0, typename T1, typename... TTT >
 constexpr auto Max( const T0& v0, const T1& v1, const TTT&... tail );
 
@@ -14289,7 +14297,7 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 }
 #define AE_EVAL(...) __VA_ARGS__
 #define AE_STRINGIFY_IMPL(S) #S
-#define AE_VA_ARGS_COUNT_IMPL(_,_9,_8,_7,_6,_5,_4,_3,_2,X_,...) X_
+#define AE_VA_ARGS_COUNT_IMPL(_,_10,_9,_8,_7,_6,_5,_4,_3,_2,X_,...) X_
 #define AE_GLUE_IMPL(X,Y) AE_GLUE_IMPL_IMPL(X,Y)
 #define AE_GLUE_IMPL_IMPL(X,Y) X##Y
 #define AE_GLUE_1(X) X
@@ -29243,7 +29251,7 @@ float SpriteFont::GetTextWidth( const char* text, float uiSize ) const
 	{
 		if( *text == '\r' || *text == '\n' )
 		{
-			width = std::max( width, advance );
+			width = ae::Max( width, advance );
 			advance = 0.0f;
 		}
 		else
@@ -29252,7 +29260,7 @@ float SpriteFont::GetTextWidth( const char* text, float uiSize ) const
 		}
 		text++;
 	}
-	return std::max( width, advance );
+	return ae::Max( width, advance );
 }
 
 //------------------------------------------------------------------------------
@@ -30917,15 +30925,15 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	};
 	ae::Array< _IKBone > ikBones( tag, pose.GetBoneCount() );
 	ikBones.Append( {
-		.modelPos = pose.GetBoneByIndex( 0 )->boneToModel.GetTranslation(),
-		.boneToModelRot = pose.GetBoneByIndex( 0 )->boneToModel.GetRotation(),
-		.parentBindDir = ae::Vec3( 0.0 ),
-		.selfBindDir = ae::Vec3( 0.0 ),
-		.bindLocalRot = ae::Quaternion::Identity(),
-		.basisX = ae::Vec3( 0.0 ),
-		.basisY = ae::Vec3( 0.0 ),
-		.selfBasisX = ae::Vec3( 0.0 ),
-		.length = 0.0f
+		pose.GetBoneByIndex( 0 )->boneToModel.GetTranslation(), // modelPos
+		pose.GetBoneByIndex( 0 )->boneToModel.GetRotation(), // boneToModelRot
+		ae::Vec3( 0.0 ), // parentBindDir
+		ae::Vec3( 0.0 ), // selfBindDir
+		ae::Quaternion::Identity(), // bindLocalRot
+		ae::Vec3( 0.0 ), // basisX
+		ae::Vec3( 0.0 ), // basisY
+		ae::Vec3( 0.0 ), // selfBasisX
+		0.0f // length
 	} );
 	for( uint32_t i = 1; i < pose.GetBoneCount(); i++ )
 	{
@@ -30943,15 +30951,15 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		GetLimitBasis( localBindDir, &basisX, &basisY );
 		GetLimitBasis( selfBindDir, &selfBasisX, nullptr );
 		ikBones.Append( {
-			.modelPos = currentBone->boneToModel.GetTranslation(),
-			.boneToModelRot = currentBone->boneToModel.GetRotation(),
-			.parentBindDir = localBindDir,
-			.selfBindDir = selfBindDir,
-			.bindLocalRot = parentBindRot.GetInverse() * bindRot,
-			.basisX = basisX,
-			.basisY = basisY,
-			.selfBasisX = selfBasisX,
-			.length = bindLen
+			currentBone->boneToModel.GetTranslation(), // modelPos
+			currentBone->boneToModel.GetRotation(), // boneToModelRot
+			localBindDir, // parentBindDir
+			selfBindDir,
+			parentBindRot.GetInverse() * bindRot, // bindLocalRot
+			basisX,
+			basisY,
+			selfBasisX,
+			bindLen // length
 		} );
 	}
 	const ae::Vec3 rootBoneAnchor = ikBones[ rootBoneIndex ].modelPos;
@@ -31022,10 +31030,10 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		}
 		const float length = ( ikBones[ constraint.idx0 ].modelPos - ikBones[ constraint.idx1 ].modelPos ).Length();
 		tempDistanceConstraints.Append( {
-			.idx0 = (uint32_t)constraint.idx0,
-			.idx1 = (uint32_t)constraint.idx1,
-			.minLength = length * ae::Clip01( constraint.maxCompression01 ),
-			.maxLength = length * ae::Max( 1.0f, constraint.maxStretch1N )
+			(uint32_t)constraint.idx0,
+			(uint32_t)constraint.idx1,
+			length * ae::Clip01( constraint.maxCompression01 ), // minLength
+			length * ae::Max( 1.0f, constraint.maxStretch1N ) // maxLength
 		} );
 	}
 	auto ApplyDistanceConstraints = [&]( const ae::Bone* poseBone, _IKBone* ikBone )
