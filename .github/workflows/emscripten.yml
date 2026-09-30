@@ -4,17 +4,17 @@ jobs:
   build-and-test:
       runs-on: ubuntu-latest
       container:
-        image: ghcr.io/johnhues/aether-build:latest
+        image: ${{ vars.AE_BUILD_IMAGE || 'ghcr.io/johnhues/aether-build:latest' }}
         credentials:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       steps:
       - uses: actions/checkout@v4
       - name: Create Build Directory
-        run: cmake -E make_directory build
+        run: cmake -E make_directory build_ci
       - name: Configure
-        run: . /opt/emsdk/emsdk_env.sh && emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
+        run: . /opt/emsdk/emsdk_env.sh && emcmake cmake -S . -B build_ci -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
       - name: Build
-        run: . /opt/emsdk/emsdk_env.sh && emmake make -C build all -j$(nproc)
+        run: . /opt/emsdk/emsdk_env.sh && emmake make -C build_ci all -j$(nproc)
       - name: Test
-        run: node build/test/test.js
+        run: node build_ci/test/test.js

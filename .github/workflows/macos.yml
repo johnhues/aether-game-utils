@@ -6,10 +6,10 @@ jobs:
       steps:
       - uses: actions/checkout@v4
       - name: Create Build Directory
-        run: cmake -E make_directory build
+        run: cmake -E make_directory build_ci
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
+        run: cmake -S . -B build_ci -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
       - name: Build
-        run: make -C build all -j$(nproc)
+        run: make -C build_ci all -j$(nproc)
       - name: Test
-        run: build/test/test
+        run: build_ci/test/test

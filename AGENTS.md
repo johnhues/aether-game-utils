@@ -27,7 +27,7 @@ is missing.
 | Platform | Build dir | Compile command |
 |----------|-----------|-----------------|
 | Desktop (macOS) | `build_vscode` (Ninja Multi-Config) | `cmake --build build_vscode --config RelWithDebInfo --target test` |
-| Web (Emscripten) | `build_em` (Ninja Multi-Config) | `source <path-to-emsdk>/emsdk_env.sh && cmake --build build_em --config RelWithDebInfo --target test` |
+| Web (Emscripten) | `build_emscripten` (Ninja Multi-Config) | `source <path-to-emsdk>/emsdk_env.sh && cmake --build build_emscripten --config RelWithDebInfo --target test` |
 | iOS (Xcode, arm64) | `build_ios` | `cmake --build build_ios --config RelWithDebInfo --target test -- -allowProvisioningUpdates -destination generic/platform=iOS` |
 
 Notes:
@@ -37,9 +37,12 @@ Notes:
 - The iOS build may stop at the code-signing/link step without provisioning; a
   clean *compile* of all sources is the signal that matters for header
   compatibility.
-- Configure commands for `build_em` (`emcmake cmake -S . -B build_em -G "Ninja
+- Configure commands for `build_emscripten` (`emcmake cmake -S . -B build_emscripten -G "Ninja
   Multi-Config"`) and `build_ios` (Xcode generator + `scripts/ios.toolchain.cmake`)
-  live in the VS Code workspace tasks (`aether-game-utils.code-workspace`).
+  live in the VS Code tasks (`.vscode/tasks.json`).
+- Never configure into a plain `build/`. Every toolchain gets its own `build_*`
+  directory, so editor, sweep and container caches cannot collide. `.gitignore`
+  covers `build` and `build_*`. The workflows use `build_ci`.
 
 ### Full toolchain sweep — `scripts/coverage_build.sh`
 Pre-merge sweep that builds every toolchain in one run. Slow (~20-40 min: a fresh

@@ -59,7 +59,7 @@
 			"command": "cmake",
 			"args": [
 				"--build",
-				"${workspaceFolder}/build_em",
+				"${workspaceFolder}/build_emscripten",
 				"--config",
 				"RelWithDebInfo",
 				"--target",
@@ -86,7 +86,7 @@
 			"command": "cmake",
 			"args": [
 				"--build",
-				"${workspaceFolder}/build_em",
+				"${workspaceFolder}/build_emscripten",
 				"--config",
 				"RelWithDebInfo",
 				"--target",
@@ -114,7 +114,7 @@
 			"args": [
 				"-a",
 				"Safari",
-				"http://localhost:58000/build_em/examples/RelWithDebInfo/${command:cmake.buildTargetName}/"
+				"http://localhost:58000/build_emscripten/examples/RelWithDebInfo/${command:cmake.buildTargetName}/"
 			],
 			"dependsOn": "Em: Build Current",
 			"options": {
@@ -142,7 +142,7 @@
 			"args": [
 				"-a",
 				"Firefox",
-				"http://localhost:58000/build_em/examples/RelWithDebInfo/${command:cmake.buildTargetName}/"
+				"http://localhost:58000/build_emscripten/examples/RelWithDebInfo/${command:cmake.buildTargetName}/"
 			],
 			"dependsOn": "Em: Build Current",
 			"options": {

@@ -4,8 +4,8 @@
 #
 # Usage: emscripten-resolve-target.sh <path|target>
 #
-# Expected path format: .../TARGET/CONFIG/EXE
-#   Example: /path/build_em/examples/01_example/Debug/index.js
+# Expected path format: .../CONFIG/TARGET/EXE
+#   Example: /path/build_emscripten/examples/Debug/01_example/index.js
 #            → extracts "01_example"
 #
 # If input has no '/', treats it as a target name and returns it as-is.
@@ -20,11 +20,7 @@ if [[ "$INPUT" != */* ]]; then
     exit 0
 fi
 
-# Path format: .../TARGET/CONFIG/EXE
-# Remove filename to get CONFIG dir
-config_dir=$(dirname "$INPUT")
-
-# Remove CONFIG dir to get TARGET
-target=$(basename "$(dirname "$config_dir")")
+# Path format: .../CONFIG/TARGET/EXE
+target=$(basename "$(dirname "$INPUT")")
 
 echo "$target"

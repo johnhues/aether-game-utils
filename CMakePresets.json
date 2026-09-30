@@ -47,11 +47,18 @@
 			}
 		},
 		{
+			"name": "ios-coverage",
+			"displayName": "iOS (coverage sweep)",
+			"description": "Same as the ios preset, in its own build directory so scripts/coverage_build.sh does not share a cache with the editor's iOS build.",
+			"inherits": "ios",
+			"binaryDir": "${sourceDir}/build_coverage_ios"
+		},
+		{
 			"name": "emscripten",
 			"displayName": "Emscripten",
 			"description": "Web build via Emscripten. Requires EMSDK env var in the shell (typically sourced from emsdk_env.sh in your .zprofile/.zshrc).",
 			"generator": "Ninja Multi-Config",
-			"binaryDir": "${sourceDir}/build_em",
+			"binaryDir": "${sourceDir}/build_emscripten",
 			"toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
 			"cacheVariables": {
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
@@ -72,6 +79,16 @@
 			"name": "ios-debug",
 			"displayName": "Debug",
 			"configurePreset": "ios",
+			"configuration": "Debug",
+			"nativeToolOptions": [
+				"-allowProvisioningUpdates",
+				"-destination", "generic/platform=iOS"
+			]
+		},
+		{
+			"name": "ios-coverage-debug",
+			"displayName": "Debug (coverage sweep)",
+			"configurePreset": "ios-coverage",
 			"configuration": "Debug",
 			"nativeToolOptions": [
 				"-allowProvisioningUpdates",
