@@ -17,4 +17,6 @@ jobs:
       - name: Build
         run: make -C build_ci all -j$(nproc)
       - name: Test
+        env:
+          WINEPREFIX: /tmp/wineprefix
         run: wine build_ci/test/test.exe

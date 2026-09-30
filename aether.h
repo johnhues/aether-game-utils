@@ -478,6 +478,43 @@ template< typename T > using _EnableIfFractional = std::enable_if_t< std::is_flo
 #	define AE_WASM_EXPORT
 #endif
 // clang-format on
+
+// Uninitialized storage for N objects of type T, with the size and alignment of
+// T[ N ]. Empty when N is zero, where Data() returns null. The caller must
+// construct and destroy the objects.
+template< typename T, uint32_t N >
+struct _ArrayStorage
+{
+	T* Data() { return (T*)m_bytes; }
+	const T* Data() const { return (const T*)m_bytes; }
+private:
+	alignas(T) std::byte m_bytes[ sizeof(T) * N ];
+};
+
+template< typename T >
+struct _ArrayStorage< T, 0 >
+{
+	T* Data() { return nullptr; }
+	const T* Data() const { return nullptr; }
+};
+
+// Storage for N default constructed objects of type T. Empty when N is zero,
+// where Data() returns null.
+template< typename T, uint32_t N >
+struct _InlineArray
+{
+	T* Data() { return m_objects; }
+	const T* Data() const { return m_objects; }
+private:
+	T m_objects[ N ];
+};
+
+template< typename T >
+struct _InlineArray< T, 0 >
+{
+	T* Data() { return nullptr; }
+	const T* Data() const { return nullptr; }
+};
 // Internal End
 //------------------------------------------------------------------------------
 
@@ -2084,17 +2121,7 @@ private:
 	uint32_t m_capacity;
 	T* m_array;
 	ae::Tag m_tag;
-	// clang-format off
-	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT; // NOLINT WarnOnSizeOfPointerToAggregate
-#if _AE_LINUX_ || _AE_WINDOWS_
-	struct Storage { AlignedStorageT data[ N ]; };
-	Storage m_storage;
-#else
-	template< uint32_t > struct Storage { AlignedStorageT data[ N ]; };
-	template<> struct Storage< 0 > {};
-	Storage< N > m_storage;
-#endif
-	// clang-format on
+	ae::_ArrayStorage< T, N > m_storage;
 public:
 	//! For ranged-based looping. Returns a pointer to the first element of the
 	//! array, but can return null when array length is zero. Lowercase to match
@@ -2179,16 +2206,7 @@ private:
 	Entry* m_entries;
 	uint32_t m_capacity;
 	uint32_t m_length;
-	// clang-format off
-#if _AE_LINUX_|| _AE_WINDOWS_
-	struct Storage { Entry data[ N ]; };
-	Storage m_storage;
-#else
-	template< uint32_t > struct Storage { Entry data[ N ]; };
-	template<> struct Storage< 0 > {};
-	Storage< N > m_storage;
-#endif
-	// clang-format on
+	ae::_InlineArray< Entry, N > m_storage;
 };
 
 //! Set ae::Map to Fast mode to allow reordering of elements. Stable to maintain
@@ -2641,36 +2659,17 @@ public:
 private:
 	ObjectPool( ObjectPool& other ) = delete;
 	void operator=( ObjectPool& other ) = delete;
-	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
 	struct Page
 	{
 		Page() : node( this ) {}
 		ae::ListNode< Page > node;
 		ae::FreeList< N > freeList;
-		AlignedStorageT objects[ N ];
+		ae::_ArrayStorage< T, N > objects;
 	};
-	
-#if _AE_LINUX_|| _AE_WINDOWS_
-	template< bool Allocate > struct ConditionalPage {
-		Page* Get() { return Allocate ? nullptr : page; }
-		const Page* Get() const { return Allocate ? nullptr : page; }
-		Page page[ Allocate ? 0 : 1 ];
-	};
-#else
-	template< bool Allocate > struct ConditionalPage {
-		Page* Get() { return nullptr; }
-		const Page* Get() const { return nullptr; }
-	};
-	template<> struct ConditionalPage< false > {
-		Page* Get() { return &page; }
-		const Page* Get() const { return &page; }
-		Page page;
-	};
-#endif
 	ae::Tag m_tag;
 	uint32_t m_length = 0;
 	ae::List< Page > m_pages;
-	ConditionalPage< Paged > m_firstPage;
+	ae::_InlineArray< Page, Paged ? 0 : 1 > m_firstPage;
 };
 
 //------------------------------------------------------------------------------
@@ -10913,7 +10912,7 @@ Array< T, N >::Array()
 	
 	m_length = 0;
 	m_capacity = N;
-	m_array = (T*)&m_storage;
+	m_array = m_storage.Data();
 }
 
 template< typename T, uint32_t N >
@@ -10923,7 +10922,7 @@ Array< T, N >::Array( const T& value, uint32_t length )
 	
 	m_length = length;
 	m_capacity = N;
-	m_array = (T*)&m_storage;
+	m_array = m_storage.Data();
 	for( uint32_t i = 0; i < length; i++ )
 	{
 		new ( &m_array[ i ] ) T ( value );
@@ -10938,7 +10937,7 @@ Array< T, N >::Array( std::initializer_list< T > initList )
 	
 	m_length = (uint32_t)initList.size();
 	m_capacity = N;
-	m_array = (T*)&m_storage;
+	m_array = m_storage.Data();
 	uint32_t i = 0;
 	for( const T& value : initList )
 	{
@@ -10985,7 +10984,7 @@ Array< T, N >::Array( const Array< T, N >& other )
 {
 	m_length = 0;
 	m_capacity = N;
-	m_array = N ? (T*)&m_storage : nullptr;
+	m_array = m_storage.Data();
 	m_tag = other.m_tag;
 	
 	// Array must be initialized above before calling Reserve
@@ -11007,7 +11006,7 @@ Array< T, N >::Array( Array< T, N >&& other ) noexcept
 		AE_DEBUG_ASSERT( other.m_tag == ae::Tag() );
 		m_length = 0;
 		m_capacity = N;
-		m_array = (T*)&m_storage;
+		m_array = m_storage.Data();
 		*this = other; // Regular assignment (without std::move)
 	}
 	else
@@ -11294,7 +11293,7 @@ void Array< T, N >::Reserve( uint32_t _capacity )
 {
 	if( N > 0 )
 	{
-		AE_DEBUG_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
+		AE_DEBUG_ASSERT_MSG( m_array == m_storage.Data(), "Static array reference has been overwritten" );
 		AE_ASSERT_MSG( N >= _capacity, "# >= #", N, _capacity );
 		return;
 	}
@@ -11403,11 +11402,12 @@ T& Array< T, N >::Last()
 //------------------------------------------------------------------------------
 template< typename Key, uint32_t N, typename Hash >
 HashMap< Key, N, Hash >::HashMap() :
-	m_entries( (Entry*)&m_storage ),
+	m_entries( nullptr ),
 	m_capacity( N ),
 	m_length( 0 )
 {
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
+	m_entries = m_storage.Data();
 }
 
 template< typename Key, uint32_t N, typename Hash >
@@ -11465,7 +11465,7 @@ HashMap< Key, N, Hash >::HashMap( const HashMap< Key, N, Hash >& other ) :
 	if( N )
 	{
 		AE_DEBUG_ASSERT( other.m_tag == ae::Tag() );
-		m_entries = (Entry*)&m_storage;
+		m_entries = m_storage.Data();
 	}
 	else
 	{
@@ -12635,7 +12635,7 @@ template< typename T, uint32_t N, bool Paged >
 ObjectPool< T, N, Paged >::ObjectPool()
 {
 	AE_STATIC_ASSERT_MSG( !Paged, "Paged ae::ObjectPool requires an allocation tag" );
-	m_pages.Append( m_firstPage.Get()->node );
+	m_pages.Append( m_firstPage.Data()->node );
 }
 
 template< typename T, uint32_t N, bool Paged >
@@ -12668,7 +12668,7 @@ T* ObjectPool< T, N, Paged >::New( Args&& ... args )
 		if( index >= 0 )
 		{
 			m_length++;
-			return new ( &page->objects[ index ] ) T( std::forward< Args >( args ) ... );
+			return new ( page->objects.Data() + index ) T( std::forward< Args >( args ) ... );
 		}
 	}
 	return nullptr;
@@ -12684,7 +12684,7 @@ void ObjectPool< T, N, Paged >::Delete( T* obj )
 	Page* page = m_pages.GetFirst();
 	while( page )
 	{
-		index = (int32_t)( obj - (const T*)page->objects );
+		index = (int32_t)( obj - page->objects.Data() );
 		if( 0 <= index && index < N )
 		{
 			break;
@@ -12693,7 +12693,7 @@ void ObjectPool< T, N, Paged >::Delete( T* obj )
 	}
 	if( !Paged || page )
 	{
-		AE_DEBUG_ASSERT( (T*)&page->objects[ index ] == obj );
+		AE_DEBUG_ASSERT( page->objects.Data() + index == obj );
 		AE_DEBUG_ASSERT_MSG( page->freeList.IsAllocated( index ), "Can't Delete() previously deleted object" );
 		obj->~T();
 #if _AE_DEBUG_
@@ -12718,7 +12718,7 @@ void ObjectPool< T, N, Paged >::DeleteAll()
 		{
 			if( page->freeList.IsAllocated( i ) )
 			{
-				( (T*)&page->objects[ i ] )->~T(); // @TODO: Skip this for basic types
+				( page->objects.Data() + i )->~T(); // @TODO: Skip this for basic types
 			}
 		}
 		page->freeList.FreeAll();
@@ -12736,7 +12736,7 @@ void ObjectPool< T, N, Paged >::DeleteAll()
 	}
 	else
 	{
-		deleteAllFn( m_firstPage.Get() );
+		deleteAllFn( m_firstPage.Data() );
 	}
 	m_length = 0;
 }
@@ -12750,14 +12750,14 @@ const T* ObjectPool< T, N, Paged >::GetFirst() const
 		if( page )
 		{
 			AE_ASSERT( page->freeList.Length() );
-			return page->freeList.Length() ? (const T*)&page->objects[ page->freeList.GetFirst() ] : nullptr;
+			return page->freeList.Length() ? page->objects.Data() + page->freeList.GetFirst() : nullptr;
 		}
 	}
 	else if( !Paged && m_length )
 	{
-		int32_t index = m_firstPage.Get()->freeList.GetFirst();
+		int32_t index = m_firstPage.Data()->freeList.GetFirst();
 		AE_ASSERT( index >= 0 );
-		return (const T*)&m_firstPage.Get()->objects[ index ];
+		return m_firstPage.Data()->objects.Data() + index;
 	}
 	AE_ASSERT( m_length == 0 );
 	return nullptr;
@@ -12771,16 +12771,16 @@ const T* ObjectPool< T, N, Paged >::GetNext( const T* obj ) const
 	while( page )
 	{
 		AE_ASSERT( !Paged || page->freeList.Length() );
-		int32_t index = (int32_t)( obj - (const T*)page->objects );
+		int32_t index = (int32_t)( obj - page->objects.Data() );
 		bool foundPage = ( 0 <= index && index < N );
 		if( foundPage )
 		{
-			AE_ASSERT( (const T*)&page->objects[ index ] == obj );
+			AE_ASSERT( page->objects.Data() + index == obj );
 			AE_ASSERT_MSG( page->freeList.IsAllocated( index ), "Can't GetNext() with previously deleted object" );
 			int32_t next = page->freeList.GetNext( index );
 			if( next >= 0 )
 			{
-				return (const T*)&page->objects[ next ];
+				return page->objects.Data() + next;
 			}
 		}
 		page = page->node.GetNext();
@@ -12789,7 +12789,7 @@ const T* ObjectPool< T, N, Paged >::GetNext( const T* obj ) const
 			// Given object is last element of previous page
 			int32_t next = page->freeList.GetFirst();
 			AE_ASSERT( 0 <= next && next < N );
-			return (const T*)&page->objects[ next ];
+			return page->objects.Data() + next;
 		}
 	}
 	return nullptr;
@@ -12891,7 +12891,7 @@ typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Pa
 {
 	if( const Page* lastPage = ( m_pool ? m_pool->m_pages.GetLast() : nullptr ) )
 	{
-		T* endPtr = const_cast< T* >( reinterpret_cast< const T* >( &lastPage->objects[ N ] ) );
+		T* endPtr = const_cast< T* >( lastPage->objects.Data() + N );
 		return Iterator< T2 >( m_pool, lastPage, endPtr );
 	}
 	return Iterator< T2 >();
