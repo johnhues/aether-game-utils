@@ -421,6 +421,18 @@ TEST_CASE( "can allocate objects after clear", "[aeObjectPool]" )
 //------------------------------------------------------------------------------
 // ae::ObjectPool tests
 //------------------------------------------------------------------------------
+TEST_CASE( "paged pools preserve extended alignment", "[aePagedObjectPool]" )
+{
+	struct alignas(16) AlignedValue { int value = 0; };
+	ae::ObjectPool< AlignedValue, 2, true > pool = TAG_POOL;
+	AlignedValue* value = pool.New();
+	REQUIRE( value );
+	REQUIRE( reinterpret_cast< uintptr_t >( value ) % alignof( AlignedValue ) == 0 );
+	value->value = 42;
+	REQUIRE( value->value == 42 );
+	pool.Delete( value );
+}
+
 TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjectPool]" )
 {
 	ae::LifetimeTester::ClearStats();

@@ -2085,8 +2085,11 @@ private:
 	T* m_array;
 	ae::Tag m_tag;
 	// clang-format off
-	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT; // NOLINT WarnOnSizeOfPointerToAggregate
-#if _AE_LINUX_ || _AE_WINDOWS_
+	struct alignas(T) AlignedStorageT { std::byte data[ sizeof(T) ]; };
+#if _AE_MSVC_
+	struct Storage { std::array< AlignedStorageT, N > data; };
+	Storage m_storage;
+#elif _AE_LINUX_ || _AE_WINDOWS_
 	struct Storage { AlignedStorageT data[ N ]; };
 	Storage m_storage;
 #else
@@ -2180,7 +2183,10 @@ private:
 	uint32_t m_capacity;
 	uint32_t m_length;
 	// clang-format off
-#if _AE_LINUX_|| _AE_WINDOWS_
+#if _AE_MSVC_
+	struct Storage { std::array< Entry, N > data; };
+	Storage m_storage;
+#elif _AE_LINUX_|| _AE_WINDOWS_
 	struct Storage { Entry data[ N ]; };
 	Storage m_storage;
 #else
@@ -2641,7 +2647,7 @@ public:
 private:
 	ObjectPool( ObjectPool& other ) = delete;
 	void operator=( ObjectPool& other ) = delete;
-	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
+	struct alignas(T) AlignedStorageT { std::byte data[ sizeof(T) ]; };
 	struct Page
 	{
 		Page() : node( this ) {}
@@ -2650,7 +2656,13 @@ private:
 		AlignedStorageT objects[ N ];
 	};
 	
-#if _AE_LINUX_|| _AE_WINDOWS_
+#if _AE_MSVC_
+	template< bool Allocate > struct ConditionalPage {
+		Page* Get() { return Allocate ? nullptr : page.data(); }
+		const Page* Get() const { return Allocate ? nullptr : page.data(); }
+		std::array< Page, Allocate ? 0 : 1 > page;
+	};
+#elif _AE_LINUX_|| _AE_WINDOWS_
 	template< bool Allocate > struct ConditionalPage {
 		Page* Get() { return Allocate ? nullptr : page; }
 		const Page* Get() const { return Allocate ? nullptr : page; }

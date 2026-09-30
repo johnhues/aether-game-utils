@@ -465,6 +465,16 @@ TEST_CASE( "initial size of dynamic array is exact when specified", "[ae::Array]
 	}
 }
 
+TEST_CASE( "static arrays preserve extended alignment", "[ae::Array]" )
+{
+	struct alignas(64) AlignedValue { int value = 0; };
+	ae::Array< AlignedValue, 2 > array;
+	AlignedValue& value = array.Append( {} );
+	value.value = 42;
+	REQUIRE( reinterpret_cast< uintptr_t >( &value ) % alignof( AlignedValue ) == 0 );
+	REQUIRE( array[ 0 ].value == 42 );
+}
+
 TEST_CASE( "array Find() returns first matching element", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
