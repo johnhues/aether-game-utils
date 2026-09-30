@@ -247,6 +247,7 @@
 	#pragma warning( disable : 4244 ) // conversion from 'float' to 'int32_t'
 	#pragma warning( disable : 4267 ) // conversion from 'size_t' to 'uint32_t'
 	#pragma warning( disable : 4800 )
+	#pragma warning( disable : 4324 ) // Structure was padded due to alignment specifier
 #elif _AE_APPLE_
 	#define AE_POP_WARNINGS
 	#pragma clang diagnostic push
@@ -891,7 +892,7 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 //------------------------------------------------------------------------------
 // ae::Vec3 struct
 //------------------------------------------------------------------------------
-struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
+struct alignas( 16 ) Vec3 : public VecT< Vec3 >
 {
 	Vec3() = default; //!< Trivial constructor for performance of vertex arrays etc
 	explicit Vec3( float v );
@@ -957,8 +958,9 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 		};
 		float data[ 3 ];
 	};
-	float pad;
 };
+static_assert( sizeof( Vec3 ) == 16, "ae::Vec3 must be 16 bytes" );
+static_assert( alignof( Vec3 ) == 16, "ae::Vec3 must be 16 byte aligned" );
 
 //------------------------------------------------------------------------------
 // ae::Vec4 struct
@@ -1256,7 +1258,7 @@ struct AE_ALIGN( 8 ) Int2 : public IntT< Int2 >
 //------------------------------------------------------------------------------
 // ae::Int3 class
 //------------------------------------------------------------------------------
-struct AE_ALIGN( 16 ) Int3 : public IntT< Int3 >
+struct alignas( 16 ) Int3 : public IntT< Int3 >
 {
 	union
 	{
@@ -1268,7 +1270,6 @@ struct AE_ALIGN( 16 ) Int3 : public IntT< Int3 >
 		};
 		int32_t data[ 3 ];
 	};
-	int32_t pad;
 
 	Int3() = default;
 	Int3( const Int3& ) = default;
@@ -1285,6 +1286,8 @@ struct AE_ALIGN( 16 ) Int3 : public IntT< Int3 >
 	void SetXY( Int2 xy );
 	void SetXZ( Int2 xz );
 };
+static_assert( sizeof( Int3 ) == 16, "ae::Int3 must be 16 bytes" );
+static_assert( alignof( Int3 ) == 16, "ae::Int3 must be 16 byte aligned" );
 
 //------------------------------------------------------------------------------
 // ae::Triangle class
@@ -7744,14 +7747,12 @@ public:
 	~_ScratchBuffer();
 	static uint32_t GetScratchBytes( uint32_t bytes );
 
-#if _AE_EMSCRIPTEN_
-	static const uint32_t kScratchAlignment = 8; // Emscripten only supports up to 8 byte alignment
-#else
 	static const uint32_t kScratchAlignment = 16;
-#endif
 	uint8_t* data = nullptr;
 	uint32_t offset = 0;
 	uint32_t capacity = 0;
+private:
+	uint8_t* m_allocation = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -9108,12 +9109,12 @@ inline Vec2 Vec2::DtSlerp( const Vec2& end, float snappiness, float dt, float ep
 //------------------------------------------------------------------------------
 // ae::Vec3 member functions
 //------------------------------------------------------------------------------
-inline Vec3::Vec3( float v ) : x( v ), y( v ), z( v ), pad( 0.0f ) {}
-inline Vec3::Vec3( float x, float y, float z ) : x( x ), y( y ), z( z ), pad( 0.0f ) {}
-inline Vec3::Vec3( const float* xyz ) : x( xyz[ 0 ] ), y( xyz[ 1 ] ), z( xyz[ 2 ] ), pad( 0.0f ) {}
-inline Vec3::Vec3( struct Int3 i3 ) : x( (float)i3.x ), y( (float)i3.y ), z( (float)i3.z ), pad( 0.0f ) {}
-inline Vec3::Vec3( Vec2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
-inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
+inline Vec3::Vec3( float v ) : x( v ), y( v ), z( v ) {}
+inline Vec3::Vec3( float x, float y, float z ) : x( x ), y( y ), z( z ) {}
+inline Vec3::Vec3( const float* xyz ) : x( xyz[ 0 ] ), y( xyz[ 1 ] ), z( xyz[ 2 ] ) {}
+inline Vec3::Vec3( struct Int3 i3 ) : x( (float)i3.x ), y( (float)i3.y ), z( (float)i3.z ) {}
+inline Vec3::Vec3( Vec2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ) {}
+inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ) {}
 inline Vec3::operator Vec2() const { return Vec2( x, y ); }
 inline Vec3 Vec3::XZY( Vec2 xz, float y ) { return Vec3( xz.x, y, xz.y ); }
 inline void Vec3::SetXY( Vec2 xy ) { x = xy.x; y = xy.y; }
@@ -9412,13 +9413,13 @@ inline Int2::Int2( int32_t _x, int32_t _y ) : x( _x ), y( _y ) {}
 //------------------------------------------------------------------------------
 // ae::Int3 member functions
 //------------------------------------------------------------------------------
-inline Int3::Int3( int32_t _v ) : x( _v ), y( _v ), z( _v ), pad( 0 ) {}
-inline Int3::Int3( int32_t _x, int32_t _y, int32_t _z ) : x( _x ), y( _y ), z( _z ), pad( 0 ) {}
-inline Int3::Int3( Int2 xy, int32_t _z ) : x( xy.x ), y( xy.y ), z( _z ), pad( 0 ) {}
-inline Int3::Int3( const int32_t( &v )[ 3 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
-inline Int3::Int3( const int32_t( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
-inline Int3::Int3( int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
-inline Int3::Int3( const int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int3::Int3( int32_t _v ) : x( _v ), y( _v ), z( _v ) {}
+inline Int3::Int3( int32_t _x, int32_t _y, int32_t _z ) : x( _x ), y( _y ), z( _z ) {}
+inline Int3::Int3( Int2 xy, int32_t _z ) : x( xy.x ), y( xy.y ), z( _z ) {}
+inline Int3::Int3( const int32_t( &v )[ 3 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ) {}
+inline Int3::Int3( const int32_t( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ) {}
+inline Int3::Int3( int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ) {}
+inline Int3::Int3( const int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ) {}
 inline Int2 Int3::GetXY() const { return Int2( x, y ); }
 inline Int2 Int3::GetXZ() const { return Int2( x, z ); }
 inline void Int3::SetXY( Int2 xy ) { x = xy.x; y = xy.y; }
@@ -16055,13 +16056,16 @@ ae::_Globals::~_Globals()
 //------------------------------------------------------------------------------
 _ScratchBuffer::_ScratchBuffer( uint32_t capacity ) : offset( 0 ), capacity( capacity )
 {
-	data = new uint8_t[ capacity ]; // @TODO: Maybe this shouldn't use new/delete?
+	m_allocation = new uint8_t[ capacity + kScratchAlignment - 1 ];
+	// operator new[] only guarantees 8 byte alignment on wasm32
+	const intptr_t mask = (intptr_t)kScratchAlignment - 1;
+	data = (uint8_t*)( ( (intptr_t)m_allocation + mask ) & ~mask );
 	AE_ASSERT( (intptr_t)data % kScratchAlignment == 0 );
 }
 _ScratchBuffer::~_ScratchBuffer()
 {
 	AE_ASSERT( offset == 0 );
-	delete [] data;
+	delete [] m_allocation;
 }
 
 uint32_t _ScratchBuffer::GetScratchBytes( uint32_t bytes )
@@ -17926,7 +17930,8 @@ bool AABB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* 
 {
 	float tMin = -INFINITY;
 	float tMax = INFINITY;
-	ae::Vec3 nMin, nMax;
+	// Zero while the line is parallel to all three axes, where there is no normal
+	ae::Vec3 nMin( 0.0f ), nMax( 0.0f );
 	ae::Vec3 axes[] =
 	{
 		ae::Vec3( 1.0f, 0.0f, 0.0f ),
