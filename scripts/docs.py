@@ -26,11 +26,15 @@ import html
 import http.server
 import json
 import os
+import platform
 import re
 import shutil
 import socket
 import subprocess
 import sys
+import tarfile
+import urllib.request
+import zipfile
 from collections import Counter
 from pathlib import Path
 
@@ -52,6 +56,12 @@ DOXYFILE  = REPO_ROOT / "Doxyfile"
 BUILD_DIR = REPO_ROOT / "build_docs"
 DOCS_DIR  = REPO_ROOT / "docs"
 LOG_FILE  = BUILD_DIR / "doxygen.log"
+
+# Pinned: the site's post processing reads doxygen's markup, so the version is
+# part of the build, not whatever the machine has installed. This release is
+# downloaded into build_docs/ on first use, locally and in CI alike.
+DOXYGEN_VERSION = "1.18.0"
+DOXYGEN_FILES   = "https://www.doxygen.nl/files/"
 
 BUILD_CONFIGS = [ "Release", "RelWithDebInfo", "Debug" ]
 
@@ -170,18 +180,95 @@ def tool_version( name, args ):
     return path, version
 
 
+def doxygen_release():
+    """Returns the release archive for this platform and the path of the
+    doxygen binary inside it, or ( None, None ) if there is no release."""
+    version = DOXYGEN_VERSION
+    machine = platform.machine().lower()
+    x64 = machine in ( "x86_64", "amd64" )
+    if sys.platform.startswith( "linux" ) and x64:
+        return f"doxygen-{version}.linux.bin.tar.gz", f"doxygen-{version}/bin/doxygen"
+    if sys.platform == "darwin":
+        arch = "arm" if machine == "arm64" else "intel"
+        return f"doxygen-{version}-mac-{arch}.zip", f"doxygen-{version}/doxygen"
+    if sys.platform == "win32" and x64:
+        return f"doxygen-{version}.windows.x64.bin.zip", "doxygen.exe"
+    return None, None
+
+
+def doxygen_install_dir():
+    return BUILD_DIR / f"doxygen-{DOXYGEN_VERSION}"
+
+
+def doxygen_installed():
+    """Path of the pinned doxygen if it was already downloaded, else None."""
+    archive, binary = doxygen_release()
+    path = doxygen_install_dir() / binary if archive else None
+    return path if path and path.exists() else None
+
+
+def download( url, dest ):
+    """curl ships with macOS, Linux distros, and Windows 10+, and unlike urllib
+    it uses the system certificate store on every one of them."""
+    if shutil.which( "curl" ):
+        subprocess.run( [ "curl", "-fsSL", "-o", str( dest ), url ], check=True )
+    else:
+        urllib.request.urlretrieve( url, dest )
+
+
+@functools.cache
+def doxygen():
+    """Path of the pinned doxygen, downloading it into build_docs/ first if
+    needed. Exits if there is no doxygen release for this platform."""
+    if path := doxygen_installed():
+        return path
+    archive, binary = doxygen_release()
+    if not archive:
+        sys.exit( f"ERROR: doxygen {DOXYGEN_VERSION} has no release for "
+                  f"{sys.platform} {platform.machine()}" )
+    step( f"Downloading doxygen {DOXYGEN_VERSION}" )
+    BUILD_DIR.mkdir( parents=True, exist_ok=True )
+    install = doxygen_install_dir()
+    partial = install.with_name( install.name + ".partial" )
+    shutil.rmtree( partial, ignore_errors=True )
+    archive_path = BUILD_DIR / archive
+    try:
+        download( DOXYGEN_FILES + archive, archive_path )
+        # Extracted next to the final location and renamed into place, so an
+        # interrupted download is never mistaken for an install
+        if archive.endswith( ".tar.gz" ):
+            with tarfile.open( archive_path ) as tar:
+                if hasattr( tarfile, "data_filter" ):
+                    tar.extractall( partial, filter="data" )
+                else:
+                    tar.extractall( partial )
+        else:
+            with zipfile.ZipFile( archive_path ) as zip:
+                zip.extractall( partial )
+            # zipfile drops the executable bit
+            os.chmod( partial / binary, 0o755 )
+        shutil.rmtree( install, ignore_errors=True )
+        partial.rename( install )
+    except ( OSError, subprocess.CalledProcessError, tarfile.TarError, zipfile.BadZipFile ) as error:
+        shutil.rmtree( partial, ignore_errors=True )
+        sys.exit( f"ERROR: failed to download doxygen {DOXYGEN_VERSION} "
+                  f"from {DOXYGEN_FILES + archive}: {error}" )
+    finally:
+        archive_path.unlink( missing_ok=True )
+    return install / binary
+
+
 def print_tools():
-    doxygen_path, doxygen_version = tool_version( "doxygen", [ "--version" ] )
-    rows = [
-        (
-            "doxygen",
-            doxygen_version if doxygen_path else "not found",
-            doxygen_path or "required: brew install doxygen"
-        ),
-    ]
-    for name, state, hint in rows:
-        print( f" {name:<9} {state:<14} {dim( hint )}" )
-    return doxygen_path is not None
+    path = doxygen_installed()
+    if path:
+        _, version = tool_version( str( path ), [ "--version" ] )
+        state, hint = version or DOXYGEN_VERSION, str( path.relative_to( REPO_ROOT ) )
+    elif doxygen_release()[ 0 ]:
+        state, hint = DOXYGEN_VERSION, "downloaded into build_docs/ on first use"
+    else:
+        state, hint = "unavailable", f"no doxygen {DOXYGEN_VERSION} release for this platform"
+    print( f" {'doxygen':<9} {state:<14} {dim( hint )}" )
+    return doxygen_release()[ 0 ] is not None
 
 
 #------------------------------------------------------------------------------
@@ -249,7 +336,7 @@ def write_doxyfile( name, overrides ):
 def run_doxygen( doxyfile ):
     print( dim( f"  doxygen {doxyfile.relative_to( REPO_ROOT )}" ) )
     result = subprocess.run(
-        [ "doxygen", str( doxyfile ) ],
+        [ str( doxygen() ), str( doxyfile ) ],
         cwd=REPO_ROOT, capture_output=True, text=True
     )
     if result.returncode < 0:
@@ -273,7 +360,7 @@ def default_layout():
     if not path.exists():
         BUILD_DIR.mkdir( parents=True, exist_ok=True )
         subprocess.run(
-            [ "doxygen", "-l", str( path ) ],
+            [ str( doxygen() ), "-l", str( path ) ],
             cwd=REPO_ROOT, capture_output=True, text=True
         )
     return path
@@ -1025,7 +1112,7 @@ def main():
 
     heading( "aether-game-utils documentation" )
     if not print_tools():
-        sys.exit( "\nERROR: doxygen is required; install it with: brew install doxygen" )
+        sys.exit( f"\nERROR: doxygen {DOXYGEN_VERSION} has no release for this platform" )
 
     if args.task:
         run_task( args.task, args )
