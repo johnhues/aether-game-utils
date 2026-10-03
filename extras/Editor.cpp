@@ -5505,7 +5505,7 @@ JsonScene::~JsonScene()
 
 } // End ae namespace
 
-#if _AE_APPLE_
+#if _AE_APPLE_ || _AE_LINUX_
 #include <unistd.h> // fork
 #elif _AE_WINDOWS_
 #define WIN32_LEAN_AND_MEAN
@@ -5527,7 +5527,7 @@ void Editor::m_Fork()
 		levelPath = m_lastLoadedLevel.c_str();
 	}
 
-#if _AE_APPLE_
+#if _AE_APPLE_ || _AE_LINUX_
 	if( !fork() )
 	{
 		ae::Array< char*, 8 > args;
@@ -5540,6 +5540,7 @@ void Editor::m_Fork()
 		}
 		args.Append( nullptr );
 		execv( args[ 0 ], args.Data() );
+		_exit( 1 ); // Only reached if execv() failed
 	}
 #elif _AE_WINDOWS_
 	STARTUPINFOA startupInfo;

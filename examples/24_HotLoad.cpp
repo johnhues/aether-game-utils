@@ -35,7 +35,11 @@ int main()
 
 	// Lib path
 	ae::Str256 libResourcePath;
+#if __APPLE__
 	ae::Str64 fileName = "HotLoadable.dylib";
+#else
+	ae::Str64 fileName = "HotLoadable.so";
+#endif
 	fileSystem.GetAbsolutePath( ae::FileSystem::Root::Data, fileName.c_str(), &libResourcePath );
 
 	ae::Str256 buildCmd;

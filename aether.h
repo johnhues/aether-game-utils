@@ -16428,6 +16428,14 @@ T* ae::Cast( C* obj )
 	#include <pwd.h>
 	#include <limits.h>
 	#include <sys/stat.h>
+	#include <dlfcn.h>
+	#include <dirent.h>
+	#include <errno.h>
+	#include <fcntl.h>
+	#include <poll.h>
+	#include <sys/ioctl.h>
+	#include <sys/mman.h>
+	#include <linux/input.h>
 	#ifndef AE_ENABLE_OPENAL
 		#define AE_ENABLE_OPENAL 0
 	#endif
@@ -20556,7 +20564,7 @@ bool HotLoader::Reload()
 	Close();
 	AE_INFO( "Loading: '#'", m_libPath );
 
-	#if _AE_APPLE_
+	#if _AE_APPLE_ || _AE_LINUX_
 		m_dylib = dlopen( m_libPath.c_str(), RTLD_NOW | RTLD_LOCAL );
 		if( !m_dylib )
 		{
@@ -20570,7 +20578,7 @@ bool HotLoader::Reload()
 
 	for( auto& fn : m_fns )
 	{
-		#if _AE_APPLE_
+		#if _AE_APPLE_ || _AE_LINUX_
 			fn.value = dlsym( m_dylib, fn.key.c_str() );
 			if( !fn.value )
 			{
@@ -20590,14 +20598,14 @@ void HotLoader::Close()
 	if( m_dylib )
 	{
 		AE_INFO( "Closing '#'", m_libPath );
-#if _AE_APPLE_
+#if _AE_APPLE_ || _AE_LINUX_
 		if( dlclose( m_dylib ) )
 		{
 			AE_FAIL_MSG( "dlclose() failed: #", dlerror() );
 		}
 #endif
 		
-#if _AE_APPLE_
+#if _AE_APPLE_ || _AE_LINUX_
 		const bool isLoaded = dlopen( m_libPath.c_str(), RTLD_NOLOAD | RTLD_LOCAL );
 		AE_ASSERT_MSG( !isLoaded, "Could not unload library '#'. See AE_EXPORT comments.", m_libPath );
 #endif
@@ -20608,7 +20616,7 @@ void HotLoader::Close()
 
 void* HotLoader::m_LoadFn( const char* name )
 {
-#if _AE_APPLE_
+#if _AE_APPLE_ || _AE_LINUX_
 	void* fn = m_fns.Set( name, dlsym( m_dylib, name ) );
 	AE_ASSERT_MSG( fn, "Could not load function '#'", name );
 	return fn;
@@ -21127,6 +21135,2139 @@ int32_t Application( int32_t argc, char* argv[],
 }
 
 uint32_t _ae_GetCurrentFramebuffer();
+#if _AE_LINUX_
+//! Loads all OpenGL function pointers with the given loader and returns the
+//! number of required functions that could not be loaded
+uint32_t _ae_LoadGLFunctions( void* ( *getProcAddress )( const char* ) );
+#endif
+
+// Three text lines, the convention shared by Windows and browsers. Fixed rather
+// than read from OS settings so a detent produces the same travel everywhere
+const float _kScrollPointsPerNotch = 48.0f;
+
+#if _AE_LINUX_
+//------------------------------------------------------------------------------
+// Internal Linux Wayland platform
+// libwayland-client, libwayland-egl, and libEGL (plus the optional libxkbcommon
+// and libwayland-cursor) are loaded at runtime with dlopen(), so building
+// doesn't require any development packages. The Wayland protocol interface
+// tables below are declared by hand and match what wayland-scanner generates.
+//------------------------------------------------------------------------------
+struct _wl_proxy;
+struct _wl_interface;
+struct _wl_message
+{
+	const char* name;
+	const char* signature;
+	const _wl_interface** types;
+};
+struct _wl_interface
+{
+	const char* name;
+	int version;
+	int method_count;
+	const _wl_message* methods;
+	int event_count;
+	const _wl_message* events;
+};
+struct _wl_array
+{
+	size_t size;
+	size_t alloc;
+	void* data;
+};
+struct _wl_cursor_image
+{
+	uint32_t width;
+	uint32_t height;
+	uint32_t hotspot_x;
+	uint32_t hotspot_y;
+	uint32_t delay;
+};
+struct _wl_cursor
+{
+	unsigned int image_count;
+	_wl_cursor_image** images;
+	char* name;
+};
+typedef void ( *_WlListenerFn )( void );
+template< typename T > _WlListenerFn _WlFn( T fn ) { return reinterpret_cast< _WlListenerFn >( +fn ); }
+inline float _WlFixedToFloat( int32_t f ) { return f / 256.0f; }
+inline int32_t _WlFloatToFixed( float f ) { return (int32_t)( f * 256.0f ); }
+
+// libwayland only needs argument types to create objects sent by the server,
+// which none of the protocols declared here do
+static const _wl_interface* _kWlNullTypes[ 8 ] = {};
+#define _AE_WL_MSG( _name, _sig ) { _name, _sig, _kWlNullTypes }
+#define _AE_WL_INTERFACE( _var, _name, _version, _requests, _events ) \
+	const _wl_interface _var = { _name, _version, (int)countof( _requests ), _requests, (int)countof( _events ), _events };
+#define _AE_WL_INTERFACE_NO_EVENTS( _var, _name, _version, _requests ) \
+	const _wl_interface _var = { _name, _version, (int)countof( _requests ), _requests, 0, nullptr };
+
+// xdg-shell
+const _wl_message _kXdgWmBaseRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "create_positioner", "n" ), _AE_WL_MSG( "get_xdg_surface", "no" ), _AE_WL_MSG( "pong", "u" ) };
+const _wl_message _kXdgWmBaseEvents[] = { _AE_WL_MSG( "ping", "u" ) };
+_AE_WL_INTERFACE( _kXdgWmBaseInterface, "xdg_wm_base", 6, _kXdgWmBaseRequests, _kXdgWmBaseEvents )
+const _wl_message _kXdgSurfaceRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "get_toplevel", "n" ), _AE_WL_MSG( "get_popup", "n?oo" ), _AE_WL_MSG( "set_window_geometry", "iiii" ), _AE_WL_MSG( "ack_configure", "u" ) };
+const _wl_message _kXdgSurfaceEvents[] = { _AE_WL_MSG( "configure", "u" ) };
+_AE_WL_INTERFACE( _kXdgSurfaceInterface, "xdg_surface", 6, _kXdgSurfaceRequests, _kXdgSurfaceEvents )
+const _wl_message _kXdgToplevelRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "set_parent", "?o" ), _AE_WL_MSG( "set_title", "s" ), _AE_WL_MSG( "set_app_id", "s" ), _AE_WL_MSG( "show_window_menu", "ouii" ), _AE_WL_MSG( "move", "ou" ), _AE_WL_MSG( "resize", "ouu" ), _AE_WL_MSG( "set_max_size", "ii" ), _AE_WL_MSG( "set_min_size", "ii" ), _AE_WL_MSG( "set_maximized", "" ), _AE_WL_MSG( "unset_maximized", "" ), _AE_WL_MSG( "set_fullscreen", "?o" ), _AE_WL_MSG( "unset_fullscreen", "" ), _AE_WL_MSG( "set_minimized", "" ) };
+const _wl_message _kXdgToplevelEvents[] = { _AE_WL_MSG( "configure", "iia" ), _AE_WL_MSG( "close", "" ), _AE_WL_MSG( "configure_bounds", "4ii" ), _AE_WL_MSG( "wm_capabilities", "5a" ) };
+_AE_WL_INTERFACE( _kXdgToplevelInterface, "xdg_toplevel", 6, _kXdgToplevelRequests, _kXdgToplevelEvents )
+// xdg-decoration-unstable-v1
+const _wl_message _kXdgDecorationManagerRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "get_toplevel_decoration", "no" ) };
+_AE_WL_INTERFACE_NO_EVENTS( _kXdgDecorationManagerInterface, "zxdg_decoration_manager_v1", 1, _kXdgDecorationManagerRequests )
+const _wl_message _kXdgToplevelDecorationRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "set_mode", "u" ), _AE_WL_MSG( "unset_mode", "" ) };
+const _wl_message _kXdgToplevelDecorationEvents[] = { _AE_WL_MSG( "configure", "u" ) };
+_AE_WL_INTERFACE( _kXdgToplevelDecorationInterface, "zxdg_toplevel_decoration_v1", 1, _kXdgToplevelDecorationRequests, _kXdgToplevelDecorationEvents )
+// xdg-output-unstable-v1
+const _wl_message _kXdgOutputManagerRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "get_xdg_output", "no" ) };
+_AE_WL_INTERFACE_NO_EVENTS( _kXdgOutputManagerInterface, "zxdg_output_manager_v1", 3, _kXdgOutputManagerRequests )
+const _wl_message _kXdgOutputRequests[] = { _AE_WL_MSG( "destroy", "" ) };
+const _wl_message _kXdgOutputEvents[] = { _AE_WL_MSG( "logical_position", "ii" ), _AE_WL_MSG( "logical_size", "ii" ), _AE_WL_MSG( "done", "" ), _AE_WL_MSG( "name", "2s" ), _AE_WL_MSG( "description", "2s" ) };
+_AE_WL_INTERFACE( _kXdgOutputInterface, "zxdg_output_v1", 3, _kXdgOutputRequests, _kXdgOutputEvents )
+// relative-pointer-unstable-v1
+const _wl_message _kRelativePointerManagerRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "get_relative_pointer", "no" ) };
+_AE_WL_INTERFACE_NO_EVENTS( _kRelativePointerManagerInterface, "zwp_relative_pointer_manager_v1", 1, _kRelativePointerManagerRequests )
+const _wl_message _kRelativePointerRequests[] = { _AE_WL_MSG( "destroy", "" ) };
+const _wl_message _kRelativePointerEvents[] = { _AE_WL_MSG( "relative_motion", "uuffff" ) };
+_AE_WL_INTERFACE( _kRelativePointerInterface, "zwp_relative_pointer_v1", 1, _kRelativePointerRequests, _kRelativePointerEvents )
+// pointer-constraints-unstable-v1
+const _wl_message _kPointerConstraintsRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "lock_pointer", "noo?ou" ), _AE_WL_MSG( "confine_pointer", "noo?ou" ) };
+_AE_WL_INTERFACE_NO_EVENTS( _kPointerConstraintsInterface, "zwp_pointer_constraints_v1", 1, _kPointerConstraintsRequests )
+const _wl_message _kLockedPointerRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "set_cursor_position_hint", "ff" ), _AE_WL_MSG( "set_region", "?o" ) };
+const _wl_message _kLockedPointerEvents[] = { _AE_WL_MSG( "locked", "" ), _AE_WL_MSG( "unlocked", "" ) };
+_AE_WL_INTERFACE( _kLockedPointerInterface, "zwp_locked_pointer_v1", 1, _kLockedPointerRequests, _kLockedPointerEvents )
+// cursor-shape-v1
+const _wl_message _kCursorShapeManagerRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "get_pointer", "no" ), _AE_WL_MSG( "get_tablet_tool_v2", "no" ) };
+_AE_WL_INTERFACE_NO_EVENTS( _kCursorShapeManagerInterface, "wp_cursor_shape_manager_v1", 1, _kCursorShapeManagerRequests )
+const _wl_message _kCursorShapeDeviceRequests[] = { _AE_WL_MSG( "destroy", "" ), _AE_WL_MSG( "set_shape", "uu" ) };
+_AE_WL_INTERFACE_NO_EVENTS( _kCursorShapeDeviceInterface, "wp_cursor_shape_device_v1", 1, _kCursorShapeDeviceRequests )
+#undef _AE_WL_MSG
+#undef _AE_WL_INTERFACE
+#undef _AE_WL_INTERFACE_NO_EVENTS
+
+// Opcodes of the requests used below
+const uint32_t _kWlDisplayGetRegistry = 1;
+const uint32_t _kWlRegistryBind = 0;
+const uint32_t _kWlCompositorCreateSurface = 0;
+const uint32_t _kWlCompositorCreateRegion = 1;
+const uint32_t _kWlSurfaceDestroy = 0;
+const uint32_t _kWlSurfaceAttach = 1;
+const uint32_t _kWlSurfaceDamage = 2;
+const uint32_t _kWlSurfaceFrame = 3;
+const uint32_t _kWlSurfaceSetOpaqueRegion = 4;
+const uint32_t _kWlSurfaceCommit = 6;
+const uint32_t _kWlSurfaceSetBufferScale = 8;
+const uint32_t _kWlRegionDestroy = 0;
+const uint32_t _kWlRegionAdd = 1;
+const uint32_t _kWlSeatGetPointer = 0;
+const uint32_t _kWlSeatGetKeyboard = 1;
+const uint32_t _kWlPointerSetCursor = 0;
+const uint32_t _kWlPointerRelease = 1;
+const uint32_t _kWlKeyboardRelease = 0;
+const uint32_t _kXdgWmBaseGetXdgSurface = 2;
+const uint32_t _kXdgWmBasePong = 3;
+const uint32_t _kXdgSurfaceDestroy = 0;
+const uint32_t _kXdgSurfaceGetToplevel = 1;
+const uint32_t _kXdgSurfaceAckConfigure = 4;
+const uint32_t _kXdgToplevelDestroy = 0;
+const uint32_t _kXdgToplevelSetTitle = 2;
+const uint32_t _kXdgToplevelSetAppId = 3;
+const uint32_t _kXdgToplevelSetMinSize = 8;
+const uint32_t _kXdgToplevelSetMaximized = 9;
+const uint32_t _kXdgToplevelUnsetMaximized = 10;
+const uint32_t _kXdgToplevelSetFullscreen = 11;
+const uint32_t _kXdgToplevelUnsetFullscreen = 12;
+const uint32_t _kXdgToplevelSetMinimized = 13;
+const uint32_t _kXdgDecorationManagerGetToplevelDecoration = 1;
+const uint32_t _kXdgToplevelDecorationDestroy = 0;
+const uint32_t _kXdgToplevelDecorationSetMode = 1;
+const uint32_t _kXdgOutputManagerGetXdgOutput = 1;
+const uint32_t _kRelativePointerManagerGetRelativePointer = 1;
+const uint32_t _kRelativePointerDestroy = 0;
+const uint32_t _kPointerConstraintsLockPointer = 1;
+const uint32_t _kLockedPointerDestroy = 0;
+const uint32_t _kLockedPointerSetCursorPositionHint = 1;
+const uint32_t _kCursorShapeManagerGetPointer = 1;
+const uint32_t _kCursorShapeDeviceDestroy = 0;
+const uint32_t _kCursorShapeDeviceSetShape = 1;
+const uint32_t _kWlMarshalFlagDestroy = 1;
+
+// EGL
+typedef int32_t _EGLint;
+typedef unsigned int _EGLBoolean;
+const _EGLint _kEGL_NONE = 0x3038;
+const _EGLint _kEGL_ALPHA_SIZE = 0x3021;
+const _EGLint _kEGL_BLUE_SIZE = 0x3022;
+const _EGLint _kEGL_GREEN_SIZE = 0x3023;
+const _EGLint _kEGL_RED_SIZE = 0x3024;
+const _EGLint _kEGL_DEPTH_SIZE = 0x3025;
+const _EGLint _kEGL_SURFACE_TYPE = 0x3033;
+const _EGLint _kEGL_WINDOW_BIT = 0x0004;
+const _EGLint _kEGL_RENDERABLE_TYPE = 0x3040;
+const _EGLint _kEGL_OPENGL_BIT = 0x0008;
+const _EGLint _kEGL_VENDOR = 0x3053;
+const _EGLint _kEGL_VERSION = 0x3054;
+const unsigned int _kEGL_OPENGL_API = 0x30A2;
+const unsigned int _kEGL_PLATFORM_WAYLAND_KHR = 0x31D8;
+const _EGLint _kEGL_CONTEXT_MAJOR_VERSION = 0x3098;
+const _EGLint _kEGL_CONTEXT_MINOR_VERSION = 0x30FB;
+const _EGLint _kEGL_CONTEXT_OPENGL_PROFILE_MASK = 0x30FD;
+const _EGLint _kEGL_CONTEXT_OPENGL_CORE_PROFILE_BIT = 0x0001;
+
+//------------------------------------------------------------------------------
+// Internal ae::_WaylandOutput
+//------------------------------------------------------------------------------
+struct _WaylandOutput
+{
+	_wl_proxy* output = nullptr;
+	_wl_proxy* xdgOutput = nullptr;
+	uint32_t name = 0; // Registry name
+	ae::Str64 connector; // eg. "eDP-1"
+	ae::Int2 position = ae::Int2( 0 );
+	ae::Int2 modeSize = ae::Int2( 0 );
+	ae::Int2 logicalPosition = ae::Int2( 0 );
+	ae::Int2 logicalSize = ae::Int2( 0 );
+	int32_t scale = 1;
+};
+
+//------------------------------------------------------------------------------
+// Internal ae::_Wayland
+// Process wide Wayland connection and the state of the single ae::Window.
+//------------------------------------------------------------------------------
+struct _Wayland
+{
+	//! Returns the Wayland connection, connecting on first use. Returns null
+	//! if a Wayland compositor is not available.
+	static _Wayland* Get();
+
+	bool InitializeWindow( ae::Window* window );
+	void TerminateWindow();
+	//! Reads and dispatches events of the given queue (or the default queue if
+	//! null), waiting up to \p timeout seconds for new events
+	void Dispatch( void* queue, double timeout );
+	//! Called by ae::Input::Pump()
+	void Pump( ae::Input* input );
+	void Present();
+	void MakeCurrent();
+	void SetTitle( const char* title );
+	void SetMode( bool fullscreen, bool maximized, bool minimized );
+	void SetSize( ae::Int2 size );
+	void SetPointerLocked( bool locked );
+	void SetCursorHidden( bool hidden );
+	void SetCursorPositionHint( ae::Vec2 pos );
+
+	// Requests
+	template< typename... Args > _wl_proxy* Request( _wl_proxy* proxy, uint32_t opcode, const _wl_interface* newInterface, uint32_t flags, Args... args )
+	{
+		return wl_proxy_marshal_flags( proxy, opcode, newInterface, wl_proxy_get_version( proxy ), flags, args... );
+	}
+	_wl_proxy* Bind( uint32_t name, const _wl_interface* interface, uint32_t version );
+
+	// Internal
+	bool m_Initialize();
+	bool m_LoadLibraries();
+	ae::Input* m_GetInput();
+	void m_ApplyConfigure();
+	void m_UpdateScale();
+	void m_ApplyScale();
+	void m_UpdateSurfaceSize( ae::Int2 size );
+	void m_ApplyCursor();
+	void m_ApplyAxis();
+	bool m_LoadCursorTheme();
+	void m_HandleKey( ae::Input* input, uint32_t key, bool pressed );
+	void m_EmitKeyText( ae::Input* input, uint32_t key );
+
+	// libwayland-client
+	void* m_clientLib = nullptr;
+	_wl_proxy* ( *wl_display_connect )( const char* name ) = nullptr;
+	int ( *wl_display_get_fd )( _wl_proxy* display ) = nullptr;
+	int ( *wl_display_dispatch_pending )( _wl_proxy* display ) = nullptr;
+	int ( *wl_display_roundtrip )( _wl_proxy* display ) = nullptr;
+	int ( *wl_display_flush )( _wl_proxy* display ) = nullptr;
+	int ( *wl_display_prepare_read )( _wl_proxy* display ) = nullptr;
+	int ( *wl_display_read_events )( _wl_proxy* display ) = nullptr;
+	void ( *wl_display_cancel_read )( _wl_proxy* display ) = nullptr;
+	int ( *wl_display_get_error )( _wl_proxy* display ) = nullptr;
+	void* ( *wl_display_create_queue )( _wl_proxy* display ) = nullptr;
+	int ( *wl_display_prepare_read_queue )( _wl_proxy* display, void* queue ) = nullptr;
+	int ( *wl_display_dispatch_queue_pending )( _wl_proxy* display, void* queue ) = nullptr;
+	void ( *wl_event_queue_destroy )( void* queue ) = nullptr;
+	_wl_proxy* ( *wl_proxy_create_wrapper )( _wl_proxy* proxy ) = nullptr;
+	void ( *wl_proxy_wrapper_destroy )( _wl_proxy* wrapper ) = nullptr;
+	void ( *wl_proxy_set_queue )( _wl_proxy* proxy, void* queue ) = nullptr;
+	_wl_proxy* ( *wl_proxy_marshal_flags )( _wl_proxy* proxy, uint32_t opcode, const _wl_interface* interface, uint32_t version, uint32_t flags, ... ) = nullptr;
+	int ( *wl_proxy_add_listener )( _wl_proxy* proxy, _WlListenerFn* implementation, void* data ) = nullptr;
+	void ( *wl_proxy_destroy )( _wl_proxy* proxy ) = nullptr;
+	uint32_t ( *wl_proxy_get_version )( _wl_proxy* proxy ) = nullptr;
+	const _wl_interface* wl_registry_interface = nullptr;
+	const _wl_interface* wl_compositor_interface = nullptr;
+	const _wl_interface* wl_surface_interface = nullptr;
+	const _wl_interface* wl_region_interface = nullptr;
+	const _wl_interface* wl_callback_interface = nullptr;
+	const _wl_interface* wl_seat_interface = nullptr;
+	const _wl_interface* wl_pointer_interface = nullptr;
+	const _wl_interface* wl_keyboard_interface = nullptr;
+	const _wl_interface* wl_output_interface = nullptr;
+	const _wl_interface* wl_shm_interface = nullptr;
+	// libwayland-egl
+	void* m_eglWindowLib = nullptr;
+	void* ( *wl_egl_window_create )( _wl_proxy* surface, int width, int height ) = nullptr;
+	void ( *wl_egl_window_resize )( void* eglWindow, int width, int height, int dx, int dy ) = nullptr;
+	void ( *wl_egl_window_destroy )( void* eglWindow ) = nullptr;
+	// libEGL
+	void* m_eglLib = nullptr;
+	void* m_glLib = nullptr;
+	void* ( *eglGetProcAddress )( const char* name ) = nullptr;
+	void* ( *eglGetDisplay )( void* nativeDisplay ) = nullptr;
+	void* ( *eglGetPlatformDisplay )( unsigned int platform, void* nativeDisplay, const intptr_t* attribs ) = nullptr;
+	_EGLBoolean ( *eglInitialize )( void* display, _EGLint* major, _EGLint* minor ) = nullptr;
+	_EGLBoolean ( *eglBindAPI )( unsigned int api ) = nullptr;
+	_EGLBoolean ( *eglChooseConfig )( void* display, const _EGLint* attribs, void** configs, _EGLint configSize, _EGLint* configCount ) = nullptr;
+	_EGLBoolean ( *eglGetConfigAttrib )( void* display, void* config, _EGLint attribute, _EGLint* value ) = nullptr;
+	void* ( *eglCreateContext )( void* display, void* config, void* shareContext, const _EGLint* attribs ) = nullptr;
+	_EGLBoolean ( *eglDestroyContext )( void* display, void* context ) = nullptr;
+	void* ( *eglCreateWindowSurface )( void* display, void* config, void* nativeWindow, const _EGLint* attribs ) = nullptr;
+	_EGLBoolean ( *eglDestroySurface )( void* display, void* surface ) = nullptr;
+	_EGLBoolean ( *eglMakeCurrent )( void* display, void* draw, void* read, void* context ) = nullptr;
+	void* ( *eglGetCurrentContext )() = nullptr;
+	_EGLBoolean ( *eglSwapBuffers )( void* display, void* surface ) = nullptr;
+	_EGLBoolean ( *eglSwapInterval )( void* display, _EGLint interval ) = nullptr;
+	_EGLint ( *eglGetError )() = nullptr;
+	const char* ( *eglQueryString )( void* display, _EGLint name ) = nullptr;
+	// libxkbcommon (optional, for text input)
+	void* m_xkbLib = nullptr;
+	void* ( *xkb_context_new )( int flags ) = nullptr;
+	void* ( *xkb_keymap_new_from_string )( void* context, const char* string, int format, int flags ) = nullptr;
+	void ( *xkb_keymap_unref )( void* keymap ) = nullptr;
+	int ( *xkb_keymap_key_repeats )( void* keymap, uint32_t key ) = nullptr;
+	void* ( *xkb_state_new )( void* keymap ) = nullptr;
+	void ( *xkb_state_unref )( void* state ) = nullptr;
+	int ( *xkb_state_update_mask )( void* state, uint32_t depressedMods, uint32_t latchedMods, uint32_t lockedMods, uint32_t depressedLayout, uint32_t latchedLayout, uint32_t lockedLayout ) = nullptr;
+	int ( *xkb_state_key_get_utf8 )( void* state, uint32_t key, char* buffer, size_t size ) = nullptr;
+	uint32_t ( *xkb_state_key_get_one_sym )( void* state, uint32_t key ) = nullptr;
+	void* ( *xkb_compose_table_new_from_locale )( void* context, const char* locale, int flags ) = nullptr;
+	void* ( *xkb_compose_state_new )( void* table, int flags ) = nullptr;
+	int ( *xkb_compose_state_feed )( void* state, uint32_t keysym ) = nullptr;
+	void ( *xkb_compose_state_reset )( void* state ) = nullptr;
+	int ( *xkb_compose_state_get_status )( void* state ) = nullptr;
+	int ( *xkb_compose_state_get_utf8 )( void* state, char* buffer, size_t size ) = nullptr;
+	// libwayland-cursor (optional, used when wp_cursor_shape_manager_v1 is not available)
+	void* m_cursorLib = nullptr;
+	void* ( *wl_cursor_theme_load )( const char* name, int size, _wl_proxy* shm ) = nullptr;
+	_wl_cursor* ( *wl_cursor_theme_get_cursor )( void* theme, const char* name ) = nullptr;
+	_wl_proxy* ( *wl_cursor_image_get_buffer )( _wl_cursor_image* image ) = nullptr;
+
+	// Globals
+	_wl_proxy* display = nullptr;
+	_wl_proxy* registry = nullptr;
+	_wl_proxy* compositor = nullptr;
+	_wl_proxy* xdgWmBase = nullptr;
+	_wl_proxy* decorationManager = nullptr;
+	_wl_proxy* xdgOutputManager = nullptr;
+	_wl_proxy* relativePointerManager = nullptr;
+	_wl_proxy* pointerConstraints = nullptr;
+	_wl_proxy* cursorShapeManager = nullptr;
+	_wl_proxy* shm = nullptr;
+	_wl_proxy* seat = nullptr;
+	ae::Array< _WaylandOutput, 16 > outputs;
+	bool displayError = false;
+
+	// Window
+	ae::Window* window = nullptr;
+	_wl_proxy* surface = nullptr;
+	_wl_proxy* xdgSurface = nullptr;
+	_wl_proxy* xdgToplevel = nullptr;
+	_wl_proxy* toplevelDecoration = nullptr;
+	_wl_proxy* frameCallback = nullptr;
+	// Frame callbacks use their own queue so waiting for them in Present()
+	// doesn't dispatch input events outside of ae::Input::Pump()
+	void* frameQueue = nullptr;
+	_wl_proxy* frameSurface = nullptr; // Wrapper of surface on frameQueue
+	void* eglWindow = nullptr;
+	void* eglDisplay = nullptr;
+	void* eglContext = nullptr;
+	void* eglSurface = nullptr;
+	struct ToplevelState
+	{
+		ae::Int2 size = ae::Int2( 0 );
+		bool fullscreen = false;
+		bool maximized = false;
+		bool tiled = false;
+		bool activated = false;
+	};
+	ToplevelState nextState; // From xdg_toplevel.configure
+	ToplevelState pendingState; // From xdg_surface.configure, waiting to be acked
+	ToplevelState state; // Currently applied
+	uint32_t pendingSerial = 0;
+	bool hasPendingConfigure = false;
+	bool configured = false;
+	bool minimizeRequested = false;
+	bool closeRequested = false;
+	bool scaleCommitPending = false; // True after changing the buffer scale until the next buffer is committed
+	ae::Int2 windowedSize = ae::Int2( 0 ); // Size to restore when leaving fullscreen or maximized
+	ae::Int2 size = ae::Int2( 0 ); // Logical surface size
+	int32_t bufferScale = 1;
+	int32_t pendingScale = 0; // Applied with the next configure in ae::Input::Pump(), or 0 if unchanged
+	int32_t preferredScale = 0; // wl_surface.preferred_buffer_scale, or 0 if not received
+	ae::Array< _wl_proxy*, 16 > enteredOutputs;
+	bool vsync = true;
+
+	// Pointer
+	_wl_proxy* pointer = nullptr;
+	_wl_proxy* cursorShapeDevice = nullptr;
+	_wl_proxy* relativePointer = nullptr;
+	_wl_proxy* lockedPointer = nullptr;
+	_wl_proxy* cursorSurface = nullptr;
+	void* cursorTheme = nullptr;
+	_wl_cursor* cursor = nullptr;
+	uint32_t pointerSerial = 0;
+	bool pointerInside = false;
+	bool cursorHidden = false;
+	ae::Vec2 axisValue = ae::Vec2( 0.0f );
+	ae::Vec2 axisDiscrete = ae::Vec2( 0.0f );
+	uint32_t axisSource = 0;
+
+	// Keyboard
+	_wl_proxy* keyboard = nullptr;
+	void* xkbContext = nullptr;
+	void* xkbKeymap = nullptr;
+	void* xkbState = nullptr;
+	void* xkbComposeState = nullptr;
+	int32_t repeatRate = 25; // Keys per second
+	int32_t repeatDelay = 600; // Milliseconds
+	uint32_t repeatKey = 0; // Evdev key code, 0 when not repeating
+	double repeatTime = 0.0;
+};
+
+//------------------------------------------------------------------------------
+// Internal Wayland event listeners
+//------------------------------------------------------------------------------
+ae::Key _ae_EvdevToKey( uint32_t code )
+{
+	switch( code )
+	{
+		case KEY_A: return ae::Key::A;
+		case KEY_B: return ae::Key::B;
+		case KEY_C: return ae::Key::C;
+		case KEY_D: return ae::Key::D;
+		case KEY_E: return ae::Key::E;
+		case KEY_F: return ae::Key::F;
+		case KEY_G: return ae::Key::G;
+		case KEY_H: return ae::Key::H;
+		case KEY_I: return ae::Key::I;
+		case KEY_J: return ae::Key::J;
+		case KEY_K: return ae::Key::K;
+		case KEY_L: return ae::Key::L;
+		case KEY_M: return ae::Key::M;
+		case KEY_N: return ae::Key::N;
+		case KEY_O: return ae::Key::O;
+		case KEY_P: return ae::Key::P;
+		case KEY_Q: return ae::Key::Q;
+		case KEY_R: return ae::Key::R;
+		case KEY_S: return ae::Key::S;
+		case KEY_T: return ae::Key::T;
+		case KEY_U: return ae::Key::U;
+		case KEY_V: return ae::Key::V;
+		case KEY_W: return ae::Key::W;
+		case KEY_X: return ae::Key::X;
+		case KEY_Y: return ae::Key::Y;
+		case KEY_Z: return ae::Key::Z;
+		case KEY_1: return ae::Key::Num1;
+		case KEY_2: return ae::Key::Num2;
+		case KEY_3: return ae::Key::Num3;
+		case KEY_4: return ae::Key::Num4;
+		case KEY_5: return ae::Key::Num5;
+		case KEY_6: return ae::Key::Num6;
+		case KEY_7: return ae::Key::Num7;
+		case KEY_8: return ae::Key::Num8;
+		case KEY_9: return ae::Key::Num9;
+		case KEY_0: return ae::Key::Num0;
+		case KEY_ENTER: return ae::Key::Enter;
+		case KEY_ESC: return ae::Key::Escape;
+		case KEY_BACKSPACE: return ae::Key::Backspace;
+		case KEY_TAB: return ae::Key::Tab;
+		case KEY_SPACE: return ae::Key::Space;
+		case KEY_MINUS: return ae::Key::Minus;
+		case KEY_EQUAL: return ae::Key::Equals;
+		case KEY_LEFTBRACE: return ae::Key::LeftBracket;
+		case KEY_RIGHTBRACE: return ae::Key::RightBracket;
+		case KEY_BACKSLASH: return ae::Key::Backslash;
+		case KEY_SEMICOLON: return ae::Key::Semicolon;
+		case KEY_APOSTROPHE: return ae::Key::Apostrophe;
+		case KEY_GRAVE: return ae::Key::Tilde;
+		case KEY_COMMA: return ae::Key::Comma;
+		case KEY_DOT: return ae::Key::Period;
+		case KEY_SLASH: return ae::Key::Slash;
+		case KEY_CAPSLOCK: return ae::Key::CapsLock;
+		case KEY_F1: return ae::Key::F1;
+		case KEY_F2: return ae::Key::F2;
+		case KEY_F3: return ae::Key::F3;
+		case KEY_F4: return ae::Key::F4;
+		case KEY_F5: return ae::Key::F5;
+		case KEY_F6: return ae::Key::F6;
+		case KEY_F7: return ae::Key::F7;
+		case KEY_F8: return ae::Key::F8;
+		case KEY_F9: return ae::Key::F9;
+		case KEY_F10: return ae::Key::F10;
+		case KEY_F11: return ae::Key::F11;
+		case KEY_F12: return ae::Key::F12;
+		case KEY_SYSRQ: return ae::Key::PrintScreen;
+		case KEY_SCROLLLOCK: return ae::Key::ScrollLock;
+		case KEY_PAUSE: return ae::Key::Pause;
+		case KEY_INSERT: return ae::Key::Insert;
+		case KEY_HOME: return ae::Key::Home;
+		case KEY_PAGEUP: return ae::Key::PageUp;
+		case KEY_DELETE: return ae::Key::Delete;
+		case KEY_END: return ae::Key::End;
+		case KEY_PAGEDOWN: return ae::Key::PageDown;
+		case KEY_RIGHT: return ae::Key::Right;
+		case KEY_LEFT: return ae::Key::Left;
+		case KEY_DOWN: return ae::Key::Down;
+		case KEY_UP: return ae::Key::Up;
+		case KEY_NUMLOCK: return ae::Key::NumLock;
+		case KEY_KPSLASH: return ae::Key::NumPadDivide;
+		case KEY_KPASTERISK: return ae::Key::NumPadMultiply;
+		case KEY_KPMINUS: return ae::Key::NumPadMinus;
+		case KEY_KPPLUS: return ae::Key::NumPadPlus;
+		case KEY_KPENTER: return ae::Key::NumPadEnter;
+		case KEY_KP1: return ae::Key::NumPad1;
+		case KEY_KP2: return ae::Key::NumPad2;
+		case KEY_KP3: return ae::Key::NumPad3;
+		case KEY_KP4: return ae::Key::NumPad4;
+		case KEY_KP5: return ae::Key::NumPad5;
+		case KEY_KP6: return ae::Key::NumPad6;
+		case KEY_KP7: return ae::Key::NumPad7;
+		case KEY_KP8: return ae::Key::NumPad8;
+		case KEY_KP9: return ae::Key::NumPad9;
+		case KEY_KP0: return ae::Key::NumPad0;
+		case KEY_KPDOT: return ae::Key::NumPadPeriod;
+		case KEY_KPEQUAL: return ae::Key::NumPadEquals;
+		case KEY_LEFTCTRL: return ae::Key::LeftControl;
+		case KEY_LEFTSHIFT: return ae::Key::LeftShift;
+		case KEY_LEFTALT: return ae::Key::LeftAlt;
+		case KEY_LEFTMETA: return ae::Key::LeftSuper;
+		case KEY_RIGHTCTRL: return ae::Key::RightControl;
+		case KEY_RIGHTSHIFT: return ae::Key::RightShift;
+		case KEY_RIGHTALT: return ae::Key::RightAlt;
+		case KEY_RIGHTMETA: return ae::Key::RightSuper;
+		default: return ae::Key::None;
+	}
+}
+
+_WaylandOutput* _ae_FindWaylandOutput( _Wayland* wl, _wl_proxy* proxy )
+{
+	for( _WaylandOutput& output : wl->outputs )
+	{
+		if( output.output == proxy || output.xdgOutput == proxy )
+		{
+			return &output;
+		}
+	}
+	return nullptr;
+}
+
+const _WlListenerFn _kWlOutputListener[] =
+{
+	// geometry
+	_WlFn( []( void* data, _wl_proxy* proxy, int32_t x, int32_t y, int32_t physicalWidth, int32_t physicalHeight, int32_t subpixel, const char* make, const char* model, int32_t transform )
+	{
+		if( _WaylandOutput* output = _ae_FindWaylandOutput( (_Wayland*)data, proxy ) ) { output->position = ae::Int2( x, y ); }
+	} ),
+	// mode
+	_WlFn( []( void* data, _wl_proxy* proxy, uint32_t flags, int32_t width, int32_t height, int32_t refresh )
+	{
+		const uint32_t kModeCurrent = 1;
+		_WaylandOutput* output = _ae_FindWaylandOutput( (_Wayland*)data, proxy );
+		if( output && ( flags & kModeCurrent ) ) { output->modeSize = ae::Int2( width, height ); }
+	} ),
+	// done
+	_WlFn( []( void* data, _wl_proxy* proxy ) {} ),
+	// scale
+	_WlFn( []( void* data, _wl_proxy* proxy, int32_t factor )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		if( _WaylandOutput* output = _ae_FindWaylandOutput( wl, proxy ) )
+		{
+			output->scale = ae::Max( 1, factor );
+			wl->m_UpdateScale();
+		}
+	} ),
+	// name
+	_WlFn( []( void* data, _wl_proxy* proxy, const char* name )
+	{
+		if( _WaylandOutput* output = _ae_FindWaylandOutput( (_Wayland*)data, proxy ) ) { output->connector = name; }
+	} ),
+	// description
+	_WlFn( []( void* data, _wl_proxy* proxy, const char* description ) {} ),
+};
+
+const _WlListenerFn _kXdgOutputListener[] =
+{
+	// logical_position
+	_WlFn( []( void* data, _wl_proxy* proxy, int32_t x, int32_t y )
+	{
+		if( _WaylandOutput* output = _ae_FindWaylandOutput( (_Wayland*)data, proxy ) ) { output->logicalPosition = ae::Int2( x, y ); }
+	} ),
+	// logical_size
+	_WlFn( []( void* data, _wl_proxy* proxy, int32_t width, int32_t height )
+	{
+		if( _WaylandOutput* output = _ae_FindWaylandOutput( (_Wayland*)data, proxy ) ) { output->logicalSize = ae::Int2( width, height ); }
+	} ),
+	// done
+	_WlFn( []( void* data, _wl_proxy* proxy ) {} ),
+	// name
+	_WlFn( []( void* data, _wl_proxy* proxy, const char* name ) {} ),
+	// description
+	_WlFn( []( void* data, _wl_proxy* proxy, const char* description ) {} ),
+};
+
+const _WlListenerFn _kXdgWmBaseListener[] =
+{
+	// ping
+	_WlFn( []( void* data, _wl_proxy* xdgWmBase, uint32_t serial )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		wl->Request( xdgWmBase, _kXdgWmBasePong, nullptr, 0, serial );
+	} ),
+};
+
+const _WlListenerFn _kWlSurfaceListener[] =
+{
+	// enter
+	_WlFn( []( void* data, _wl_proxy* surface, _wl_proxy* output )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		if( output && wl->enteredOutputs.Find( output ) < 0 && wl->enteredOutputs.Length() < wl->enteredOutputs.Capacity() )
+		{
+			wl->enteredOutputs.Append( output );
+			wl->m_UpdateScale();
+		}
+	} ),
+	// leave
+	_WlFn( []( void* data, _wl_proxy* surface, _wl_proxy* output )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		wl->enteredOutputs.RemoveAll( output );
+		wl->m_UpdateScale();
+	} ),
+	// preferred_buffer_scale
+	_WlFn( []( void* data, _wl_proxy* surface, int32_t factor )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		wl->preferredScale = ae::Max( 1, factor );
+		wl->m_UpdateScale();
+	} ),
+	// preferred_buffer_transform
+	_WlFn( []( void* data, _wl_proxy* surface, uint32_t transform ) {} ),
+};
+
+const _WlListenerFn _kXdgSurfaceListener[] =
+{
+	// configure
+	_WlFn( []( void* data, _wl_proxy* xdgSurface, uint32_t serial )
+	{
+		// Applying (and acking) the configure is deferred until ae::Input::Pump()
+		// so the next committed buffer is always rendered at the acked size
+		_Wayland* wl = (_Wayland*)data;
+		wl->pendingState = wl->nextState;
+		wl->pendingSerial = serial;
+		wl->hasPendingConfigure = true;
+		wl->configured = true;
+	} ),
+};
+
+const _WlListenerFn _kXdgToplevelListener[] =
+{
+	// configure
+	_WlFn( []( void* data, _wl_proxy* toplevel, int32_t width, int32_t height, _wl_array* states )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		_Wayland::ToplevelState& next = wl->nextState;
+		next = _Wayland::ToplevelState();
+		next.size = ae::Int2( width, height );
+		const uint32_t* stateValues = (const uint32_t*)states->data;
+		for( uint32_t i = 0; i < states->size / sizeof( uint32_t ); i++ )
+		{
+			switch( stateValues[ i ] )
+			{
+				case 1: next.maximized = true; break;
+				case 2: next.fullscreen = true; break;
+				case 4: next.activated = true; break;
+				case 5: case 6: case 7: case 8: next.tiled = true; break;
+				default: break;
+			}
+		}
+	} ),
+	// close
+	_WlFn( []( void* data, _wl_proxy* toplevel )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		wl->closeRequested = true;
+		if( ae::Input* input = wl->m_GetInput() )
+		{
+			input->quit = true;
+		}
+	} ),
+	// configure_bounds
+	_WlFn( []( void* data, _wl_proxy* toplevel, int32_t width, int32_t height ) {} ),
+	// wm_capabilities
+	_WlFn( []( void* data, _wl_proxy* toplevel, _wl_array* capabilities ) {} ),
+};
+
+const _WlListenerFn _kXdgToplevelDecorationListener[] =
+{
+	// configure
+	_WlFn( []( void* data, _wl_proxy* decoration, uint32_t mode )
+	{
+		const uint32_t kClientSide = 1;
+		if( mode == kClientSide )
+		{
+			AE_WARN( "The Wayland compositor requested client side window decorations, which are not supported" );
+		}
+	} ),
+};
+
+const _WlListenerFn _kWlCallbackListener[] =
+{
+	// done
+	_WlFn( []( void* data, _wl_proxy* callback, uint32_t time )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		if( wl->frameCallback == callback )
+		{
+			wl->frameCallback = nullptr;
+		}
+		wl->wl_proxy_destroy( callback );
+	} ),
+};
+
+const _WlListenerFn _kWlPointerListener[] =
+{
+	// enter
+	_WlFn( []( void* data, _wl_proxy* pointer, uint32_t serial, _wl_proxy* surface, int32_t x, int32_t y )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		if( !surface || surface != wl->surface )
+		{
+			return;
+		}
+		wl->pointerSerial = serial;
+		wl->pointerInside = true;
+		wl->m_ApplyCursor();
+		ae::Input* input = wl->m_GetInput();
+		if( input && !( input->m_captureMouse && wl->relativePointer ) )
+		{
+			input->m_mousePosSet = false; // Don't register movement from where the cursor left
+			input->m_SetMousePos( ae::Vec2( _WlFixedToFloat( x ), wl->size.y - _WlFixedToFloat( y ) ) );
+		}
+	} ),
+	// leave
+	_WlFn( []( void* data, _wl_proxy* pointer, uint32_t serial, _wl_proxy* surface )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		wl->pointerInside = false;
+		if( ae::Input* input = wl->m_GetInput() )
+		{
+			input->m_mousePosSet = false;
+			// Button releases are not sent after the pointer leaves
+			input->mouse.leftButton = false;
+			input->mouse.rightButton = false;
+			input->mouse.middleButton = false;
+		}
+	} ),
+	// motion
+	_WlFn( []( void* data, _wl_proxy* pointer, uint32_t time, int32_t x, int32_t y )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		ae::Input* input = wl->m_GetInput();
+		if( input && !( input->m_captureMouse && wl->relativePointer ) ) // Relative motion is used while captured
+		{
+			input->m_SetMousePos( ae::Vec2( _WlFixedToFloat( x ), wl->size.y - _WlFixedToFloat( y ) ) );
+			input->mouse.usingTouch = false;
+		}
+	} ),
+	// button
+	_WlFn( []( void* data, _wl_proxy* pointer, uint32_t serial, uint32_t time, uint32_t button, uint32_t state )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		if( ae::Input* input = wl->m_GetInput() )
+		{
+			const bool pressed = ( state == 1 );
+			switch( button )
+			{
+				case BTN_LEFT: input->mouse.leftButton = pressed; break;
+				case BTN_RIGHT: input->mouse.rightButton = pressed; break;
+				case BTN_MIDDLE: input->mouse.middleButton = pressed; break;
+				default: break;
+			}
+			input->mouse.usingTouch = false;
+		}
+	} ),
+	// axis
+	_WlFn( []( void* data, _wl_proxy* pointer, uint32_t time, uint32_t axis, int32_t value )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		( axis ? wl->axisValue.x : wl->axisValue.y ) += _WlFixedToFloat( value );
+		const uint32_t kFrameVersion = 5;
+		if( wl->wl_proxy_get_version( pointer ) < kFrameVersion )
+		{
+			wl->m_ApplyAxis();
+		}
+	} ),
+	// frame
+	_WlFn( []( void* data, _wl_proxy* pointer )
+	{
+		( (_Wayland*)data )->m_ApplyAxis();
+	} ),
+	// axis_source
+	_WlFn( []( void* data, _wl_proxy* pointer, uint32_t source )
+	{
+		( (_Wayland*)data )->axisSource = source;
+	} ),
+	// axis_stop
+	_WlFn( []( void* data, _wl_proxy* pointer, uint32_t time, uint32_t axis ) {} ),
+	// axis_discrete
+	_WlFn( []( void* data, _wl_proxy* pointer, uint32_t axis, int32_t discrete )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		( axis ? wl->axisDiscrete.x : wl->axisDiscrete.y ) += (float)discrete;
+	} ),
+};
+
+const _WlListenerFn _kRelativePointerListener[] =
+{
+	// relative_motion
+	_WlFn( []( void* data, _wl_proxy* relativePointer, uint32_t timeHi, uint32_t timeLo, int32_t dx, int32_t dy, int32_t dxUnaccel, int32_t dyUnaccel )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		ae::Input* input = wl->m_GetInput();
+		if( input && input->m_captureMouse )
+		{
+			// Captured mouse position stays in the center of the window, like
+			// on other platforms where the cursor is warped each frame
+			const ae::Vec2 center( wl->size.x / 2.0f, wl->size.y / 2.0f );
+			input->m_SetMousePos( center, ae::Vec2( _WlFixedToFloat( dx ), -_WlFixedToFloat( dy ) ) );
+		}
+	} ),
+};
+
+const _WlListenerFn _kLockedPointerListener[] =
+{
+	// locked
+	_WlFn( []( void* data, _wl_proxy* lockedPointer ) {} ),
+	// unlocked
+	_WlFn( []( void* data, _wl_proxy* lockedPointer ) {} ),
+};
+
+const _WlListenerFn _kWlKeyboardListener[] =
+{
+	// keymap
+	_WlFn( []( void* data, _wl_proxy* keyboard, uint32_t format, int32_t fd, uint32_t size )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		const uint32_t kFormatXkbV1 = 1;
+		if( format == kFormatXkbV1 && wl->xkbContext )
+		{
+			void* keymapStr = mmap( nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0 );
+			if( keymapStr != MAP_FAILED )
+			{
+				void* keymap = wl->xkb_keymap_new_from_string( wl->xkbContext, (const char*)keymapStr, 1, 0 );
+				munmap( keymapStr, size );
+				if( keymap )
+				{
+					if( wl->xkbState ) { wl->xkb_state_unref( wl->xkbState ); }
+					if( wl->xkbKeymap ) { wl->xkb_keymap_unref( wl->xkbKeymap ); }
+					wl->xkbKeymap = keymap;
+					wl->xkbState = wl->xkb_state_new( keymap );
+				}
+			}
+		}
+		close( fd );
+	} ),
+	// enter
+	_WlFn( []( void* data, _wl_proxy* keyboard, uint32_t serial, _wl_proxy* surface, _wl_array* keys )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		if( ae::Input* input = wl->m_GetInput() )
+		{
+			const uint32_t* keyCodes = (const uint32_t*)keys->data;
+			for( uint32_t i = 0; i < keys->size / sizeof( uint32_t ); i++ )
+			{
+				if( const ae::Key key = _ae_EvdevToKey( keyCodes[ i ] ); key != ae::Key::None )
+				{
+					input->m_keys[ (int)key ] = true;
+				}
+			}
+		}
+	} ),
+	// leave
+	_WlFn( []( void* data, _wl_proxy* keyboard, uint32_t serial, _wl_proxy* surface )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		wl->repeatKey = 0;
+		if( ae::Input* input = wl->m_GetInput() )
+		{
+			// Clear keys so they aren't stuck down, releases are not sent after leaving
+			memset( input->m_keys, 0, sizeof( input->m_keys ) );
+		}
+	} ),
+	// key
+	_WlFn( []( void* data, _wl_proxy* keyboard, uint32_t serial, uint32_t time, uint32_t key, uint32_t state )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		if( ae::Input* input = wl->m_GetInput() )
+		{
+			wl->m_HandleKey( input, key, state == 1 );
+		}
+	} ),
+	// modifiers
+	_WlFn( []( void* data, _wl_proxy* keyboard, uint32_t serial, uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		if( wl->xkbState )
+		{
+			wl->xkb_state_update_mask( wl->xkbState, depressed, latched, locked, 0, 0, group );
+		}
+	} ),
+	// repeat_info
+	_WlFn( []( void* data, _wl_proxy* keyboard, int32_t rate, int32_t delay )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		wl->repeatRate = rate;
+		wl->repeatDelay = delay;
+	} ),
+};
+
+const _WlListenerFn _kWlSeatListener[] =
+{
+	// capabilities
+	_WlFn( []( void* data, _wl_proxy* seat, uint32_t capabilities )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		const uint32_t kPointer = 1;
+		const uint32_t kKeyboard = 2;
+		const bool hasPointer = ( capabilities & kPointer );
+		const bool hasKeyboard = ( capabilities & kKeyboard );
+		if( hasPointer && !wl->pointer )
+		{
+			wl->pointer = wl->Request( seat, _kWlSeatGetPointer, wl->wl_pointer_interface, 0, nullptr );
+			wl->wl_proxy_add_listener( wl->pointer, (_WlListenerFn*)_kWlPointerListener, wl );
+			if( wl->cursorShapeManager )
+			{
+				wl->cursorShapeDevice = wl->Request( wl->cursorShapeManager, _kCursorShapeManagerGetPointer, &_kCursorShapeDeviceInterface, 0, nullptr, wl->pointer );
+			}
+		}
+		else if( !hasPointer && wl->pointer )
+		{
+			wl->SetPointerLocked( false );
+			if( wl->cursorShapeDevice )
+			{
+				wl->Request( wl->cursorShapeDevice, _kCursorShapeDeviceDestroy, nullptr, _kWlMarshalFlagDestroy );
+				wl->cursorShapeDevice = nullptr;
+			}
+			wl->Request( wl->pointer, _kWlPointerRelease, nullptr, _kWlMarshalFlagDestroy );
+			wl->pointer = nullptr;
+			wl->pointerInside = false;
+		}
+		if( hasKeyboard && !wl->keyboard )
+		{
+			wl->keyboard = wl->Request( seat, _kWlSeatGetKeyboard, wl->wl_keyboard_interface, 0, nullptr );
+			wl->wl_proxy_add_listener( wl->keyboard, (_WlListenerFn*)_kWlKeyboardListener, wl );
+		}
+		else if( !hasKeyboard && wl->keyboard )
+		{
+			wl->Request( wl->keyboard, _kWlKeyboardRelease, nullptr, _kWlMarshalFlagDestroy );
+			wl->keyboard = nullptr;
+			wl->repeatKey = 0;
+		}
+	} ),
+	// name
+	_WlFn( []( void* data, _wl_proxy* seat, const char* name ) {} ),
+};
+
+const _WlListenerFn _kWlRegistryListener[] =
+{
+	// global
+	_WlFn( []( void* data, _wl_proxy* registry, uint32_t name, const char* interface, uint32_t version )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		if( !strcmp( interface, "wl_compositor" ) ) { wl->compositor = wl->Bind( name, wl->wl_compositor_interface, ae::Min( version, 6u ) ); }
+		else if( !strcmp( interface, "xdg_wm_base" ) ) { wl->xdgWmBase = wl->Bind( name, &_kXdgWmBaseInterface, ae::Min( version, 6u ) ); }
+		else if( !strcmp( interface, "zxdg_decoration_manager_v1" ) ) { wl->decorationManager = wl->Bind( name, &_kXdgDecorationManagerInterface, 1 ); }
+		else if( !strcmp( interface, "zxdg_output_manager_v1" ) ) { wl->xdgOutputManager = wl->Bind( name, &_kXdgOutputManagerInterface, ae::Min( version, 3u ) ); }
+		else if( !strcmp( interface, "zwp_relative_pointer_manager_v1" ) ) { wl->relativePointerManager = wl->Bind( name, &_kRelativePointerManagerInterface, 1 ); }
+		else if( !strcmp( interface, "zwp_pointer_constraints_v1" ) ) { wl->pointerConstraints = wl->Bind( name, &_kPointerConstraintsInterface, 1 ); }
+		else if( !strcmp( interface, "wp_cursor_shape_manager_v1" ) ) { wl->cursorShapeManager = wl->Bind( name, &_kCursorShapeManagerInterface, 1 ); }
+		else if( !strcmp( interface, "wl_shm" ) ) { wl->shm = wl->Bind( name, wl->wl_shm_interface, 1 ); }
+		else if( !strcmp( interface, "wl_seat" ) && !wl->seat ) // Only the first seat is used
+		{
+			wl->seat = wl->Bind( name, wl->wl_seat_interface, ae::Min( version, 5u ) );
+			wl->wl_proxy_add_listener( wl->seat, (_WlListenerFn*)_kWlSeatListener, wl );
+		}
+		else if( !strcmp( interface, "wl_output" ) && wl->outputs.Length() < wl->outputs.Capacity() )
+		{
+			_WaylandOutput& output = wl->outputs.Append( {} );
+			output.name = name;
+			output.output = wl->Bind( name, wl->wl_output_interface, ae::Min( version, 4u ) );
+			wl->wl_proxy_add_listener( output.output, (_WlListenerFn*)_kWlOutputListener, wl );
+		}
+	} ),
+	// global_remove
+	_WlFn( []( void* data, _wl_proxy* registry, uint32_t name )
+	{
+		_Wayland* wl = (_Wayland*)data;
+		const int32_t idx = wl->outputs.FindFn( [ name ]( const _WaylandOutput& o ) { return o.name == name; } );
+		if( idx >= 0 )
+		{
+			_wl_proxy* output = wl->outputs[ idx ].output;
+			wl->enteredOutputs.RemoveAll( output );
+			if( wl->outputs[ idx ].xdgOutput )
+			{
+				wl->Request( wl->outputs[ idx ].xdgOutput, 0, nullptr, _kWlMarshalFlagDestroy );
+			}
+			wl->wl_proxy_destroy( output );
+			wl->outputs.Remove( idx );
+			wl->m_UpdateScale();
+		}
+	} ),
+};
+
+//------------------------------------------------------------------------------
+// Internal ae::_Wayland member functions
+//------------------------------------------------------------------------------
+_Wayland* _Wayland::Get()
+{
+	static _Wayland s_wayland;
+	static const bool s_initialized = s_wayland.m_Initialize();
+	return s_initialized ? &s_wayland : nullptr;
+}
+
+bool _Wayland::m_LoadLibraries()
+{
+#define _AE_LOAD_FN( _lib, _fn ) _fn = (decltype( _fn ))dlsym( _lib, #_fn )
+#define _AE_LOAD_REQUIRED_FN( _lib, _fn ) \
+	_AE_LOAD_FN( _lib, _fn ); \
+	if( !_fn ) { AE_ERROR( "Failed to load '#' from Wayland/EGL libraries", #_fn ); return false; }
+
+	m_clientLib = dlopen( "libwayland-client.so.0", RTLD_NOW | RTLD_LOCAL );
+	m_eglWindowLib = dlopen( "libwayland-egl.so.1", RTLD_NOW | RTLD_LOCAL );
+	m_eglLib = dlopen( "libEGL.so.1", RTLD_NOW | RTLD_LOCAL );
+	if( !m_clientLib || !m_eglWindowLib || !m_eglLib )
+	{
+		AE_ERROR( "Failed to load Wayland/EGL libraries (libwayland-client.so.0, libwayland-egl.so.1, libEGL.so.1)" );
+		return false;
+	}
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_connect );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_get_fd );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_dispatch_pending );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_roundtrip );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_flush );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_prepare_read );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_read_events );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_cancel_read );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_get_error );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_create_queue );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_prepare_read_queue );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_display_dispatch_queue_pending );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_event_queue_destroy );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_proxy_create_wrapper );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_proxy_wrapper_destroy );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_proxy_set_queue );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_proxy_marshal_flags ); // libwayland 1.20+
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_proxy_add_listener );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_proxy_destroy );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_proxy_get_version );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_registry_interface );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_compositor_interface );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_surface_interface );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_region_interface );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_callback_interface );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_seat_interface );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_pointer_interface );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_keyboard_interface );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_output_interface );
+	_AE_LOAD_REQUIRED_FN( m_clientLib, wl_shm_interface );
+	_AE_LOAD_REQUIRED_FN( m_eglWindowLib, wl_egl_window_create );
+	_AE_LOAD_REQUIRED_FN( m_eglWindowLib, wl_egl_window_resize );
+	_AE_LOAD_REQUIRED_FN( m_eglWindowLib, wl_egl_window_destroy );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglGetProcAddress );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglGetDisplay );
+	_AE_LOAD_FN( m_eglLib, eglGetPlatformDisplay ); // EGL 1.5
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglInitialize );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglBindAPI );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglChooseConfig );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglGetConfigAttrib );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglCreateContext );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglDestroyContext );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglCreateWindowSurface );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglDestroySurface );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglMakeCurrent );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglGetCurrentContext );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglSwapBuffers );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglSwapInterval );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglGetError );
+	_AE_LOAD_REQUIRED_FN( m_eglLib, eglQueryString );
+	// Fallback for GL functions not returned by eglGetProcAddress (pre EGL 1.5)
+	m_glLib = dlopen( "libOpenGL.so.0", RTLD_NOW | RTLD_LOCAL );
+	if( !m_glLib )
+	{
+		m_glLib = dlopen( "libGL.so.1", RTLD_NOW | RTLD_LOCAL );
+	}
+
+	// Optional
+	m_xkbLib = dlopen( "libxkbcommon.so.0", RTLD_NOW | RTLD_LOCAL );
+	if( m_xkbLib )
+	{
+		_AE_LOAD_FN( m_xkbLib, xkb_context_new );
+		_AE_LOAD_FN( m_xkbLib, xkb_keymap_new_from_string );
+		_AE_LOAD_FN( m_xkbLib, xkb_keymap_unref );
+		_AE_LOAD_FN( m_xkbLib, xkb_keymap_key_repeats );
+		_AE_LOAD_FN( m_xkbLib, xkb_state_new );
+		_AE_LOAD_FN( m_xkbLib, xkb_state_unref );
+		_AE_LOAD_FN( m_xkbLib, xkb_state_update_mask );
+		_AE_LOAD_FN( m_xkbLib, xkb_state_key_get_utf8 );
+		_AE_LOAD_FN( m_xkbLib, xkb_state_key_get_one_sym );
+		_AE_LOAD_FN( m_xkbLib, xkb_compose_table_new_from_locale );
+		_AE_LOAD_FN( m_xkbLib, xkb_compose_state_new );
+		_AE_LOAD_FN( m_xkbLib, xkb_compose_state_feed );
+		_AE_LOAD_FN( m_xkbLib, xkb_compose_state_reset );
+		_AE_LOAD_FN( m_xkbLib, xkb_compose_state_get_status );
+		_AE_LOAD_FN( m_xkbLib, xkb_compose_state_get_utf8 );
+		const bool xkbLoaded = xkb_context_new && xkb_keymap_new_from_string && xkb_keymap_unref && xkb_keymap_key_repeats
+			&& xkb_state_new && xkb_state_unref && xkb_state_update_mask && xkb_state_key_get_utf8 && xkb_state_key_get_one_sym;
+		xkbContext = xkbLoaded ? xkb_context_new( 0 ) : nullptr;
+		if( xkbContext && xkb_compose_table_new_from_locale && xkb_compose_state_new && xkb_compose_state_feed
+			&& xkb_compose_state_reset && xkb_compose_state_get_status && xkb_compose_state_get_utf8 )
+		{
+			// Compose sequences, eg. dead keys
+			const char* locale = getenv( "LC_ALL" );
+			if( !locale || !locale[ 0 ] ) { locale = getenv( "LC_CTYPE" ); }
+			if( !locale || !locale[ 0 ] ) { locale = getenv( "LANG" ); }
+			if( !locale || !locale[ 0 ] ) { locale = "C"; }
+			if( void* composeTable = xkb_compose_table_new_from_locale( xkbContext, locale, 0 ) )
+			{
+				xkbComposeState = xkb_compose_state_new( composeTable, 0 );
+			}
+		}
+	}
+	if( !xkbContext )
+	{
+		AE_WARN( "Failed to load libxkbcommon.so.0, text input is not available" );
+	}
+	m_cursorLib = dlopen( "libwayland-cursor.so.0", RTLD_NOW | RTLD_LOCAL );
+	if( m_cursorLib )
+	{
+		_AE_LOAD_FN( m_cursorLib, wl_cursor_theme_load );
+		_AE_LOAD_FN( m_cursorLib, wl_cursor_theme_get_cursor );
+		_AE_LOAD_FN( m_cursorLib, wl_cursor_image_get_buffer );
+	}
+#undef _AE_LOAD_REQUIRED_FN
+#undef _AE_LOAD_FN
+	return true;
+}
+
+bool _Wayland::m_Initialize()
+{
+	if( !getenv( "WAYLAND_DISPLAY" ) && !getenv( "WAYLAND_SOCKET" ) )
+	{
+		AE_ERROR( "WAYLAND_DISPLAY is not set, a Wayland compositor is required for windowing" );
+		return false;
+	}
+	if( !m_LoadLibraries() )
+	{
+		return false;
+	}
+	display = wl_display_connect( nullptr );
+	if( !display )
+	{
+		AE_ERROR( "Failed to connect to the Wayland display" );
+		return false;
+	}
+	registry = Request( display, _kWlDisplayGetRegistry, wl_registry_interface, 0, nullptr );
+	wl_proxy_add_listener( registry, (_WlListenerFn*)_kWlRegistryListener, this );
+	wl_display_roundtrip( display ); // Globals
+	if( xdgWmBase )
+	{
+		wl_proxy_add_listener( xdgWmBase, (_WlListenerFn*)_kXdgWmBaseListener, this );
+	}
+	if( xdgOutputManager )
+	{
+		for( _WaylandOutput& output : outputs )
+		{
+			output.xdgOutput = Request( xdgOutputManager, _kXdgOutputManagerGetXdgOutput, &_kXdgOutputInterface, 0, nullptr, output.output );
+			wl_proxy_add_listener( output.xdgOutput, (_WlListenerFn*)_kXdgOutputListener, this );
+		}
+	}
+	wl_display_roundtrip( display ); // Seat and output info
+	if( !compositor || !xdgWmBase )
+	{
+		AE_ERROR( "The Wayland compositor does not support wl_compositor or xdg_wm_base" );
+		return false;
+	}
+	return true;
+}
+
+_wl_proxy* _Wayland::Bind( uint32_t name, const _wl_interface* interface, uint32_t version )
+{
+	return wl_proxy_marshal_flags( registry, _kWlRegistryBind, interface, version, 0, name, interface->name, version, nullptr );
+}
+
+ae::Input* _Wayland::m_GetInput()
+{
+	// Input events are only dispatched by ae::Input::Pump()
+	return window ? window->input : nullptr;
+}
+
+void _Wayland::Dispatch( void* queue, double timeout )
+{
+	if( displayError )
+	{
+		return;
+	}
+	auto dispatchPending = [ this, queue ]()
+	{
+		return queue ? wl_display_dispatch_queue_pending( display, queue ) : wl_display_dispatch_pending( display );
+	};
+	dispatchPending();
+	while( ( queue ? wl_display_prepare_read_queue( display, queue ) : wl_display_prepare_read( display ) ) != 0 )
+	{
+		dispatchPending();
+	}
+	wl_display_flush( display );
+	pollfd pfd;
+	pfd.fd = wl_display_get_fd( display );
+	pfd.events = POLLIN;
+	pfd.revents = 0;
+	if( poll( &pfd, 1, (int)( timeout * 1000.0 ) ) > 0 )
+	{
+		wl_display_read_events( display );
+	}
+	else
+	{
+		wl_display_cancel_read( display );
+	}
+	dispatchPending();
+	if( const int error = wl_display_get_error( display ) )
+	{
+		AE_ERROR( "Wayland connection error: #", strerror( error ) );
+		displayError = true;
+		closeRequested = true;
+	}
+}
+
+bool _Wayland::InitializeWindow( ae::Window* w )
+{
+	AE_ASSERT_MSG( !window, "Only one ae::Window is supported on Linux" );
+	window = w;
+	windowedSize = ae::Int2( w->GetWidth(), w->GetHeight() );
+	size = windowedSize;
+	// Use the display scale up front when it's unambiguous, otherwise it's
+	// updated when the surface enters an output
+	if( outputs.Length() == 1 )
+	{
+		bufferScale = outputs[ 0 ].scale;
+	}
+	pendingScale = 0;
+
+	surface = Request( compositor, _kWlCompositorCreateSurface, wl_surface_interface, 0, nullptr );
+	wl_proxy_add_listener( surface, (_WlListenerFn*)_kWlSurfaceListener, this );
+	frameQueue = wl_display_create_queue( display );
+	frameSurface = wl_proxy_create_wrapper( surface );
+	wl_proxy_set_queue( frameSurface, frameQueue );
+	xdgSurface = Request( xdgWmBase, _kXdgWmBaseGetXdgSurface, &_kXdgSurfaceInterface, 0, nullptr, surface );
+	wl_proxy_add_listener( xdgSurface, (_WlListenerFn*)_kXdgSurfaceListener, this );
+	xdgToplevel = Request( xdgSurface, _kXdgSurfaceGetToplevel, &_kXdgToplevelInterface, 0, nullptr );
+	wl_proxy_add_listener( xdgToplevel, (_WlListenerFn*)_kXdgToplevelListener, this );
+	// The app id is used by desktops to match the window with a .desktop file
+	Request( xdgToplevel, _kXdgToplevelSetAppId, nullptr, 0, program_invocation_short_name );
+	Request( xdgToplevel, _kXdgToplevelSetMinSize, nullptr, 0, 150, 100 );
+	if( decorationManager )
+	{
+		const uint32_t kServerSide = 2;
+		toplevelDecoration = Request( decorationManager, _kXdgDecorationManagerGetToplevelDecoration, &_kXdgToplevelDecorationInterface, 0, nullptr, xdgToplevel );
+		wl_proxy_add_listener( toplevelDecoration, (_WlListenerFn*)_kXdgToplevelDecorationListener, this );
+		Request( toplevelDecoration, _kXdgToplevelDecorationSetMode, nullptr, 0, kServerSide );
+	}
+	else
+	{
+		AE_WARN( "The Wayland compositor does not support server side window decorations (zxdg_decoration_manager_v1)" );
+	}
+	Request( surface, _kWlSurfaceCommit, nullptr, 0 );
+	// A buffer can't be attached until the initial configure is acked
+	while( !configured && !displayError )
+	{
+		if( wl_display_roundtrip( display ) < 0 )
+		{
+			break;
+		}
+	}
+	if( !configured )
+	{
+		AE_ERROR( "Failed to configure Wayland window" );
+		return false;
+	}
+	m_ApplyConfigure();
+	m_ApplyScale();
+
+#if AE_ENABLE_OPENGL
+	// EGL
+	if( eglGetPlatformDisplay )
+	{
+		eglDisplay = eglGetPlatformDisplay( _kEGL_PLATFORM_WAYLAND_KHR, display, nullptr );
+	}
+	if( !eglDisplay )
+	{
+		eglDisplay = eglGetDisplay( display );
+	}
+	_EGLint eglMajor = 0;
+	_EGLint eglMinor = 0;
+	if( !eglDisplay || !eglInitialize( eglDisplay, &eglMajor, &eglMinor ) )
+	{
+		AE_ERROR( "Failed to initialize EGL (EGL error #)", eglGetError() );
+		return false;
+	}
+	if( !eglBindAPI( _kEGL_OPENGL_API ) )
+	{
+		AE_ERROR( "Failed to bind the OpenGL EGL API" );
+		return false;
+	}
+	const _EGLint configAttribs[] =
+	{
+		_kEGL_SURFACE_TYPE, _kEGL_WINDOW_BIT,
+		_kEGL_RENDERABLE_TYPE, _kEGL_OPENGL_BIT,
+		_kEGL_RED_SIZE, 8,
+		_kEGL_GREEN_SIZE, 8,
+		_kEGL_BLUE_SIZE, 8,
+		_kEGL_DEPTH_SIZE, 24,
+		_kEGL_NONE
+	};
+	void* configs[ 64 ];
+	_EGLint configCount = 0;
+	if( !eglChooseConfig( eglDisplay, configAttribs, configs, countof( configs ), &configCount ) || !configCount )
+	{
+		AE_ERROR( "Failed to find an EGL config" );
+		return false;
+	}
+	// Prefer an 8 bit color config without alpha so the window is opaque
+	void* config = nullptr;
+	for( int32_t pass = 0; pass < 2 && !config; pass++ )
+	{
+		for( int32_t i = 0; i < configCount; i++ )
+		{
+			_EGLint r = 0, g = 0, b = 0, a = 0;
+			eglGetConfigAttrib( eglDisplay, configs[ i ], _kEGL_RED_SIZE, &r );
+			eglGetConfigAttrib( eglDisplay, configs[ i ], _kEGL_GREEN_SIZE, &g );
+			eglGetConfigAttrib( eglDisplay, configs[ i ], _kEGL_BLUE_SIZE, &b );
+			eglGetConfigAttrib( eglDisplay, configs[ i ], _kEGL_ALPHA_SIZE, &a );
+			if( r == 8 && g == 8 && b == 8 && ( pass || a == 0 ) )
+			{
+				config = configs[ i ];
+				break;
+			}
+		}
+	}
+	if( !config )
+	{
+		config = configs[ 0 ];
+	}
+	const _EGLint contextAttribs[] =
+	{
+		_kEGL_CONTEXT_MAJOR_VERSION, ae::GLMajorVersion(),
+		_kEGL_CONTEXT_MINOR_VERSION, ae::GLMinorVersion(),
+		_kEGL_CONTEXT_OPENGL_PROFILE_MASK, _kEGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+		_kEGL_NONE
+	};
+	eglContext = eglCreateContext( eglDisplay, config, nullptr, contextAttribs );
+	if( !eglContext )
+	{
+		AE_ERROR( "Failed to create an OpenGL #.# core context (EGL error #)", ae::GLMajorVersion(), ae::GLMinorVersion(), eglGetError() );
+		return false;
+	}
+	const ae::Int2 pixels = size * bufferScale;
+	eglWindow = wl_egl_window_create( surface, pixels.x, pixels.y );
+	eglSurface = eglWindow ? eglCreateWindowSurface( eglDisplay, config, eglWindow, nullptr ) : nullptr;
+	if( !eglSurface )
+	{
+		AE_ERROR( "Failed to create EGL window surface (EGL error #)", eglGetError() );
+		return false;
+	}
+	if( !eglMakeCurrent( eglDisplay, eglSurface, eglSurface, eglContext ) )
+	{
+		AE_ERROR( "Failed to make EGL context current (EGL error #)", eglGetError() );
+		return false;
+	}
+	// Frame pacing is handled with frame callbacks in _Wayland::Present(), so
+	// eglSwapBuffers() never blocks indefinitely while the window is hidden
+	eglSwapInterval( eglDisplay, 0 );
+	const uint32_t glFnLoadFailed = _ae_LoadGLFunctions( []( const char* name ) -> void*
+	{
+		_Wayland* wl = _Wayland::Get();
+		void* fn = wl->eglGetProcAddress( name );
+		if( !fn && wl->m_glLib )
+		{
+			fn = dlsym( wl->m_glLib, name );
+		}
+		return fn;
+	} );
+	if( glFnLoadFailed )
+	{
+		AE_ERROR( "Failed to load # OpenGL function#", glFnLoadFailed, ( glFnLoadFailed == 1 ) ? "" : "s" );
+		return false;
+	}
+	if( window->GetLoggingEnabled() )
+	{
+		AE_INFO( "EGL # (#)", eglQueryString( eglDisplay, _kEGL_VERSION ), eglQueryString( eglDisplay, _kEGL_VENDOR ) );
+	}
+#endif
+	return true;
+}
+
+void _Wayland::TerminateWindow()
+{
+	if( !window )
+	{
+		return;
+	}
+	SetPointerLocked( false );
+	if( eglDisplay )
+	{
+		eglMakeCurrent( eglDisplay, nullptr, nullptr, nullptr );
+		if( eglSurface ) { eglDestroySurface( eglDisplay, eglSurface ); }
+		if( eglContext ) { eglDestroyContext( eglDisplay, eglContext ); }
+	}
+	if( eglWindow ) { wl_egl_window_destroy( eglWindow ); }
+	if( frameCallback ) { wl_proxy_destroy( frameCallback ); }
+	if( frameSurface ) { wl_proxy_wrapper_destroy( frameSurface ); }
+	if( frameQueue ) { wl_event_queue_destroy( frameQueue ); }
+	if( toplevelDecoration ) { Request( toplevelDecoration, _kXdgToplevelDecorationDestroy, nullptr, _kWlMarshalFlagDestroy ); }
+	if( xdgToplevel ) { Request( xdgToplevel, _kXdgToplevelDestroy, nullptr, _kWlMarshalFlagDestroy ); }
+	if( xdgSurface ) { Request( xdgSurface, _kXdgSurfaceDestroy, nullptr, _kWlMarshalFlagDestroy ); }
+	if( surface ) { Request( surface, _kWlSurfaceDestroy, nullptr, _kWlMarshalFlagDestroy ); }
+	wl_display_flush( display );
+	eglSurface = nullptr;
+	eglContext = nullptr;
+	eglWindow = nullptr;
+	frameCallback = nullptr;
+	frameSurface = nullptr;
+	frameQueue = nullptr;
+	toplevelDecoration = nullptr;
+	xdgToplevel = nullptr;
+	xdgSurface = nullptr;
+	surface = nullptr;
+	configured = false;
+	hasPendingConfigure = false;
+	pointerInside = false;
+	enteredOutputs.Clear();
+	window = nullptr;
+}
+
+void _Wayland::m_ApplyConfigure()
+{
+	if( !hasPendingConfigure )
+	{
+		return;
+	}
+	hasPendingConfigure = false;
+	const bool wasActivated = state.activated;
+	state = pendingState;
+	ae::Int2 newSize = state.size;
+	const bool floating = !state.fullscreen && !state.maximized && !state.tiled;
+	if( newSize.x <= 0 || newSize.y <= 0 )
+	{
+		// The compositor lets the client pick its size
+		newSize = windowedSize;
+	}
+	else if( floating )
+	{
+		windowedSize = newSize;
+	}
+	if( state.activated )
+	{
+		minimizeRequested = false;
+	}
+	Request( xdgSurface, _kXdgSurfaceAckConfigure, nullptr, 0, pendingSerial );
+	m_UpdateSurfaceSize( newSize );
+	if( window && wasActivated != state.activated )
+	{
+		window->m_UpdateFocused( state.activated );
+	}
+}
+
+void _Wayland::m_UpdateScale()
+{
+	int32_t scale = preferredScale;
+	if( !scale )
+	{
+		// Before wl_surface v6 the buffer scale is chosen by the client, so
+		// match the highest scale of the displays the window is on
+		scale = 1;
+		for( _wl_proxy* output : enteredOutputs )
+		{
+			if( const _WaylandOutput* o = _ae_FindWaylandOutput( this, output ) )
+			{
+				scale = ae::Max( scale, o->scale );
+			}
+		}
+		if( !enteredOutputs.Length() )
+		{
+			return; // Keep the current scale until the window is visible
+		}
+	}
+	// Like configure events, the new scale is applied in ae::Input::Pump() so
+	// the next committed buffer is always rendered at the new scale
+	pendingScale = ( scale != bufferScale ) ? scale : 0;
+}
+
+void _Wayland::m_ApplyScale()
+{
+	if( pendingScale && window )
+	{
+		bufferScale = pendingScale;
+		pendingScale = 0;
+		m_UpdateSurfaceSize( size );
+		if( window->GetLoggingEnabled() ) { AE_INFO( "window scale #", bufferScale ); }
+	}
+}
+
+void _Wayland::m_UpdateSurfaceSize( ae::Int2 newSize )
+{
+	if( !window || !surface )
+	{
+		return;
+	}
+	newSize = ae::Int2( ae::Max( newSize.x, 1 ), ae::Max( newSize.y, 1 ) );
+	const bool changed = ( newSize != size || bufferScale != (int32_t)window->GetScaleFactor() );
+	size = newSize;
+	window->m_UpdateSize( size.x, size.y, (float)bufferScale );
+	if( !changed && eglWindow )
+	{
+		return;
+	}
+	if( window->GetLoggingEnabled() ) { AE_INFO( "window size #x# (scale #)", size.x, size.y, bufferScale ); }
+	if( eglWindow )
+	{
+		const ae::Int2 pixels = size * bufferScale;
+		wl_egl_window_resize( eglWindow, pixels.x, pixels.y, 0, 0 );
+	}
+	const uint32_t kSetBufferScaleVersion = 3;
+	if( wl_proxy_get_version( surface ) >= kSetBufferScaleVersion )
+	{
+		Request( surface, _kWlSurfaceSetBufferScale, nullptr, 0, bufferScale );
+		scaleCommitPending = true;
+	}
+	// The window content is always opaque, even when the EGL config has alpha
+	_wl_proxy* region = Request( compositor, _kWlCompositorCreateRegion, wl_region_interface, 0, nullptr );
+	Request( region, _kWlRegionAdd, nullptr, 0, 0, 0, size.x, size.y );
+	Request( surface, _kWlSurfaceSetOpaqueRegion, nullptr, 0, region );
+	Request( region, _kWlRegionDestroy, nullptr, _kWlMarshalFlagDestroy );
+}
+
+void _Wayland::Pump( ae::Input* input )
+{
+	Dispatch( nullptr, 0.0 );
+	m_ApplyConfigure();
+	m_ApplyScale();
+	if( closeRequested )
+	{
+		input->quit = true;
+	}
+
+	// Key repeat is implemented by clients on Wayland, it only affects text input
+	if( repeatKey && repeatRate > 0 )
+	{
+		const double currentTime = ae::GetTime();
+		const double interval = 1.0 / repeatRate;
+		for( uint32_t i = 0; i < 64 && repeatTime <= currentTime; i++ ) // Limit catch up after long frames
+		{
+			m_EmitKeyText( input, repeatKey );
+			repeatTime += interval;
+		}
+		if( repeatTime <= currentTime )
+		{
+			repeatTime = currentTime + interval;
+		}
+	}
+}
+
+void _Wayland::m_HandleKey( ae::Input* input, uint32_t key, bool pressed )
+{
+	if( const ae::Key aeKey = _ae_EvdevToKey( key ); aeKey != ae::Key::None )
+	{
+		input->m_keys[ (int)aeKey ] = pressed;
+	}
+	if( pressed )
+	{
+		m_EmitKeyText( input, key );
+		const uint32_t xkbKey = key + 8; // Evdev codes are offset by 8 in xkb
+		const bool repeats = xkbKeymap ? xkb_keymap_key_repeats( xkbKeymap, xkbKey ) : ( key == KEY_BACKSPACE );
+		repeatKey = repeats ? key : 0;
+		repeatTime = ae::GetTime() + repeatDelay / 1000.0;
+	}
+	else if( key == repeatKey )
+	{
+		repeatKey = 0;
+	}
+}
+
+void _Wayland::m_EmitKeyText( ae::Input* input, uint32_t key )
+{
+	// Matches Windows text input behavior
+	switch( key )
+	{
+		case KEY_ENTER:
+		case KEY_KPENTER:
+			input->m_text += '\n';
+			input->m_textInput += '\n';
+			return;
+		case KEY_TAB:
+			input->m_text += '\t';
+			input->m_textInput += '\t';
+			return;
+		case KEY_BACKSPACE:
+			// Don't modify m_textInput on backspace presses, it only stores incoming printable keys and is cleared each frame
+			while( !input->m_text.empty() && ( input->m_text.back() & 0xC0 ) == 0x80 )
+			{
+				input->m_text.pop_back(); // UTF-8 continuation bytes
+			}
+			if( !input->m_text.empty() )
+			{
+				input->m_text.pop_back();
+			}
+			return;
+		default:
+			break;
+	}
+	if( !xkbState )
+	{
+		return;
+	}
+	const uint32_t xkbKey = key + 8;
+	char text[ 64 ];
+	text[ 0 ] = 0;
+	if( xkbComposeState )
+	{
+		const int kFeedAccepted = 1;
+		const int kStatusComposing = 1;
+		const int kStatusComposed = 2;
+		const int kStatusCancelled = 3;
+		const uint32_t keysym = xkb_state_key_get_one_sym( xkbState, xkbKey );
+		if( xkb_compose_state_feed( xkbComposeState, keysym ) == kFeedAccepted )
+		{
+			switch( xkb_compose_state_get_status( xkbComposeState ) )
+			{
+				case kStatusComposing:
+					return;
+				case kStatusComposed:
+					xkb_compose_state_get_utf8( xkbComposeState, text, sizeof( text ) );
+					xkb_compose_state_reset( xkbComposeState );
+					break;
+				case kStatusCancelled:
+					xkb_compose_state_reset( xkbComposeState );
+					return;
+				default:
+					break;
+			}
+		}
+	}
+	if( !text[ 0 ] )
+	{
+		xkb_state_key_get_utf8( xkbState, xkbKey, text, sizeof( text ) );
+	}
+	// Skip control characters, eg. ctrl+c
+	if( (uint8_t)text[ 0 ] >= 0x20 && text[ 0 ] != 0x7F )
+	{
+		input->m_text += text;
+		input->m_textInput += text;
+	}
+}
+
+void _Wayland::m_ApplyAxis()
+{
+	// Axis events are grouped into frames so wheel detents and smooth
+	// scrolling from the same device event are not counted twice
+	ae::Input* input = ( axisValue != ae::Vec2( 0.0f ) || axisDiscrete != ae::Vec2( 0.0f ) ) ? m_GetInput() : nullptr;
+	if( input )
+	{
+		const uint32_t kSourceWheel = 0;
+		const uint32_t kSourceFinger = 1;
+		const uint32_t kSourceWheelTilt = 3;
+		// Wayland reports positive values for scrolling down and right, the
+		// user's natural scrolling setting has already been applied
+		ae::Vec2 scroll;
+		if( axisSource == kSourceWheel || axisSource == kSourceWheelTilt )
+		{
+			// Compositors report 10 points per detent when discrete steps are not available
+			const ae::Vec2 notches = ( axisDiscrete != ae::Vec2( 0.0f ) ) ? axisDiscrete : axisValue / 10.0f;
+			scroll = notches * _kScrollPointsPerNotch;
+		}
+		else
+		{
+			scroll = axisValue;
+		}
+		input->mouse.scroll.x += scroll.x;
+		input->mouse.scroll.y -= scroll.y;
+		input->mouse.usingTouch = ( axisSource == kSourceFinger );
+	}
+	axisValue = ae::Vec2( 0.0f );
+	axisDiscrete = ae::Vec2( 0.0f );
+	axisSource = 0;
+}
+
+void _Wayland::m_ApplyCursor()
+{
+	if( !pointer || !pointerInside )
+	{
+		return;
+	}
+	if( cursorHidden )
+	{
+		Request( pointer, _kWlPointerSetCursor, nullptr, 0, pointerSerial, nullptr, 0, 0 );
+	}
+	else if( cursorShapeDevice )
+	{
+		const uint32_t kShapeDefault = 1;
+		Request( cursorShapeDevice, _kCursorShapeDeviceSetShape, nullptr, 0, pointerSerial, kShapeDefault );
+	}
+	else if( m_LoadCursorTheme() )
+	{
+		_wl_cursor_image* image = cursor->images[ 0 ];
+		_wl_proxy* buffer = wl_cursor_image_get_buffer( image );
+		if( !buffer )
+		{
+			return;
+		}
+		const int32_t scale = ( wl_proxy_get_version( cursorSurface ) >= 3 ) ? bufferScale : 1;
+		Request( pointer, _kWlPointerSetCursor, nullptr, 0, pointerSerial, cursorSurface, (int32_t)image->hotspot_x / scale, (int32_t)image->hotspot_y / scale );
+		Request( cursorSurface, _kWlSurfaceAttach, nullptr, 0, buffer, 0, 0 );
+		if( scale > 1 )
+		{
+			Request( cursorSurface, _kWlSurfaceSetBufferScale, nullptr, 0, scale );
+		}
+		Request( cursorSurface, _kWlSurfaceDamage, nullptr, 0, 0, 0, (int32_t)image->width, (int32_t)image->height );
+		Request( cursorSurface, _kWlSurfaceCommit, nullptr, 0 );
+	}
+}
+
+bool _Wayland::m_LoadCursorTheme()
+{
+	if( cursor )
+	{
+		return true;
+	}
+	if( cursorTheme || !wl_cursor_theme_load || !wl_cursor_theme_get_cursor || !wl_cursor_image_get_buffer || !shm )
+	{
+		return false; // Previously failed or not supported
+	}
+	const char* sizeStr = getenv( "XCURSOR_SIZE" );
+	int32_t cursorSize = sizeStr ? atoi( sizeStr ) : 0;
+	if( cursorSize <= 0 )
+	{
+		cursorSize = 24;
+	}
+	cursorTheme = wl_cursor_theme_load( getenv( "XCURSOR_THEME" ), cursorSize * bufferScale, shm );
+	if( !cursorTheme )
+	{
+		cursorTheme = (void*)1; // Don't try again
+		return false;
+	}
+	cursor = wl_cursor_theme_get_cursor( cursorTheme, "default" );
+	if( !cursor )
+	{
+		cursor = wl_cursor_theme_get_cursor( cursorTheme, "left_ptr" );
+	}
+	if( cursor && cursor->image_count )
+	{
+		cursorSurface = Request( compositor, _kWlCompositorCreateSurface, wl_surface_interface, 0, nullptr );
+		return true;
+	}
+	cursor = nullptr;
+	return false;
+}
+
+void _Wayland::SetPointerLocked( bool locked )
+{
+	if( locked && pointer && !lockedPointer && surface )
+	{
+		if( pointerConstraints )
+		{
+			const uint32_t kLifetimePersistent = 2;
+			lockedPointer = Request( pointerConstraints, _kPointerConstraintsLockPointer, &_kLockedPointerInterface, 0, nullptr, surface, pointer, nullptr, kLifetimePersistent );
+			wl_proxy_add_listener( lockedPointer, (_WlListenerFn*)_kLockedPointerListener, this );
+		}
+		if( relativePointerManager )
+		{
+			relativePointer = Request( relativePointerManager, _kRelativePointerManagerGetRelativePointer, &_kRelativePointerInterface, 0, nullptr, pointer );
+			wl_proxy_add_listener( relativePointer, (_WlListenerFn*)_kRelativePointerListener, this );
+		}
+		if( !lockedPointer || !relativePointer )
+		{
+			AE_WARN( "The Wayland compositor does not support pointer locking (zwp_pointer_constraints_v1 and zwp_relative_pointer_manager_v1)" );
+		}
+	}
+	else if( !locked )
+	{
+		if( lockedPointer )
+		{
+			Request( lockedPointer, _kLockedPointerDestroy, nullptr, _kWlMarshalFlagDestroy );
+			lockedPointer = nullptr;
+		}
+		if( relativePointer )
+		{
+			Request( relativePointer, _kRelativePointerDestroy, nullptr, _kWlMarshalFlagDestroy );
+			relativePointer = nullptr;
+		}
+	}
+}
+
+void _Wayland::SetCursorHidden( bool hidden )
+{
+	if( hidden != cursorHidden )
+	{
+		cursorHidden = hidden;
+		m_ApplyCursor(); // Applied again on pointer enter
+	}
+}
+
+void _Wayland::SetCursorPositionHint( ae::Vec2 pos )
+{
+	// Wayland clients can't move the cursor, but the compositor can be hinted
+	// where to place it when a pointer lock ends
+	if( lockedPointer && surface )
+	{
+		Request( lockedPointer, _kLockedPointerSetCursorPositionHint, nullptr, 0, _WlFloatToFixed( pos.x ), _WlFloatToFixed( size.y - pos.y ) );
+		if( !scaleCommitPending ) // Don't commit a new buffer scale with a buffer of the previous size
+		{
+			Request( surface, _kWlSurfaceCommit, nullptr, 0 );
+		}
+	}
+}
+
+void _Wayland::MakeCurrent()
+{
+	if( eglContext && eglGetCurrentContext() != eglContext )
+	{
+		eglMakeCurrent( eglDisplay, eglSurface, eglSurface, eglContext );
+	}
+}
+
+void _Wayland::Present()
+{
+	if( !eglSurface )
+	{
+		return;
+	}
+	if( vsync )
+	{
+		// Wait for the compositor to request a new frame. Hidden windows may
+		// never receive a frame callback, so give up after a timeout.
+		const double deadline = ae::GetTime() + 0.1;
+		while( frameCallback && !displayError )
+		{
+			const double remaining = deadline - ae::GetTime();
+			if( remaining <= 0.0 )
+			{
+				break;
+			}
+			Dispatch( frameQueue, remaining );
+		}
+		if( frameCallback )
+		{
+			wl_proxy_destroy( frameCallback );
+		}
+		frameCallback = Request( frameSurface, _kWlSurfaceFrame, wl_callback_interface, 0, nullptr );
+		wl_proxy_add_listener( frameCallback, (_WlListenerFn*)_kWlCallbackListener, this );
+	}
+	eglSwapBuffers( eglDisplay, eglSurface );
+	scaleCommitPending = false;
+}
+
+void _Wayland::SetTitle( const char* title )
+{
+	if( xdgToplevel )
+	{
+		Request( xdgToplevel, _kXdgToplevelSetTitle, nullptr, 0, title );
+	}
+}
+
+void _Wayland::SetMode( bool fullscreen, bool maximized, bool minimized )
+{
+	if( !xdgToplevel )
+	{
+		return;
+	}
+	if( fullscreen )
+	{
+		Request( xdgToplevel, _kXdgToplevelSetFullscreen, nullptr, 0, nullptr );
+	}
+	else if( minimized )
+	{
+		// There is no event for minimizing, so the window is considered
+		// minimized until it's activated again
+		Request( xdgToplevel, _kXdgToplevelSetMinimized, nullptr, 0 );
+		minimizeRequested = true;
+	}
+	else
+	{
+		if( state.fullscreen )
+		{
+			Request( xdgToplevel, _kXdgToplevelUnsetFullscreen, nullptr, 0 );
+		}
+		if( maximized )
+		{
+			Request( xdgToplevel, _kXdgToplevelSetMaximized, nullptr, 0 );
+		}
+		else if( state.maximized )
+		{
+			Request( xdgToplevel, _kXdgToplevelUnsetMaximized, nullptr, 0 );
+		}
+	}
+	wl_display_flush( display );
+}
+
+void _Wayland::SetSize( ae::Int2 newSize )
+{
+	// Clients can only pick their own size while not fullscreen, maximized, or tiled
+	windowedSize = newSize;
+	if( !state.fullscreen && !state.maximized && !state.tiled )
+	{
+		m_UpdateSurfaceSize( newSize );
+	}
+}
+
+//------------------------------------------------------------------------------
+// Internal Linux evdev gamepads
+//------------------------------------------------------------------------------
+struct _LinuxGamepad
+{
+	bool Open( const char* path );
+	void Close();
+	void Read();
+	void Sync();
+	bool GetButton( uint32_t code ) const { return keys[ code / 8 ] & ( 1 << ( code % 8 ) ); }
+	bool HasAxis( uint32_t code ) const { return absBits[ code / 8 ] & ( 1 << ( code % 8 ) ); }
+	float GetStick( uint32_t code ) const; // [-1, 1]
+	float GetTrigger( uint32_t code ) const; // [0, 1]
+	void GetState( ae::GamepadState* stateOut ) const;
+
+	int fd = -1;
+	ae::Str256 path;
+	bool nintendoSonyLayout = false;
+	uint8_t keys[ KEY_CNT / 8 + 1 ];
+	uint8_t absBits[ ABS_CNT / 8 + 1 ];
+	input_absinfo absInfo[ ABS_CNT ];
+};
+
+bool _LinuxGamepad::Open( const char* devicePath )
+{
+	fd = open( devicePath, O_RDONLY | O_NONBLOCK | O_CLOEXEC );
+	if( fd < 0 )
+	{
+		return false;
+	}
+	uint8_t keyBits[ KEY_CNT / 8 + 1 ];
+	memset( keyBits, 0, sizeof( keyBits ) );
+	memset( absBits, 0, sizeof( absBits ) );
+	const bool isGamepad = ioctl( fd, EVIOCGBIT( EV_KEY, sizeof( keyBits ) ), keyBits ) >= 0
+		&& ioctl( fd, EVIOCGBIT( EV_ABS, sizeof( absBits ) ), absBits ) >= 0
+		&& ( keyBits[ BTN_GAMEPAD / 8 ] & ( 1 << ( BTN_GAMEPAD % 8 ) ) )
+		&& HasAxis( ABS_X );
+	if( !isGamepad )
+	{
+		Close();
+		return false;
+	}
+	// The Linux gamepad spec places BTN_NORTH at the top of the face buttons,
+	// which Sony and Nintendo drivers follow. Xbox style drivers (xpad etc.)
+	// instead report their X and Y buttons as BTN_X (BTN_NORTH) and BTN_Y.
+	input_id id;
+	memset( &id, 0, sizeof( id ) );
+	ioctl( fd, EVIOCGID, &id );
+	nintendoSonyLayout = ( id.vendor == 0x054c || id.vendor == 0x057e );
+	path = devicePath;
+	Sync();
+	return true;
+}
+
+void _LinuxGamepad::Close()
+{
+	if( fd >= 0 )
+	{
+		close( fd );
+	}
+	fd = -1;
+	path = "";
+}
+
+void _LinuxGamepad::Sync()
+{
+	memset( keys, 0, sizeof( keys ) );
+	ioctl( fd, EVIOCGKEY( sizeof( keys ) ), keys );
+	memset( absInfo, 0, sizeof( absInfo ) );
+	for( uint32_t i = 0; i < ABS_CNT; i++ )
+	{
+		if( HasAxis( i ) )
+		{
+			ioctl( fd, EVIOCGABS( i ), &absInfo[ i ] );
+		}
+	}
+}
+
+void _LinuxGamepad::Read()
+{
+	input_event events[ 64 ];
+	while( fd >= 0 )
+	{
+		const ssize_t bytes = read( fd, events, sizeof( events ) );
+		if( bytes <= 0 )
+		{
+			if( bytes < 0 && errno != EAGAIN && errno != EINTR )
+			{
+				Close(); // Disconnected
+			}
+			return;
+		}
+		for( uint32_t i = 0; i < bytes / sizeof( input_event ); i++ )
+		{
+			const input_event& e = events[ i ];
+			if( e.type == EV_KEY && e.code < KEY_CNT )
+			{
+				if( e.value ) { keys[ e.code / 8 ] |= ( 1 << ( e.code % 8 ) ); }
+				else { keys[ e.code / 8 ] &= ~( 1 << ( e.code % 8 ) ); }
+			}
+			else if( e.type == EV_ABS && e.code < ABS_CNT )
+			{
+				absInfo[ e.code ].value = e.value;
+			}
+			else if( e.type == EV_SYN && e.code == SYN_DROPPED )
+			{
+				Sync();
+			}
+		}
+	}
+}
+
+float _LinuxGamepad::GetStick( uint32_t code ) const
+{
+	const input_absinfo& info = absInfo[ code ];
+	if( !HasAxis( code ) || info.maximum <= info.minimum )
+	{
+		return 0.0f;
+	}
+	return ae::Clip( ( info.value - info.minimum ) * 2.0f / ( info.maximum - info.minimum ) - 1.0f, -1.0f, 1.0f );
+}
+
+float _LinuxGamepad::GetTrigger( uint32_t code ) const
+{
+	const input_absinfo& info = absInfo[ code ];
+	if( !HasAxis( code ) || info.maximum <= info.minimum )
+	{
+		return 0.0f;
+	}
+	return ae::Clip01( ( info.value - info.minimum ) / (float)( info.maximum - info.minimum ) );
+}
+
+void _LinuxGamepad::GetState( ae::GamepadState* gp ) const
+{
+	gp->connected = true;
+	gp->leftAnalog = ae::Vec2( GetStick( ABS_X ), -GetStick( ABS_Y ) );
+	// Most drivers report the right stick on RX/RY and analog triggers on Z/RZ,
+	// generic HID gamepads use Z/RZ for the right stick and GAS/BRAKE for triggers
+	if( HasAxis( ABS_RX ) )
+	{
+		gp->rightAnalog = ae::Vec2( GetStick( ABS_RX ), -GetStick( ABS_RY ) );
+		gp->leftTrigger = GetTrigger( ABS_Z );
+		gp->rightTrigger = GetTrigger( ABS_RZ );
+	}
+	else
+	{
+		gp->rightAnalog = ae::Vec2( GetStick( ABS_Z ), -GetStick( ABS_RZ ) );
+		gp->leftTrigger = GetTrigger( ABS_BRAKE );
+		gp->rightTrigger = GetTrigger( ABS_GAS );
+	}
+	if( GetButton( BTN_TL2 ) ) { gp->leftTrigger = 1.0f; }
+	if( GetButton( BTN_TR2 ) ) { gp->rightTrigger = 1.0f; }
+	const int32_t hatX = absInfo[ ABS_HAT0X ].value;
+	const int32_t hatY = absInfo[ ABS_HAT0Y ].value;
+	gp->up = ( HasAxis( ABS_HAT0Y ) && hatY < 0 ) || GetButton( BTN_DPAD_UP );
+	gp->down = ( HasAxis( ABS_HAT0Y ) && hatY > 0 ) || GetButton( BTN_DPAD_DOWN );
+	gp->left = ( HasAxis( ABS_HAT0X ) && hatX < 0 ) || GetButton( BTN_DPAD_LEFT );
+	gp->right = ( HasAxis( ABS_HAT0X ) && hatX > 0 ) || GetButton( BTN_DPAD_RIGHT );
+	gp->start = GetButton( BTN_START );
+	gp->select = GetButton( BTN_SELECT );
+	gp->a = GetButton( BTN_SOUTH );
+	gp->b = GetButton( BTN_EAST );
+	gp->x = GetButton( nintendoSonyLayout ? BTN_WEST : BTN_X );
+	gp->y = GetButton( nintendoSonyLayout ? BTN_NORTH : BTN_Y );
+	gp->leftBumper = GetButton( BTN_TL );
+	gp->rightBumper = GetButton( BTN_TR );
+	gp->leftAnalogClick = GetButton( BTN_THUMBL );
+	gp->rightAnalogClick = GetButton( BTN_THUMBR );
+}
+
+struct _LinuxGamepads
+{
+	void Update( ae::GamepadState* states, uint32_t count, bool enabled )
+	{
+		// Scan for newly connected gamepads periodically
+		const double currentTime = ae::GetTime();
+		if( currentTime >= nextScanTime )
+		{
+			nextScanTime = currentTime + 2.0;
+			Scan();
+		}
+		for( uint32_t i = 0; i < countof( pads ) && i < count; i++ )
+		{
+			pads[ i ].Read();
+			if( enabled && pads[ i ].fd >= 0 )
+			{
+				pads[ i ].GetState( &states[ i ] );
+			}
+		}
+	}
+
+	void Scan()
+	{
+		DIR* dir = opendir( "/dev/input" );
+		if( !dir )
+		{
+			return;
+		}
+		ae::Array< ae::Str256, 64 > paths;
+		while( dirent* entry = readdir( dir ) )
+		{
+			if( !strncmp( entry->d_name, "event", 5 ) && paths.Length() < paths.Capacity() )
+			{
+				paths.Append( ae::Str256::Format( "/dev/input/#", entry->d_name ) );
+			}
+		}
+		closedir( dir );
+		// Connect in device order so player indices are stable
+		std::sort( paths.begin(), paths.end(), []( const ae::Str256& a, const ae::Str256& b )
+		{
+			return a.Length() != b.Length() ? a.Length() < b.Length() : strcmp( a.c_str(), b.c_str() ) < 0;
+		} );
+		for( const ae::Str256& path : paths )
+		{
+			bool alreadyOpen = false;
+			_LinuxGamepad* freePad = nullptr;
+			for( _LinuxGamepad& pad : pads )
+			{
+				alreadyOpen = alreadyOpen || ( pad.fd >= 0 && pad.path == path );
+				freePad = ( !freePad && pad.fd < 0 ) ? &pad : freePad;
+			}
+			if( !alreadyOpen && freePad )
+			{
+				freePad->Open( path.c_str() );
+			}
+		}
+	}
+
+	_LinuxGamepad pads[ 4 ];
+	double nextScanTime = 0.0;
+};
+#endif // _AE_LINUX_
 
 //------------------------------------------------------------------------------
 // ae::Screen functions
@@ -21192,6 +23333,22 @@ ae::Array< ae::Screen, 16 > GetScreens()
 		Screen& s = result.Append( {} );
 		s.position = ae::Int2( 0, 0 );
 		_aeEmscriptenGetCanvasInfo( &s.size.x, &s.size.y, nullptr );
+	}
+#elif _AE_LINUX_
+	if( _Wayland* wl = _Wayland::Get() )
+	{
+		for( const _WaylandOutput& output : wl->outputs )
+		{
+			Screen& s = result.Append( {} );
+			// xdg-output provides the actual layout, which accounts for fractional scaling
+			const bool hasLogical = ( output.logicalSize.x > 0 && output.logicalSize.y > 0 );
+			s.position = hasLogical ? output.logicalPosition : output.position;
+			s.size = hasLogical ? output.logicalSize : ( output.modeSize / output.scale );
+			s.scaleFactor = hasLogical ? ( output.modeSize.x / (float)output.logicalSize.x ) : (float)output.scale;
+			s.isPrimary = ( result.Length() == 1 ); // Wayland has no concept of a primary display
+			const char* connector = output.connector.c_str();
+			s.isExternal = !( !strncmp( connector, "eDP", 3 ) || !strncmp( connector, "LVDS", 4 ) || !strncmp( connector, "DSI", 3 ) );
+		}
 	}
 #endif
 	return result;
@@ -21605,6 +23762,16 @@ void Window::m_Initialize( const char* frameStorageKey )
 		m_scaleFactor = (float)screen.scale;
 	}
 #endif
+#elif _AE_LINUX_
+	// Wayland doesn't allow clients to position their windows or persist
+	// their frames, so m_pos and frameStorageKey are unused.
+	_Wayland* wl = _Wayland::Get();
+	AE_ASSERT_MSG( wl, "Failed to connect to a Wayland compositor" );
+	const bool initialized = wl->InitializeWindow( this );
+	AE_ASSERT_MSG( initialized, "Failed to create Wayland window" );
+	window = wl->surface;
+	m_context = wl->eglContext;
+	SetTitle( program_invocation_short_name );
 #endif
 #if AE_ENABLE_OPENGL
 	m_defaultFramebuffer = _ae_GetCurrentFramebuffer();
@@ -21619,6 +23786,14 @@ void Window::Terminate()
 		ae::Delete( m_backBuffer );
 		m_backBuffer = nullptr;
 	}
+#if _AE_LINUX_
+	if( window )
+	{
+		_Wayland::Get()->TerminateWindow();
+		window = nullptr;
+		m_context = nullptr;
+	}
+#endif
 }
 
 void Window::ActivateContext()
@@ -21649,6 +23824,11 @@ void Window::ActivateContext()
 	{
 		EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
 		AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+	}
+#elif _AE_LINUX_
+	if( window )
+	{
+		_Wayland::Get()->MakeCurrent();
 	}
 #endif
 #endif
@@ -21684,6 +23864,11 @@ void Window::Present()
 		HDC hdc = GetDC( (HWND)window );
 		AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
 		SwapBuffers( hdc );
+	}
+#elif _AE_LINUX_
+	if( window )
+	{
+		_Wayland::Get()->Present();
 	}
 #endif
 #endif
@@ -21760,6 +23945,8 @@ void Window::SetTitle( const char* title )
 		}
 #elif _AE_EMSCRIPTEN_
 		emscripten_set_window_title( title );
+#elif _AE_LINUX_
+		if( window ) { _Wayland::Get()->SetTitle( title ); }
 #endif
 		m_windowTitle = title;
 	}
@@ -21814,6 +24001,25 @@ Window::Mode Window::m_QueryMode() const
 	EmscriptenFullscreenChangeEvent s;
 	emscripten_get_fullscreen_status( &s );
 	return s.isFullscreen ? Mode::Fullscreen : Mode::Windowed;
+#elif _AE_LINUX_
+	if( !window )
+	{
+		return m_mode;
+	}
+	const _Wayland* wl = _Wayland::Get();
+	if( wl->minimizeRequested )
+	{
+		return Mode::Minimized;
+	}
+	if( wl->state.fullscreen )
+	{
+		return Mode::Fullscreen;
+	}
+	if( wl->state.maximized )
+	{
+		return Mode::Maximized;
+	}
+	return Mode::Windowed;
 #else
 	return m_mode;
 #endif
@@ -21956,6 +24162,13 @@ void Window::m_SetMode( ae::Window::Mode mode )
 		if( GetLoggingEnabled() ) { AE_INFO( "exit full screen" ); }
 		emscripten_exit_fullscreen();
 	}
+#elif _AE_LINUX_
+	if( window )
+	{
+		// The compositor applies the change asynchronously, m_mode is updated
+		// by ae::Input::Pump() once the window is reconfigured
+		_Wayland::Get()->SetMode( mode == Mode::Fullscreen, mode == Mode::Maximized, mode == Mode::Minimized );
+	}
 #endif
 	m_SyncMode();
 }
@@ -21971,6 +24184,12 @@ void Window::SetPosition( Int2 pos )
 
 void Window::SetSize( uint32_t width, uint32_t height )
 {
+#if _AE_LINUX_
+	if( window )
+	{
+		_Wayland::Get()->SetSize( ae::Int2( width, height ) );
+	}
+#endif
 //	if( window )
 //	{
 //		SDL_SetWindowSize( (SDL_Window*)window, width, height );
@@ -22107,10 +24326,6 @@ namespace ae {
 //------------------------------------------------------------------------------
 // ae::Input member functions
 //------------------------------------------------------------------------------
-// Three text lines, the convention shared by Windows and browsers. Fixed rather
-// than read from OS settings so a detent produces the same travel everywhere
-const float _kScrollPointsPerNotch = 48.0f;
-
 #if _AE_EMSCRIPTEN_
 EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
@@ -22717,10 +24932,17 @@ void Input::Pump()
 		m_window->m_UpdateSize( width, height, scale );
 		m_window->m_SyncMode();
 	}
+#elif _AE_LINUX_
+	// Keyboard and mouse state is updated by Wayland event listeners
+	if( m_window && m_window->window )
+	{
+		_Wayland::Get()->Pump( this );
+		m_window->m_SyncMode();
+	}
 #endif
 
-#if !_AE_EMSCRIPTEN_
-	// Mouse capture
+#if !_AE_EMSCRIPTEN_ && !_AE_LINUX_
+	// Mouse capture (Wayland uses relative pointer events instead of warping)
 	if( m_captureMouse )
 	{
 		mouse.movement = ae::Vec2( 0.0f );
@@ -23288,6 +25510,12 @@ void Input::Pump()
 			}
 		}
 	}
+#elif _AE_LINUX_
+	{
+		static _LinuxGamepads s_gamepads;
+		const bool gamepadsEnabled = !m_gamepadRequiresFocus || ( m_window && m_window->GetFocused() );
+		s_gamepads.Update( gamepads, countof( gamepads ), gamepadsEnabled );
+	}
 #endif
 	// Additional gamepad state processing shared across platforms
 	for( GamepadState& gp : gamepads )
@@ -23536,6 +25764,11 @@ void Input::m_WarpCursor( ae::Vec2 pos )
 		CGWarpMouseCursorPosition( CGPointMake( posScreen.x, posScreen.y ) );
 		CGAssociateMouseAndMouseCursorPosition( true );
 	}
+#elif _AE_LINUX_
+	if( m_window && m_window->window )
+	{
+		_Wayland::Get()->SetCursorPositionHint( pos );
+	}
 #endif
 }
 
@@ -23570,9 +25803,15 @@ void Input::m_ApplyMouseCapture( bool capture )
 		// Remember original cursor position
 		m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( mouse.position ) : ae::Optional< ae::Vec2 >();
 		m_UpdateCursorHidden();
+#if _AE_LINUX_
+		_Wayland::Get()->SetPointerLocked( true );
+#endif
 		const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
 		m_WarpCursor( localCenter );
 		m_mousePosSet = false;
+#if _AE_LINUX_
+		mouse.position = localCenter; // Stays centered, relative pointer events drive mouse.movement
+#endif
 	}
 	else if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
 	{
@@ -23580,6 +25819,13 @@ void Input::m_ApplyMouseCapture( bool capture )
 		m_WarpCursor( *pos );
 		mouse.position = *pos;
 	}
+#if _AE_LINUX_
+	if( !capture )
+	{
+		// After m_WarpCursor() so the compositor receives the position hint first
+		_Wayland::Get()->SetPointerLocked( false );
+	}
+#endif
 }
 
 void Input::m_UpdateCursorHidden()
@@ -23613,6 +25859,11 @@ void Input::m_UpdateCursorHidden()
 	else
 	{
 		EM_ASM( { document.getElementById('canvas').style.cursor = 'auto'; } );
+	}
+#elif _AE_LINUX_
+	if( m_window && m_window->window )
+	{
+		_Wayland::Get()->SetCursorHidden( hide );
 	}
 #endif
 }
@@ -26108,9 +28359,6 @@ enum _ae_GLProfileEnum
 #		include AE_OPENGL_CUSTOM_HEADER
 #	elif _AE_EMSCRIPTEN_
 #		include <GLES3/gl3.h>
-#	elif _AE_LINUX_
-#		define GL_GLEXT_PROTOTYPES 1
-#		include <GL/glcorearb.h>
 #	elif _AE_IOS_
 #		include <OpenGLES/ES3/gl.h>
 #	elif _AE_APPLE_
@@ -26393,16 +28641,22 @@ enum _ae_GLProfileEnum
 #		undef _AE_GL_FUNC
 #		undef _AE_GL_IMPORT_ATTRIBUTE
 
-#	else
-		// Native macOS/Linux: system GL headers provide all declarations.
-#	endif
+#	elif _AE_LINUX_
 
-#	undef _AE_EACH_GL_FUNC
+		// Internal linkage so these pointers can't interpose on (or be
+		// interposed by) the real GL entry points of runtime loaded libraries
+#		define _AE_GL_FUNC( ret, name, params ) static ret ( *name ) params = nullptr;
+		_AE_EACH_GL_FUNC
+#		undef _AE_GL_FUNC
+
+#	else
+		// Native macOS: system GL headers provide all declarations.
+#	endif
 #endif // AE_ENABLE_OPENGL
 
 #if AE_ENABLE_OPENGL
 
-#	if _AE_EMSCRIPTEN_ || _AE_IOS_ || _AE_WASM_ || _AE_WINDOWS_
+#	if _AE_EMSCRIPTEN_ || _AE_IOS_ || _AE_WASM_ || _AE_WINDOWS_ || _AE_LINUX_
 #		define glClearDepth glClearDepthf
 #	endif
 
@@ -26438,6 +28692,28 @@ uint32_t _ae_GetCurrentFramebuffer()
 	return 0;
 #endif
 }
+
+#if _AE_LINUX_ && AE_ENABLE_OPENGL
+uint32_t _ae_LoadGLFunctions( void* ( *getProcAddress )( const char* ) )
+{
+	uint32_t failCount = 0;
+#	define _AE_GL_FUNC( ret, name, params ) \
+		name = (decltype( name ))getProcAddress( #name ); \
+		if( !name && !_ae_IsOptionalGLFunction( #name ) ) { failCount++; AE_ERROR( "Failed to load OpenGL function '" #name "'" ); }
+	auto _ae_IsOptionalGLFunction = []( const char* name )
+	{
+		return !strcmp( name, "glTextureBarrierNV" ) // Extension
+			|| !strcmp( name, "glTexStorage2D" ) // GL 4.2
+			|| !strcmp( name, "glDebugMessageCallback" ); // GL 4.3
+	};
+	_AE_EACH_GL_FUNC
+#	undef _AE_GL_FUNC
+	return failCount;
+}
+#endif
+#if AE_ENABLE_OPENGL
+#	undef _AE_EACH_GL_FUNC
+#endif
 
 int32_t _GLGetTypeCount( uint32_t glType )
 {
@@ -28805,6 +31081,11 @@ void GraphicsDevice::SetVsyncEnabled( bool enabled )
 {
 #if _AE_WINDOWS_
 	wglSwapIntervalEXT( enabled ? 1 : 0 );
+#elif _AE_LINUX_
+	if( _Wayland* wl = _Wayland::Get() )
+	{
+		wl->vsync = enabled;
+	}
 #endif
 }
 
@@ -28812,6 +31093,11 @@ bool GraphicsDevice::GetVsyncEnabled() const
 {
 #if _AE_WINDOWS_
 	return wglGetSwapIntervalEXT() != 0;
+#elif _AE_LINUX_
+	if( const _Wayland* wl = _Wayland::Get() )
+	{
+		return wl->vsync;
+	}
 #endif
 	return false;
 }
@@ -28928,6 +31214,11 @@ void GraphicsDevice::AddTextureBarrier()
 	// There are less draconian ways in desktop ES, and nothing in WebGL.
 #if _AE_WINDOWS_ || _AE_OSX_
 	glTextureBarrierNV();
+#elif _AE_LINUX_
+	if( glTextureBarrierNV ) // Optional extension
+	{
+		glTextureBarrierNV();
+	}
 #endif
 }
 

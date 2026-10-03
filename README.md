@@ -220,7 +220,7 @@ const char* kFragmentShader = R"(
 )";
 ```
 
-This ~200 line example contains everythings needed for a cross-platform first person exploration game on: Web, MacOS, Windows, and iOS (and more platforms to come!).
+This ~200 line example contains everythings needed for a cross-platform first person exploration game on: Web, MacOS, Windows, Linux, and iOS (and more platforms to come!).
 
 <!-- # Games using aether game utils
 [Bella Lunaux: The Case of the Diamond Panther Tiara](https://johnhues.itch.io/bella-lunaux-tiara)

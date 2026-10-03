@@ -410,7 +410,7 @@ elseif(MINGW)
 	target_link_libraries("22_read_me" PUBLIC comdlg32 gdi32 imm32 ole32 setupapi shell32 user32 version winmm ws2_32 xinput opengl32)
 elseif(EMSCRIPTEN)
 elseif(UNIX)
-	target_link_libraries("22_read_me" PUBLIC GL)
+	target_link_libraries("22_read_me" PUBLIC ${CMAKE_DL_LIBS})
 endif()
 
 if(AE_DESKTOP) # AE_DESKTOP START
@@ -458,6 +458,11 @@ if(APPLE)
 		ARCHIVE_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
 		LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
 		RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+	)
+elseif(UNIX)
+	# Output built HotLoadable library into the data directory next to the executable
+	set_target_properties(HotLoadable PROPERTIES
+		LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:24_hot_load>/data"
 	)
 else()
 	# @TODO

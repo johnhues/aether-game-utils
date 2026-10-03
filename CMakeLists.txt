@@ -88,6 +88,10 @@ if (IOS)
 	endif()
 elseif(EMSCRIPTEN)
 	list(APPEND AE_DEPS_LIBRARIES GL)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+	# Wayland, EGL, and OpenGL are loaded at runtime with dlopen(), so no
+	# development packages are needed to build
+	list(APPEND AE_DEPS_LIBRARIES ${CMAKE_DL_LIBS})
 else()
 	set(OpenGL_GL_PREFERENCE GLVND) # See https://cmake.org/cmake/help/latest/policy/CMP0072.html
 	find_package(OpenGL REQUIRED)

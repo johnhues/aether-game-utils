@@ -31,6 +31,13 @@ cl /std:c++17 -D_UNICODE -DUNICODE main.cpp
 ```
 and run `main.exe`.
 
+## Building and Running on Linux
+Change to the folder and run:
+```
+g++ -std=c++17 main.cpp && ./a.out
+```
+Windowing requires a Wayland compositor (X11 is not supported). No development packages are needed to build: `libwayland-client`, `libwayland-egl`, `libEGL`, and `libxkbcommon` are loaded at runtime, and are installed by default on Wayland desktops.
+
 ## Building and Running with Emscripten
 Also download [index.html](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/index.html) into the folder. Change to the folder, and with `emsdk` activated run:
 ```
