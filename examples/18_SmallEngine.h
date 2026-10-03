@@ -93,7 +93,7 @@ public:
 	ae::Rect GetUIRegion() const;
 	ae::Vec3 cameraPos = ae::Vec3( 10.0f );
 	ae::Vec3 cameraDir = ae::Vec3( -1.0f ).SafeNormalizeCopy();
-	ae::Color skyColor = ae::Color::PicoBlue();
+	ae::Color skyColor = ae::Color::AetherBlue();
 	ae::Matrix4 worldToView = ae::Matrix4::Identity();
 	ae::Matrix4 viewToProj = ae::Matrix4::Identity();
 	ae::Matrix4 worldToProj = ae::Matrix4::Identity();

@@ -260,7 +260,7 @@ void Dialog::Update( SmallEngine* engine )
 			const ae::Vec2 max( uiRegion.GetMax().x, ( uiRegion.GetCenter().y + min.y ) * 0.5f );
 			const ae::Rect textRegion = ae::Rect::FromPoints( min, max );
 			engine->spriteRenderer.AddSprite( 1, textRegion, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Black().SetA( 0.5f ) );
-			engine->spriteRenderer.AddText( 0, text.c_str(), &engine->font, textRegion, fontSize, lineHeight, ae::Color::PicoWhite() );
+			engine->spriteRenderer.AddText( 0, text.c_str(), &engine->font, textRegion, fontSize, lineHeight, ae::Color::AetherWhite() );
 		}
 	}
 }

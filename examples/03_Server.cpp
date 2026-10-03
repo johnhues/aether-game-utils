@@ -105,7 +105,7 @@ int main()
 		}
 
 		render.Activate();
-		render.Clear( listener.GetConnectionCount() ? ae::Color::PicoGreen() : ae::Color::PicoRed() );
+		render.Clear( listener.GetConnectionCount() ? ae::Color::AetherGreen() : ae::Color::AetherRed() );
 		render.Present();
 
 		timeStep.Tick();

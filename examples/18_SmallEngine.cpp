@@ -236,7 +236,7 @@ void SmallEngine::GetUniforms( ae::UniformList* uniformList )
 {
 	uniformList->Set( "u_ambientLight", skyColor.GetLinearRGB() );
 	
-	uniformList->Set( "u_directionalLightColor", ae::Color::PicoPeach().ScaleRGB( 1.0f ).GetLinearRGB() );
+	uniformList->Set( "u_directionalLightColor", ae::Color::AetherYellow().ScaleRGB( 1.0f ).GetLinearRGB() );
 	uniformList->Set( "u_directionalLightDir", ae::Vec3( -7.0f, 5.0f, -3.0f ).NormalizeCopy() );
 	
 	uniformList->Set( "u_pointLightPosition", light.position );

@@ -257,26 +257,64 @@
 //------------------------------------------------------------------------------
 // Macro helpers
 //------------------------------------------------------------------------------
+//! \defgroup MacroHelpers Macro Helpers
+//! \brief Preprocessor helpers for counting, joining, and selecting macro
+//! arguments.
+//! @{
+//------------------------------------------------------------------------------
 //! Returns the number of arguments passed to this macro, up to 10
+//! Usage:
+//! \code
+//! AE_VA_ARGS_COUNT( arg0, ..., argN )
+//! \endcode
 #define AE_VA_ARGS_COUNT(...) AE_EVAL(AE_VA_ARGS_COUNT_IMPL(__VA_ARGS__,10,9,8,7,6,5,4,3,2,1,))
 //! Combines each argument into a single token
+//! Usage:
+//! \code
+//! AE_GLUE( token0, ..., tokenN )
+//! \endcode
 #define AE_GLUE(...) AE_EVAL(AE_GLUE_IMPL(AE_GLUE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__))
 //! Combines each argument into a single token, but arguments are separated by
 //! '::' (double colons).
+//! Usage:
+//! \code
+//! AE_GLUE_TYPE( Namespace0, ..., NameSpaceN, MyType )
+//! \endcode
 #define AE_GLUE_TYPE(...) AE_EVAL(AE_GLUE(AE_GLUE_TYPE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__))
 //! Combines each argument into a single token with an underscore between each
 //! argument. This is useful for creating unique names for variables, functions,
 //! etc. from a list of arguments.
+//! Usage:
+//! \code
+//! AE_GLUE_UNDERSCORE( token0, ..., tokenN )
+//! \endcode
 #define AE_GLUE_UNDERSCORE(...) AE_EVAL(AE_GLUE(AE_GLUE_UNDERSCORE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__))
 //! Converts the given argument to a string. Useful for converting the result of
 //! another macro invocation into a string.
+//! Usage:
+//! \code
+//! AE_STRINGIFY( expression )
+//! \endcode
 #define AE_STRINGIFY(S) AE_STRINGIFY_IMPL(S)
 //! Returns the Nth element of __VA_ARGS__
+//! Usage:
+//! \code
+//! AE_GET_ELEM( N, arg0, ..., argN )
+//! \endcode
 #define AE_GET_ELEM(N, ...) AE_EVAL(AE_GLUE(AE_GET_ELEM_, N)(__VA_ARGS__))
 //! Returns the last argument passed to this macro
+//! Usage:
+//! \code
+//! AE_GET_LAST( arg0, ..., argN )
+//! \endcode
 #define AE_GET_LAST(...) AE_EVAL(AE_GET_ELEM(AE_VA_ARGS_COUNT(__VA_ARGS__), _, __VA_ARGS__ ,,,,,,,,,,,)) // Get last argument - placeholder decrements by one
 //! Returns all of the arguments passed to this macro except the last one
+//! Usage:
+//! \code
+//! AE_DROP_LAST( arg0, ..., argN )
+//! \endcode
 #define AE_DROP_LAST(...) AE_EVAL(AE_GLUE(AE_DROP_LAST_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__))
+//! @} End MacroHelpers defgroup
 
 //------------------------------------------------------------------------------
 // System Headers
@@ -339,6 +377,14 @@ namespace ae {
 //------------------------------------------------------------------------------
 // Platform Utils
 //------------------------------------------------------------------------------
+//! \def AE_BREAK
+//! \ingroup Platform
+//! Halts in an attached debugger, or terminates the process when none is
+//! attached.
+//! Usage:
+//! \code
+//! AE_BREAK();
+//! \endcode
 #ifndef AE_BREAK
 #	if _AE_WINDOWS_
 #		define AE_BREAK() __debugbreak()
@@ -363,6 +409,14 @@ namespace ae {
 	#define aeCompilationWarning( _msg ) _Pragma( "warning #_msg" )
 #endif
 
+//! \def AE_ALIGN
+//! \ingroup Platform
+//! Aligns the following declaration to \p _x bytes. Expands to nothing on
+//! platforms without support.
+//! Usage:
+//! \code
+//! AE_ALIGN( 16 ) float m_values[ 4 ];
+//! \endcode
 #if _AE_LINUX_ || _AE_APPLE_
 	#define AE_ALIGN( _x ) __attribute__ ((aligned(_x)))
 //#elif _AE_WINDOWS_
@@ -372,6 +426,14 @@ namespace ae {
 	#define AE_ALIGN( _x )
 #endif
 
+//! \def AE_PACK
+//! \ingroup Platform
+//! Removes padding between the members of the given struct or class
+//! declaration.
+//! Usage:
+//! \code
+//! AE_PACK( struct MyType { uint8_t flag; uint32_t value; } );
+//! \endcode
 #if _AE_MSVC_
 	#define AE_PACK( ... ) __pragma( pack(push, 1) ) __VA_ARGS__ __pragma( pack(pop))
 #else
@@ -519,7 +581,8 @@ struct _InlineArray< T, 0 >
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
-//! \defgroup Platform
+//! \defgroup Platform Platform
+//! \brief Process, time, clipboard, and debugger utilities.
 //! @{
 //------------------------------------------------------------------------------
 //! Returns the process ID on Windows, OSX, and Linux. Returns 0 with Emscripten builds.
@@ -548,6 +611,8 @@ void SetClipboardText( const char* text );
 std::string GetClipboardText();
 //! @} End Platform defgroup
 
+//! \addtogroup Allocation
+//! @{
 //------------------------------------------------------------------------------
 // Tags @TODO: Remove this! All tags should be user specified
 //------------------------------------------------------------------------------
@@ -561,9 +626,12 @@ using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_FIXME ae::Tag( "aeFixMe" )
 #define AE_ALLOC_TAG_FILE ae::Tag( "aeFile" )
 
+//! @}
+
 //------------------------------------------------------------------------------
-//! \defgroup Allocation
-//! Allocation utilities.
+//! \defgroup Allocation Allocation
+//! \brief Allocation utilities.
+//!
 //! By default aether-game-utils uses system allocations (malloc / free). The
 //! default allocator is thread safe. If this is not okay for your use case,
 //! it's advised that you implement your own ae::Allocator with dlmalloc or
@@ -625,6 +693,8 @@ void* Reallocate( void* data, uint32_t bytes, uint32_t alignment );
 void Free( void* data );
 //! @} End Allocation defgroup
 
+//! \addtogroup Allocation
+//! @{
 //------------------------------------------------------------------------------
 // ae::Scratch< T > class
 //! Can be used for scoped allocations within a single frame. Because this uses
@@ -657,8 +727,11 @@ private:
 	uint32_t m_prevOffsetCheck;
 };
 
+//! @}
+
 //------------------------------------------------------------------------------
-//! \defgroup Math
+//! \defgroup Math Math
+//! \brief Vectors, matrices, quaternions, geometric primitives, and color.
 //! @{
 //------------------------------------------------------------------------------
 constexpr float PI = 3.14159265358979323846f; // @TODO: Remove
@@ -918,7 +991,7 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 	Vec2 Slerp( const Vec2& end, float t, float epsilon = 0.0001f ) const;
 	static Vec2 Reflect( Vec2 v, Vec2 n );
 
-	//! Define conversion functions etc for ae::Vec2. See AE_CONFIG_FILE for more info.
+	// Define conversion functions etc for ae::Vec2. See AE_CONFIG_FILE for more info.
 #ifdef AE_VEC2_CLASS_CONFIG
 	AE_VEC2_CLASS_CONFIG
 #endif
@@ -937,6 +1010,8 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 //------------------------------------------------------------------------------
 // ae::Vec3 struct
 //------------------------------------------------------------------------------
+//! \hideinheritancegraph
+//! \hidecollaborationgraph
 struct alignas( 16 ) Vec3 : public VecT< Vec3 >
 {
 	Vec3() = default; //!< Trivial constructor for performance of vertex arrays etc
@@ -988,11 +1063,17 @@ struct alignas( 16 ) Vec3 : public VecT< Vec3 >
 	//! xyz by w). Use Matrix4::TransformPoint3x4 for affine transforms.
 	static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p );
 
-	//! Define conversion functions etc for ae::Vec3. See AE_CONFIG_FILE for more info.
+	// Define conversion functions etc for ae::Vec3. See AE_CONFIG_FILE for more info.
 #ifdef AE_VEC3_CLASS_CONFIG
 	AE_VEC3_CLASS_CONFIG
 #endif
 	
+#ifdef AE_DOXYGEN
+	float x;
+	float y;
+	float z;
+	float data[ 3 ]; //!< The same storage as \p x, \p y and \p z.
+#else
 	union
 	{
 		struct
@@ -1003,6 +1084,7 @@ struct alignas( 16 ) Vec3 : public VecT< Vec3 >
 		};
 		float data[ 3 ];
 	};
+#endif
 };
 static_assert( sizeof( Vec3 ) == 16, "ae::Vec3 must be 16 bytes" );
 static_assert( alignof( Vec3 ) == 16, "ae::Vec3 must be 16 byte aligned" );
@@ -1034,7 +1116,7 @@ struct AE_ALIGN( 16 ) Vec4 : public VecT< Vec4 >
 	Vec2 GetZW() const;
 	Vec3 GetXYZ() const;
 
-	//! Define conversion functions etc for ae::Vec4. See AE_CONFIG_FILE for more info.
+	// Define conversion functions etc for ae::Vec4. See AE_CONFIG_FILE for more info.
 #ifdef AE_VEC4_CLASS_CONFIG
 	AE_VEC4_CLASS_CONFIG
 #endif
@@ -1143,7 +1225,7 @@ public:
 	bool operator!=( const ae::Matrix4& o ) const { return !operator== ( o ); }
 	bool IsNAN() const;
 
-	//! Define conversion functions etc for ae::Matrix4. See AE_CONFIG_FILE for more info.
+	// Define conversion functions etc for ae::Matrix4. See AE_CONFIG_FILE for more info.
 #ifdef AE_MAT4_CLASS_CONFIG
 	AE_MAT4_CLASS_CONFIG
 #endif
@@ -1229,7 +1311,7 @@ public:
 	//! the \p swingOut component is the rotation around the axis' orthogonal plane.
 	void GetTwistSwing( Vec3 axis, Quaternion* twistOut, Quaternion* swingOut ) const;
 
-	//! Define conversion functions etc for ae::Quaternion. See AE_CONFIG_FILE for more info.
+	// Define conversion functions etc for ae::Quaternion. See AE_CONFIG_FILE for more info.
 #ifdef AE_QUAT_CLASS_CONFIG
 	AE_QUAT_CLASS_CONFIG
 #endif
@@ -1334,6 +1416,13 @@ struct alignas( 16 ) Int3 : public IntT< Int3 >
 static_assert( sizeof( Int3 ) == 16, "ae::Int3 must be 16 bytes" );
 static_assert( alignof( Int3 ) == 16, "ae::Int3 must be 16 byte aligned" );
 
+//! @} End Math defgroup
+
+//------------------------------------------------------------------------------
+//! \defgroup Geometry Geometry
+//! \brief Shapes, the meshes built from them, and the queries that cross them: raycasts, push outs, and surface extraction.
+//! \demo{examples/12_geometry,21/9}
+//! @{
 //------------------------------------------------------------------------------
 // ae::Triangle class
 //------------------------------------------------------------------------------
@@ -1594,9 +1683,21 @@ private:
 
 //! @} End Math defgroup
 
+
 //------------------------------------------------------------------------------
 // ae::Color struct
 //------------------------------------------------------------------------------
+//! \ingroup Graphics
+//! A linear color with an alpha channel, carrying the sixteen slot aether
+//! palette.
+//!
+//! \demo{examples/31_palette_analyzer,16/10}
+//! [examples/31_PaletteAnalyzer.cpp](https://github.com/johnhues/aether-game-utils/blob/main/examples/31_PaletteAnalyzer.cpp)
+//!
+//! \usage
+//! \snippet{lineno} ColorUsage.cpp Palette
+//! \output
+//! \include{lineno} ColorUsage.txt
 struct Color
 {
 	Color() : r( 0.0f ), g( 0.0f ), b( 0.0f ), a( 1.0f ) {} //!< Defaults to black
@@ -1654,52 +1755,41 @@ struct Color
 	static float RGBToSRGB( float x );
 
 	// Grayscale
-	static Color White();
-	static Color Gray();
-	static Color Black();
+	static Color White(); //!< #FFFFFF
+	static Color LightGray(); //!< #C0C0C0
+	static Color Gray(); //!< #808080
+	static Color DarkGray(); //!< #404040
+	static Color Black(); //!< #000000
 	// Rainbow
-	static Color Red();
-	static Color Orange();
-	static Color Yellow();
-	static Color Green();
-	static Color Blue();
-	static Color Indigo();
-	static Color Violet();
+	static Color Red(); //!< #FF0000
+	static Color Orange(); //!< #FF7F00
+	static Color Yellow(); //!< #FFFF00
+	static Color Green(); //!< #00FF00
+	static Color Blue(); //!< #0000FF
+	static Color Indigo(); //!< #4B0082
+	static Color Violet(); //!< #9400D3
 	// CMYK
-	static Color Cyan();
-	static Color Magenta();
-	// aether
-	static Color AetherDarkRed();
-	static Color AetherRed();
-	static Color AetherOrange();
-	static Color AetherYellow();
-	static Color AetherGreen();
-	static Color AetherTeal();
-	static Color AetherBlue();
-	static Color AetherPurple();
-	static Color AetherWhite();
-	static Color AetherGray();
-	static Color AetherDarkGray();
-	static Color AetherBlack();
-	// Pico
-	static Color PicoBlack();
-	static Color PicoDarkBlue();
-	static Color PicoDarkPurple();
-	static Color PicoDarkGreen();
-	static Color PicoBrown();
-	static Color PicoDarkGray();
-	static Color PicoLightGray();
-	static Color PicoWhite();
-	static Color PicoRed();
-	static Color PicoOrange();
-	static Color PicoYellow();
-	static Color PicoGreen();
-	static Color PicoBlue();
-	static Color PicoIndigo();
-	static Color PicoPink();
-	static Color PicoPeach();
+	static Color Cyan(); //!< #00FFFF
+	static Color Magenta(); //!< #FF00FF
+	// aether 16-color palette
+	static Color AetherBlack(); //!< #180712
+	static Color AetherDarkRed(); //!< #581713
+	static Color AetherSkinDark(); //!< #3E2928
+	static Color AetherDarkBlue(); //!< #1D3051
+	static Color AetherDarkPurple(); //!< #61365D
+	static Color AetherDarkGreen(); //!< #495C44
+	static Color AetherSkinMediumDark(); //!< #74513F
+	static Color AetherSkinMedium(); //!< #85654F
+	static Color AetherRed(); //!< #CC353F
+	static Color AetherSkinMediumLight(); //!< #977F73
+	static Color AetherGreen(); //!< #8A9367
+	static Color AetherOrange(); //!< #FF7F44
+	static Color AetherBlue(); //!< #71B1C4
+	static Color AetherSkinLight(); //!< #CAA3A4
+	static Color AetherYellow(); //!< #F3CB71
+	static Color AetherWhite(); //!< #FFF3F5
 
-	//! Define conversion functions etc for ae::Color. See AE_CONFIG_FILE for more info.
+	// Define conversion functions etc for ae::Color. See AE_CONFIG_FILE for more info.
 #ifdef AE_COLOR_CLASS_CONFIG
 	AE_COLOR_CLASS_CONFIG
 #endif
@@ -1731,6 +1821,8 @@ private:
 	#pragma warning(default:26495) // Re-enable uninitialized variable warning
 #endif
 
+//! \addtogroup Platform
+//! @{
 //------------------------------------------------------------------------------
 // ae::TimeStep
 //! A utility for measuring and controlling frame time. Create once at the
@@ -1769,7 +1861,11 @@ private:
 	double m_frameStart = 0.0;
 };
 
-//! \defgroup DataStructures
+//! @}
+
+//! \defgroup DataStructures Data Structures
+//! \brief Fixed capacity and dynamic containers: strings, arrays, maps, lists,
+//! and pools.
 //! @{
 
 //------------------------------------------------------------------------------
@@ -1827,7 +1923,7 @@ public:
 	bool Empty() const;
 	static constexpr uint32_t MaxLength() { return N - 3u; } // Leave room for length var and null terminator
 
-	//! Define conversion functions etc for ae::Str< N >. See AE_CONFIG_FILE for more info.
+	// Define conversion functions etc for ae::Str< N >. See AE_CONFIG_FILE for more info.
 #ifdef AE_STR_CLASS_CONFIG
 	AE_STR_CLASS_CONFIG
 #endif
@@ -1848,11 +1944,17 @@ private:
 	char m_str[ MaxLength() + 1u ];
 };
 // Predefined lengths
+//! An ae::Str with 16 bytes of storage.
 using Str16 = Str< 16 >;
+//! An ae::Str with 32 bytes of storage.
 using Str32 = Str< 32 >;
+//! An ae::Str with 64 bytes of storage.
 using Str64 = Str< 64 >;
+//! An ae::Str with 128 bytes of storage.
 using Str128 = Str< 128 >;
+//! An ae::Str with 256 bytes of storage.
 using Str256 = Str< 256 >;
+//! An ae::Str with 512 bytes of storage.
 using Str512 = Str< 512 >;
 
 //------------------------------------------------------------------------------
@@ -1866,7 +1968,7 @@ struct UUID
 	bool operator==( const UUID& other ) const;
 	bool operator!=( const UUID& other ) const;
 
-	//! Define conversion functions etc for ae::UUID. See AE_CONFIG_FILE for more info.
+	// Define conversion functions etc for ae::UUID. See AE_CONFIG_FILE for more info.
 #ifdef AE_UUID_CLASS_CONFIG
 	AE_UUID_CLASS_CONFIG
 #endif
@@ -1982,6 +2084,14 @@ private:
 //------------------------------------------------------------------------------
 // ae::Array class
 //------------------------------------------------------------------------------
+//! A contiguous array with configurable storage. Storage is statically
+//! allocated within the array when \p N is greater than zero, and dynamically
+//! allocated when \p N is zero, in which case an ae::Tag is required on
+//! construction.
+//! \usage
+//! \snippet{lineno} ArrayUsage.cpp Append
+//! \output
+//! \include{lineno} ArrayUsage.txt
 template< typename T, uint32_t N = 0 >
 class Array
 {
@@ -3190,6 +3300,8 @@ private:
 
 //! @} End DataStructures defgroup
 
+//! \addtogroup Geometry
+//! @{
 //------------------------------------------------------------------------------
 // ae::Rect class
 // @TODO: Move this up near Vec3 etc
@@ -3228,7 +3340,7 @@ public:
 	void operator*=( const Vec2& v );
 	void operator/=( const Vec2& v );
 
-	//! Define conversion functions etc for ae::Rect. See AE_CONFIG_FILE for more info.
+	// Define conversion functions etc for ae::Rect. See AE_CONFIG_FILE for more info.
 #ifdef AE_RECT_CLASS_CONFIG
 	AE_RECT_CLASS_CONFIG
 #endif
@@ -3401,10 +3513,19 @@ template< typename... Args > void PushLogTag( const char* format, Args... args )
 //! Pops the last log prefix set by ae::PushLogTag() on the current thread. Take
 //! care to match every call to ae::PushLogTag() with a call to ae::PopLogTag().
 void PopLogTag();
+//! \ingroup Logging
 //! A helper macro that calls ae::PushLogTag(), and then ae::PopLogTag()
 //! automatically at the end of the current scope.
+//! Usage:
+//! \code
+//! AE_LOG_TAG( tagName );
+//! \endcode
 #define AE_LOG_TAG( _tag ) ae::PushLogTag( #_tag ); ae::RunOnDestroy _ae_logTag_##_tag( []() { ae::PopLogTag(); } )
 
+//! @}
+
+//! \addtogroup Logging
+//! @{
 //------------------------------------------------------------------------------
 // Logging types
 //------------------------------------------------------------------------------
@@ -3419,6 +3540,8 @@ enum class LogSeverity
 };
 typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t line, const char* message );
 
+//! @}
+
 } // ae end
 
 //------------------------------------------------------------------------------
@@ -3426,24 +3549,112 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 //------------------------------------------------------------------------------
 #define _AE_SRCCHK( _v, _d ) ( AE_ENABLE_SOURCE_INFO ? _v : _d ) // Internal usage
 // clang-format off
+
+//! \defgroup Logging Logging
+//! \brief Formatted logging at a severity level, with scoped tags.
+//!
+//! Each '#' in \p format is replaced with the next argument, in order. The
+//! result is submitted to AE_LOG_FUNCTION_CONFIG().
+//! @{
+//------------------------------------------------------------------------------
+//! Logs a message with ae::LogSeverity::Info. Same as AE_INFO().
+//! Usage:
+//! \code
+//! AE_LOG( format, args... );
+//! \endcode
 #define AE_LOG(...) ae::_Log( ae::LogSeverity::Info, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+//! Logs a message with ae::LogSeverity::Trace.
+//! Usage:
+//! \code
+//! AE_TRACE( format, args... );
+//! \endcode
 #define AE_TRACE(...) ae::_Log( ae::LogSeverity::Trace, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+//! Logs a message with ae::LogSeverity::Debug.
+//! Usage:
+//! \code
+//! AE_DEBUG( format, args... );
+//! \endcode
 #define AE_DEBUG(...) ae::_Log( ae::LogSeverity::Debug, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+//! Logs a message with ae::LogSeverity::Info.
+//! Usage:
+//! \code
+//! AE_INFO( format, args... );
+//! \endcode
 #define AE_INFO(...) ae::_Log( ae::LogSeverity::Info, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+//! Logs a message with ae::LogSeverity::Warning.
+//! Usage:
+//! \code
+//! AE_WARN( format, args... );
+//! \endcode
 #define AE_WARN(...) ae::_Log( ae::LogSeverity::Warning, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+//! Logs a message with ae::LogSeverity::Warning. Same as AE_WARN().
+//! Usage:
+//! \code
+//! AE_WARNING( format, args... );
+//! \endcode
 #define AE_WARNING(...) ae::_Log( ae::LogSeverity::Warning, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+//! Logs a message with ae::LogSeverity::Error.
+//! Usage:
+//! \code
+//! AE_ERR( format, args... );
+//! \endcode
 #define AE_ERR(...) ae::_Log( ae::LogSeverity::Error, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+//! Logs a message with ae::LogSeverity::Error. Same as AE_ERR().
+//! Usage:
+//! \code
+//! AE_ERROR( format, args... );
+//! \endcode
 #define AE_ERROR(...) ae::_Log( ae::LogSeverity::Error, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+//! @} End Logging defgroup
 
 //------------------------------------------------------------------------------
 // Assertion functions
 //------------------------------------------------------------------------------
+//! \defgroup Assertions Assertions
+//! \brief Runtime and compile time assertions, with debug only variants.
+//! @{
+//------------------------------------------------------------------------------
+//! \def AE_ASSERT_IMPL
+//! Called with the formatted message after a failed assertion has been logged.
+//! Define before including aether.h to replace the default, which calls
+//! AE_BREAK().
+//! Usage:
+//! \code
+//! #define AE_ASSERT_IMPL( msgStr ) MyFatalHandler( msgStr )
+//! \endcode
 #ifndef AE_ASSERT_IMPL
 #	define AE_ASSERT_IMPL( msgStr ) do { (void)(msgStr); AE_BREAK(); } while(0)
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
+//! Logs a fatal message naming the failed expression and calls
+//! AE_ASSERT_IMPL() when \p _x is false.
+//! Usage:
+//! \code
+//! AE_ASSERT( expression );
+//! \endcode
 #define AE_ASSERT( _x ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
+//! Logs a fatal message naming the failed expression along with the given
+//! format, then calls AE_ASSERT_IMPL() when \p _x is false.
+//! Usage:
+//! \code
+//! AE_ASSERT_MSG( expression, format, args... );
+//! \endcode
 #define AE_ASSERT_MSG( _x, ... ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT_MSG( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
+//! \def AE_DEBUG_ASSERT
+//! AE_ASSERT() in debug builds, and nothing otherwise, so \p _x must have no
+//! side effects the program depends on.
+//! Usage:
+//! \code
+//! AE_DEBUG_ASSERT( expression );
+//! \endcode
+
+//! \def AE_DEBUG_ASSERT_MSG
+//! AE_ASSERT_MSG() in debug builds, and nothing otherwise, so \p _x must have
+//! no side effects the program depends on.
+//! Usage:
+//! \code
+//! AE_DEBUG_ASSERT_MSG( expression, format, args... );
+//! \endcode
 #if _AE_DEBUG_
 	#define AE_DEBUG_ASSERT( _x ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_DEBUG_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
 	#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_DEBUG_ASSERT_MSG( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
@@ -3451,8 +3662,32 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 	#define AE_DEBUG_ASSERT( _x ) do {} while(0)
 	#define AE_DEBUG_ASSERT_MSG( _x, ... ) do {} while(0)
 #endif
+//! Logs a fatal message and calls AE_ASSERT_IMPL() unconditionally.
+//! Usage:
+//! \code
+//! AE_FAIL();
+//! \endcode
 #define AE_FAIL() do { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } while(0)
+//! Logs a fatal message with the given format and calls AE_ASSERT_IMPL()
+//! unconditionally.
+//! Usage:
+//! \code
+//! AE_FAIL_MSG( format, args... );
+//! \endcode
 #define AE_FAIL_MSG( ... ) do { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } while(0)
+//! \def AE_DEBUG_FAIL
+//! AE_FAIL() in debug builds, and nothing otherwise.
+//! Usage:
+//! \code
+//! AE_DEBUG_FAIL();
+//! \endcode
+
+//! \def AE_DEBUG_FAIL_MSG
+//! AE_FAIL_MSG() in debug builds, and nothing otherwise.
+//! Usage:
+//! \code
+//! AE_DEBUG_FAIL_MSG( format, args... );
+//! \endcode
 #if _AE_DEBUG_
 	#define AE_DEBUG_FAIL() do { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } while(0)
 	#define AE_DEBUG_FAIL_MSG( ... ) do { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } while(0)
@@ -3464,18 +3699,41 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 //------------------------------------------------------------------------------
 // Static assertion functions
 //------------------------------------------------------------------------------
+//! Compile time assertion, reporting \p _x as the failure message.
+//! Usage:
+//! \code
+//! AE_STATIC_ASSERT( constantExpression );
+//! \endcode
 #define AE_STATIC_ASSERT( _x ) static_assert( _x, #_x )
+//! Compile time assertion with the given failure message.
+//! Usage:
+//! \code
+//! AE_STATIC_ASSERT_MSG( constantExpression, "message" );
+//! \endcode
 #define AE_STATIC_ASSERT_MSG( _x, _m ) static_assert( _x, _m )
+//! Unconditional compile time failure with the given message.
+//! Usage:
+//! \code
+//! AE_STATIC_FAIL( "message" );
+//! \endcode
 #define AE_STATIC_FAIL( _m ) static_assert( 0, _m )
 
 //------------------------------------------------------------------------------
 // AE_DEBUG_IF
 //------------------------------------------------------------------------------
+//! \def AE_DEBUG_IF
+//! Runs the following statement in debug builds only. Elsewhere the statement
+//! is discarded with 'if constexpr( false )', so it must still compile.
+//! Usage:
+//! \code
+//! AE_DEBUG_IF( expression ) { ... }
+//! \endcode
 #if _AE_DEBUG_
 	#define AE_DEBUG_IF( _expr ) if( _expr )
 #else
 	#define AE_DEBUG_IF( _expr ) if constexpr( false )
 #endif
+//! @} End Assertions defgroup
 // clang-format on
 
 namespace ae {
@@ -3511,6 +3769,8 @@ namespace ae {
 	}
 #endif
 
+//! \addtogroup Platform
+//! @{
 //------------------------------------------------------------------------------
 // ae::HotLoader class
 //------------------------------------------------------------------------------
@@ -3541,6 +3801,10 @@ private:
 	ae::Map< ae::Str64, void*, 16 > m_fns;
 };
 
+//! @}
+
+//! \addtogroup Allocation
+//! @{
 //------------------------------------------------------------------------------
 // ae::RunOnDestroy
 // Usage:
@@ -3564,6 +3828,11 @@ struct RunOnDestroy
 	T m_func;
 };
 
+//! @}
+
+//------------------------------------------------------------------------------
+//! \addtogroup Platform
+//! @{
 //------------------------------------------------------------------------------
 // ae::Screen
 //------------------------------------------------------------------------------
@@ -3581,6 +3850,10 @@ struct Screen
 //! the returned array will be empty.
 ae::Array< ae::Screen, 16 > GetScreens();
 
+//! @}
+
+//! \addtogroup Platform
+//! @{
 //------------------------------------------------------------------------------
 // ae::Application function
 //------------------------------------------------------------------------------
@@ -3625,6 +3898,10 @@ int32_t Application(
 	const AppTerminateFn& terminate
 );
 
+//! @}
+
+//! \addtogroup Platform
+//! @{
 //------------------------------------------------------------------------------
 // ae::Window class
 // @TODO: WindowUnits enum: virtual dpi (OS desktop), Content (actual pixels)
@@ -3738,6 +4015,11 @@ public:
 	class Input* input = nullptr;
 };
 
+//! @}
+
+//------------------------------------------------------------------------------
+//! \addtogroup Platform
+//! @{
 //------------------------------------------------------------------------------
 // ae::Key enum
 //------------------------------------------------------------------------------
@@ -3920,6 +4202,7 @@ struct MouseState
 //------------------------------------------------------------------------------
 // ae::GamepadState struct
 //------------------------------------------------------------------------------
+//! \demo{examples/26_gamepad,1/1}
 // @TODO: Add or replace this with ae::Button/ae::Stick/ae::Trigger like ae::Key
 struct GamepadState // @TODO: Rename Gamepad
 {
@@ -4157,6 +4440,11 @@ public:
 };
 
 /* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
+//! @}
+
+//------------------------------------------------------------------------------
+//! \addtogroup Platform
+//! @{
 //------------------------------------------------------------------------------
 // ae::File class
 //! \brief Used to asynchronously load data from remote sources.
@@ -4386,6 +4674,12 @@ public:
 	static bool IsDirectory( const char* path ); // @todo delete
 };
 
+//! @}
+
+//------------------------------------------------------------------------------
+//! \defgroup Networking Networking
+//! \brief Sockets, replicated objects, and the binary streams they travel as.
+//! @{
 //------------------------------------------------------------------------------
 // ae::Socket class
 //------------------------------------------------------------------------------
@@ -4563,6 +4857,12 @@ private:
 	ae::Array< ae::Socket* > m_connections;
 };
 
+//! @}
+
+//------------------------------------------------------------------------------
+//! \defgroup Graphics Graphics
+//! \brief Devices, shaders, textures, buffers, and the renderers built on them: text, sprites, and debug lines.
+//! @{
 //------------------------------------------------------------------------------
 // @TODO: Graphics globals. Should be parameters to modules that need them.
 //------------------------------------------------------------------------------
@@ -4859,6 +5159,11 @@ private:
 //------------------------------------------------------------------------------
 // ae::InstanceData class
 //------------------------------------------------------------------------------
+//! Per-instance data for instanced rendering with ae::VertexBuffer.
+//! \demo{examples/21_instancing,21/9}
+//! About ~2 million cubes. Scroll to Rotate. Ctrl+Scroll to Zoom. Shift+Scroll
+//! to Pan.
+//------------------------------------------------------------------------------
 class InstanceData
 {
 public:
@@ -5000,6 +5305,9 @@ public:
 //------------------------------------------------------------------------------
 // ae::RenderTarget class
 //------------------------------------------------------------------------------
+//! A render target for offscreen rendering with color and depth attachments.
+//! \demo{examples/20_render_target,21/9}
+//------------------------------------------------------------------------------
 class RenderTarget
 {
 public:
@@ -5065,6 +5373,7 @@ private:
 //! window size (multiplied by the scale factor for maximum resolution). This target is linear and so colors transferred
 //! to it should also be linear. There is no need to to use sRGB at any point in your pipeline unless you have an explicit
 //! need for it yourself.
+//! \demo{examples/18_SmallEngine,21/9}
 //------------------------------------------------------------------------------
 class GraphicsDevice
 {
@@ -5113,6 +5422,9 @@ public:
 
 //------------------------------------------------------------------------------
 // ae::TextRender class
+//------------------------------------------------------------------------------
+//! A text rendering utility class.
+//! \demo{examples/05_text,4/1}
 //------------------------------------------------------------------------------
 class TextRender
 {
@@ -5418,6 +5730,10 @@ private:
 	ae::Vec3 m_up;
 };
 
+//! @}
+
+//! \addtogroup Geometry
+//! @{
 //------------------------------------------------------------------------------
 // ae::Spline class
 //------------------------------------------------------------------------------
@@ -5596,6 +5912,15 @@ struct PushOutInfo
 //------------------------------------------------------------------------------
 // ae::CollisionMesh class
 //------------------------------------------------------------------------------
+//! A triangle mesh with a BVH, answering raycasts and sphere push outs. Static
+//! when \p VertMax, \p TriMax and \p BVHMax are set, dynamic when they are
+//! zero, in which case an ae::Tag is required on construction.
+//!
+//! \demo{examples/22_read_me,32/9}
+//! \usage
+//! \snippet{lineno} 22_ReadMe.cpp Walk
+//! Full source:
+//! [examples/22_ReadMe.cpp](https://github.com/johnhues/aether-game-utils/blob/main/examples/22_ReadMe.cpp)
 template< uint32_t VertMax = 0, uint32_t TriMax = 0, uint32_t BVHMax = 0 >
 class CollisionMesh
 {
@@ -5655,6 +5980,12 @@ private:
 	ae::BVH< BVHTri, BVHMax > m_bvh;
 };
 
+//! @}
+
+//------------------------------------------------------------------------------
+//! \defgroup Algorithm Algorithm
+//! \brief Searches over a graph of nodes.
+//! @{
 //------------------------------------------------------------------------------
 // ae::AStarNode example interface
 //------------------------------------------------------------------------------
@@ -5706,10 +6037,17 @@ struct AStarNode
 //! Returns the number of nodes written to \p pathOut. If the path is longer
 //! than \p pathOutMax, the path is truncated from the end, so only the beginning
 //! of the path is written. If no path is found, 0 is returned.
+//! \demo{examples/25_a_star,4/3}
 //------------------------------------------------------------------------------
 template< typename T >
 uint32_t AStar( const T* startNode, const T* nodes, uint32_t nodeCount, const T** goalNodes, uint32_t goalCount, const T** pathOut, uint32_t pathOutMax );
 
+//! @}
+
+//------------------------------------------------------------------------------
+//! \defgroup Animation Animation
+//! \brief Skeletons, skinning, clips, and inverse kinematics.
+//! @{
 //------------------------------------------------------------------------------
 // ae::Keyframe struct
 //------------------------------------------------------------------------------
@@ -5840,6 +6178,9 @@ struct IKRotationConstraint
 //------------------------------------------------------------------------------
 // ae::IK struct
 //------------------------------------------------------------------------------
+//! A full body FABRIK solver for skeletal animation.
+//! \demo{examples/17_ik,21/9}
+//------------------------------------------------------------------------------
 struct IK
 {
 	IK( ae::Tag tag );
@@ -5933,6 +6274,10 @@ private:
 	ae::Array< Vertex > m_verts;
 };
 
+//! @}
+
+//! \addtogroup Platform
+//! @{
 //------------------------------------------------------------------------------
 // ae::OBJLoader class
 //------------------------------------------------------------------------------
@@ -6005,6 +6350,11 @@ private:
 	ae::Array< uint8_t > m_data;
 };
 
+//! @}
+
+//------------------------------------------------------------------------------
+//! \addtogroup Platform
+//! @{
 //------------------------------------------------------------------------------
 // ae::AudioData class
 //------------------------------------------------------------------------------
@@ -6018,6 +6368,9 @@ public:
 
 //------------------------------------------------------------------------------
 // ae::Audio class
+//------------------------------------------------------------------------------
+//! For playing basic sounds and music.
+//! \demo{examples/08_audio,21/9}
 //------------------------------------------------------------------------------
 class Audio
 {
@@ -6061,6 +6414,10 @@ private:
 
 class BinaryWriter;
 class BinaryReader;
+//! @}
+
+//! \addtogroup Networking
+//! @{
 //------------------------------------------------------------------------------
 // ae::BinaryStream base class
 //------------------------------------------------------------------------------
@@ -6490,6 +6847,10 @@ public:
 	uint32_t GetNetObjectCount() const { return m_netObjects.Length(); }
 };
 
+//! @}
+
+//! \addtogroup Geometry
+//! @{
 //------------------------------------------------------------------------------
 // ae::IsosurfaceExtractor types
 //------------------------------------------------------------------------------
@@ -6680,7 +7041,11 @@ private:
 	ae::Map< Index, Brick > m_brickMap;
 };
 
-//! \defgroup Meta
+//! @}
+
+//! \defgroup Meta Meta
+//! \brief Runtime type registration and reflection for classes, variables, and
+//! enums.
 //! @{
 // clang-format off
 using TypeName = ae::Str64;
@@ -6692,7 +7057,13 @@ class EnumType;
 //------------------------------------------------------------------------------
 // Macros to force module linking
 //------------------------------------------------------------------------------
-//! Call signature: AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
+//! Forces the linker to keep the type registration of a class compiled into a
+//! static library. Call this once in the global scope of a cpp file that is
+//! part of the final binary.
+//! Usage:
+//! \code
+//! AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
+//! \endcode
 #define AE_FORCE_LINK_CLASS( ... ) AE_FORCE_LINK_CLASS_IMPL( __VA_ARGS__ )
 
 #if 0
@@ -6760,9 +7131,16 @@ int main()
 //! Extreme caution must be taken if adding a virtual function to a non-virtual
 //! hierarchy, and is generally discouraged. It may be valuable to have multiple
 //! unrelated AE_BASE_TYPE's, with and without a v-table.
+//! Usage:
+//! \code
+//! AE_BASE_TYPE;
+//! \endcode
 #define AE_BASE_TYPE\
+	/*! Name of the registered type this type inherits from, or an empty string. */\
 	static const char* GetParentTypeName() { return ""; }\
+	/*! The registered type this type inherits from, or null. */\
 	static const ae::ClassType* GetParentType() { return nullptr; }\
+	/*! The ae::TypeId of this instance's most derived registered type. */\
 	ae::TypeId GetTypeId() const { return _metaTypeId; }\
 	ae::TypeId _metaTypeId = ae::kInvalidTypeId;
 
@@ -6781,68 +7159,144 @@ public:
 //! or ae::GetClassType< MyType >(). Call this once in the global scope of any
 //! cpp file. The class (or a type it inherits from, see ae::Inheritor) must use
 //! the AE_BASE_TYPE macro.
+//! Usage:
+//! \code
+//! AE_REGISTER_CLASS( MyType );
+//! \endcode
 #define AE_REGISTER_CLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE(_CLASS), AE_GLUE_TYPE(_CLASS) )
 //! Registers the class variable 'MyType::classVar'
+//! Usage:
+//! \code
+//! AE_REGISTER_CLASS_VAR( MyType, classVar );
+//! \endcode
 #define AE_REGISTER_CLASS_VAR( _CLASS, _V ) AE_REGISTER_NAMESPACECLASS_VAR( (_CLASS), _V )
 //! Registers an instance of an attribute with a class. The attribute type must
 //! be registered with AE_REGISTER_CLASS() before this is called.
+//! Usage:
+//! \code
+//! AE_REGISTER_CLASS_ATTRIBUTE( MyType, MyAttribute, AttributeArgs... );
+//! \endcode
 #define AE_REGISTER_CLASS_ATTRIBUTE( _CLASS, _A, _ARGS ) AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (_CLASS), (_A), _ARGS )
 //! Registers an instance of an attribute with a class variable. The attribute
 //! must be registered with AE_REGISTER_CLASS() before this is called.
+//! Usage:
+//! \code
+//! AE_REGISTER_CLASS_VAR_ATTRIBUTE( MyType, classVar, MyAttribute, AttributeArgs... );
+//! \endcode
 #define AE_REGISTER_CLASS_VAR_ATTRIBUTE( _CLASS, _V, _A, _ARGS ) AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (_CLASS), _V, (_A), _ARGS )
 
 //! Registers a new type that can be retrieved with ae::GetClassTypeByName( "Namespace0::NameSpace1::MyType" )
 //! or ae::GetClassType< Namespace0::NameSpace1::MyType >(). Call this once in
 //! the global scope of any cpp file. The class (or a type it inherits from, see
-//! ae::Inheritor) must use the AE_BASE_TYPE macro. Call signature:
+//! ae::Inheritor) must use the AE_BASE_TYPE macro.
+//! Usage:
+//! \code
 //! AE_REGISTER_NAMESPACECLASS( (Namespace0, ..., NameSpaceN, MyType) );
+//! \endcode
 #define AE_REGISTER_NAMESPACECLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS )
 //! Registers the class variable 'Namespace0::...::NamespaceN::MyType::classVar'
-//! Call signature: AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, ..., NameSpaceN, MyType), classVar );
+//! Usage:
+//! \code
+//! AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, ..., NameSpaceN, MyType), classVar );
+//! \endcode
 #define AE_REGISTER_NAMESPACECLASS_VAR( _CLASS, _V ) AE_REGISTER_CLASS_VAR_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS, _V )
 //! Registers an instance of an attribute with a class. The attribute type must
 //! be registered with AE_REGISTER_NAMESPACECLASS() before this is called.
-//! Call signature: AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Namespace0, ..., NameSpaceN, MyType), (Namespace0, ..., NameSpaceN, MyAttribute), AttributeArgs... );
+//! Usage:
+//! \code
+//! AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Namespace0, ..., NameSpaceN, MyType), (Namespace0, ..., NameSpaceN, MyAttribute), AttributeArgs... );
+//! \endcode
 #define AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( _CLASS, _A, _ARGS ) AE_REGISTER_CLASS_ATTRIBUTE_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS, AE_GLUE_UNDERSCORE _A, AE_GLUE_TYPE _A, _ARGS )
 //! Registers an instance of an attribute with a class variable. The attribute
 //! must be registered with AE_REGISTER_NAMESPACECLASS() before this is called.
-//! Call signature: AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Namespace0, ..., NameSpaceN, MyType), classVar, (Namespace0, ..., NameSpaceN, MyAttribute), AttributeArgs... );
+//! Usage:
+//! \code
+//! AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (Namespace0, ..., NameSpaceN, MyType), classVar, (Namespace0, ..., NameSpaceN, MyAttribute), AttributeArgs... );
+//! \endcode
 #define AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( _CLASS, _V, _A, _ARGS ) AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS, _V, AE_GLUE_UNDERSCORE _A, AE_GLUE_TYPE _A, _ARGS )
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
 //------------------------------------------------------------------------------
 //! Define a new enum (must register with AE_REGISTER_ENUM_CLASS)
+//! Usage:
+//! \code
+//! AE_DEFINE_ENUM_CLASS( MyEnum, uint32_t, Value0, ..., ValueN );
+//! \endcode
 #define AE_DEFINE_ENUM_CLASS( E, T, ... ) AE_DEFINE_ENUM_CLASS_IMPL( E, T, false, ##__VA_ARGS__ )
 //! Define a new bit field enum (must register with AE_REGISTER_ENUM_CLASS)
+//! Usage:
+//! \code
+//! AE_DEFINE_BIT_FIELD_ENUM_CLASS( MyFlags, uint32_t, Value0, ..., ValueN );
+//! \endcode
 #define AE_DEFINE_BIT_FIELD_ENUM_CLASS( E, T, ... ) AE_DEFINE_BIT_FIELD_ENUM_CLASS_IMPL( E, T, ##__VA_ARGS__ )
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
+//! Usage:
+//! \code
+//! AE_REGISTER_ENUM_CLASS( MyEnum );
+//! \endcode
 #define AE_REGISTER_ENUM_CLASS( E ) AE_REGISTER_ENUM_CLASS_IMPL( E )
 
 //------------------------------------------------------------------------------
 // External c-style enum registerer
 //------------------------------------------------------------------------------
 //! Register an already defined c-style enum type
+//! Usage:
+//! \code
+//! AE_REGISTER_ENUM( MyEnum );
+//! \endcode
 #define AE_REGISTER_ENUM( E ) AE_REGISTER_ENUM_IMPL( E )
 //! Register an already defined c-style bit field enum type
+//! Usage:
+//! \code
+//! AE_REGISTER_BIT_FIELD_ENUM( MyFlags );
+//! \endcode
 #define AE_REGISTER_BIT_FIELD_ENUM( E ) AE_REGISTER_BIT_FIELD_ENUM_IMPL( E )
 //! Register an already defined c-style enum type where each value has a prefix
+//! Usage:
+//! \code
+//! AE_REGISTER_ENUM_PREFIX( MyEnum, kMyEnum_ );
+//! \endcode
 #define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) AE_REGISTER_ENUM_PREFIX_IMPL( E, PREFIX )
 //! Register an already defined c-style bit field enum type where each value has a prefix
+//! Usage:
+//! \code
+//! AE_REGISTER_BIT_FIELD_ENUM_PREFIX( MyFlags, kMyFlags_ );
+//! \endcode
 #define AE_REGISTER_BIT_FIELD_ENUM_PREFIX( E, PREFIX ) AE_REGISTER_BIT_FIELD_ENUM_PREFIX_IMPL( E, PREFIX )
 //! Register c-style enum value
+//! Usage:
+//! \code
+//! AE_REGISTER_ENUM_VALUE( MyEnum, Value );
+//! \endcode
 #define AE_REGISTER_ENUM_VALUE( E, V ) ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #V, V );
 //! Register c-style enum value with a manually specified name
+//! Usage:
+//! \code
+//! AE_REGISTER_ENUM_VALUE_NAME( MyEnum, VALUE, Value );
+//! \endcode
 #define AE_REGISTER_ENUM_VALUE_NAME( E, V, N ) ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #N, V );
 
 //------------------------------------------------------------------------------
 // External enum class registerer
 //------------------------------------------------------------------------------
 //! Register an already defined enum class type
+//! Usage:
+//! \code
+//! AE_REGISTER_ENUM_CLASS2( MyEnum );
+//! \endcode
 #define AE_REGISTER_ENUM_CLASS2( E ) AE_REGISTER_ENUM_CLASS2_IMPL( E )
 //! Register an already defined bit field enum class type
+//! Usage:
+//! \code
+//! AE_REGISTER_BIT_FIELD_ENUM_CLASS2( MyFlags );
+//! \endcode
 #define AE_REGISTER_BIT_FIELD_ENUM_CLASS2( E ) AE_REGISTER_BIT_FIELD_ENUM_CLASS2_IMPL( E )
 //! Register enum class value
+//! Usage:
+//! \code
+//! AE_REGISTER_ENUM_CLASS2_VALUE( MyEnum, Value );
+//! \endcode
 #define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##V( #V, E::V ); }
 
 //------------------------------------------------------------------------------
@@ -9449,7 +9903,9 @@ inline void Int3::SetXZ( Int2 xz ) { x = xz.x; z = xz.y; }
 // clang-format off
 // Grayscale
 inline Color Color::White() { static const Color c = Color::SRGB8( 255, 255, 255 ); return c; }
-inline Color Color::Gray() { static const Color c = Color::SRGB8( 127, 127, 127 ); return c; }
+inline Color Color::LightGray() { static const Color c = Color::SRGB8( 192, 192, 192 ); return c; }
+inline Color Color::Gray() { static const Color c = Color::SRGB8( 128, 128, 128 ); return c; }
+inline Color Color::DarkGray() { static const Color c = Color::SRGB8( 64, 64, 64 ); return c; }
 inline Color Color::Black() { static const Color c = Color::SRGB8( 0, 0, 0 ); return c; }
 // Rainbow
 inline Color Color::Red() { static const Color c = Color::SRGB8( 255, 0, 0 ); return c; }
@@ -9459,39 +9915,26 @@ inline Color Color::Green() { static const Color c = Color::SRGB8( 0, 255, 0 ); 
 inline Color Color::Blue() { static const Color c = Color::SRGB8( 0, 0, 255 ); return c; }
 inline Color Color::Indigo() { static const Color c = Color::SRGB8( 75, 0, 130 ); return c; }
 inline Color Color::Violet() { static const Color c = Color::SRGB8( 148, 0, 211 ); return c; }
-// Other
+// CMYK
 inline Color Color::Cyan() { static const Color c = Color( 0.0f, 1.0f, 1.0f ); return c; }
 inline Color Color::Magenta() { static const Color c = Color( 1.0f, 0.0f, 1.0f ); return c; }
 // aether
-inline Color Color::AetherDarkRed() { static const Color c = Color::SRGB8( 175, 65, 90 ); return c; }
-inline Color Color::AetherRed() { static const Color c = Color::SRGB8( 240, 75, 90 ); return c; }
-inline Color Color::AetherOrange() { static const Color c = Color::SRGB8( 255, 150, 60 ); return c; }
-inline Color Color::AetherYellow() { static const Color c = Color::SRGB8( 250, 205, 100 ); return c; }
-inline Color Color::AetherGreen() { static const Color c = Color::SRGB8( 180, 240, 80 ); return c; }
-inline Color Color::AetherTeal() { static const Color c = Color::SRGB8( 90, 195, 185 ); return c; }
-inline Color Color::AetherBlue() { static const Color c = Color::SRGB8( 70, 120, 225 ); return c; }
-inline Color Color::AetherPurple() { static const Color c = Color::SRGB8( 120, 90, 195 ); return c; }
-inline Color Color::AetherWhite() { static const Color c = Color::SRGB8( 235, 230, 215 ); return c; }
-inline Color Color::AetherGray() { static const Color c = Color::SRGB8( 145, 135, 130 ); return c; }
-inline Color Color::AetherDarkGray() { static const Color c = Color::SRGB8( 105, 105, 100 ); return c; }
-inline Color Color::AetherBlack() { static const Color c = Color::SRGB8( 45, 45, 45 ); return c; }
-// Pico
-inline Color Color::PicoBlack() { static const Color c = Color::SRGB8( 0, 0, 0 ); return c; }
-inline Color Color::PicoDarkBlue() { static const Color c = Color::SRGB8( 29, 43, 83 ); return c; }
-inline Color Color::PicoDarkPurple() { static const Color c = Color::SRGB8( 126, 37, 83 ); return c; }
-inline Color Color::PicoDarkGreen() { static const Color c = Color::SRGB8( 0, 135, 81 ); return c; }
-inline Color Color::PicoBrown() { static const Color c = Color::SRGB8( 171, 82, 54 ); return c; }
-inline Color Color::PicoDarkGray() { static const Color c = Color::SRGB8( 95, 87, 79 ); return c; }
-inline Color Color::PicoLightGray() { static const Color c = Color::SRGB8( 194, 195, 199 ); return c; }
-inline Color Color::PicoWhite() { static const Color c = Color::SRGB8( 255, 241, 232 ); return c; }
-inline Color Color::PicoRed() { static const Color c = Color::SRGB8( 255, 0, 77 ); return c; }
-inline Color Color::PicoOrange() { static const Color c = Color::SRGB8( 255, 163, 0 ); return c; }
-inline Color Color::PicoYellow() { static const Color c = Color::SRGB8( 255, 236, 39 ); return c; }
-inline Color Color::PicoGreen() { static const Color c = Color::SRGB8( 0, 228, 54 ); return c; }
-inline Color Color::PicoBlue() { static const Color c = Color::SRGB8( 41, 173, 255 ); return c; }
-inline Color Color::PicoIndigo() { static const Color c = Color::SRGB8( 131, 118, 156 ); return c; }
-inline Color Color::PicoPink() { static const Color c = Color::SRGB8( 255, 119, 168 ); return c; }
-inline Color Color::PicoPeach() { static const Color c = Color::SRGB8( 255, 204, 170 ); return c; }
+inline Color Color::AetherBlack() { static const Color c = Color::SRGB8( 24, 7, 18 ); return c; }
+inline Color Color::AetherDarkRed() { static const Color c = Color::SRGB8( 88, 23, 19 ); return c; }
+inline Color Color::AetherSkinDark() { static const Color c = Color::SRGB8( 62, 41, 40 ); return c; }
+inline Color Color::AetherDarkBlue() { static const Color c = Color::SRGB8( 29, 48, 81 ); return c; }
+inline Color Color::AetherDarkPurple() { static const Color c = Color::SRGB8( 97, 54, 93 ); return c; }
+inline Color Color::AetherDarkGreen() { static const Color c = Color::SRGB8( 73, 92, 68 ); return c; }
+inline Color Color::AetherSkinMediumDark() { static const Color c = Color::SRGB8( 116, 81, 63 ); return c; }
+inline Color Color::AetherSkinMedium() { static const Color c = Color::SRGB8( 133, 101, 79 ); return c; }
+inline Color Color::AetherRed() { static const Color c = Color::SRGB8( 204, 53, 63 ); return c; }
+inline Color Color::AetherSkinMediumLight() { static const Color c = Color::SRGB8( 151, 127, 115 ); return c; }
+inline Color Color::AetherGreen() { static const Color c = Color::SRGB8( 138, 147, 103 ); return c; }
+inline Color Color::AetherOrange() { static const Color c = Color::SRGB8( 255, 127, 68 ); return c; }
+inline Color Color::AetherBlue() { static const Color c = Color::SRGB8( 113, 177, 196 ); return c; }
+inline Color Color::AetherSkinLight() { static const Color c = Color::SRGB8( 202, 163, 164 ); return c; }
+inline Color Color::AetherYellow() { static const Color c = Color::SRGB8( 243, 203, 113 ); return c; }
+inline Color Color::AetherWhite() { static const Color c = Color::SRGB8( 255, 243, 245 ); return c; }
 // clang-format on
 
 //------------------------------------------------------------------------------
@@ -14365,7 +14808,7 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 // Macros to force module linking
 //------------------------------------------------------------------------------
 // clang-format off
-//! Call signature: AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
+//! Usage: AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
 #define AE_FORCE_LINK_CLASS_IMPL(...)\
 	extern int AE_GLUE_UNDERSCORE(_ae_force_link, __VA_ARGS__);\
 	struct AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__) { AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__)() { AE_GLUE_UNDERSCORE(_ae_force_link, __VA_ARGS__) = 1; } };\
@@ -21949,7 +22392,9 @@ void Input::Initialize( Window* window )
 	emscripten_set_touchend_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	emscripten_set_touchmove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	emscripten_set_touchcancel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
-	emscripten_set_wheel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleWheel );
+	// @NOTE: Internal. Window level wheel listeners are passive in Chrome, so
+	// preventDefault() is ignored there and the page scrolls.
+	emscripten_set_wheel_callback( "#canvas", this, true, &_aeEmscriptenHandleWheel );
 	emscripten_set_focus_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_blur_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
@@ -25780,6 +26225,7 @@ enum _ae_GLProfileEnum
 #		define GL_RGB8                             0x8051
 #		define GL_RGBA8                            0x8058
 #		define GL_DEPTH_COMPONENT                  0x1902
+#		define GL_TEXTURE_BINDING_2D               0x8069
 
 		// GL buffers / usage
 #		define GL_STREAM_DRAW                      0x88E0
@@ -27566,6 +28012,9 @@ void Texture2D::Initialize( const TextureParams& params )
 	Texture::Initialize( GL_TEXTURE_2D );
 	m_width = params.width;
 	m_height = params.height;
+	// The caller's texture binding is restored before returning.
+	GLint previousTexture = 0;
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &previousTexture );
 	glBindTexture( GetTarget(), GetTexture() );
 
 #if _AE_IOS_
@@ -27854,7 +28303,8 @@ void Texture2D::Initialize( const TextureParams& params )
 		}
 #endif
 	}
-	
+
+	glBindTexture( GetTarget(), (uint32_t)previousTexture );
 	AE_CHECK_GL_ERROR();
 }
 
@@ -31170,7 +31620,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 						debugLines->AddLine(
 							debugModelToWorld.TransformPoint3x4( ikChild->modelPos ),
 							debugModelToWorld.TransformPoint3x4( ikBone->modelPos ),
-							ae::Color::AetherDarkGray()
+							ae::Color::Gray()
 						);
 					}
 				}
@@ -31328,7 +31778,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					{
 						const ae::Quaternion preRef = ikBones[ poseBone->parent->index ].boneToModelRot * ikBone->bindLocalRot;
 						const float preTwist = GetSignedTwist( preRef, ikBone->boneToModelRot, ikBone->selfBindDir );
-						DebugDrawTwistDelta( ikBone, poseBone->parent->index, preTwist, applied, ae::Color::PicoPink() );
+						DebugDrawTwistDelta( ikBone, poseBone->parent->index, preTwist, applied, ae::Color::AetherSkinLight() );
 					}
 					const ae::Vec3 worldAxis = ikBone->boneToModelRot.Rotate( ikBone->selfBindDir );
 					const ae::Quaternion q = ae::Quaternion( worldAxis, applied );
@@ -31410,7 +31860,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 						const ae::Quaternion hierOri = ikBones[ poseBone->parent->index ].boneToModelRot * ikBone->bindLocalRot;
 						ae::Quaternion refOri = ikBone->boneToModelRot.Rotate( ikBone->selfBindDir ).RotationTo( currentIncoming ) * ikBone->boneToModelRot;
 						const ae::Vec3 desiredChildPos = ikChild->modelPos;
-						const ae::Vec3 clipOffset = ClipJoint( ikChild->length, ikBone->modelPos, refOri, ikChild->parentBindDir, ikChild->basisX, ikChild->basisY, ikChild->modelPos, *constraint, ae::Color::AetherPurple() );
+						const ae::Vec3 clipOffset = ClipJoint( ikChild->length, ikBone->modelPos, refOri, ikChild->parentBindDir, ikChild->basisX, ikChild->basisY, ikChild->modelPos, *constraint, ae::Color::AetherDarkPurple() );
 						ikChild->modelPos += clipOffset;
 						// The swing-limit ellipse is oriented by the parent's
 						// twist, so a clipped direction can be reachable if the
@@ -31454,13 +31904,13 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 									if( debugLines && iterations == iterationCount - 1 )
 									{
 										const float preTwist = GetSignedTwist( hierOri, ikBone->boneToModelRot, twistAxis );
-										DebugDrawTwistDelta( ikBone, poseBone->parent->index, preTwist, applied, ae::Color::PicoBlue() );
+										DebugDrawTwistDelta( ikBone, poseBone->parent->index, preTwist, applied, ae::Color::AetherBlue() );
 									}
 									const ae::Quaternion q = ae::Quaternion( currentIncoming, applied );
 									ikBone->boneToModelRot = q * ikBone->boneToModelRot;
 									refOri = q * refOri;
 									ikChild->modelPos = desiredChildPos;
-									ikChild->modelPos += ClipJoint( ikChild->length, ikBone->modelPos, refOri, ikChild->parentBindDir, ikChild->basisX, ikChild->basisY, ikChild->modelPos, *constraint, ae::Color::AetherPurple() );
+									ikChild->modelPos += ClipJoint( ikChild->length, ikBone->modelPos, refOri, ikChild->parentBindDir, ikChild->basisX, ikChild->basisY, ikChild->modelPos, *constraint, ae::Color::AetherDarkPurple() );
 								}
 							}
 						}
@@ -31486,7 +31936,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					debugLines->AddLine(
 						debugModelToWorld.TransformPoint3x4( ikChild->modelPos ),
 						debugModelToWorld.TransformPoint3x4( ikBone->modelPos ),
-						isFinalIteration ? ae::Color::AetherWhite() : ae::Color::AetherDarkGray()
+						isFinalIteration ? ae::Color::AetherWhite() : ae::Color::Gray()
 					);
 				}
 				forwardIter( forwardIter, ikChild, poseChild );
@@ -31566,7 +32016,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 						const ae::Vec3 center = ( ikBone->modelPos + ikParent->modelPos ) * 0.5f;
 						const float radius = debugJointScale * 0.6f;
 						const float twist = GetSignedTwist( ref, ikBone->boneToModelRot, ikBone->selfBindDir );
-						DebugDrawTwistArc( center, axis, zeroDir, constraint->twistLimits[ 0 ], constraint->twistLimits[ 1 ], radius, ae::Color::AetherDarkGray() );
+						DebugDrawTwistArc( center, axis, zeroDir, constraint->twistLimits[ 0 ], constraint->twistLimits[ 1 ], radius, ae::Color::Gray() );
 						debugLines->AddLine(
 							debugModelToWorld.TransformPoint3x4( center + zeroDir * ( radius * 0.85f ) ),
 							debugModelToWorld.TransformPoint3x4( center + zeroDir * ( radius * 1.15f ) ),

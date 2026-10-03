@@ -65,7 +65,7 @@ public:
   void Render( const ae::Matrix4& worldToNdc )
   {
     render.Activate();
-    render.Clear( ae::Color::PicoBlack() );
+    render.Clear( ae::Color::AetherBlack() );
     
     debugLines.Render( worldToNdc );
     

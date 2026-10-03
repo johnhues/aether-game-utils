@@ -57,11 +57,11 @@ int main( int argc, char* argv[] )
 	{
 		input.Pump();
 		render.Activate();
-		render.Clear( ae::Color::AetherDarkGray() );
+		render.Clear( ae::Color::DarkGray() );
 
 		auto DrawGamepad = [&]( float ox, float oy, const ae::GamepadState* gamepad )
 		{
-			const ae::Color inactiveColor = gamepad->connected ? ae::Color::AetherBlack() : ae::Color::AetherGray();
+			const ae::Color inactiveColor = gamepad->connected ? ae::Color::AetherBlack() : ae::Color::Gray();
 			auto DrawButton = [&]( float x, float y, float radius, bool pressed )
 			{
 				x -= 0.5f;
@@ -73,7 +73,7 @@ int main( int argc, char* argv[] )
 				x -= 0.5f;
 				y = ( 1.0f - y ) - 0.5f;
 				const float r = ae::Min( halfSize.x, halfSize.y ) * 0.4f;
-				const ae::Color color = ( pressed > 0.0f ) ? ae::Color::AetherDarkGray().Lerp( ae::Color::AetherGreen(), pressed ) : inactiveColor;
+				const ae::Color color = ( pressed > 0.0f ) ? ae::Color::DarkGray().Lerp( ae::Color::AetherGreen(), pressed ) : inactiveColor;
 				debug.AddRect( ae::Vec3( x, y, 0.0f ), ae::Vec3( 0, 1, 0 ), ae::Vec3( 0, 0, 1 ), halfSize, r, 8, color );
 			};
 			auto DrawJoystick = [&]( float x, float y, ae::Vec2 dir, bool pressed )
@@ -91,7 +91,7 @@ int main( int argc, char* argv[] )
 				x -= 0.5f;
 				y = ( 1.0f - y ) - 0.5f;
 				const float t = ( ae::GetTime() - (uint32_t)ae::GetTime() );
-				const ae::Color color = gamepad->connected ? ( ae::Color::AetherDarkGray().Lerp( ae::Color::AetherGreen(), ( 1.0f - t ) ) ) : inactiveColor;
+				const ae::Color color = gamepad->connected ? ( ae::Color::DarkGray().Lerp( ae::Color::AetherGreen(), ( 1.0f - t ) ) ) : inactiveColor;
 				debug.AddCircle( ae::Vec3( x, y, 0.0f ), ae::Vec3( 0, 0, 1 ), radius, color, 64 );
 				if( gamepad->connected )
 				{

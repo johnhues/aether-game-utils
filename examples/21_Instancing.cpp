@@ -62,14 +62,14 @@ struct Vertex
 
 Vertex kCubeVerts[] =
 {
-	{ ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::PicoRed().GetLinearRGBA() },
-	{ ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::PicoOrange().GetLinearRGBA() },
-	{ ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::PicoYellow().GetLinearRGBA() },
-	{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
-	{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::PicoGreen().GetLinearRGBA() },
-	{ ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
-	{ ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::PicoPink().GetLinearRGBA() },
-	{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::PicoBlue().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::AetherRed().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::AetherOrange().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherYellow().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherWhite().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherGreen().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherWhite().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherSkinLight().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherBlue().GetLinearRGBA() },
 };
 
 uint16_t kCubeIndices[] =
@@ -108,7 +108,8 @@ int main( int argc, char* argv[] )
 		input.Initialize( &window );
 		timeStep.SetTimeStep( 1.0f / 60.0f );
 
-		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 25.0f ) );
+		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 1.5f ) );
+		camera.SetDistanceLimits( 1.5f, INFINITY );
 
 		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 		shader.SetDepthTest( true );
@@ -150,7 +151,7 @@ int main( int argc, char* argv[] )
 		r1 += timeStep.GetDt() * 0.75f;
 
 		render.Activate();
-		render.Clear( ae::Color::PicoDarkPurple() );
+		render.Clear( ae::Color::AetherDarkPurple() );
 
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), ae::Vec3( 0.0f, 1.0f, 0.0f ) );
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.5f, 1000.0f );

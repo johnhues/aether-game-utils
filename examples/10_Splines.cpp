@@ -156,7 +156,7 @@ int main( int argc, char* argv[] )
     ae::Vec3 rotPos = p + ae::Vec3( cosf(angle), sinf(angle), 0.0f ) * 0.5f;
     transform = ae::Matrix4::Translation( rotPos - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
-    spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoDarkPurple() );
+    spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::AetherDarkPurple() );
     // Closest dot (check)
     spline.GetMinDistance( rotPos, &rotPos, &t1 );
     transform = ae::Matrix4::Translation( spline.GetPoint( t1 ) - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
@@ -165,7 +165,7 @@ int main( int argc, char* argv[] )
     // Closest dot
     transform = ae::Matrix4::Translation( rotPos - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
-    spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoDarkPurple() );
+    spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::AetherDarkPurple() );
 
     ae::UniformList uniforms;
     uniforms.Set( "u_worldToProj", ae::Matrix4::Scaling( ae::Vec3( 0.2f / render.GetAspectRatio(), 0.2f, 1.0f ) ) );

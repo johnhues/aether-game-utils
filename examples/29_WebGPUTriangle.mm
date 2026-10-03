@@ -42,9 +42,9 @@ struct Vertex
 };
 
 static const Vertex kTriangleVerts[] = {
-	{ { -0.5f, -0.4f }, { 1.00f, 0.31f, 0.40f, 1.0f } }, // PicoRed-ish
-	{ {  0.5f, -0.4f }, { 0.10f, 0.69f, 0.30f, 1.0f } }, // PicoGreen-ish
-	{ {  0.0f,  0.5f }, { 0.16f, 0.42f, 0.85f, 1.0f } }, // PicoBlue-ish
+	{ { -0.5f, -0.4f }, { 1.00f, 0.31f, 0.40f, 1.0f } }, // AetherRed-ish
+	{ {  0.5f, -0.4f }, { 0.10f, 0.69f, 0.30f, 1.0f } }, // AetherGreen-ish
+	{ {  0.0f,  0.5f }, { 0.16f, 0.42f, 0.85f, 1.0f } }, // AetherBlue-ish
 };
 
 static const char* kTriangleWgsl = R"(

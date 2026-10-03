@@ -609,7 +609,7 @@ private:
 	ae::DocumentValue* m_docObjects = nullptr;
 
 	// UI configuration
-	ae::Color m_selectionColor = ae::Color::PicoOrange();
+	ae::Color m_selectionColor = ae::Color::AetherOrange();
 	float m_objectHue = 3.7f;
 	float m_objectHueRange = 0.3f;
 	float m_objectSaturation = 0.25f;
@@ -1007,14 +1007,14 @@ void EditorProgram::Initialize()
 	};
 	Vertex kCubeVerts[] =
 	{
-		{ ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
-		{ ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
-		{ ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
-		{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
-		{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
-		{ ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
-		{ ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
-		{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::DarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::DarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::DarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::DarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::DarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::DarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::DarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
+		{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::DarkGray().ScaleRGB( 0.9f + ae::Random01() * 0.1f ).GetLinearRGBA() },
 	};
 	uint16_t kCubeIndices[] =
 	{

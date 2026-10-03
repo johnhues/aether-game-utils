@@ -1,0 +1,395 @@
+/* Safari on iOS inflates text inside wide blocks unless told not to, which
+   pushes a fixed layout past the screen. */
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
+/* ===========================================================================
+   Palette
+   ---------------------------------------------------------------------------
+   The sixteen ae::Color::Aether* slots from aether.h, ordered by ascending
+   lightness. To replace the palette, replace only this block: every rule below
+   refers to these by name and nothing else states a color.
+   examples/31_PaletteAnalyzer.cpp emits this block from its "Copy as CSS"
+   button.
+   =========================================================================== */
+:root {
+	--ae-black:           #180712;
+	--ae-darkred:         #581713;
+	--ae-skindark:        #3E2928;
+	--ae-darkblue:        #1D3051;
+	--ae-darkpurple:      #61365D;
+	--ae-darkgreen:       #495C44;
+	--ae-skinmediumdark:  #74513F;
+	--ae-skinmedium:      #85654F;
+	--ae-red:             #CC353F;
+	--ae-skinmediumlight: #977F73;
+	--ae-green:           #8A9367;
+	--ae-orange:          #FF7F44;
+	--ae-blue:            #71B1C4;
+	--ae-skinlight:       #CAA3A4;
+	--ae-yellow:          #F3CB71;
+	--ae-white:           #FFF3F5;
+}
+
+/* ===========================================================================
+   Roles
+   ---------------------------------------------------------------------------
+   The palette carries a dark register and a bright one. The site draws with
+   the bright row on a dark ground, the one scheme every reader gets. The
+   wiring below reads these by name.
+
+   Ground is the page, panel is every surface raised off it: code blocks,
+   member tables, prototypes. Edge draws borders and row dividers, chrome the
+   furniture on the ground - arrows, icons, the search outline. Brand is the
+   project title, frame the tab bar, accent the links.
+
+   Heading ramp runs outermost to innermost: page title, section heading,
+   member entry. The first two sit on the ground and recede; the third sits on
+   a panel and takes the ink.
+   =========================================================================== */
+html {
+	--ae-ground: var(--ae-black);
+	--ae-ink: var(--ae-white);
+	--ae-panel: var(--ae-skindark);
+	--ae-edge: var(--ae-skinmediumlight);
+	--ae-chrome: color-mix(in oklab, var(--ae-panel) 72%, var(--ae-skinlight));
+	--ae-muted: var(--ae-skinmediumlight);
+
+	--ae-brand: var(--ae-orange);
+	--ae-frame: var(--ae-yellow);
+	--ae-accent: var(--ae-blue);
+	--ae-accent-soft: var(--ae-darkblue);
+	--ae-on-accent: var(--ae-black);
+
+	--ae-heading-1: var(--ae-white);
+	--ae-heading-2: var(--ae-skinlight);
+	--ae-heading-3: var(--ae-ink);
+
+	--ae-keyword: var(--ae-red);
+	--ae-type: var(--ae-blue);
+	--ae-string: var(--ae-yellow);
+	--ae-comment: var(--ae-green);
+	--ae-preprocessor: var(--ae-skinlight);
+}
+
+/* ===========================================================================
+   Wiring
+   ---------------------------------------------------------------------------
+   Roles to the variables doxygen-awesome and doxygen read. Every value here
+   is a role, so this block is written once and holds for both themes. The
+   :root qualifier matches the specificity of doxygen-awesome's own dark block,
+   which sets many of these names; this file loads after it.
+   =========================================================================== */
+html:root {
+	/* Type, one Safari zoom step above doxygen-awesome's own sizes. Scaling
+	   type rather than the page leaves the layout a column the width of the
+	   screen; zoom on the root element does not, iOS Safari keeps the layout
+	   viewport at screen width and the page scrolls sideways. */
+	--page-font-size: 18px;
+	--navigation-font-size: 16.5px;
+	--toc-font-size: 15.4px;
+	--code-font-size: 16px;
+	--title-font-size: 25px;
+	--memtitle-font-size: 21px;
+	--content-line-height: 31px;
+	--table-line-height: 28px;
+
+	/* doxygen-awesome */
+	--primary-color: var(--ae-accent);
+	--primary-dark-color: var(--ae-heading-2);
+	--primary-light-color: var(--ae-accent-soft);
+	--on-primary-color: var(--ae-on-accent);
+	--page-background-color: var(--ae-ground);
+	--page-foreground-color: var(--ae-ink);
+	--page-secondary-foreground-color: var(--ae-muted);
+	--separator-color: var(--ae-chrome);
+	--odd-color: var(--ae-panel);
+	--menu-selected-background: var(--ae-panel);
+	--header-background: var(--ae-ground);
+	--header-foreground: var(--ae-ink);
+	--side-nav-background: var(--ae-panel);
+	--searchbar-foreground: var(--ae-ink);
+	--code-background: var(--ae-panel);
+	--code-foreground: var(--ae-ink);
+	--section-code-background: var(--ae-panel);
+	--section-code-border: var(--ae-edge);
+	--tablehead-background: var(--ae-panel);
+	--tablehead-foreground: var(--ae-heading-2);
+	--blockquote-background: var(--ae-panel);
+	--blockquote-foreground: var(--ae-muted);
+	--fragment-background: var(--ae-panel);
+	--fragment-foreground: var(--ae-ink);
+	--fragment-keyword: var(--ae-keyword);
+	--fragment-keywordtype: var(--ae-type);
+	--fragment-keywordflow: var(--ae-keyword);
+	--fragment-token: var(--ae-string);
+	--fragment-comment: var(--ae-comment);
+	--fragment-link: var(--ae-accent);
+	--fragment-preprocessor: var(--ae-preprocessor);
+	--fragment-linenumber-color: var(--ae-muted);
+	--fragment-linenumber-background: transparent;
+	--fragment-linenumber-border: var(--ae-chrome);
+
+	/* Admonitions: a ground tinted with the hue, the hue itself, then the ink
+	   the text is set in. */
+	--note-color: color-mix(in oklab, var(--ae-blue) 22%, var(--ae-ground));
+	--note-color-dark: var(--ae-blue);
+	--note-color-darker: var(--ae-ink);
+	--warning-color: color-mix(in oklab, var(--ae-yellow) 22%, var(--ae-ground));
+	--warning-color-dark: var(--ae-yellow);
+	--warning-color-darker: var(--ae-ink);
+	--bug-color: color-mix(in oklab, var(--ae-red) 22%, var(--ae-ground));
+	--bug-color-dark: var(--ae-red);
+	--bug-color-darker: var(--ae-ink);
+	--todo-color: color-mix(in oklab, var(--ae-darkpurple) 22%, var(--ae-ground));
+	--todo-color-dark: var(--ae-darkpurple);
+	--todo-color-darker: var(--ae-ink);
+	--invariant-color: color-mix(in oklab, var(--ae-green) 22%, var(--ae-ground));
+	--invariant-color-dark: var(--ae-green);
+	--invariant-color-darker: var(--ae-ink);
+	--deprecated-color: color-mix(in oklab, var(--ae-skinmediumlight) 22%, var(--ae-ground));
+	--deprecated-color-dark: var(--ae-skinmediumlight);
+	--deprecated-color-darker: var(--ae-ink);
+
+	/* doxygen's own, for the parts doxygen-awesome leaves alone */
+	--title-background-color: var(--ae-ground);
+	--title-separator-color: var(--ae-panel);
+	--header-separator-color: var(--ae-chrome);
+	--group-header-color: var(--ae-heading-2);
+	--group-header-separator-color: var(--ae-chrome);
+	--index-header-color: var(--ae-heading-2);
+	--index-separator-color: var(--ae-edge);
+	--index-odd-item-bg-color: var(--ae-ground);
+	--index-even-item-bg-color: var(--ae-ground);
+	--glow-color: var(--ae-accent-soft);
+
+	--nav-background-color: var(--ae-ground);
+	--nav-foreground-color: var(--ae-chrome);
+	--nav-border-color: var(--ae-panel);
+	--nav-text-normal-color: var(--ae-frame);
+	--nav-menu-background-color: var(--ae-ground);
+	--nav-menu-foreground-color: var(--ae-frame);
+	--nav-menu-button-color: var(--ae-frame);
+	--nav-menu-active-bg: var(--ae-panel);
+	--nav-arrow-color: var(--ae-chrome);
+	--nav-arrow-selected-color: var(--ae-heading-2);
+
+	--search-background-color: var(--ae-ground);
+	--search-foreground-color: var(--ae-skinmediumlight);
+	--search-active-color: var(--ae-ink);
+	--search-box-border-color: var(--ae-chrome);
+	--search-filter-background-color: var(--ae-panel);
+	--search-filter-foreground-color: var(--ae-ink);
+	--search-filter-border-color: var(--ae-edge);
+	--search-filter-highlight-text-color: var(--ae-ink);
+	--search-filter-highlight-bg-color: var(--ae-panel);
+	--search-results-background-color: var(--ae-panel);
+	--search-results-foreground-color: var(--ae-ink);
+	--search-results-border-color: var(--ae-edge);
+	--search-close-icon-bg-color: var(--ae-chrome);
+	--search-close-icon-fg-color: var(--ae-ground);
+
+	--memdecl-background-color: var(--ae-panel);
+	--memdecl-foreground-color: var(--ae-muted);
+	--memdecl-border-color: var(--ae-edge);
+	--memdecl-template-color: var(--ae-heading-2);
+	--memdef-border-color: var(--ae-edge);
+	--memdef-title-background-color: var(--ae-panel);
+	--memdef-proto-background-color: var(--ae-panel);
+	--memdef-proto-text-color: var(--ae-ink);
+	--memdef-param-name-color: var(--ae-muted);
+	--memdef-template-color: var(--ae-heading-2);
+
+	--toc-background-color: var(--ae-panel);
+	--toc-border-color: var(--ae-edge);
+	--toc-header-color: var(--ae-heading-2);
+	--table-cell-border-color: var(--ae-edge);
+	--table-header-background-color: var(--ae-panel);
+	--table-header-foreground-color: var(--ae-heading-2);
+
+	--code-keyword-color: var(--ae-keyword);
+	--code-flow-keyword-color: var(--ae-keyword);
+	--code-type-keyword-color: var(--ae-type);
+	--code-string-literal-color: var(--ae-string);
+	--code-char-literal-color: var(--ae-string);
+	--code-comment-color: var(--ae-comment);
+	--code-preprocessor-color: var(--ae-preprocessor);
+}
+
+/* The member list scripts/docs.py moves onto each class page: signatures on
+   the left, first sentences opposite. The signature column is inset to the
+   same place the prototypes below start. */
+table.directory {
+	width: 100%;
+	table-layout: fixed;
+}
+
+table.directory td.entry {
+	width: 55%;
+	padding-left: var(--spacing-medium);
+	white-space: normal;
+	overflow-wrap: break-word;
+}
+
+table.directory td.desc {
+	width: auto;
+	min-width: 0;
+	color: var(--ae-muted);
+}
+
+/* doxygen-awesome bleeds the section rule past the column with a stack of box
+   shadows offset to either side. The page zoom lands those offsets on
+   fractional pixels and leaves a fleck of the rule standing at each edge of
+   the heading, so the rule is drawn as a border instead. */
+h2.groupheader,
+td h2.groupheader {
+	box-shadow: none;
+	border-bottom: 1px solid var(--separator-color);
+}
+
+/* Graphs are drawn at their natural size, wider than the column on any class
+   with a few members. The page stays one column and the graph scrolls inside
+   its own box, the way a code block does. */
+div.dyncontent div.center,
+div.dotgraph,
+div.center {
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+/* The project name leads the navigation as the link to the main page, so the
+   title block above it says nothing the bar does not. */
+#titlearea {
+	display: none;
+}
+
+#main-menu > li > a {
+	color: var(--ae-white);
+	padding: var(--spacing-small) var(--spacing-medium);
+}
+
+#main-menu > li:has( > a ) {
+	margin: 0 var(--spacing-small) 0 0;
+}
+
+/* The project name keeps the title's weight and size, a step down from the
+   heading it replaced. */
+#main-menu > li:first-child > a {
+	font-size: calc( var(--title-font-size) * 0.85 );
+	font-weight: 600;
+}
+
+
+/* Inline code in prose. doxygen-awesome gives it the code block ground, which
+   sets a chip around a word mid sentence. */
+span.tt {
+	background: none;
+}
+
+/* The brief is followed by the full description on the same page, so the jump
+   link is noise. Hidden everywhere it appears, including class lists. */
+a[href$="#details"] {
+	display: none;
+}
+
+/* The group a class belongs to, shown under the page title. Set as a category
+   label rather than a word crowding the heading. */
+div.ingroups {
+	width: auto;
+	margin-top: 0.6em;
+	font-size: 9pt;
+	font-weight: 600;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+}
+
+div.ingroups a:hover {
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+/* The ramp applied: page title, then section headings through
+   --group-header-color, then the member entries inside them. */
+.title {
+	color: var(--ae-heading-1);
+}
+
+.memtitle {
+	color: var(--ae-heading-3);
+}
+
+/* ===========================================================================
+   Live example viewport
+   ---------------------------------------------------------------------------
+   The emscripten build of an example, embedded in the page it documents.
+   doxygen-demo.js fills the frame on play and arms it on click; an unarmed
+   frame ignores the pointer so the page scrolls under the cursor. Press
+   Escape or click the page to hand input back.
+   =========================================================================== */
+.ae-demo {
+	position: relative;
+	display: block;
+	width: 100%;
+	aspect-ratio: 2 / 1;
+	border: 1px solid var(--separator-color);
+	border-radius: var(--border-radius-medium);
+	background: var(--ae-black);
+	overflow: hidden;
+}
+
+.ae-demo iframe {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	pointer-events: none;
+}
+
+.ae-demo.armed {
+	outline: 2px solid var(--primary-color);
+}
+
+/* Dims the example while it is not taking input. */
+.ae-demo::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: var(--ae-black);
+	opacity: 0.5;
+	pointer-events: none;
+}
+
+.ae-demo.armed::after {
+	display: none;
+}
+
+/* A paused example keeps the dim it had before it was armed. */
+.ae-demo.paused::after {
+	display: block;
+}
+
+.ae-demo.armed iframe {
+	pointer-events: auto;
+}
+
+.ae-demo-play {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate( -50%, -50% );
+	z-index: 1;
+	padding: 1.2rem 3.6rem;
+	font-family: var(--font-family);
+	font-size: 3rem;
+	color: var(--ae-white);
+	background: var(--ae-black);
+	border: 1px solid var(--separator-color);
+	border-radius: var(--border-radius-large);
+	cursor: pointer;
+}
+
+.ae-demo.armed .ae-demo-play {
+	display: none;
+}

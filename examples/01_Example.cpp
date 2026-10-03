@@ -49,7 +49,7 @@ int main( int argc, char* argv[] )
 	{
 		input.Pump();
 		graphicsDevice.Activate();
-		graphicsDevice.Clear( ae::Color::AetherDarkGray() );
+		graphicsDevice.Clear( ae::Color::DarkGray() );
 		graphicsDevice.Present();
 		timeStep.Tick();
 		return !input.quit;

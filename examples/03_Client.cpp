@@ -104,7 +104,7 @@ int main( int argc, char* argv[] )
 
 		conn.SendAll();
 		render.Activate();
-		render.Clear( conn.IsConnected() ? ae::Color::PicoGreen() : ae::Color::PicoRed() );
+		render.Clear( conn.IsConnected() ? ae::Color::AetherGreen() : ae::Color::AetherRed() );
 		render.Present();
 		timeStep.Tick();
 

@@ -109,22 +109,22 @@ int main( int argc, char* argv[] )
 
 		// Render
 		render.Activate();
-		ae::Color color = ae::Color::PicoDarkGray();
+		ae::Color color = ae::Color::DarkGray();
 		if( musicPlaying )
 		{
 			ae::Color beatColors[] =
 			{
-				ae::Color::PicoBlue(),
-				ae::Color::PicoRed(),
-				ae::Color::PicoOrange(),
-				ae::Color::PicoDarkPurple()
+				ae::Color::AetherBlue(),
+				ae::Color::AetherRed(),
+				ae::Color::AetherOrange(),
+				ae::Color::AetherDarkPurple()
 			};
 			const uint32_t beat = musicTime / 0.75f;
 			color = beatColors[ beat % countof( beatColors ) ];
 		}
 		float hitOpacity = ae::Min( 1.0f, hitFade / 0.8f );
 		hitOpacity *= hitOpacity;
-		render.Clear( color.Lerp( ae::Color::PicoWhite(), hitOpacity * 0.8f ) );
+		render.Clear( color.Lerp( ae::Color::AetherWhite(), hitOpacity * 0.8f ) );
 		render.Present();
 		timeStep.Tick();
 		return !input.quit;

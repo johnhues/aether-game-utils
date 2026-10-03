@@ -46,7 +46,7 @@ int Run()
 	{
 		input.Pump();
 		graphicsDevice.Activate();
-		graphicsDevice.Clear( ae::Color::PicoDarkPurple() );
+		graphicsDevice.Clear( ae::Color::AetherDarkPurple() );
 		graphicsDevice.Present();
 		timeStep.Tick();
 	}

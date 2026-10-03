@@ -41,9 +41,9 @@ struct Vertex
 };
 
 Vertex kTriangleVerts[] = {
-	{ ae::Vec4( -0.5f, -0.4f, 0.0f, 1.0f ), ae::Color::PicoRed().GetLinearRGBA() },
-	{ ae::Vec4( 0.5f, -0.4f, 0.0f, 1.0f ), ae::Color::PicoGreen().GetLinearRGBA() },
-	{ ae::Vec4( 0.0f, 0.4f, 0.0f, 1.0f ), ae::Color::PicoBlue().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, -0.4f, 0.0f, 1.0f ), ae::Color::AetherRed().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, -0.4f, 0.0f, 1.0f ), ae::Color::AetherGreen().GetLinearRGBA() },
+	{ ae::Vec4( 0.0f, 0.4f, 0.0f, 1.0f ), ae::Color::AetherBlue().GetLinearRGBA() },
 };
 
 uint16_t kTriangleIndices[] = { 0, 1, 2 };
@@ -102,7 +102,7 @@ bool Game::Update()
 	pos += dir * 0.01f;
 
 	render.Activate();
-	render.Clear( ae::Color::PicoDarkPurple() );
+	render.Clear( ae::Color::AetherDarkPurple() );
 
 	ae::Matrix4 transform = ae::Matrix4::Translation( pos );
 	transform *= ae::Matrix4::RotationY( rotation );

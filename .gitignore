@@ -37,6 +37,7 @@
 # Build directories
 build
 build_*
+_site
 __pycache__
 
 # System

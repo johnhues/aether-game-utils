@@ -164,7 +164,7 @@ int main( int argc, char* argv[] )
 		if( UpdateResources() )
 		{
 			render.Activate();
-			render.Clear( ae::Color::PicoDarkPurple() );
+			render.Clear( ae::Color::AetherDarkPurple() );
 			render.Present();
 			timeStep.Tick();
 			return !input.quit;
@@ -177,7 +177,7 @@ int main( int argc, char* argv[] )
 		camera.Update( &input, dt );
 
 		render.Activate();
-		render.Clear( ae::Color::PicoDarkPurple() );
+		render.Clear( ae::Color::AetherDarkPurple() );
 		
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( ae::QUARTER_PI, render.GetAspectRatio(), 0.25f, 100.0f );
@@ -514,38 +514,38 @@ int main( int argc, char* argv[] )
 				debug.AddLine( ae::Vec3( 0.0f ), ae::Vec3( 0.0f, 0.0f, 1.0f ), ae::Color::Blue() );
 				
 				// Plane
-				debug.AddLine( p, pn, ae::Color::PicoPink() );
+				debug.AddLine( p, pn, ae::Color::AetherSkinLight() );
 				
 				// Ray
 				ae::Vec3 rayHit( 0.0f );
 				float distance = 0.0f;
 				float t = 0.0f;
-				debug.AddSphere( raySource, 0.05f, ae::Color::PicoPeach(), 8 );
+				debug.AddSphere( raySource, 0.05f, ae::Color::AetherYellow(), 8 );
 				if( rayTest && plane.Raycast( raySource, ray, &rayHit, &distance ) )
 				{
 					const ae::Vec3 rayDistancePoint = raySource + ray.SafeNormalizeCopy() * distance;
-					debug.AddSphere( rayHit, 0.05f, ae::Color::PicoPeach(), 8 );
-					debug.AddLine( raySource, rayDistancePoint, ae::Color::PicoPeach() );
-					debug.AddCircle( p, plane.GetNormal(), ( p - rayHit ).Length(), ae::Color::PicoPink(), 32 );
+					debug.AddSphere( rayHit, 0.05f, ae::Color::AetherYellow(), 8 );
+					debug.AddLine( raySource, rayDistancePoint, ae::Color::AetherYellow() );
+					debug.AddCircle( p, plane.GetNormal(), ( p - rayHit ).Length(), ae::Color::AetherSkinLight(), 32 );
 					debug.AddLine( rayDistancePoint, raySource + ray, ae::Color::Red() );
 				}
 				else if( !rayTest && plane.IntersectLine( raySource, ray, nullptr, &t ) )
 				{
 					rayHit = raySource + ray * t;
-					debug.AddSphere( rayHit, 0.05f, ae::Color::PicoPeach(), 8 );
-					debug.AddLine( raySource, rayHit, ae::Color::PicoPeach() );
-					debug.AddCircle( p, plane.GetNormal(), ( p - rayHit ).Length(), ae::Color::PicoPink(), 32 );
+					debug.AddSphere( rayHit, 0.05f, ae::Color::AetherYellow(), 8 );
+					debug.AddLine( raySource, rayHit, ae::Color::AetherYellow() );
+					debug.AddCircle( p, plane.GetNormal(), ( p - rayHit ).Length(), ae::Color::AetherSkinLight(), 32 );
 				}
 				else
 				{
-					debug.AddLine( raySource, raySource + ray, ae::Color::PicoPeach() );
+					debug.AddLine( raySource, raySource + ray, ae::Color::AetherYellow() );
 				}
 				ae::Vec3 closest = plane.GetClosestPoint( raySource );
-				debug.AddCircle( p, plane.GetNormal(), ( p - closest ).Length(), ae::Color::PicoPink(), 32 );
-				debug.AddLine( p, closest, ae::Color::PicoPink() );
+				debug.AddCircle( p, plane.GetNormal(), ( p - closest ).Length(), ae::Color::AetherSkinLight(), 32 );
+				debug.AddLine( p, closest, ae::Color::AetherSkinLight() );
 				
 				float sd = plane.GetSignedDistance( raySource );
-				ae::Color sdColor = sd > 0.0f ? ae::Color::PicoGreen() : ae::Color::PicoRed();
+				ae::Color sdColor = sd > 0.0f ? ae::Color::AetherGreen() : ae::Color::AetherRed();
 				debug.AddSphere( closest, 0.05f, sdColor, 8 );
 				debug.AddLine( closest, closest + plane.GetNormal() * sd, sdColor );
 				
@@ -592,9 +592,9 @@ int main( int argc, char* argv[] )
 				p += ae::Vec3( cosf( s_pb ), 0.0f, sinf( s_pb ) );
 				
 				float dist = aabb.GetSignedDistanceFromSurface( p );
-				debug.AddSphere( p, 0.05f, ae::Color::PicoPink(), 8 );
+				debug.AddSphere( p, 0.05f, ae::Color::AetherSkinLight(), 8 );
 				
-				ae::Color nearestColor = ( dist > 0.0f ) ? ae::Color::PicoGreen() : ae::Color::PicoRed();
+				ae::Color nearestColor = ( dist > 0.0f ) ? ae::Color::AetherGreen() : ae::Color::AetherRed();
 				ae::Vec3 surface = aabb.GetClosestPointOnSurface( p );
 				debug.AddSphere( surface, 0.05f, nearestColor, 8 );
 				ae::Vec3 toSurface = ( surface - p ).NormalizeCopy() * ae::Abs( dist );
@@ -605,11 +605,11 @@ int main( int argc, char* argv[] )
 				if( aabb.Raycast( raySource, ray, &rayP, &rayN, &rayDistance ) )
 				{
 					const ae::Vec3 rayDistancePoint = raySource + ray.SafeNormalizeCopy() * rayDistance;
-					debug.AddLine( raySource, rayDistancePoint, ae::Color::PicoBlue() );
+					debug.AddLine( raySource, rayDistancePoint, ae::Color::AetherBlue() );
 					debug.AddLine( rayDistancePoint, raySource + ray, ae::Color::Red() );
 
-					debug.AddSphere( rayP, 0.05f, ae::Color::PicoBlue(), 8 );
-					debug.AddLine( rayP, rayP + rayN, ae::Color::PicoBlue() );
+					debug.AddSphere( rayP, 0.05f, ae::Color::AetherBlue(), 8 );
+					debug.AddLine( rayP, rayP + rayN, ae::Color::AetherBlue() );
 					
 					float t1;
 					ae::Vec3 n1;
@@ -672,9 +672,9 @@ int main( int argc, char* argv[] )
 				p += ae::Vec3( cosf( s_pb ), 0.0f, sinf( s_pb ) );
 				
 				const float dist = obb.GetSignedDistanceFromSurface( p );
-				debug.AddSphere( p, 0.05f, ae::Color::PicoPink(), 8 );
+				debug.AddSphere( p, 0.05f, ae::Color::AetherSkinLight(), 8 );
 				
-				ae::Color nearestColor = ( dist > 0.0f ) ? ae::Color::PicoGreen() : ae::Color::PicoRed();
+				ae::Color nearestColor = ( dist > 0.0f ) ? ae::Color::AetherGreen() : ae::Color::AetherRed();
 				ae::Vec3 surface = obb.GetClosestPointOnSurface( p );
 				debug.AddSphere( surface, 0.05f, nearestColor, 8 );
 				ae::Vec3 toSurface = ( surface - p ).NormalizeCopy() * ae::Abs( dist );
@@ -689,12 +689,12 @@ int main( int argc, char* argv[] )
 					ae::Vec3 to;
 					ae::Color color;
 				} rays[] = {
-					{ ae::Vec3( 10.0f, 0.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::PicoRed() },
-					{ ae::Vec3( 0.0f, 10.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::PicoGreen() },
-					{ ae::Vec3( 0.0f, 0.0f, 10.0f ), ae::Vec3( 0.0f ), ae::Color::PicoBlue() },
-					{ ae::Vec3( -10.0f, 0.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::PicoRed() },
-					{ ae::Vec3( 0.0f, -10.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::PicoGreen() },
-					{ ae::Vec3( 0.0f, 0.0f, -10.0f ), ae::Vec3( 0.0f ), ae::Color::PicoBlue() },
+					{ ae::Vec3( 10.0f, 0.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::AetherRed() },
+					{ ae::Vec3( 0.0f, 10.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::AetherGreen() },
+					{ ae::Vec3( 0.0f, 0.0f, 10.0f ), ae::Vec3( 0.0f ), ae::Color::AetherBlue() },
+					{ ae::Vec3( -10.0f, 0.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::AetherRed() },
+					{ ae::Vec3( 0.0f, -10.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::AetherGreen() },
+					{ ae::Vec3( 0.0f, 0.0f, -10.0f ), ae::Vec3( 0.0f ), ae::Color::AetherBlue() },
 				};
 				for( uint32_t i = 0; i < countof(rays); i++ )
 				{
@@ -706,11 +706,11 @@ int main( int argc, char* argv[] )
 				if( obb.Raycast( raySource, ray, &rayP, &rayN, &rayDistance ) )
 				{
 					const ae::Vec3 rayDistancePoint = raySource + ray.SafeNormalizeCopy() * rayDistance;
-					debug.AddLine( raySource, rayDistancePoint, ae::Color::PicoBlue() );
+					debug.AddLine( raySource, rayDistancePoint, ae::Color::AetherBlue() );
 					debug.AddLine( rayDistancePoint, raySource + ray, ae::Color::Red() );
 					
-					debug.AddSphere( rayP, 0.05f, ae::Color::PicoBlue(), 8 );
-					debug.AddLine( rayP, rayP + rayN, ae::Color::PicoBlue() );
+					debug.AddSphere( rayP, 0.05f, ae::Color::AetherBlue(), 8 );
+					debug.AddLine( rayP, rayP + rayN, ae::Color::AetherBlue() );
 					
 					float t1;
 					ae::Vec3 n1;
@@ -732,7 +732,7 @@ int main( int argc, char* argv[] )
 				infoText.Append( "Rotate Speed: 1-2\n" );
 				infoText.Append( "Lerp: Space\n" );
 
-				debug.AddCircle( ae::Vec3( 0.0f ), camera.GetPosition(), 1.0f, ae::Color::PicoPink(), 32 );
+				debug.AddCircle( ae::Vec3( 0.0f ), camera.GetPosition(), 1.0f, ae::Color::AetherSkinLight(), 32 );
 
 				static float s_setAngle = 0.0f;
 				ae::Vec3 s = camera.GetRight();
@@ -885,12 +885,12 @@ int main( int argc, char* argv[] )
 					ae::Vec3 source;
 					ae::Color color;
 				} rays[] = {
-					{ .source = ae::Vec3( 10.0f, 0.0f, 0.0f ), .color = ae::Color::PicoRed() },
-					{ .source = ae::Vec3( 0.0f, 10.0f, 0.0f ), .color = ae::Color::PicoGreen() },
-					{ .source = ae::Vec3( 0.0f, 0.0f, 10.0f ), .color = ae::Color::PicoBlue() },
-					{ .source = ae::Vec3( -10.0f, 0.0f, 0.0f ), .color = ae::Color::PicoRed() },
-					{ .source = ae::Vec3( 0.0f, -10.0f, 0.0f ), .color = ae::Color::PicoGreen() },
-					{ .source = ae::Vec3( 0.0f, 0.0f, -10.0f ), .color = ae::Color::PicoBlue() },
+					{ .source = ae::Vec3( 10.0f, 0.0f, 0.0f ), .color = ae::Color::AetherRed() },
+					{ .source = ae::Vec3( 0.0f, 10.0f, 0.0f ), .color = ae::Color::AetherGreen() },
+					{ .source = ae::Vec3( 0.0f, 0.0f, 10.0f ), .color = ae::Color::AetherBlue() },
+					{ .source = ae::Vec3( -10.0f, 0.0f, 0.0f ), .color = ae::Color::AetherRed() },
+					{ .source = ae::Vec3( 0.0f, -10.0f, 0.0f ), .color = ae::Color::AetherGreen() },
+					{ .source = ae::Vec3( 0.0f, 0.0f, -10.0f ), .color = ae::Color::AetherBlue() },
 				};
 				for( uint32_t i = 0; i < countof(rays); i++ )
 				{
@@ -899,7 +899,7 @@ int main( int argc, char* argv[] )
 				}
 
 				const ae::RaycastParams params = { .source = raySource, .ray = ray };
-				drawRaycast( params, ae::Color::PicoPink() );
+				drawRaycast( params, ae::Color::AetherSkinLight() );
 				break;
 			}
 			case 11:

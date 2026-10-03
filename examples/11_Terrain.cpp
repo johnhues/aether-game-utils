@@ -527,7 +527,7 @@ int main()
     if( !headless )
     {
       render.Activate();
-      render.Clear( ae::Color::PicoDarkPurple() );
+      render.Clear( ae::Color::AetherDarkPurple() );
 
       ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), ae::Vec3( 0.0f, 0.0f, 1.0f ) );
       ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.525f, render.GetAspectRatio(), 0.5f, 1000.0f );
@@ -662,7 +662,7 @@ int main()
           else
           {
             ae::Vec3 endPos = object->raySrc + object->rayDir * object->rayLength;
-            debug.AddLine( object->raySrc, endPos, ae::Color::PicoDarkGray() );
+            debug.AddLine( object->raySrc, endPos, ae::Color::DarkGray() );
           }
         }
       }

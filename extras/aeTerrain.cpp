@@ -1859,7 +1859,7 @@ void Terrain::Update( ae::Vec3 center, float radius )
       {
         ae::AABB chunkAABB = job->GetChunk()->GetAABB();
         m_params.debug->AddLine( m_center, chunkAABB.GetCenter(), ae::Color::Red() );
-        m_params.debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), ae::Color::PicoRed() );
+        m_params.debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), ae::Color::AetherRed() );
       }
     }
 

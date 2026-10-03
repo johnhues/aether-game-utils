@@ -123,6 +123,7 @@ int main( int argc, char* argv[] )
 			}
 
 			// Physics
+			//! [Walk]
 			player.velocity += dir.TrimCopy( 1.0f ) * dt * 15.0f;
 			player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
 			player.velocity.y -= dt * 20.0f;
@@ -137,6 +138,7 @@ int main( int argc, char* argv[] )
 				player.sphere.center = r.hits[ 0 ].position +  ae::Vec3( 0, player.sphere.radius * 1.1f, 0 );
 				player.velocity.y = ae::Max( 0.0f, player.velocity.y );
 			}
+			//! [Walk]
 
 			// Rendering
 			ae::UniformList uniforms;

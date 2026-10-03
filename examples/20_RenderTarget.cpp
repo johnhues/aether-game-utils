@@ -64,11 +64,11 @@ Vertex kCubeVerts[] =
 	{ ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::AetherRed().GetLinearRGBA() },
 	{ ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::AetherOrange().GetLinearRGBA() },
 	{ ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherYellow().GetLinearRGBA() },
-	{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherTeal().GetLinearRGBA() },
-	{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherPurple().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherBlue().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkPurple().GetLinearRGBA() },
 	{ ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherGreen().GetLinearRGBA() },
 	{ ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkRed().GetLinearRGBA() },
-	{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherBlue().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkBlue().GetLinearRGBA() },
 };
 
 uint16_t kCubeIndices[] =
@@ -86,9 +86,9 @@ uint16_t kCubeIndices[] =
 //------------------------------------------------------------------------------
 Vertex kCursorVerts[] =
 {
-	{ ae::Vec4( 0.0f, 0.0f, 0.0f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
-	{ ae::Vec4( 0.0f, -1.0f, 0.0f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
-	{ ae::Vec4( 1.0f, 0.0f, 0.0f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
+	{ ae::Vec4( 0.0f, 0.0f, 0.0f, 1.0f ), ae::Color::AetherWhite().GetLinearRGBA() },
+	{ ae::Vec4( 0.0f, -1.0f, 0.0f, 1.0f ), ae::Color::AetherWhite().GetLinearRGBA() },
+	{ ae::Vec4( 1.0f, 0.0f, 0.0f, 1.0f ), ae::Color::AetherWhite().GetLinearRGBA() },
 };
 uint16_t kCursorIndices[] =
 {

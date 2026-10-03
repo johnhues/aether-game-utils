@@ -16,6 +16,44 @@ When adding a new user-defined customization point, prefer a clean public
 Do not expose xmacro details directly to users when a clean public macro seam is
 possible.
 
+## Documentation
+`scripts/docs.py` drives doxygen. Run it with no arguments for a menu, or pass a
+task: `preview` (HTML site), `markdown` (regenerates the checked-in `docs/*.md`,
+needs moxygen), `report` (ranks what is still undocumented). Output lands in
+`build_docs/` (gitignored); only `markdown` writes into the repo. `preview`
+switches graphs to graphviz automatically when `dot` is installed, so the
+Doxyfile stays portable for machines without it. Settings live
+in `Doxyfile`, tab names in `DoxygenLayout.xml`, presentation in
+`doxygen-custom.css`; `docs.py` layers per-task overrides on a copy, so none of
+them need editing to preview something.
+
+Every external macro carries a description and a usage block:
+
+```cpp
+//! Registers the class variable 'MyType::classVar'
+//! Usage:
+//! \code
+//! AE_REGISTER_CLASS_VAR( MyType, classVar );
+//! \endcode
+#define AE_REGISTER_CLASS_VAR( _CLASS, _V ) ...
+```
+
+Five doxygen behaviors shape where those comments go:
+- `aether.h` has no `\file` block, so a macro is only documented if it sits
+  inside a `\defgroup` block or carries `\ingroup`. Outside one it produces no
+  output at all.
+- Macros defined inside `#if`/`#ifndef` need a `//! \def NAME` block placed
+  *before* the `#if`. Doxygen preprocesses, so a comment in the branch it does
+  not take is dropped, and a comment directly above `#ifndef` is absorbed into
+  the enclosing group's description instead.
+- `\defgroup Name Title` needs both a title and an explicit `\brief`, or the
+  group's row in the category index is blank. Follow `@{` with a `//---` rule so
+  the next comment block is not absorbed into the group description.
+- A macro that appears inside a declaration, like `AE_ALIGN( 16 ) struct Vec3`,
+  hides the declaration from doxygen unless it is listed in `PREDEFINED`.
+- `QT_AUTOBRIEF` is on, so the first sentence of a `//!` block becomes the brief
+  shown in summary tables. Keep that first sentence self-contained.
+
 ## Compatibility Builds
 `aether.h` ships to desktop, web, and iOS, so changes to it must compile-check
 on all three toolchains before landing; `scripts/coverage_build.sh` runs the full

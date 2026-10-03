@@ -255,7 +255,7 @@ int main( int argc, char* argv[] )
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.25f, 50.0f );
 		ae::Matrix4 worldToProj = viewToProj * worldToView;
 		render.Activate();
-		render.Clear( ae::Color::PicoDarkPurple() );
+		render.Clear( ae::Color::AetherDarkPurple() );
 
 		// Render mesh
 		ae::Matrix4 modelToWorld = ae::Matrix4::Identity();
@@ -263,7 +263,7 @@ int main( int argc, char* argv[] )
 		uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
 		uniformList.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
 		uniformList.Set( "u_lightDir", ae::Vec3( 0.0f, 0.0f, -1.0f ).NormalizeCopy() );
-		uniformList.Set( "u_lightColor", ae::Color::PicoPeach().GetLinearRGB() );
+		uniformList.Set( "u_lightColor", ae::Color::AetherYellow().GetLinearRGB() );
 		uniformList.Set( "u_ambColor", ae::Vec3( 0.8f ) );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 		uniformList.Set( "u_tex", &texture );

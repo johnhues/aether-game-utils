@@ -344,7 +344,7 @@ int main( int argc, char* argv[] )
 			const ae::Skeleton& pose = specimen->runner.SolvedPose();
 			const ae::Matrix4 modelToWorld = ae::Matrix4::Translation( specimen->offset );
 			const bool failed = !specimen->lastReport.pass;
-			const ae::Color boneColor = failed ? ae::Color::AetherRed() : ( ( i == selected ) ? ae::Color::AetherGreen() : ae::Color::PicoBlue() );
+			const ae::Color boneColor = failed ? ae::Color::AetherRed() : ( ( i == selected ) ? ae::Color::AetherGreen() : ae::Color::AetherBlue() );
 			for( uint32_t b = 1; b < pose.GetBoneCount(); b++ )
 			{
 				const ae::Bone* bone = pose.GetBoneByIndex( b );
@@ -364,7 +364,7 @@ int main( int argc, char* argv[] )
 				{
 					const ae::Vec3 p0 = modelToWorld.TransformPoint3x4( pose.GetBoneByIndex( constraint.idx0 )->boneToModel.GetTranslation() );
 					const ae::Vec3 p1 = modelToWorld.TransformPoint3x4( pose.GetBoneByIndex( constraint.idx1 )->boneToModel.GetTranslation() );
-					debugLines.AddLine( p0, p1, ae::Color::PicoOrange().ScaleA( 0.7f ) );
+					debugLines.AddLine( p0, p1, ae::Color::AetherOrange().ScaleA( 0.7f ) );
 				}
 			}
 			// Targets
@@ -388,12 +388,12 @@ int main( int argc, char* argv[] )
 		for( float g = -2.0f; g <= 2.0f + galleryRows * kGallerySpacing; g += 0.5f )
 		{
 			const float xMax = 2.0f + ( kGalleryColumns - 1 ) * kGallerySpacing;
-			gridLines.AddLine( ae::Vec3( -2.0f, -g, 0.0f ), ae::Vec3( xMax, -g, 0.0f ), ae::Color::PicoDarkGray() );
+			gridLines.AddLine( ae::Vec3( -2.0f, -g, 0.0f ), ae::Vec3( xMax, -g, 0.0f ), ae::Color::DarkGray() );
 		}
 		for( float g = -2.0f; g <= 2.0f + ( kGalleryColumns - 1 ) * kGallerySpacing; g += 0.5f )
 		{
 			const float yMin = -( 2.0f + galleryRows * kGallerySpacing );
-			gridLines.AddLine( ae::Vec3( g, yMin, 0.0f ), ae::Vec3( g, 2.0f, 0.0f ), ae::Color::PicoDarkGray() );
+			gridLines.AddLine( ae::Vec3( g, yMin, 0.0f ), ae::Vec3( g, 2.0f, 0.0f ), ae::Color::DarkGray() );
 		}
 
 		if( viewportTarget.GetWidth() )
@@ -402,7 +402,7 @@ int main( int argc, char* argv[] )
 			const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, viewportTarget.GetAspectRatio(), camera.GetMinDistance() * 0.5f, 100.0f );
 			const ae::Matrix4 worldToProj = viewToProj * worldToView;
 			viewportTarget.Activate();
-			viewportTarget.Clear( window.GetFocused() ? ae::Color::AetherBlack() : ae::Color::PicoBlack() );
+			viewportTarget.Clear( window.GetFocused() ? ae::Color::AetherBlack() : ae::Color::Black() );
 			debugLines.Render( worldToProj );
 			gridLines.Render( worldToProj );
 		}

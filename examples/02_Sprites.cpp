@@ -97,7 +97,7 @@ int main( int argc, char* argv[] )
 	{
 		input.Pump();
 		render.Activate();
-		render.Clear( ae::Color::PicoDarkPurple() );
+		render.Clear( ae::Color::AetherDarkPurple() );
 		spriteRenderer.Clear();
 
 		if( file && file->GetStatus() != ae::File::Status::Pending )
@@ -117,16 +117,16 @@ int main( int argc, char* argv[] )
 			// Red
 			ae::Matrix4 localToWorld = ae::Matrix4::Translation( ae::Vec3( -0.5f, -0.5f, 0.5f ) );
 			localToWorld *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
-			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoRed() );
+			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::AetherRed() );
 
 			// Green
 			localToWorld = ae::Matrix4::Scaling(  ae::Vec3( 1.0f, 1.0f, 0.5f ) );
-			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoGreen() );
+			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::AetherGreen() );
 
 			// Blue
 			localToWorld = ae::Matrix4::Translation( ae::Vec3( 0.5f, 0.5f, -0.5f ) );
 			localToWorld *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
-			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoBlue() );
+			spriteRenderer.AddSprite( 0, localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::AetherBlue() );
 
 			ae::UniformList uniforms;
 			uniforms.Set( "u_worldToProj", ae::Matrix4::Scaling( ae::Vec3( 0.5f / render.GetAspectRatio(), 0.5f, 1.0f ) ) );

@@ -1,5 +1,7 @@
 name: Emscripten
-on: [push]
+on:
+  push:
+  workflow_dispatch:
 jobs:
   build-and-test:
       runs-on: ubuntu-latest
@@ -18,3 +20,48 @@ jobs:
         run: . /opt/emsdk/emsdk_env.sh && emmake make -C build_ci all -j$(nproc)
       - name: Test
         run: node build_ci/test/test.js
+      - name: Collect Examples
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-examples
+          path: build_ci/examples/Release
+          retention-days: 1
+
+  publish-docs:
+      if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+      needs: build-and-test
+      runs-on: ubuntu-latest
+      permissions:
+        pages: write
+        id-token: write
+      environment:
+        name: github-pages
+        url: ${{ steps.deploy.outputs.page_url }}
+      steps:
+      - uses: actions/checkout@v4
+      - name: Install Doxygen
+        # Pinned: the site's post processing reads doxygen's markup, so the
+        # version is part of the build, not whatever the runner ships.
+        run: |
+          curl -sSL "https://www.doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz" | tar xz
+          echo "$PWD/doxygen-${DOXYGEN_VERSION}/bin" >> $GITHUB_PATH
+        env:
+          DOXYGEN_VERSION: 1.18.0
+      - name: Fetch Examples
+        uses: actions/download-artifact@v4
+        with:
+          name: web-examples
+          path: web-examples
+      - name: Build Site
+        run: python3 scripts/docs.py publish --yes --config-dir web-examples --out _site
+      - name: Check Site
+        run: |
+          test -f _site/index.html
+          test -d _site/examples
+          echo "pages: $(ls _site/*.html | wc -l), examples: $(ls _site/examples | wc -l)"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@v4

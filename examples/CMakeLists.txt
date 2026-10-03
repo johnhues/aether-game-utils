@@ -513,6 +513,18 @@ ae_add_bundle("IK Gallery"
 	LIBS "ae;ae_extras;imgui"
 )
 
+# Palette Analyzer
+ae_add_bundle("Palette Analyzer"
+	TARGET_NAME "31_palette_analyzer"
+	BUNDLE_ID "io.aether.PaletteAnalyzer"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "31_PaletteAnalyzer.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES}"
+	LIBS "ae;ae_extras;ae_loaders;imgui"
+)
+
 if(EMSCRIPTEN)
 	ae_add_bundle("WebGPU Async"
 		TARGET_NAME "28_webgpu_async"

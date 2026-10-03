@@ -589,8 +589,8 @@ int main()
 				const ae::Bone* parent = bone->parent;
 				if( parent )
 				{
-					debugLines.AddLine( parent->boneToModel.GetTranslation(), bone->boneToModel.GetTranslation(), ae::Color::PicoBlue() );
-					debugLines.AddOBB( bone->boneToModel * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
+					debugLines.AddLine( parent->boneToModel.GetTranslation(), bone->boneToModel.GetTranslation(), ae::Color::AetherBlue() );
+					debugLines.AddOBB( bone->boneToModel * ae::Matrix4::Scaling( 0.05f ), ae::Color::AetherBlue() );
 				}
 			}
 
@@ -613,13 +613,13 @@ int main()
 			testBasisY,
 			testJoint1.GetTranslation(),
 			testRotationConstraints,
-			ae::Color::PicoBlue()
+			ae::Color::AetherBlue()
 		);
 
 		// Joint limits
-		debugLines.AddOBB( testJoint0, ae::Color::PicoBlue() );
-		debugLines.AddOBB( testJoint1, ae::Color::PicoBlue() );
-		debugLines.AddLine( testJoint0.GetTranslation(), testJointClipped, ae::Color::PicoBlue() );
+		debugLines.AddOBB( testJoint0, ae::Color::AetherBlue() );
+		debugLines.AddOBB( testJoint1, ae::Color::AetherBlue() );
+		debugLines.AddLine( testJoint0.GetTranslation(), testJointClipped, ae::Color::AetherBlue() );
 
 		// Add grid
 		gridLines.AddLine( ae::Vec3( -2, 0, 0 ), ae::Vec3( 2, 0, 0 ), ae::Color::Red() );
@@ -627,8 +627,8 @@ int main()
 		for( float i = -2; i <= 2.00001f; i += 0.5f )
 		{
 			if( ae::Abs( i ) < 0.0001f ) { continue; }
-			gridLines.AddLine( ae::Vec3( i, -2, 0 ), ae::Vec3( i, 2, 0 ), ae::Color::PicoLightGray() );
-			gridLines.AddLine( ae::Vec3( -2, i, 0 ), ae::Vec3( 2, i, 0 ), ae::Color::PicoLightGray() );
+			gridLines.AddLine( ae::Vec3( i, -2, 0 ), ae::Vec3( i, 2, 0 ), ae::Color::LightGray() );
+			gridLines.AddLine( ae::Vec3( -2, i, 0 ), ae::Vec3( 2, i, 0 ), ae::Color::LightGray() );
 		}
 
 		// Start frame
@@ -660,7 +660,7 @@ int main()
 			// 	if( parent )
 			// 	{
 			// 		const ae::Vec3 pos = bone->transform.GetTranslation();
-			// 		const ae::Color color = ( ae::Line( rayOrigin, rayOrigin + rayDir ).GetDistance( pos ) < 0.3f ) ? ae::Color::PicoRed() : ae::Color::PicoBlue();
+			// 		const ae::Color color = ( ae::Line( rayOrigin, rayOrigin + rayDir ).GetDistance( pos ) < 0.3f ) ? ae::Color::AetherRed() : ae::Color::AetherBlue();
 			// 		debugLines.AddCircle( pos, -rayDir, 0.1f, color, 16 );
 			// 	}
 			// }
@@ -698,7 +698,7 @@ int main()
 		}
 		
 		render.Activate();
-		render.Clear( window.GetFocused() ? ae::Color::AetherBlack() : ae::Color::PicoBlack() );
+		render.Clear( window.GetFocused() ? ae::Color::AetherBlack() : ae::Color::Black() );
 		
 		// Render mesh
 		if( drawMesh )
@@ -708,7 +708,7 @@ int main()
 			uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
 			uniformList.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
 			uniformList.Set( "u_lightDir", ae::Vec3( 0.0f, -1.0f, 0.0f ).NormalizeCopy() );
-			uniformList.Set( "u_lightColor", ae::Color::PicoPeach().GetLinearRGB() );
+			uniformList.Set( "u_lightColor", ae::Color::AetherYellow().GetLinearRGB() );
 			uniformList.Set( "u_ambColor", ae::Vec3( 0.8f ) );
 			uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 			uniformList.Set( "u_tex", &texture );

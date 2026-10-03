@@ -132,7 +132,7 @@ int main( int argc, char* argv[] )
 		spinVelocity = input.Get( ae::Key::Space ) ? ( spinVelocity + timeStep.GetDt() ) : ae::Max( 0.0f, spinVelocity - timeStep.GetDt() * 2.0f );
 		spin += timeStep.GetDt() * spinVelocity;
 		render.Activate();
-		render.Clear( ae::Color::PicoDarkPurple() );
+		render.Clear( ae::Color::AetherDarkPurple() );
 		
 		ae::UniformList uniformList;
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
@@ -185,24 +185,24 @@ int main( int argc, char* argv[] )
 			ae::Matrix4 modelToWorld = ae::Matrix4::RotationY( spin ) * ae::Matrix4::Scaling( 1.0f / aabb.GetHalfSize().Length() );
 			uniformList.Set( "u_worldToProj", viewToProj * worldToView * modelToWorld );
 			uniformList.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
-			uniformList.Set( "u_lightColor", ae::Color::White().Lerp( ae::Color::PicoPeach(), 0.75f ).GetLinearRGB() );
+			uniformList.Set( "u_lightColor", ae::Color::White().Lerp( ae::Color::AetherYellow(), 0.75f ).GetLinearRGB() );
 			uniformList.Set( "u_lightDir", ae::Vec3( 7.0f, -3.0f, -5.0f ).NormalizeCopy() );
-			uniformList.Set( "u_ambLight", ae::Color::PicoDarkPurple().ScaleRGB( 0.5f ).GetLinearRGB() );
+			uniformList.Set( "u_ambLight", ae::Color::AetherDarkPurple().ScaleRGB( 0.5f ).GetLinearRGB() );
 			uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 			vertexData.Bind( &shader, uniformList );
 			vertexData.Draw();
 			// Shadow
 			ae::Matrix4 flat = ae::Matrix4::Scaling( ae::Vec3( 1.0f, 0.0f, 1.0f ) );
 			uniformList.Set( "u_worldToProj", viewToProj * worldToView * flat * modelToWorld );
-			uniformList.Set( "u_color", ae::Color::PicoDarkPurple().ScaleRGB( 0.6f ).GetLinearRGBA() );
+			uniformList.Set( "u_color", ae::Color::AetherDarkPurple().ScaleRGB( 0.6f ).GetLinearRGBA() );
 			vertexData.Bind( &shadowShader, uniformList );
 			vertexData.Draw();
 			// Debug
-			debugLines.AddOBB( modelToWorld * aabb.GetTransform(), ae::Color::PicoPink() );
+			debugLines.AddOBB( modelToWorld * aabb.GetTransform(), ae::Color::AetherSkinLight() );
 		}
-		debugLines.AddLine( ae::Vec3( 10.0f, 0.0f, 0.0f ), ae::Vec3( -10.0f, 0.0f, 0.0f ), ae::Color::PicoRed() );
-		debugLines.AddLine( ae::Vec3( 0.0f, 10.0f, 0.0f ), ae::Vec3( 0.0f, 0.0f, 0.0f ), ae::Color::PicoGreen() );
-		debugLines.AddLine( ae::Vec3( 0.0f, 0.0f, 10.0f ), ae::Vec3( 0.0f, 0.0f, -10.0f ), ae::Color::PicoBlue() );
+		debugLines.AddLine( ae::Vec3( 10.0f, 0.0f, 0.0f ), ae::Vec3( -10.0f, 0.0f, 0.0f ), ae::Color::AetherRed() );
+		debugLines.AddLine( ae::Vec3( 0.0f, 10.0f, 0.0f ), ae::Vec3( 0.0f, 0.0f, 0.0f ), ae::Color::AetherGreen() );
+		debugLines.AddLine( ae::Vec3( 0.0f, 0.0f, 10.0f ), ae::Vec3( 0.0f, 0.0f, -10.0f ), ae::Color::AetherBlue() );
 		debugLines.Render( viewToProj * worldToView );
 		
 		render.Present();

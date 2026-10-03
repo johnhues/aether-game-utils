@@ -248,7 +248,7 @@ int main( int argc, char* argv[] )
 	bool dualContouringEnabled = false;
 	double executionTime = 0.0;
 	uint32_t executionCount = 0;
-	const ae::Color color = ae::Color::AetherTeal();
+	const ae::Color color = ae::Color::AetherBlue();
 	ae::Vec3 translation;
 	ae::Vec3 rotation;
 	ae::Vec3 scale;
@@ -496,7 +496,7 @@ int main( int argc, char* argv[] )
 		
 		ae::UniformList uniforms;
 		uniforms.Set( "u_worldToProj", worldToProj );
-		debugLines.AddAABB( region.GetCenter(), region.GetHalfSize(), ae::Color::AetherPurple() );
+		debugLines.AddAABB( region.GetCenter(), region.GetHalfSize(), ae::Color::AetherDarkPurple() );
 		if( extractor->indices.Length() )
 		{
 			uniforms.Set( "u_light", ae::Vec2( (float)directionalLightEnabled, (float)ambientLightEnabled ) );

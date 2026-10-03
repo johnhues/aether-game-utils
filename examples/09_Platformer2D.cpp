@@ -41,9 +41,10 @@ const uint32_t kTileMask_Open = 0;
 const uint32_t kTileMask_Collision = 1;
 
 const uint32_t kTile_Air = 0;
-const uint32_t kTile_Wall = 1;
-const uint32_t kTile_Water = 2;
-const uint32_t kTile_Foliage = 3;
+const uint32_t kTile_Inside = 1;
+const uint32_t kTile_Wall = 2;
+const uint32_t kTile_Water = 3;
+const uint32_t kTile_Foliage = 4;
 
 const float kGravity = 10.0f;
 const float kAirDensity = 12.5f;
@@ -65,39 +66,54 @@ const float kSwimHorizontal = 6.5f;
 const float kSwimUp = 14.0f;
 const float kSwimDown = 10.0f;
 
-const ae::Color kFoliageColor = ae::Color::AetherGreen().ScaleRGB( 0.1f );
-const ae::Color kWaterBackgroundColor = ae::Color::AetherBlue();
-const ae::Color kWallColor = ae::Color::AetherGray();
+const ae::Color kPlayerColor = ae::Color::AetherSkinMedium();
+const ae::Color kSkyColor = ae::Color::AetherBlue();
+const ae::Color kFoliageColor = ae::Color::AetherGreen();
+const ae::Color kFoliageLightColor = ae::Color::AetherYellow();
+const ae::Color kFoliageDarkColor = ae::Color::AetherDarkGreen();
+const ae::Color kWallColor = ae::Color::AetherWhite();
+const ae::Color kInsideColor = ae::Color::AetherSkinDark();
 const ae::Color kWaterColor = ae::Color::AetherBlue().ScaleA( 0.5f );
-const ae::Color kShadowColor = ae::Color::AetherPurple().ScaleRGB( 0.1f ).ScaleA( 0.8f );
+const ae::Color kWaterBackgroundColor = ae::Color::AetherDarkGreen();
+const ae::Color kShadowColor = ae::Color::AetherBlack().ScaleA( 0.6f );
 const ae::Vec2 kShadowOffset = ae::Vec2( 0.0f, -0.25f );
 
 // Map
-#define O kTile_Air
-#define B kTile_Wall
-#define W kTile_Water
-#define L kTile_Foliage
-const uint32_t kMapData[] =
+const uint32_t kMapWidth = 32;
+const char kMapData[] =
 {
-	B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,L,L,L,L,
-	B,O,O,B,B,B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,L,L,
-	B,O,O,B,B,B,B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,
-	B,O,O,B,L,L,B,B,O,O,B,B,B,O,O,O,O,O,O,O,O,O,O,O,O,O,O,B,
-	B,O,B,B,B,B,B,B,O,O,O,O,O,O,O,O,B,B,B,B,B,B,O,L,L,O,O,B,
-	B,O,O,B,L,L,L,O,O,O,O,O,O,O,O,O,O,L,L,L,L,L,L,L,B,B,B,B,
-	B,B,O,B,L,O,O,O,O,O,O,O,O,O,O,O,O,O,O,L,L,O,O,L,B,B,B,B,
-	B,O,O,B,O,O,O,O,B,B,B,B,B,O,O,O,O,O,O,O,B,O,O,O,O,L,L,B,
-	B,O,B,B,O,O,O,O,O,O,B,B,O,O,O,O,O,O,O,B,B,O,O,O,O,O,L,B,
-	B,O,O,O,O,O,B,B,O,L,B,B,W,W,W,W,W,W,B,B,B,W,W,W,W,W,W,B,
-	B,O,O,O,O,O,O,O,L,L,B,B,W,W,W,W,W,W,W,W,W,W,W,W,W,B,B,B,
-	B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,
+	"                                              L▒██░░░░░░░░░░░░░░"
+	"      ████████████████████████████████████████L▒██░░░░░░░░░░░░░░"
+	"          ██░░░░██░░░░██░░░░██░░░░██░░░░██░░░░L▒██░░░░░░░░░░░░░░"
+	"          ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░L▒██░░░░░░░░░░░░░░"
+	"          ░░    ░░    ░░    ░░    ░░    ░░    L▒██░░░░░░░░░░░░░░"
+	"          ░░    ░░    ░░    ░░    ░░    ░░    L▒██░░░░░░░░░░░░░░"
+	"          ░░    ░░    ░░    ░░    ░░    ░░    L▒██░░░░░░░░░░░░░░"
+	"          ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░L▒██░░░░░░░░░░░░░░"
+	"          ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░L▒██░░░░░░░░░░░░░░"
+	"      L▒L▒████████████████████████████████████L▒██░░░░░░░░░░░░░░"
+	"      L▒L▒████████████████████████████████████L▒██░░░░░░░░░░░░░░"
+	"      L▒L▒████████████████████████████████████L▒██░░░░░░░░░░░░░░"
+	"      L▒L▒████████████████████████████████████L▒██░░░░░░░░░░░░░░"
+	"      L▒L▒████████████████████████████████████L▒██░░░░░░░░░░░░░░"
+	"      L▒L▒██░░░░░░██░░░░██L▒L▒██L▒L▒██L▒L▒██L▒L▒██░░░░░░░░░░░░░░"
+	"        L▒  ████░░░░░░░░░░L▒░░░░L▒░░L▒░░░░L▒L▒L▒██░░░░░░░░░░░░░░"
+	"        L▒    ██░░░░░░░░  L▒    L▒  L▒      L▒  ██░░░░░░░░░░░░░░"
+	"              ██░░░░░░    L▒        L▒          ████████████████"
+	"          L▒████░░░░░░░░            L▒          ██L▒L▒██L▒L▒████"
+	"          L▒  ██████████            L▒            L▒░░░░░░L▒L▒██"
+	"              ░░░░░░░░██░░                        L▒░░░░░░L▒L▒██"
+	"            ████░░░░░░██░░░░  ░░                  ░░░░░░L▒L▒L▒██"
+	"              ██████████░░░░░░░░░░  ░░░░██████████░░░░░░L▒██████"
+	"██            ██L▒L▒L▒L▒░░░░░░░░░░░░░░░░░░L▒L▒L▒L▒░░░░░░L▒░░░░██"
+	"██          ████░░░░L▒L▒░░░░░░░░░░░░░░░░░░░░░░L▒L▒░░░░░░░░░░░░██"
+	"██            ██░░░░L▒L▒██████████░░░░░░░░░░░░L▒L▒░░░░░░░░░░░░██"
+	"██            ██░░L▒L▒L▒L▒L▒████░░░░░░░░░░░░░░L▒L▒░░░░░░░░░░░░██"
+	"██            ░░░░L▒████L▒L▒████W▒W▒W▒W▒W▒W▒██████W▒W▒W▒W▒W▒W▒██"
+	"██            ░░░░L▒░░░░L▒L▒████W▒W▒W▒W▒W▒W▒██████W▒W▒W▒W▒██████"
+	"██████W▒W▒W▒████████████████████████████████████████████████████"
+	"████████████████████████████████████████████████████████████████"
 };
-#undef O
-#undef B
-#undef W
-#undef L
-const uint32_t kMapWidth = 28;
-const uint32_t kMapHeight = 12;
 
 const char* kVertexShader = R"(
 	AE_UNIFORM_HIGHP mat4 u_worldToProj;
@@ -122,6 +138,48 @@ const char* kFragmentShader = R"(
 		AE_COLOR = v_color;
 	}
 )";
+
+//------------------------------------------------------------------------------
+// Map decoding
+//------------------------------------------------------------------------------
+//! Pairs a two character \p kMapData glyph with the tile it represents.
+struct MapGlyph
+{
+	const char* glyph;
+	uint32_t tile;
+};
+const MapGlyph kMapGlyphs[] =
+{
+	{ "  ", kTile_Air },
+	{ "░░", kTile_Inside },
+	{ "██", kTile_Wall },
+	{ "W▒", kTile_Water },
+	{ "L▒", kTile_Foliage },
+};
+
+//! Decodes \p kMapData into \p tilesOut, one tile per glyph. Returns the
+//! height of the map in tiles.
+uint32_t DecodeMap( ae::Array< uint32_t >* tilesOut )
+{
+	tilesOut->Clear();
+	for( const char* c = kMapData; *c; )
+	{
+		const MapGlyph* match = nullptr;
+		for( const MapGlyph& mapGlyph : kMapGlyphs )
+		{
+			if( strncmp( c, mapGlyph.glyph, strlen( mapGlyph.glyph ) ) == 0 )
+			{
+				match = &mapGlyph;
+				break;
+			}
+		}
+		AE_ASSERT_MSG( match, "Unknown map glyph at offset #", (uint32_t)( c - kMapData ) );
+		tilesOut->Append( match->tile );
+		c += strlen( match->glyph );
+	}
+	AE_ASSERT_MSG( tilesOut->Length() % kMapWidth == 0, "Map is not # tiles wide", kMapWidth );
+	return tilesOut->Length() / kMapWidth;
+}
 
 //------------------------------------------------------------------------------
 // Player class
@@ -274,7 +332,7 @@ void Player::Render( ae::SpriteRenderer* spriteRender )
 	ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( GetPosition() + kShadowOffset, -0.5f ) );
 	spriteRender->AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), kShadowColor );
 	transform = ae::Matrix4::Translation( ae::Vec3( GetPosition(), -0.5f ) );
-	spriteRender->AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::AetherRed().ScaleRGB( 0.7f ) );
+	spriteRender->AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), kPlayerColor );
 }
 
 //------------------------------------------------------------------------------
@@ -298,7 +356,7 @@ struct Game
 		window.SetTitle( "Platformer 2D" );
 		render.Initialize( &window );
 		input.Initialize( &window );
-		spriteRender.Initialize( 1, 512 );
+		spriteRender.Initialize( 1, 2048 ); // @TODO: Cull blocks outside the view
 		spriteShader.Initialize( kVertexShader, kFragmentShader );
 		spriteShader.SetBlending( true );
 		timeStep.SetTimeStep( 1.0f / kFramesPerSecond );
@@ -307,13 +365,16 @@ struct Game
 		world.SetCollisionMask( kTileMask_Collision );
 		world.SetTileProperties( kTile_Air, kTileMask_Open );
 		world.SetTileFluidDensity( kTile_Air, kAirDensity );
+		world.SetTileProperties( kTile_Inside, kTileMask_Open );
+		world.SetTileFluidDensity( kTile_Inside, kAirDensity );
 		world.SetTileProperties( kTile_Wall, kTileMask_Collision );
 		world.SetTileProperties( kTile_Water, kTileMask_Open );
 		world.SetTileFluidDensity( kTile_Water, kWaterDensity );
 		world.SetTileProperties( kTile_Foliage, kTileMask_Open );
 		world.SetTileFluidDensity( kTile_Foliage, kFoliageDensity );
-		AE_STATIC_ASSERT( countof(kMapData) == kMapWidth * kMapHeight );
-		world.LoadTiles( kMapData, kMapWidth, kMapHeight, true );
+		ae::Array< uint32_t > tiles = TAG_ALL;
+		const uint32_t mapHeight = DecodeMap( &tiles );
+		world.LoadTiles( tiles.Data(), kMapWidth, mapHeight, true );
 		
 		player.Initialize( &world, ae::Vec2( 2.0f, 2.0f ) );
 		return true;
@@ -326,22 +387,38 @@ struct Game
 		world.Update( timeStep.GetDt() );
 		
 		render.Activate();
-		render.Clear( ae::Color::PicoDarkBlue() );
+		render.Clear( kSkyColor );
 		spriteRender.Clear();
 
 		for( uint32_t y = 0; y < world.GetHeight(); y++ )
 		for( uint32_t x = 0; x < world.GetWidth(); x++ )
 		{
+			const uint32_t tile = world.GetTile( ae::Int2( x, y ) );
 			ae::Color color;
-			switch( world.GetTile( ae::Int2( x, y ) ) )
+			switch( tile )
 			{
-				case kTile_Foliage: color = kFoliageColor; break;
+				case kTile_Inside: color = kInsideColor; break;
+				case kTile_Foliage: color = kFoliageDarkColor; break;
 				case kTile_Water: color = kWaterBackgroundColor; break;
 				default: color = ae::Color().ScaleA( 0.0f ); break;
 			}
 			if( color.a == 0 ) { continue; }
-			ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( x, y, 0.0f ) );
+			const ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( x, y, 0.0f ) );
 			spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), color );
+
+			if( tile != kTile_Inside )
+			{
+				uint64_t seed = ae::GetHash64( ae::Int2( x, y ) );
+				const ae::Vec3 toCenter( -0.5f, -0.5f, 0.0f );
+
+				const ae::Vec3 offsetMid( ae::Random01( &seed ) * 0.5f, 0.25f + ae::Random01( &seed ) * 0.25f, 0.0f );
+				const ae::Matrix4 midTransform = transform * ae::Matrix4::Scaling( 0.75f, 1.25f, 1.0f ) * ae::Matrix4::Translation( toCenter + offsetMid );
+				spriteRender.AddSprite( 0, midTransform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), kFoliageColor );
+
+				const ae::Vec3 offsetLight( ae::Random01( &seed ), ae::Random01( &seed ), 0.0f );
+				const ae::Matrix4 lightTransform = transform * ae::Matrix4::Scaling( 0.2f, 0.3f, 1.0f ) * ae::Matrix4::Translation( toCenter + offsetLight );
+				spriteRender.AddSprite( 0, lightTransform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), kFoliageLightColor );
+			}
 		}
 
 		for( uint32_t y = 0; y < world.GetHeight(); y++ )

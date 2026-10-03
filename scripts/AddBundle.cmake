@@ -259,7 +259,7 @@ function(ae_add_bundle BUNDLE_NAME)
 			# "-s MINIMAL_RUNTIME=2" # Enable aggressive MINIMAL_RUNTIME mode.
 			"-s INITIAL_MEMORY=2GB" # Allocate the max possible safe memory, which for legacy reasons is 2GB. Leave it up to the browser/OS to decide how much of that memory to actually back with physical RAM.
 			"-s ALLOW_MEMORY_GROWTH=0"
-			"-s MIN_WEBGL_VERSION=3 -s MAX_WEBGL_VERSION=3" # Require WebGL 3 support in target browser, for smallest generated code size. (pass -s MIN_WEBGL_VERSION=1 to dual-target WebGL 1 and WebGL 2)
+			"-s MIN_WEBGL_VERSION=2 -s MAX_WEBGL_VERSION=2" # Require WebGL 2 support in target browser, for smallest generated code size. (pass -s MIN_WEBGL_VERSION=1 to dual-target WebGL 1 and WebGL 2)
 			"-s ENVIRONMENT=web" # The generated build output is only to be expected to be run in a web browser, never in a native CLI shell, or in a web worker.
 			"-s ABORTING_MALLOC=0" # Fine tuning for code size: do not generate code to abort program execution on malloc() failures, that will not be interesting here.
 			"-s GL_SUPPORT_AUTOMATIC_ENABLE_EXTENSIONS=0" # Reduce WebGL code size: We do not need GLES2 emulation for automatic GL extension enabling
@@ -290,6 +290,7 @@ function(ae_add_bundle BUNDLE_NAME)
 		set(_AE_EM_LINKER_FLAGS_RELWITHDEBINFO
 			"-O2"
 			"-g"
+			"-s ASSERTIONS=1"
 		)
 		set(_AE_EM_LINKER_FLAGS_RELEASE
 			"--closure=1" # Enable Closure compiler for aggressive JS size minification

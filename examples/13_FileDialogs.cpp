@@ -40,7 +40,7 @@ int main()
   {
     input.Pump();
     device.Activate();
-    device.Clear( ae::Color::PicoBlue() );
+    device.Clear( ae::Color::AetherBlue() );
     device.Present();
 
     if( !input.GetPrev( ae::Key::Num1 ) && input.Get( ae::Key::Num1 ) )

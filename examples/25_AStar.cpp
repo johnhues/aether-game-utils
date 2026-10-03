@@ -173,7 +173,7 @@ int main( int argc, char* argv[] )
 		DrawLine( startPos, startNode->pos, ( pathLength ? ae::Color::AetherGreen() : ae::Color::AetherBlue() ) );
 		for( const AStarNode& node : nodes )
 		{
-			ae::Color color = ae::Color::AetherGray();
+			ae::Color color = ae::Color::Gray();
 			if( std::find( path, path + pathLength, &node ) != ( path + pathLength ) )
 			{
 				color = ae::Color::AetherGreen();
@@ -187,7 +187,7 @@ int main( int argc, char* argv[] )
 			{
 				if( next > &node )
 				{
-					DrawLine( node.pos, next->pos, ae::Color::AetherGray() );
+					DrawLine( node.pos, next->pos, ae::Color::Gray() );
 				}
 			}
 		}

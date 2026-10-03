@@ -274,7 +274,7 @@ bool Program::Tick()
 			m_selectRect = ae::Rect();
 			m_selectRect.ExpandPoint( m_selectStart );
 			m_selectRect.ExpandPoint( currentCursorPos );
-			DrawRect( m_selectRect, ae::Color::PicoBlue().ScaleA( 0.5f ) );
+			DrawRect( m_selectRect, ae::Color::AetherBlue().ScaleA( 0.5f ) );
 		}
 	}
 	else if( m_input.mousePrev.leftButton ) // Release mouse left
@@ -306,8 +306,8 @@ bool Program::Tick()
 	if( m_rightClick )
 	{
 		ae::Rect shadowRect = ae::Rect::FromCenterAndSize( m_rightClickRect.GetCenter() + ae::Vec2( 5.0f, -5.0f ), m_rightClickRect.GetSize() );
-		DrawRect( shadowRect, ae::Color::PicoDarkGray() );
-		DrawRect( m_rightClickRect, ae::Color::PicoLightGray() );
+		DrawRect( shadowRect, ae::Color::DarkGray() );
+		DrawRect( m_rightClickRect, ae::Color::LightGray() );
 	}
 
 	DrawCursor();
@@ -331,15 +331,15 @@ void Program::DrawRect( ae::Rect rect, ae::Color color )
 
 void Program::DrawWindow()
 {
-	m_gfx.Clear( ae::Color::PicoLightGray() );
+	m_gfx.Clear( ae::Color::LightGray() );
 	ae::Rect bgRect;
 	bgRect.ExpandPoint( ae::Vec2( 20.0f ) );
 	bgRect.ExpandPoint( ae::Vec2( m_gfx.GetWidth() - 20.0f, m_gfx.GetHeight() - 60.0f ) );
-	DrawRect( bgRect, ae::Color::PicoWhite() );
+	DrawRect( bgRect, ae::Color::AetherWhite() );
 	bgRect = ae::Rect();
 	bgRect.ExpandPoint( ae::Vec2( 20.0f, m_gfx.GetHeight() - 50.0f ) );
 	bgRect.ExpandPoint( ae::Vec2( m_gfx.GetWidth() - 20.0f, m_gfx.GetHeight() - 20.0f ) );
-	DrawRect( bgRect, ae::Color::PicoWhite() );
+	DrawRect( bgRect, ae::Color::AetherWhite() );
 }
 
 void Program::DrawCursor()
@@ -349,13 +349,13 @@ void Program::DrawCursor()
 
 	ae::Matrix4 localToWorld = ae::Matrix4::Translation( mousePos.x - 2.0f, mousePos.y + 4.0f, 0.0f ) * ae::Matrix4::Scaling( 30.0f );
 	uniformList.Set( "u_worldToProj", m_worldToProj * localToWorld );
-	uniformList.Set( "u_color", ae::Color::PicoDarkGray().GetLinearRGBA() );
+	uniformList.Set( "u_color", ae::Color::DarkGray().GetLinearRGBA() );
 	m_triangle.Bind( &m_shader, uniformList );
 	m_triangle.Draw();
 
 	localToWorld = ae::Matrix4::Translation( mousePos.x, mousePos.y, 0.0f ) * ae::Matrix4::Scaling( 20.0f );
 	uniformList.Set( "u_worldToProj", m_worldToProj * localToWorld );
-	uniformList.Set( "u_color", ae::Color::PicoWhite().GetLinearRGBA() );
+	uniformList.Set( "u_color", ae::Color::AetherWhite().GetLinearRGBA() );
 	m_triangle.Bind( &m_shader, uniformList );
 	m_triangle.Draw();
 }
@@ -367,18 +367,18 @@ void Program::DrawFolders()
 	for( const Folder* folder : m_currentFolder->subFolders )
 	{
 		ae::Vec2 pos = folder->pos;
-		ae::Color color = ae::Color::PicoPeach();
+		ae::Color color = ae::Color::AetherYellow();
 		if( m_selected.Find( folder ) >= 0 )
 		{
 			if( m_state == State::Dragging )
 			{
 				pos += dragOffset;
 			}
-			color = color.Lerp( ae::Color::PicoBlue(), 0.4f );
+			color = color.Lerp( ae::Color::AetherBlue(), 0.4f );
 		}
 		ae::Rect folderRect = ae::Rect::FromCenterAndSize( pos, kFolderIconSize );
 		ae::Rect shadowRect = ae::Rect::FromCenterAndSize( folderRect.GetCenter() + ae::Vec2( 5.0f, -5.0f ), folderRect.GetSize() );
-		DrawRect( shadowRect, ae::Color::PicoDarkGray() );
+		DrawRect( shadowRect, ae::Color::DarkGray() );
 		DrawRect( folderRect, color );
 	}
 }
