@@ -2062,13 +2062,13 @@ public:
 	//! Returns the index of the last matching element or -1 when not found.
 	template< typename U > int32_t FindLast( const U& value ) const;
 	//! Returns the index of the first matching element or -1 when not found.
-	//! The function signature should match 'bool (*)( const T2& )' or
-	//! '[...]( const T2& ) -> bool'. Return true from the predicate for a
-	//! any matching element.
+	//! The function signature should match `bool (*)( const U& )` or
+	//! `[]( const U& ) -> bool`. Return true from the predicate for a any
+	//! matching element.
 	template< typename Fn > int32_t FindFn( Fn testFn ) const;
 	//! Returns the index of the last matching element or -1 when not found.
-	//! The function signature should match 'bool (*)( const U& )' or
-	//! '[...]( const T2& ) -> bool'. Return true from the predicate for any
+	//! The function signature should match `bool (*)( const U& )` or
+	//! `[]( const U& ) -> bool`. Return true from the predicate for any
 	//! matching element.
 	template< typename Fn > int32_t FindLastFn( Fn testFn ) const;
 
@@ -2076,7 +2076,7 @@ public:
 	//! that were removed.
 	template< typename U > uint32_t RemoveAll( const U& value );
 	//! Remove elements based on predicate \p testFn. The function signature
-	//! should match 'bool (*)( const U& )' and '[]( const U& ) -> bool'. Return
+	//! should match `bool (*)( const U& )` and `[]( const U& ) -> bool`. Return
 	//! true from the predicate for removal of the given element. Returns the
 	//! number of elements that were removed.
 	template< typename Fn > uint32_t RemoveAllFn( Fn testFn );
@@ -2087,25 +2087,34 @@ public:
 	//! Does not affect the capacity of the array.
 	void Clear();
 
-	//! Performs bounds checking in debug mode, use 'GetData()' instead to
-	//! safely get the raw array.
+	//! Returns a const reference to the element at the given index. Performs
+	//! bounds checking in debug mode. Instead of calling `operator[ 0 ]` on an
+	//! empty array, use `GetData()` to safely access the raw array.
 	const T& operator[]( int32_t index ) const;
-	//! Performs bounds checking in debug mode, use 'GetData()' instead to
-	//! safely get the raw array.
+	//! Returns a reference to the element at the given index. Performs bounds
+	//! checking in debug mode. Instead of calling `operator[ 0 ]` on an empty
+	//! array, use `GetData()` to safely access the raw array.
 	T& operator[]( int32_t index );
-	//! Returns the first element in the array. Performs bounds checking in
-	//! debug mode, use 'GetData()' instead to safely get the raw array.
+	//! Returns a const reference to the first element at the given index.
+	//! Performs bounds checking in debug mode. Instead of calling `First()` on
+	//! an empty array, use `GetData()` to safely access the raw array.
 	const T& First() const;
-	//! Returns the first element in the array. Performs bounds checking in
-	//! debug mode, use 'GetData()' instead to safely get the raw array.
+	//! Returns a reference to the first element in the array. Performs bounds
+	//! checking in debug mode. Instead of calling `First()` on an empty array,
+	//! use `GetData()` to safely access the raw array.
 	T& First();
-	//! Returns the last element. Performs bounds checking in debug mode.
+	//! Returns a const reference to the last element at the given index.
+	//! Performs bounds checking in debug mode. Instead of calling `Last()` on
+	//! an empty array, use `GetData()` to safely access the raw array.
 	const T& Last() const;
-	//! Returns the last element. Performs bounds checking in debug mode.
+	//! Returns a reference to the last element in the array. Performs bounds
+	//! checking in debug mode. Instead of calling `Last()` on an empty array,
+	//! use `GetData()` to safely access the raw array.
 	T& Last();
 	//! Returns true when it is no longer safe to append to this array.
 	_AE_STATIC_STORAGE bool Full() { return m_length == m_capacity; }
-	//! It is always safe to append to dynamic arrays, barring system memory limits.
+	//! It is always safe to append to dynamic arrays, barring system memory
+	//! limits.
 	_AE_DYNAMIC_STORAGE bool Full(...) const { return false; }
 
 	//! Returns a pointer to the first element of the array, but can return null
