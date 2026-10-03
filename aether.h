@@ -21135,7 +21135,7 @@ int32_t Application( int32_t argc, char* argv[],
 }
 
 uint32_t _ae_GetCurrentFramebuffer();
-#if _AE_LINUX_
+#if _AE_LINUX_ || _AE_WINDOWS_
 //! Loads all OpenGL function pointers with the given loader and returns the
 //! number of required functions that could not be loaded
 uint32_t _ae_LoadGLFunctions( void* ( *getProcAddress )( const char* ) );
@@ -23572,6 +23572,26 @@ void Window::m_Initialize( const char* frameStorageKey )
 		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
 	}
 	m_context = ctx;
+
+	// Load all GL functions before anything uses them, including
+	// _ae_GetCurrentFramebuffer() at the end of window initialization
+	const uint32_t glFnLoadFailed = _ae_LoadGLFunctions( []( const char* name ) -> void*
+	{
+		// wglGetProcAddress returns null for GL 1.1 entries on Microsoft's ICD
+		// (and small invalid values on some drivers), those live in
+		// opengl32.dll and must be resolved with GetProcAddress.
+		void* fn = (void*)wglGetProcAddress( name );
+		if( (uintptr_t)fn <= 3 || (intptr_t)fn == -1 )
+		{
+			static const HMODULE s_opengl32Module = LoadLibraryA( "opengl32.dll" );
+			fn = s_opengl32Module ? (void*)GetProcAddress( s_opengl32Module, name ) : nullptr;
+		}
+		return fn;
+	} );
+	if( glFnLoadFailed )
+	{
+		AE_FAIL_MSG( "Failed to load # OpenGL function#.", glFnLoadFailed, ( glFnLoadFailed == 1 ) ? "" : "s" );
+	}
 #endif
 
 	// Finish window setup
@@ -28693,7 +28713,7 @@ uint32_t _ae_GetCurrentFramebuffer()
 #endif
 }
 
-#if _AE_LINUX_ && AE_ENABLE_OPENGL
+#if ( _AE_LINUX_ || _AE_WINDOWS_ ) && AE_ENABLE_OPENGL
 uint32_t _ae_LoadGLFunctions( void* ( *getProcAddress )( const char* ) )
 {
 	uint32_t failCount = 0;
@@ -30887,17 +30907,6 @@ GraphicsDevice::~GraphicsDevice()
 	Terminate();
 }
 
-#if _AE_WINDOWS_
-	#define LOAD_OPENGL_FN( _glfn )\
-		_glfn = (decltype(_glfn))wglGetProcAddress( #_glfn );\
-		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
-	// wglGetProcAddress returns null for GL 1.1 entries on Microsoft's ICD;
-	// those live in opengl32.dll and must be resolved with GetProcAddress.
-	#define LOAD_OPENGL11_FN( _glfn )\
-		_glfn = (decltype(_glfn))GetProcAddress( opengl32Module, #_glfn );\
-		if( !_glfn ) { glFnLoadFailed++; AE_ERROR( "Failed to load OpenGL function '" #_glfn "'" ); }
-#endif
-
 void GraphicsDevice::Initialize( class Window* window )
 {
 	AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
@@ -30921,93 +30930,16 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT( m_context );
 
 #if _AE_WINDOWS_
-	uint32_t glFnLoadFailed = 0;
-#endif
-	
-	AE_CHECK_GL_ERROR();
-
-#if _AE_WINDOWS_
-	const HMODULE opengl32Module = LoadLibraryA( "opengl32.dll" );
-	AE_ASSERT_MSG( opengl32Module, "Failed to load opengl32.dll" );
-	// GL 1.1 entries — resolved against opengl32.dll, not wglGetProcAddress.
-	LOAD_OPENGL11_FN( glClear );
-	LOAD_OPENGL11_FN( glClearColor );
-	LOAD_OPENGL11_FN( glViewport );
-	LOAD_OPENGL11_FN( glEnable );
-	LOAD_OPENGL11_FN( glDisable );
-	LOAD_OPENGL11_FN( glGetIntegerv );
-	LOAD_OPENGL11_FN( glGetError );
-	LOAD_OPENGL11_FN( glGenTextures );
-	LOAD_OPENGL11_FN( glBindTexture );
-	LOAD_OPENGL11_FN( glDeleteTextures );
-	LOAD_OPENGL11_FN( glTexParameteri );
-	LOAD_OPENGL11_FN( glTexImage2D );
-	LOAD_OPENGL11_FN( glTexSubImage2D );
-	LOAD_OPENGL11_FN( glDrawArrays );
-	LOAD_OPENGL11_FN( glDrawElements );
-	LOAD_OPENGL11_FN( glPolygonMode );
-	// WGL extensions and GL 2.0+ entries.
-	LOAD_OPENGL_FN( wglSwapIntervalEXT );
-	LOAD_OPENGL_FN( wglGetSwapIntervalEXT );
-	// Shader functions
-	LOAD_OPENGL_FN( glCreateProgram );
-	LOAD_OPENGL_FN( glAttachShader );
-	LOAD_OPENGL_FN( glLinkProgram );
-	LOAD_OPENGL_FN( glGetProgramiv );
-	LOAD_OPENGL_FN( glGetProgramInfoLog );
-	LOAD_OPENGL_FN( glGetActiveAttrib );
-	LOAD_OPENGL_FN( glGetAttribLocation );
-	LOAD_OPENGL_FN( glGetActiveUniform );
-	LOAD_OPENGL_FN( glGetUniformLocation );
-	LOAD_OPENGL_FN( glDeleteShader );
-	LOAD_OPENGL_FN( glDeleteProgram );
-	LOAD_OPENGL_FN( glUseProgram );
-	LOAD_OPENGL_FN( glBlendFuncSeparate );
-	LOAD_OPENGL_FN( glCreateShader );
-	LOAD_OPENGL_FN( glShaderSource );
-	LOAD_OPENGL_FN( glCompileShader );
-	LOAD_OPENGL_FN( glGetShaderiv );
-	LOAD_OPENGL_FN( glGetShaderInfoLog );
-	LOAD_OPENGL_FN( glActiveTexture );
-	LOAD_OPENGL_FN( glUniform1i );
-	LOAD_OPENGL_FN( glUniform1fv );
-	LOAD_OPENGL_FN( glUniform2fv );
-	LOAD_OPENGL_FN( glUniform3fv );
-	LOAD_OPENGL_FN( glUniform4fv );
-	LOAD_OPENGL_FN( glUniformMatrix4fv );
-	// Texture functions
-	LOAD_OPENGL_FN( glGenerateMipmap );
-	LOAD_OPENGL_FN( glBindFramebuffer );
-	LOAD_OPENGL_FN( glFramebufferTexture2D );
-	LOAD_OPENGL_FN( glGenFramebuffers );
-	LOAD_OPENGL_FN( glDeleteFramebuffers );
-	LOAD_OPENGL_FN( glCheckFramebufferStatus );
-	LOAD_OPENGL_FN( glDrawBuffers );
-	LOAD_OPENGL_FN( glTextureBarrierNV );
-	// Vertex functions
-	LOAD_OPENGL_FN( glGenVertexArrays );
-	LOAD_OPENGL_FN( glBindVertexArray );
-	LOAD_OPENGL_FN( glDeleteVertexArrays );
-	LOAD_OPENGL_FN( glDeleteBuffers );
-	LOAD_OPENGL_FN( glBindBuffer );
-	LOAD_OPENGL_FN( glGenBuffers );
-	LOAD_OPENGL_FN( glBufferData );
-	LOAD_OPENGL_FN( glBufferSubData );
-	LOAD_OPENGL_FN( glEnableVertexAttribArray );
-	LOAD_OPENGL_FN( glVertexAttribPointer );
-	LOAD_OPENGL_FN( glVertexAttribDivisor );
-	LOAD_OPENGL_FN( glDrawElementsInstanced );
-	LOAD_OPENGL_FN( glDrawArraysInstanced );
-#if AE_GL_DEBUG_MODE
-	// Debug functions
-	LOAD_OPENGL_FN( glDebugMessageCallback );
-#endif
-	if( glFnLoadFailed )
+	// GL functions are loaded by ae::Window, only WGL extensions are loaded here
+	wglSwapIntervalEXT = (decltype( wglSwapIntervalEXT ))wglGetProcAddress( "wglSwapIntervalEXT" );
+	wglGetSwapIntervalEXT = (decltype( wglGetSwapIntervalEXT ))wglGetProcAddress( "wglGetSwapIntervalEXT" );
+	if( !wglSwapIntervalEXT || !wglGetSwapIntervalEXT )
 	{
-		AE_FAIL_MSG( "Failed to load # OpenGL function#.", glFnLoadFailed, ( glFnLoadFailed == 1 ) ? "" : "s" );
+		AE_WARN( "WGL_EXT_swap_control is not supported, vsync can't be changed" );
 	}
-	AE_CHECK_GL_ERROR();
 #endif
+
+	AE_CHECK_GL_ERROR();
 
 #if AE_GL_DEBUG_MODE
 	glDebugMessageCallback( ae::OpenGLDebugCallback, nullptr );
@@ -31080,7 +31012,10 @@ void GraphicsDevice::Initialize( class Window* window )
 void GraphicsDevice::SetVsyncEnabled( bool enabled )
 {
 #if _AE_WINDOWS_
-	wglSwapIntervalEXT( enabled ? 1 : 0 );
+	if( wglSwapIntervalEXT )
+	{
+		wglSwapIntervalEXT( enabled ? 1 : 0 );
+	}
 #elif _AE_LINUX_
 	if( _Wayland* wl = _Wayland::Get() )
 	{
@@ -31092,7 +31027,7 @@ void GraphicsDevice::SetVsyncEnabled( bool enabled )
 bool GraphicsDevice::GetVsyncEnabled() const
 {
 #if _AE_WINDOWS_
-	return wglGetSwapIntervalEXT() != 0;
+	return wglGetSwapIntervalEXT && wglGetSwapIntervalEXT() != 0;
 #elif _AE_LINUX_
 	if( const _Wayland* wl = _Wayland::Get() )
 	{
@@ -31212,9 +31147,9 @@ void GraphicsDevice::AddTextureBarrier()
 {
 	// only GL has texture barrier for reading from previously written textures
 	// There are less draconian ways in desktop ES, and nothing in WebGL.
-#if _AE_WINDOWS_ || _AE_OSX_
+#if _AE_OSX_
 	glTextureBarrierNV();
-#elif _AE_LINUX_
+#elif _AE_WINDOWS_ || _AE_LINUX_
 	if( glTextureBarrierNV ) // Optional extension
 	{
 		glTextureBarrierNV();
