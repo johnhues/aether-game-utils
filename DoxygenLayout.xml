@@ -4,7 +4,8 @@
   <!-- Navigation index tabs for HTML output -->
   <navindex>
     <tab type="mainpage" visible="yes" title="aether-game-utils"/>
-    <tab type="pages" visible="yes" title="" intro=""/>
+    <tab type="user" url="@ref tutorial" title="Tutorial"/>
+    <tab type="pages" visible="no" title="" intro=""/>
     <tab type="topics" visible="yes" title="Utilities" intro=""/>
     <tab type="modules" visible="yes" title="" intro="">
       <tab type="modulelist" visible="yes" title="" intro=""/>
