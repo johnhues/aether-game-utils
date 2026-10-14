@@ -31423,6 +31423,28 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	}
 	const ae::Vec3 rootBoneAnchor = ikBones[ rootBoneIndex ].modelPos;
 
+	// Only bones between the solve root and a target, orientation target, or
+	// distance constraint are solved. All other bones keep their input local
+	// transform and are carried rigidly by their parent after solving.
+	ae::Array< bool > solved( tag, false, ikBones.Length() );
+	ae::Array< uint32_t > solvedChildCount( tag, 0u, ikBones.Length() );
+	solved[ rootBoneIndex ] = true;
+	auto MarkSolved = [&]( uint32_t index )
+	{
+		for( const Bone* walk = ( index < pose.GetBoneCount() ) ? pose.GetBoneByIndex( index ) : nullptr; walk && !solved[ walk->index ]; walk = walk->parent )
+		{
+			solved[ walk->index ] = true;
+			if( walk->parent ) { solvedChildCount[ walk->parent->index ]++; }
+		}
+	};
+	for( const auto& target : targets ) { MarkSolved( target.key ); }
+	for( const auto& targetOri : targetOrientations ) { MarkSolved( targetOri.key ); }
+	for( const IKDistanceConstraint& constraint : distanceConstraints )
+	{
+		MarkSolved( (uint32_t)constraint.idx0 );
+		MarkSolved( (uint32_t)constraint.idx1 );
+	}
+
 	// FABRIK cannot fold a chain that lies exactly on the line to a nearer
 	// target: every correction stays on that line and the effector never
 	// closes the remaining distance. Nudge the interior joints of any such
@@ -31600,12 +31622,18 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		// intermediate sub-bases, the same technique should be used.
 		auto reverseIter = [&]( auto&& reverseIter, _IKBone* ikBone, const Bone* poseBone ) -> void
 		{
-			if( poseBone->firstChild )
+			if( solvedChildCount[ poseBone->index ] )
 			{
 				uint32_t count = 0;
 				ae::Vec3 averageChildPos = ae::Vec3( 0.0f );
+				const Bone* firstSolvedChild = nullptr;
 				for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
 				{
+					if( !solved[ poseChild->index ] )
+					{
+						continue;
+					}
+					firstSolvedChild = firstSolvedChild ? firstSolvedChild : poseChild;
 					// (b) relocate and reorient joint p4 to target t
 					_IKBone* ikChild = &ikBones[ poseChild->index ];
 					reverseIter( reverseIter, ikChild, poseChild );
@@ -31650,13 +31678,29 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				// bones deterministically track their first child instead.
 				// The decision comes from the bind pose alone and cannot pop
 				// between frames.
-				const _IKBone* ikChild = &ikBones[ poseBone->firstChild->index ];
+				const _IKBone* ikChild = &ikBones[ firstSolvedChild->index ];
 				ae::Vec3 localAlignDir = ae::Vec3( 0.0f );
 				ae::Vec3 worldAlignDir = ae::Vec3( 0.0f );
 				for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
 				{
+					if( !solved[ poseChild->index ] )
+					{
+						continue;
+					}
 					localAlignDir += ikBones[ poseChild->index ].parentBindDir;
 					worldAlignDir += ( ikBones[ poseChild->index ].modelPos - ikBone->modelPos ).SafeNormalizeCopy();
+				}
+				if( localAlignDir.SafeNormalize() < 0.2f )
+				{
+					// Unsolved children hold their current direction
+					localAlignDir = ae::Vec3( 0.0f );
+					worldAlignDir = ae::Vec3( 0.0f );
+					for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
+					{
+						const _IKBone* ikAlignChild = &ikBones[ poseChild->index ];
+						localAlignDir += ikAlignChild->parentBindDir;
+						worldAlignDir += solved[ poseChild->index ] ? ( ikAlignChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy() : ikBone->boneToModelRot.Rotate( ikAlignChild->parentBindDir );
+					}
 				}
 				if( localAlignDir.SafeNormalize() < 0.2f )
 				{
@@ -31670,7 +31714,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 			}
 			else
 			{
-				// Is an extent since there's no child. Set to target for
+				// Is an extent since there's no solved child. Set to target for
 				// correct initial pose this iteration.
 				if( const ae::Vec3* target = targets.TryGet( poseBone->index ) )
 				{
@@ -31713,7 +31757,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				continue;
 			}
 			const Bone* extentBone = pose.GetBoneByIndex( extentIndex );
-			if( extentBone->firstChild || !extentBone->parent )
+			if( solvedChildCount[ extentIndex ] || !extentBone->parent )
 			{
 				continue;
 			}
@@ -31787,7 +31831,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					twistRequest[ poseBone->index ] = 0.0f;
 					twistRequestCount[ poseBone->index ] = 0;
 				}
-				if( !poseBone->firstChild )
+				if( !solvedChildCount[ poseBone->index ] )
 				{
 					if( const ae::Quaternion* extentOri = targetOrientations.TryGet( poseBone->index ) )
 					{
@@ -31821,9 +31865,13 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		}
 		auto forwardIter = [&]( auto&& forwardIter, _IKBone* ikBone, const Bone* poseBone ) -> void
 		{
-			const bool singleChild = poseBone->firstChild && !poseBone->firstChild->nextSibling;
+			const bool singleChild = ( solvedChildCount[ poseBone->index ] == 1 );
 			for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
 			{
+				if( !solved[ poseChild->index ] )
+				{
+					continue;
+				}
 				_IKBone* ikChild = &ikBones[ poseChild->index ];
 
 				if( const ae::Vec3* target = targets.TryGet( poseChild->index ) )
@@ -31971,6 +32019,27 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		};
 		twistIter( twistIter, &ikBones[ rootBoneIndex ], pose.GetBoneByIndex( rootBoneIndex ) );
 	}
+
+	// Carry unsolved bones rigidly with their solved parent using their input local transform
+	auto carryIter = [&]( auto&& carryIter, const Bone* poseBone ) -> void
+	{
+		const _IKBone* ikBone = &ikBones[ poseBone->index ];
+		const ae::Quaternion inputRot = poseBone->boneToModel.GetRotation();
+		const ae::Vec3 inputPos = poseBone->boneToModel.GetTranslation();
+		for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
+		{
+			if( !solved[ poseChild->index ] )
+			{
+				_IKBone* ikChild = &ikBones[ poseChild->index ];
+				const ae::Quaternion localRot = inputRot.GetInverse() * poseChild->boneToModel.GetRotation();
+				const ae::Vec3 localPos = inputRot.GetInverse().Rotate( poseChild->boneToModel.GetTranslation() - inputPos );
+				ikChild->boneToModelRot = ikBone->boneToModelRot * localRot;
+				ikChild->modelPos = ikBone->modelPos + ikBone->boneToModelRot.Rotate( localPos );
+			}
+			carryIter( carryIter, poseChild );
+		}
+	};
+	carryIter( carryIter, pose.GetBoneByIndex( rootBoneIndex ) );
 
 	poseOut->Initialize( &pose );
 	const ae::Bone* poseOutRoot = poseOut->GetBoneByIndex( rootBoneIndex );

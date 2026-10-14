@@ -783,6 +783,30 @@ void BuildDistancePair( IKScenario* s )
 	};
 }
 
+void BuildFingeredReach( IKScenario* s )
+{
+	s->name = "FingeredReach";
+	s->description = "Arm reaching with its middle knuckle while the untargeted outer fingers ride rigidly on the wrist";
+	s->bindPose.Initialize( 12 );
+	const ae::Bone* mount = AddBoneWorld( &s->bindPose, s->bindPose.GetRoot(), "mount", ae::Vec3( 0.0f, 0.0f, 0.85f ) );
+	const ae::Bone* shoulder = AddBoneWorld( &s->bindPose, mount, "shoulder", ae::Vec3( 0.0f, 0.0f, 1.0f ) );
+	const ae::Bone* elbow = AddBoneWorld( &s->bindPose, shoulder, "elbow", ae::Vec3( 0.3f, 0.0f, 1.0f ) );
+	const ae::Bone* wrist = AddBoneWorld( &s->bindPose, elbow, "wrist", ae::Vec3( 0.55f, 0.0f, 1.0f ) );
+	const ae::Bone* knuckleL = AddBoneWorld( &s->bindPose, wrist, "knuckleL", ae::Vec3( 0.64f, 0.03f, 1.0f ) );
+	AddBoneWorld( &s->bindPose, knuckleL, "tipL", ae::Vec3( 0.69f, 0.03f, 1.0f ) );
+	const ae::Bone* knuckleM = AddBoneWorld( &s->bindPose, wrist, "knuckleM", ae::Vec3( 0.65f, 0.0f, 1.0f ) );
+	AddBoneWorld( &s->bindPose, knuckleM, "tipM", ae::Vec3( 0.71f, 0.0f, 1.0f ) );
+	const ae::Bone* knuckleR = AddBoneWorld( &s->bindPose, wrist, "knuckleR", ae::Vec3( 0.64f, -0.03f, 1.0f ) );
+	AddBoneWorld( &s->bindPose, knuckleR, "tipR", ae::Vec3( 0.69f, -0.03f, 1.0f ) );
+	s->rootBoneIndex = shoulder->index;
+	s->staticBones.Append( shoulder->index );
+	s->targetFn = []( const IKScenario& s, uint32_t frame, ae::Map< uint32_t, ae::Vec3 >* targets, ae::Map< uint32_t, ae::Quaternion >* )
+	{
+		const float t = Cycle01( frame, s.frameCount );
+		targets->Set( Idx( s, "knuckleM" ), CirclePath( ae::Vec3( 0.35f, 0.15f, 1.0f ), ae::Vec3( 1.0f, 0.0f, 0.0f ), ae::Vec3( 0.0f, 0.0f, 1.0f ), 0.2f, t ) );
+	};
+}
+
 void BuildMidChainSteer( IKScenario* s )
 {
 	s->name = "MidChainSteer";
@@ -1187,6 +1211,7 @@ const BuildFn kScenarioBuilders[] =
 	BuildClipFeedbackReach,
 	BuildMultiChildSpine,
 	BuildDistancePair,
+	BuildFingeredReach,
 	BuildMidChainSteer,
 	BuildMirroredLimits,
 	BuildHumanoid,
@@ -1262,6 +1287,38 @@ TEST_CASE( "ik twist limits are respected", "[ae::IK]" )
 				INFO( scenario.name.c_str() << " frame " << frame << ": max twist violation " << report.maxTwistLimitError );
 				REQUIRE( report.twistPass );
 			}
+		}
+	}
+}
+
+TEST_CASE( "ik untargeted branches do not anchor their solved parent", "[ae::IK]" )
+{
+	IKScenario scenario = kIKTestTag;
+	for( uint32_t i = 0; i < IKScenarioCount(); i++ )
+	{
+		IKScenarioBuild( i, &scenario );
+		if( scenario.name == "FingeredReach" ) { break; }
+	}
+	REQUIRE( scenario.name == "FingeredReach" );
+	ae::Skeleton solved = kIKTestTag;
+	for( uint32_t frame = 0; frame < scenario.frameCount; frame += 20 )
+	{
+		SolveFrame( kIKTestTag, scenario, frame, kTestIterations, scenario.bindPose, &solved, nullptr, ae::Matrix4::Identity(), 1.0f );
+		ae::Map< uint32_t, ae::Vec3 > targets = kIKTestTag;
+		scenario.targetFn( scenario, frame, &targets, nullptr );
+		const ae::Vec3 effectorPos = solved.GetBoneByName( "knuckleM" )->boneToModel.GetTranslation();
+		INFO( "frame " << frame );
+		REQUIRE( ( effectorPos - targets.Get( Idx( scenario, "knuckleM" ) ) ).Length() < scenario.effectorTolerance );
+		for( const char* name : { "knuckleL", "tipL", "knuckleR", "tipR" } )
+		{
+			const ae::Bone* solvedBone = solved.GetBoneByName( name );
+			const ae::Bone* bindBone = scenario.bindPose.GetBoneByName( name );
+			const ae::Matrix4 solvedLocal = solvedBone->parent->boneToModel.GetInverse() * solvedBone->boneToModel;
+			const ae::Matrix4 bindLocal = bindBone->parent->boneToModel.GetInverse() * bindBone->boneToModel;
+			INFO( name );
+			REQUIRE( ( solvedLocal.GetTranslation() - bindLocal.GetTranslation() ).Length() < 0.0001f );
+			REQUIRE( ( solvedLocal.GetAxis( 0 ) - bindLocal.GetAxis( 0 ) ).Length() < 0.0001f );
+			REQUIRE( ( solvedLocal.GetAxis( 1 ) - bindLocal.GetAxis( 1 ) ).Length() < 0.0001f );
 		}
 	}
 }
