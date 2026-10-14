@@ -7437,6 +7437,8 @@ public:
 class SourceFileAttribute final : public ae::Inheritor< ae::Attribute, SourceFileAttribute >
 {
 public:
+	SourceFileAttribute() = default;
+	SourceFileAttribute( const char* _path, uint32_t _line ) : path( _path ), line( _line ) {}
 	ae::Str256 path;
 	uint32_t line = 0;
 };
@@ -14823,12 +14825,12 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 	template<> struct ae::TypeT< ::_T > : public ae::_ClassTypeT< ::_T > { TypeT() : _ClassTypeT< ::_T >( AE_STRINGIFY(_T) ) {} };\
 	ae::_TypeCreator< ::_T > AE_GLUE_UNDERSCORE(_ae_type_creator, _N);\
 	template<> ae::Type* ae::FindMetaRegistrationFor< ::_T >() { return ae::TypeT< ::_T >::Get(); }\
-	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, SourceFileAttribute)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute), nullptr) );
+	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute) ( _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__, 0) ); static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, SourceFileAttribute)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute), nullptr) );
 
 #define AE_REGISTER_CLASS_VAR_IMPL( _N, _T, _V )\
 	AE_DISABLE_INVALID_OFFSET_WARNING\
 	static ae::_VarCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_V );\
-	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, SourceFileAttribute)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute), nullptr) );\
+	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute) ( _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__, 0) ); static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, SourceFileAttribute)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute), nullptr) );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
 
 #define AE_REGISTER_CLASS_ATTRIBUTE_IMPL( _N, _T, _AN, _AT, _ARGS )\
