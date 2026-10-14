@@ -54,11 +54,17 @@ uint32_t EmSocket::Recv( void* data, uint32_t maxLength ) { return 0; }
 
 #else
 
-EmSocket::EmSocket()
-{
-  memset( this, 0, sizeof(*this) );
-  m_socket = -1;
-}
+EmSocket::EmSocket() :
+  m_socket( -1 ),
+  m_connected( false ),
+  m_connectRetry( 0.0f ),
+  m_recvBuffer( nullptr ),
+  m_recvLength( 0 ),
+  m_recvCurrent( 0 ),
+  m_sendBuffer( nullptr ),
+  m_sendLength( 0 ),
+  m_sendCurrent( 0 )
+{}
 
 EmSocket::~EmSocket()
 {

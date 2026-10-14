@@ -48,7 +48,6 @@ private:
 
   int m_socket;
   bool m_connected;
-  bool m_pending;
   float m_connectRetry;
 
   uint8_t* m_recvBuffer;
