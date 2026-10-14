@@ -31,6 +31,7 @@ if(NOT imgui_FOUND)
 		${imgui_SOURCE_DIR}
 		${imgui_SOURCE_DIR}/backends
 	)
+	target_compile_definitions(imgui PRIVATE GL_SILENCE_DEPRECATION GLES_SILENCE_DEPRECATION)
 	target_compile_options(imgui PRIVATE
 		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nontrivial-memaccess>
 		$<$<CXX_COMPILER_ID:GNU>:-Wno-class-memaccess>
