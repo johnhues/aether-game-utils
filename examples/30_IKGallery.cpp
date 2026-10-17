@@ -74,7 +74,8 @@ int main( int argc, char* argv[] )
 	bool stepOnce = false;
 	int32_t iterationCount = 8;
 	int32_t startMode = (int32_t)IKStartMode::FromBind;
-	int32_t selected = 0;
+	int32_t focused = 0;
+	int32_t hovered = -1; // Specimen under the cursor, in the list or the viewport
 	bool drawIKDebug = false;
 	bool drawConstraints = true;
 	float ikJointScale = 0.05f;
@@ -104,9 +105,10 @@ int main( int argc, char* argv[] )
 			specimens.Append( specimen );
 		}
 		AE_ASSERT( specimens.Length() );
-		selected = 0;
+		focused = 0;
 		camera.Reset( specimens[ 0 ]->offset + ae::Vec3( 2.0f * ( kGalleryColumns - 1 ), -2.0f, 1.0f ) * 0.5f, ae::Vec3( 2.5f, 6.0f, 2.5f ) );
 		camera.SetDistanceLimits( 0.25f, 40.0f );
+		camera.SetModifierKey( {} );
 
 		AE_INFO( "Run" );
 		return true;
@@ -124,11 +126,19 @@ int main( int argc, char* argv[] )
 		}
 	};
 
+	auto Focus = [&]( int32_t index )
+	{
+		focused = index;
+		camera.Refocus( specimens[ index ]->offset + ae::Vec3( 0.0f, 0.0f, 0.9f ) );
+	};
+
 	auto Update = [&]() -> bool
 	{
 		const float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
 		input.Pump();
 		ui.NewFrame( &render, &input, dt );
+		const int32_t hoveredPrev = hovered;
+		hovered = -1;
 
 		// Fixed side-by-side layout: panel docked left, viewport right. The
 		// windows have no tab bars so they can't be dragged out, re-docked,
@@ -189,13 +199,9 @@ int main( int argc, char* argv[] )
 			{
 				ResetStats();
 			}
-			ImGui::Checkbox( "Draw IK Debug (selected)", &drawIKDebug );
+			ImGui::Checkbox( "Draw IK Debug (focused)", &drawIKDebug );
 			ImGui::Checkbox( "Draw Distance Constraints", &drawConstraints );
 			ImGui::SliderFloat( "Joint Scale", &ikJointScale, 0.01f, 0.25f );
-			if( ImGui::Button( "Focus Selected" ) )
-			{
-				camera.Refocus( specimens[ selected ]->offset + ae::Vec3( 0.0f, 0.0f, 0.9f ) );
-			}
 
 			ImGui::Separator();
 
@@ -212,9 +218,13 @@ int main( int argc, char* argv[] )
 					ImGui::TableNextRow();
 					ImGui::TableNextColumn();
 					ImGui::PushID( i );
-					if( ImGui::Selectable( specimen->scenario.name.c_str(), selected == i, ImGuiSelectableFlags_SpanAllColumns ) )
+					if( ImGui::Selectable( specimen->scenario.name.c_str(), i == hoveredPrev, ImGuiSelectableFlags_SpanAllColumns ) )
 					{
-						selected = i;
+						Focus( i );
+					}
+					if( ImGui::IsItemHovered() )
+					{
+						hovered = i;
 					}
 					ImGui::PopID();
 					ImGui::TableNextColumn();
@@ -241,7 +251,7 @@ int main( int argc, char* argv[] )
 
 			ImGui::Separator();
 
-			const GallerySpecimen* specimen = specimens[ selected ];
+			const GallerySpecimen* specimen = specimens[ focused ];
 			const IKFrameReport& report = specimen->lastReport;
 			ImGui::TextWrapped( "%s", specimen->scenario.description.c_str() );
 			ImGui::Text( "bone length:     %f", report.maxBoneLengthError );
@@ -264,6 +274,8 @@ int main( int argc, char* argv[] )
 		// The 3D scene is rendered offscreen and displayed as a texture, so
 		// the viewport participates in the dock layout like any other window
 		bool viewportHovered = false;
+		ImVec2 viewportMin = ImVec2( 0.0f, 0.0f );
+		ImVec2 viewportSize = ImVec2( 0.0f, 0.0f );
 		ImGui::SetNextWindowClass( &lockedWindow );
 		ImGui::PushStyleVar( ImGuiStyleVar_WindowPadding, ImVec2( 0.0f, 0.0f ) );
 		if( ImGui::Begin( "Viewport", nullptr, lockedWindowFlags | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse ) )
@@ -279,6 +291,8 @@ int main( int argc, char* argv[] )
 			}
 			ImGui::Image( (ImTextureID)(intptr_t)viewportTarget.GetTexture( 0 )->GetTexture(), contentSize, ImVec2( 0.0f, 1.0f ), ImVec2( 1.0f, 0.0f ) );
 			viewportHovered = ImGui::IsWindowHovered();
+			viewportMin = ImGui::GetItemRectMin();
+			viewportSize = contentSize;
 		}
 		ImGui::End();
 		ImGui::PopStyleVar();
@@ -287,9 +301,38 @@ int main( int argc, char* argv[] )
 		{
 			playing = !playing;
 		}
-		if( input.GetPress( ae::Key::F ) )
+		// Closest on screen to the cursor, among specimens in front of the camera
+		if( viewportHovered && viewportSize.x > 0.0f && viewportSize.y > 0.0f && camera.GetMode() == ae::DebugCamera::Mode::None )
 		{
-			camera.Refocus( specimens[ selected ]->offset + ae::Vec3( 0.0f, 0.0f, 0.9f ) );
+			const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
+			const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, viewportSize.x / viewportSize.y, camera.GetMinDistance() * 0.5f, 100.0f );
+			const ae::Matrix4 worldToProj = viewToProj * worldToView;
+			const ImVec2 mouse = ImGui::GetIO().MousePos;
+			const ae::Vec2 cursor( mouse.x - viewportMin.x, mouse.y - viewportMin.y );
+			float closestDistanceSq = 0.0f;
+			for( int32_t i = 0; i < (int32_t)specimens.Length(); i++ )
+			{
+				const ae::Vec3 center = specimens[ i ]->offset + ae::Vec3( 0.0f, 0.0f, 0.9f );
+				const ae::Vec4 clip = worldToProj * ae::Vec4( center, 1.0f );
+				if( clip.w <= 0.0f )
+				{
+					continue;
+				}
+				const ae::Vec2 screen(
+					( clip.x / clip.w * 0.5f + 0.5f ) * viewportSize.x,
+					( 0.5f - clip.y / clip.w * 0.5f ) * viewportSize.y
+				);
+				const float distanceSq = ( screen - cursor ).LengthSquared();
+				if( hovered < 0 || distanceSq < closestDistanceSq )
+				{
+					hovered = i;
+					closestDistanceSq = distanceSq;
+				}
+			}
+			if( hovered >= 0 && input.GetMouseReleaseLeft() )
+			{
+				Focus( hovered );
+			}
 		}
 		if( input.GetPress( ae::Key::R ) )
 		{
@@ -302,6 +345,10 @@ int main( int argc, char* argv[] )
 
 		camera.SetInputEnabled( viewportHovered );
 		camera.Update( &input, dt );
+		if( camera.GetMode() != ae::DebugCamera::Mode::None )
+		{
+			hovered = -1;
+		}
 
 		// Step all specimens with identical settings so the gallery reproduces
 		// the unit tests exactly
@@ -311,7 +358,7 @@ int main( int argc, char* argv[] )
 			{
 				GallerySpecimen* specimen = specimens[ i ];
 				const uint32_t scenarioFrame = frame % specimen->scenario.frameCount;
-				const bool debugThis = drawIKDebug && ( i == selected );
+				const bool debugThis = drawIKDebug && ( i == focused );
 				specimen->lastReport = specimen->runner.Step(
 					scenarioFrame,
 					(uint32_t)iterationCount,
@@ -344,7 +391,11 @@ int main( int argc, char* argv[] )
 			const ae::Skeleton& pose = specimen->runner.SolvedPose();
 			const ae::Matrix4 modelToWorld = ae::Matrix4::Translation( specimen->offset );
 			const bool failed = !specimen->lastReport.pass;
-			const ae::Color boneColor = failed ? ae::Color::AetherRed() : ( ( i == selected ) ? ae::Color::AetherGreen() : ae::Color::AetherBlue() );
+			const ae::Color boneColor = failed ? ae::Color::AetherRed() : ae::Color::AetherBlue();
+			if( i == hovered )
+			{
+				debugLines.AddCircle( specimen->offset + ae::Vec3( 0.0f, 0.0f, 0.01f ), ae::Vec3( 0.0f, 0.0f, 1.0f ), kGallerySpacing * 0.45f, ae::Color::AetherDarkBlue(), 48 );
+			}
 			for( uint32_t b = 1; b < pose.GetBoneCount(); b++ )
 			{
 				const ae::Bone* bone = pose.GetBoneByIndex( b );
@@ -364,7 +415,7 @@ int main( int argc, char* argv[] )
 				{
 					const ae::Vec3 p0 = modelToWorld.TransformPoint3x4( pose.GetBoneByIndex( constraint.idx0 )->boneToModel.GetTranslation() );
 					const ae::Vec3 p1 = modelToWorld.TransformPoint3x4( pose.GetBoneByIndex( constraint.idx1 )->boneToModel.GetTranslation() );
-					debugLines.AddLine( p0, p1, ae::Color::AetherOrange().ScaleA( 0.7f ) );
+					debugLines.AddLine( p0, p1, ae::Color::AetherGreen().ScaleA( 0.7f ) );
 				}
 			}
 			// Targets
@@ -378,7 +429,7 @@ int main( int argc, char* argv[] )
 			for( const auto& target : targets )
 			{
 				const ae::Vec3 p = modelToWorld.TransformPoint3x4( target.value );
-				debugLines.AddSphere( p, ikJointScale * 0.5f, ae::Color::AetherGreen(), 8 );
+				debugLines.AddSphere( p, ikJointScale * 0.5f, ae::Color::AetherOrange(), 8 );
 			}
 		}
 

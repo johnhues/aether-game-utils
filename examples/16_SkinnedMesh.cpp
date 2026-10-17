@@ -111,6 +111,7 @@ int main( int argc, char* argv[] )
 		fileSystem.Initialize( "data", "ae", "skinned_mesh" );
 		camera.Reset( ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::Vec3( 0.0f, 0.4f, 3.5f ) );
 		camera.SetDistanceLimits( 1.0f, 25.0f );
+		camera.SetModifierKey( {} );
 		debugLines.Initialize( 4096 );
 
 		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );

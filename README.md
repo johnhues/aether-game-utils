@@ -1,4 +1,11 @@
 # A single-header C++ collection of cross platform utilities
+[![Emscripten](https://github.com/johnhues/aether-game-utils/actions/workflows/emscripten.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/emscripten.yml)
+[![MacOS](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml)
+[![Windows](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml)
+[![Ubuntu clang](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml)
+[![Ubuntu g++](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml)
+[![Ubuntu MinGW](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_mingw.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_mingw.yml)
+[![Ubuntu Deprecated](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_deprecated.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_deprecated.yml)
 
 For quickly creating small games or for supplementing existing projects. It provides a largely complete set of small carefully designed and optimized building blocks for game development. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:
 * Providing useful and performant utilities tailored for game development
@@ -18,7 +25,7 @@ For quickly creating small games or for supplementing existing projects. It prov
 </div>
 
 ---
-# Example Source
+# Playable Example Source
 
 ---
 
@@ -221,6 +228,8 @@ const char* kFragmentShader = R"(
 ```
 
 This ~200 line example contains everythings needed for a cross-platform first person exploration game on: Web, MacOS, Windows, and iOS (and more platforms to come!).
+
+<!-- examples -->
 
 <!-- # Games using aether game utils
 [Bella Lunaux: The Case of the Diamond Panther Tiara](https://johnhues.itch.io/bella-lunaux-tiara)

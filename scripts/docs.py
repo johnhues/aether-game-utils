@@ -47,7 +47,8 @@ except ImportError:
     # Windows has no POSIX terminal control; the prompt falls back to input().
     termios = None
 
-REPO_ROOT = Path( __file__ ).resolve().parent.parent
+SCRIPT    = Path( __file__ ).resolve()
+REPO_ROOT = SCRIPT.parent.parent
 DOXYFILE  = REPO_ROOT / "Doxyfile"
 BUILD_DIR = REPO_ROOT / "build_docs"
 DOCS_DIR  = REPO_ROOT / "docs"
@@ -301,7 +302,7 @@ def summarize_log():
 UNLISTED = (
     "annotated.html", "annotated_dup.js",
     "hierarchy.html", "hierarchy.js", "inherits.html",
-    "files.html", "files_dup.js",
+    "files.html", "files_dup.js", "pages.html",
     "functions*.html", "functions*.js",
     "doxygen_crawl.html",
 )
@@ -712,6 +713,188 @@ def place_examples( html_dir, source, copy=False ):
     return f"{built} linked from {shorten( source )}"
 
 
+def build_examples( config ):
+    """Builds the web examples for a config with the emscripten presets,
+    configuring first when the build directory has never been configured."""
+    heading( f"Build {config} Examples" )
+    if not ( emscripten_build_dir() / "CMakeCache.txt" ).exists():
+        if not os.environ.get( "EMSDK" ):
+            sys.exit( "ERROR: the emscripten preset needs EMSDK set; source "
+                      "emsdk_env.sh first" )
+        step( "Configuring" )
+        if subprocess.run( [ "cmake", "--preset", "emscripten" ], cwd=REPO_ROOT ).returncode:
+            sys.exit( "ERROR: configuring the emscripten preset failed" )
+    step( "Building" )
+    preset = f"emscripten-{config.lower()}"
+    if subprocess.run( [ "cmake", "--build", "--preset", preset ], cwd=REPO_ROOT ).returncode:
+        sys.exit( f"ERROR: building {preset} failed" )
+    note( f"built into {shorten( emscripten_build_dir() / 'examples' / config )}" )
+
+
+#------------------------------------------------------------------------------
+# Examples
+#------------------------------------------------------------------------------
+# Every example program in examples/CMakeLists.txt in numbered order, spliced
+# into a copy of README.md at EXAMPLES_MARKER that doxygen reads as the main
+# page. An example's description is
+# the first comment block after its source file's banner and license.
+EXAMPLES_DIR = REPO_ROOT / "examples"
+MAIN_PAGE = BUILD_DIR / "README.md"
+EXAMPLES_MARKER = "<!-- examples -->"
+SOURCE_URL = "https://github.com/johnhues/aether-game-utils/blob/main/examples/"
+BUNDLE = re.compile( r'^\s*ae_add_bundle\(\s*"([^"]+)"(.*?)^\s*\)', re.M | re.S )
+NUMBERED = re.compile( r"^(\d+)_" )
+
+
+def bundle_arg( body, name ):
+    found = re.search( rf'^\s*{name}\s+"([^"]*)"', body, re.M )
+    return found.group( 1 ) if found else ""
+
+
+def example_description( path ):
+    """The first paragraph of the comment block naming what the file shows."""
+    sections, lines = [], []
+    for line in path.read_text().split( "\n" ):
+        if not line.startswith( "//" ):
+            break
+        if line.startswith( "//---" ):
+            sections.append( lines )
+            lines = []
+        else:
+            lines.append( line[ 2: ].strip() )
+    for section in sections[ 2: ]:
+        paragraph = []
+        for line in section:
+            if not line and paragraph:
+                break
+            paragraph.append( line )
+        text = "\n".join( paragraph ).strip()
+        if text.startswith( "Copyright" ) or not text.endswith( ( ".", ":" ) ) and "\n-" not in text:
+            continue
+        return text
+    return ""
+
+
+def example_references():
+    """Maps each example target and source file to the aether.h symbols and
+    groups whose documentation shows it, as markdown that links to them."""
+    lines = ( REPO_ROOT / "aether.h" ).read_text().split( "\n" )
+    found = {}
+    scope = ""
+    for i, line in enumerate( lines ):
+        opened = re.match( r"(?:class|struct)\s+(?:AE_ALIGN\(\s*\d+\s*\)\s*)?(\w+)\s*(?::.*)?$", line )
+        if opened:
+            scope = opened.group( 1 )
+        if not line.lstrip().startswith( "//!" ):
+            continue
+        keys = re.findall( r"\\demo\{examples/([^,}]+)", line )
+        keys += re.findall( r"\\snippet(?:\{\w+\})?\s+(\S+)", line )
+        if not keys:
+            continue
+        start = i
+        while start > 0 and lines[ start - 1 ].lstrip().startswith( "//!" ):
+            start -= 1
+        at = i + 1
+        while at < len( lines ) and re.match( r"\s*(//|template\b)", lines[ at ] ):
+            at += 1
+        group = re.search( r"\\defgroup\s+(\w+)", "\n".join( lines[ start:i + 1 ] ) )
+        declaration = lines[ at ] if at < len( lines ) else ""
+        kind = re.match( r"(\s*)(?:class|struct)\s+(?:AE_ALIGN\(\s*\d+\s*\)\s*)?(\w+)", declaration )
+        if group:
+            symbol = f"\\ref {group.group( 1 )}"
+        elif kind and not kind.group( 1 ):
+            symbol = f"ae::{kind.group( 2 )}"
+        else:
+            function = re.search( r"(~?\w+)\s*\(", declaration )
+            name = function.group( 1 ) if function else ""
+            nested = declaration[ :1 ].isspace() and scope
+            symbol = f"ae::{scope}::{name}" if nested else f"ae::{name}"
+        for key in keys:
+            found.setdefault( key, [] )
+            if symbol not in found[ key ]:
+                found[ key ].append( symbol )
+    return found
+
+
+def write_main_page():
+    """Writes the main page with the examples in it and returns how many it
+    lists."""
+    bundles = []
+    cmake = ( EXAMPLES_DIR / "CMakeLists.txt" ).read_text()
+    for match in BUNDLE.finditer( cmake ):
+        # Desktop only bundles have no web build to embed.
+        conditions = []
+        for line in cmake[ :match.start() ].split( "\n" ):
+            line = line.strip()
+            if re.match( r"if\s*\(", line ):
+                conditions.append( line )
+            elif re.match( r"endif\s*\(", line ):
+                conditions.pop()
+        web = not any( "AE_DESKTOP" in c for c in conditions )
+        target = bundle_arg( match.group( 2 ), "TARGET_NAME" ) or match.group( 1 )
+        sources = [
+            s for s in bundle_arg( match.group( 2 ), "SRC_FILES" ).split( ";" )
+            if s and "/" not in s and "$" not in s
+        ]
+        number = NUMBERED.match( target )
+        if number:
+            bundles.append( ( int( number.group( 1 ) ), match.group( 1 ), target, sources, web ) )
+    bundles.sort( key=lambda bundle: bundle[ 0 ] )
+
+    # A numbered file no bundle compiles directly belongs to every bundle
+    # sharing its number, like a shared header or the library a loader opens.
+    claimed = { s for bundle in bundles for s in bundle[ 3 ] }
+    unclaimed = [
+        p.name for p in sorted( EXAMPLES_DIR.iterdir() )
+        if p.suffix in ( ".cpp", ".mm", ".h" ) and NUMBERED.match( p.name )
+        and p.name not in claimed
+    ]
+
+    references = example_references()
+    shapes = dict( re.findall(
+        r"\\demo\{examples/([^,}]+),([^}]+)\}", ( REPO_ROOT / "aether.h" ).read_text()
+    ) )
+    out = [ "---", "# Examples", "", "---", "" ]
+    for number, title, target, sources, web in bundles:
+        sources = sources + [
+            n for n in unclaimed if int( NUMBERED.match( n ).group( 1 ) ) == number
+        ]
+        name = "ae_" + target.lower()
+        links = [ f"[{s}]({SOURCE_URL}{s})" for s in sources ]
+        symbols = []
+        for key in [ target ] + sources:
+            symbols += [ s for s in references.get( key, [] ) if s not in symbols ]
+        description = next(
+            ( d for d in ( example_description( EXAMPLES_DIR / s ) for s in sources ) if d ),
+            ""
+        )
+        out += [ f"## {name} ({title}) {{#{name}}}", "", "---", "", " · ".join( links + symbols ) ]
+        if description:
+            out += [ "", description ]
+        if web:
+            shape = f",{shapes[ target ]}" if target in shapes else ""
+            out += [ "", f"\\demo{{examples/{target}{shape}}}" ]
+        out += [ "", "---", "" ]
+    readme = ( REPO_ROOT / "README.md" ).read_text()
+    if EXAMPLES_MARKER not in readme:
+        sys.exit( f"ERROR: README.md has no {EXAMPLES_MARKER} line to place the examples at" )
+    MAIN_PAGE.write_text( readme.replace( EXAMPLES_MARKER, "\n".join( out ), 1 ) )
+    return len( bundles )
+
+
+def main_page_overrides():
+    """Points doxygen at the main page copy in place of README.md."""
+    return {
+        "INPUT": doxyfile_value( "INPUT" ).replace( "README.md", str( shorten( MAIN_PAGE ) ) ),
+        "USE_MDFILE_AS_MAINPAGE": shorten( MAIN_PAGE ),
+    }
+
+
+def doxyfile_value( tag ):
+    found = re.search( rf"^{tag}\s*=\s*(.*)$", DOXYFILE.read_text(), re.M )
+    return found.group( 1 ).strip() if found else ""
+
+
 #------------------------------------------------------------------------------
 # Tasks
 #------------------------------------------------------------------------------
@@ -770,7 +953,9 @@ def task_publish( args ):
         shutil.rmtree( html_dir )
     with generating():
         step( "Generating HTML" )
+        print( f"  {write_main_page()} examples listed" )
         doxyfile = write_doxyfile( "publish", {
+            **main_page_overrides(),
             "OUTPUT_DIRECTORY": html_dir.parent,
             "HTML_OUTPUT": html_dir.name,
             "GENERATE_HTML": "YES",
@@ -808,7 +993,9 @@ def task_preview( args ):
         note( "cleared the previous site, every graph is drawn again" )
     with generating():
         step( "Generating HTML" )
+        print( f"  {write_main_page()} examples listed" )
         overrides = {
+            **main_page_overrides(),
             "OUTPUT_DIRECTORY": BUILD_DIR,
             "HTML_OUTPUT": "html",
             "GENERATE_HTML": "YES",
@@ -891,6 +1078,36 @@ def task_report( args ):
 #------------------------------------------------------------------------------
 # Menu
 #------------------------------------------------------------------------------
+# The menu restarts on the edited script, then acts on the key that noticed it.
+script_stamp = SCRIPT.stat().st_mtime_ns
+
+
+def reload_if_changed( key, args ):
+    """Restarts this script with key replayed if the file changed since it
+    started. A file that no longer compiles is reported and the old code kept."""
+    global script_stamp
+    stamp = SCRIPT.stat().st_mtime_ns
+    if stamp == script_stamp:
+        return
+    script_stamp = stamp
+    try:
+        compile( SCRIPT.read_text(), str( SCRIPT ), "exec" )
+    except SyntaxError as error:
+        note( f"{SCRIPT.name}:{error.lineno}: {error.msg}, kept the running copy" )
+        return
+    note( f"{SCRIPT.name} changed, reloading" )
+    argv = [ sys.executable, str( SCRIPT ) ]
+    skip = False
+    for arg in sys.argv[ 1: ]:
+        if not skip and arg not in ( "--config", "--replay" ):
+            argv.append( arg )
+        skip = not skip and arg in ( "--config", "--replay" )
+    if args.config:
+        argv += [ "--config", args.config ]
+    sys.stdout.flush()
+    os.execv( sys.executable, argv + [ "--replay", key ] )
+
+
 def choose_config( args ):
     """Sets which web build the next preview's live examples come from. Escape,
     return and q all keep the current one."""
@@ -926,24 +1143,36 @@ def choose_task( first, args ):
         shown = args.config or linked_config( BUILD_DIR / "html" ) or "Release"
         print( f"\n   c  {'Config':<17} {dim( shown )}" )
         opens = "open in browser" if remembered( "open", True ) else "browser disabled"
-        print( f"   b  {'On build':<17} {dim( opens )}" )
+        print( f"   o  {'On generate':<17} {dim( opens )}" )
+        where = shorten( emscripten_build_dir() / "examples" / shown )
+        built = f"compiles and links {where} wasm"
+        print( f"   b  {'Build examples':<17} {dim( built )}" )
         print( f"   q  {'Quit':<17} {dim( 'or escape' )}" )
         while True:
-            choice = read_key( "\n > " ).lower()
+            if args.replay:
+                choice, args.replay = args.replay, None
+                print( f"\n > {choice}" )
+            else:
+                choice = read_key( "\n > " ).lower()
             if choice == "q" or choice == ESCAPE:
                 raise Quit()
+            if choice:
+                reload_if_changed( choice, args )
             if choice == "c":
                 choose_config( args )
                 break
-            if choice == "b":
+            if choice == "o":
                 remember( "open", not remembered( "open", True ) )
+                break
+            if choice == "b":
+                build_examples( shown )
                 break
             if choice in keys:
                 return choice
             if choice.isdigit() and 1 <= int( choice ) <= len( keys ):
                 return keys[ int( choice ) - 1 ]
             if choice:
-                print( dim( "   Pick a number, a task name, c, b, or q." ) )
+                print( dim( "   Pick a number, a task name, c, o, b, or q." ) )
         first = False
 
 
@@ -1015,6 +1244,9 @@ def main():
     parser.add_argument(
         "--serve", metavar="DIR", help=argparse.SUPPRESS
     )
+    parser.add_argument(
+        "--replay", metavar="KEY", help=argparse.SUPPRESS
+    )
     args = parser.parse_args()
 
     if args.serve:
@@ -1023,7 +1255,7 @@ def main():
             ( "127.0.0.1", args.port or PREVIEW_PORT ), handler ).serve_forever()
         return
 
-    heading( "aether-game-utils documentation" )
+    heading( "aether-game-utils documentation builder" )
     if not print_tools():
         sys.exit( "\nERROR: doxygen is required; install it with: brew install doxygen" )
 

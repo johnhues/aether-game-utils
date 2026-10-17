@@ -5654,11 +5654,16 @@ private:
 //------------------------------------------------------------------------------
 // ae::DebugCamera class
 //! A camera utility which provides basic functionality for mouse and keyboard
-//! navigation. These controls mimic some popular CAD software, but are still
-//! slightly modified to be useable with a trackpad. The controls are:
-//! Orbit: (Alt+LMB)
-//! Pan: (Alt+MMB) or (Alt+touch scroll)
-//! Zoom: (Alt+RMB) or (Scroll)
+//! navigation.
+//! Mouse (non-trackpad) controls require the key set with
+//! ae::DebugCamera::SetModifierKey(), LeftAlt by default. Controls are:
+//!     Orbit: [Modifier]+LMB
+//!     Pan: [Modifier]+MMB
+//!     Zoom: [Modifier]+RMB or Scroll
+//! Trackpad controls are:
+//!     Orbit: scroll
+//!     Pan: Shift + scroll
+//!     Zoom: Pinch or ctrl + scroll
 //------------------------------------------------------------------------------
 class DebugCamera
 {
@@ -5675,6 +5680,9 @@ public:
 	void SetDistanceFromFocus( float distance );
 	//! Passing false cancels in progress input and prevents new input until called again with true. True by default.
 	void SetInputEnabled( bool enabled );
+	//! Mouse button input only starts while \p key is held, ae::Key::LeftAlt by
+	//! default. Pass {} for no modifier key. Does not affect in progress input.
+	void SetModifierKey( ae::Optional< ae::Key > key );
 	//! Sets the yaw and pitch of the camera. Updates the cameras position.
 	void SetRotation( ae::Vec2 angles );
 	//! Updates pivot and position over time
@@ -5711,6 +5719,7 @@ private:
 	Axis m_worldUp = Axis::Z;
 	// Mode
 	bool m_inputEnabled = true;
+	ae::Optional< ae::Key > m_modifierKey = ae::Key::LeftAlt;
 	Mode m_mode = Mode::None;
 	ae::Vec3 m_refocusPos = ae::Vec3( 0.0f );
 	float m_refocusSnappiness = 0.0f;
@@ -22212,15 +22221,15 @@ EM_BOOL _aeEmscriptenHandleWheel( int eventType, const EmscriptenWheelEvent* whe
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
 	input->m_TryNewFrame();
-	// DOM_DELTA_PIXEL (0) is the trackpad path, already in virtual DPI points.
-	// DOM_DELTA_LINE (1) is the mouse wheel path, three lines to a detent.
+	// DOM_DELTA_PIXEL (0) is already in virtual DPI points.
+	// DOM_DELTA_LINE (1) is a mouse wheel, three lines to a detent.
 	// DOM_DELTA_PAGE (2) is not handled — too coarse for camera/UI input.
 	if( wheelEvent->deltaMode != DOM_DELTA_PAGE )
 	{
 		const float scale = ( wheelEvent->deltaMode == DOM_DELTA_LINE ) ? ( _kScrollPointsPerNotch / 3.0f ) : 1.0f;
 		const float dx = (float)wheelEvent->deltaX * scale;
 		const float dy = -(float)wheelEvent->deltaY * scale; // Negate Y: browser positive=down, aether positive=up
-		input->mouse.usingTouch = ( wheelEvent->deltaMode == DOM_DELTA_PIXEL );
+		input->mouse.usingTouch = EM_ASM_INT( { return Module.aeWheelTrackpad ? 1 : 0; } );
 		// Browsers report deltas the OS scroll direction has already been applied
 		// to, and expose no momentum phase, so everything is user driven scroll
 		input->mouse.scroll.x += dx;
@@ -22397,6 +22406,24 @@ void Input::Initialize( Window* window )
 	// @NOTE: Internal. Window level wheel listeners are passive in Chrome, so
 	// preventDefault() is ignored there and the page scrolls.
 	emscripten_set_wheel_callback( "#canvas", this, true, &_aeEmscriptenHandleWheel );
+	// @NOTE: Internal. Sets Module.aeWheelTrackpad before each canvas wheel event
+	EM_ASM( {
+		window.addEventListener( 'wheel', function( e )
+		{
+			const legacy = e.wheelDeltaY || e.wheelDeltaX;
+			const delta = e.wheelDeltaY ? e.deltaY : e.deltaX;
+			Module.aeWheelTrackpad = legacy ? ( legacy === -3 * delta ) : ( e.deltaMode === 0 );
+		}, { capture: true, passive: true } );
+	} );
+	// @NOTE: Internal. Only a primary button drag keeps sending mouse moves
+	// once it leaves the canvas, explicit capture covers every button.
+	EM_ASM( {
+		const canvas = document.getElementById( 'canvas' );
+		canvas.addEventListener( 'pointerdown', function( e )
+		{
+			canvas.setPointerCapture( e.pointerId );
+		} );
+	} );
 	emscripten_set_focus_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_blur_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
 	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
@@ -23591,6 +23618,18 @@ void Input::m_UpdateCursorHidden()
 		( m_wantedCursorState == ae::CursorState::Hidden ) ||
 		( m_wantedCursorState == ae::CursorState::HiddenUntilMoved ) ||
 		( m_wantedCursorState == ae::CursorState::HiddenAndCaptured && m_captureMouse );
+#if _AE_EMSCRIPTEN_
+	// The cursor is only hidden over the canvas, so a drag that leaves it shows
+	// the cursor again
+	const ae::Vec2 pos = mouse.position;
+	const bool over = ( pos.x >= 0.0f && pos.y >= 0.0f &&
+		pos.x < m_window->GetWidth() && pos.y < m_window->GetHeight() );
+	EM_ASM( {
+		const style = document.getElementById( 'canvas' ).style;
+		const cursor = $0 ? 'none' : 'auto';
+		if( style.cursor !== cursor ) { style.cursor = cursor; }
+	}, hide && over );
+#endif
 	if( hide == m_hideCursor )
 	{
 		return;
@@ -23606,15 +23645,6 @@ void Input::m_UpdateCursorHidden()
 	else
 	{
 		[ NSCursor unhide ];
-	}
-#elif _AE_EMSCRIPTEN_
-	if( hide )
-	{
-		EM_ASM( { document.getElementById('canvas').style.cursor = 'none'; } );
-	}
-	else
-	{
-		EM_ASM( { document.getElementById('canvas').style.cursor = 'auto'; } );
 	}
 #endif
 }
@@ -30113,6 +30143,11 @@ void DebugCamera::SetDistanceLimits( float min, float max )
 	m_Precalculate();
 }
 
+void DebugCamera::SetModifierKey( ae::Optional< ae::Key > key )
+{
+	m_modifierKey = key;
+}
+
 void DebugCamera::Update( ae::Input* input, float dt )
 {
 	AE_ASSERT_MSG( input, "Input system is required to update debug camera" );
@@ -30122,7 +30157,8 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	// Momentum included so trackpad panning and zooming glide as expected
 	const ae::Vec2 scrollPoints = input->mouse.scroll + input->mouse.scrollInertia;
 	const ae::Vec2 scroll = m_inputEnabled ? ( scrollPoints * 0.01f ) : ae::Vec2( 0.0f );
-	const bool alt = m_inputEnabled ? input->Get( ae::Key::LeftAlt ) : false;
+	const ae::Key* modifierKey = m_modifierKey.TryGet();
+	const bool modifierHeld = m_inputEnabled ? ( !modifierKey || input->Get( *modifierKey ) ) : false;
 	const bool shift = m_inputEnabled ? input->Get( ae::Key::LeftShift ) : false;
 	const bool control = m_inputEnabled ? input->Get( ae::Key::LeftControl ) : false;
 	const bool command = m_inputEnabled ? input->Get( ae::Key::LeftSuper ) : false;
@@ -30140,15 +30176,15 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	{
 		nextMode = Mode::Zoom;
 	}
-	else if( ( alt && mmb ) || ( shift && isTouchScrolling ) )
+	else if( ( modifierHeld && mmb ) || ( shift && isTouchScrolling ) )
 	{
 		nextMode = Mode::Pan;
 	}
-	else if( ( alt && lmb ) || isTouchScrolling )
+	else if( ( modifierHeld && lmb ) || isTouchScrolling )
 	{
 		nextMode = Mode::Rotate;
 	}
-	else if( alt && rmb )
+	else if( modifierHeld && rmb )
 	{
 		nextMode = Mode::Zoom;
 	}
@@ -30178,7 +30214,11 @@ void DebugCamera::Update( ae::Input* input, float dt )
 		if( nextMode != Mode::None )
 		{
 			m_mode = nextMode;
+#if _AE_EMSCRIPTEN_
+			input->SetCursorState( ae::CursorState::Hidden );
+#else
 			input->SetCursorState( ae::CursorState::HiddenAndCaptured );
+#endif
 		}
 		else if( !m_preventModeExitImm )
 		{

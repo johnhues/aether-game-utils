@@ -22,7 +22,10 @@ task: `preview` (HTML site), `markdown` (regenerates the checked-in `docs/*.md`,
 needs moxygen), `report` (ranks what is still undocumented). Output lands in
 `build_docs/` (gitignored); only `markdown` writes into the repo. `preview`
 switches graphs to graphviz automatically when `dot` is installed, so the
-Doxyfile stays portable for machines without it. Settings live
+Doxyfile stays portable for machines without it. `preview` and `publish` also
+list every example from `examples/CMakeLists.txt` on the main page, in numbered
+order, at the `<!-- examples -->` line in README.md; an example's description is
+the first comment block after its file's banner and license, ending in a period. Settings live
 in `Doxyfile`, tab names in `DoxygenLayout.xml`, presentation in
 `doxygen-custom.css`; `docs.py` layers per-task overrides on a copy, so none of
 them need editing to preview something.

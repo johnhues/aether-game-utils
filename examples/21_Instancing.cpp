@@ -110,6 +110,7 @@ int main( int argc, char* argv[] )
 
 		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 1.5f ) );
 		camera.SetDistanceLimits( 1.5f, INFINITY );
+		camera.SetModifierKey( {} );
 
 		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 		shader.SetDepthTest( true );

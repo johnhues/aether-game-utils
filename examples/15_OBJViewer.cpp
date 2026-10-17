@@ -101,6 +101,7 @@ int main( int argc, char* argv[] )
 		timeStep.SetTimeStep( 1.0f / 60.0f );
 		fs.Initialize( DATA_DIR, "ae", "obj_viewer" );
 		camera.SetDistanceLimits( 0.25f, 10.0f );
+		camera.SetModifierKey( {} );
 		debugLines.Initialize( 1024 );
 
 		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );

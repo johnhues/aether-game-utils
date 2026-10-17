@@ -1559,6 +1559,7 @@ int main( int argc, char* argv[] )
 		solid.debugLines.SetXRayEnabled( false );
 		solid.camera.Reset( ae::Vec3( 0.0f, 0.0f, 1.0f ), ae::Vec3( 3.5f, 3.5f, 2.5f ) );
 		solid.camera.SetDistanceLimits( 0.5f, 20.0f );
+		solid.camera.SetModifierKey( {} );
 
 		// Seeded from the groups already in this palette. Membership is by slot
 		// index, so these follow position rather than color.

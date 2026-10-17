@@ -84,7 +84,23 @@
 			}
 			catch( error ) {}
 		} );
-		demo.appendChild( frame );
+		demo.insertBefore( frame, demo.firstChild );
+	}
+
+	// A frame far out of view is removed, freeing its WebGL context; browsers
+	// drop the oldest context once a page holds too many.
+	function unload( demo )
+	{
+		const frame = demo.querySelector( "iframe" );
+		if( frame )
+		{
+			if( demo.classList.contains( "armed" ) )
+			{
+				arm( demo, false );
+			}
+			demo.classList.remove( "paused" );
+			frame.remove();
+		}
 	}
 
 	document.addEventListener( "DOMContentLoaded", function()
@@ -93,7 +109,6 @@
 		demos.forEach( function( demo )
 		{
 			demo.replaceChildren();
-			load( demo );
 			const button = document.createElement( "button" );
 			button.className = "ae-demo-play";
 			button.textContent = "▶ Play";
@@ -104,6 +119,30 @@
 			} );
 			demo.appendChild( button );
 		} );
+
+		if( "IntersectionObserver" in window )
+		{
+			const observer = new IntersectionObserver( function( entries )
+			{
+				entries.forEach( function( entry )
+				{
+					const loaded = !!entry.target.querySelector( "iframe" );
+					if( entry.isIntersecting && !loaded )
+					{
+						load( entry.target );
+					}
+					else if( !entry.isIntersecting )
+					{
+						unload( entry.target );
+					}
+				} );
+			}, { rootMargin: "50% 0px" } );
+			demos.forEach( function( demo ) { observer.observe( demo ); } );
+		}
+		else
+		{
+			demos.forEach( load );
+		}
 
 		if( demos.length )
 		{

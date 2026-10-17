@@ -120,6 +120,7 @@ int main( int argc, char* argv[] )
 		objFile = fileSystem.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
 		AE_INFO( "Loading '#'", objFile->GetURL() );
 		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
+		camera.SetModifierKey( {} );
 		AE_INFO( "Run" );
 		return true;
 	};
