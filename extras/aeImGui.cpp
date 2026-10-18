@@ -179,7 +179,7 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 
 	io.DisplaySize = ImVec2( render->GetWidth() / displayScale, render->GetHeight() / displayScale );
 	io.DisplayFramebufferScale = ImVec2( displayScale, displayScale );
-	io.DeltaTime = dt;
+	io.DeltaTime = ae::Max( dt, 0.00001f ); // ImGui requires a positive delta
 	
 	// @TODO: Check ImGuiIO::WantCaptureMouse https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#q-how-can-i-tell-whether-to-dispatch-mousekeyboard-to-dear-imgui-or-to-my-application
 	io.MouseDown[ 0 ] = input->mouse.leftButton;
