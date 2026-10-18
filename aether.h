@@ -5306,7 +5306,7 @@ public:
 // ae::RenderTarget class
 //------------------------------------------------------------------------------
 //! A render target for offscreen rendering with color and depth attachments.
-//! \demo{examples/20_render_target,21/9}
+//! \demo{examples/20_render_target,4/3}
 //------------------------------------------------------------------------------
 class RenderTarget
 {

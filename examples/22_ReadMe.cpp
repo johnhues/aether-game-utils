@@ -52,7 +52,7 @@ int main( int argc, char* argv[] )
 
 	auto Update = [&]() -> bool
 	{
-		const float dt = ae::Min( timeStep.GetDt(), 0.03f );
+		const float dt = timeStep.GetDt();
 		input.Pump();
 
 		// Async resource loading for web

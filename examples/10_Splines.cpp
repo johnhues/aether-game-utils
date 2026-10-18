@@ -142,7 +142,7 @@ int main( int argc, char* argv[] )
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.4f ) );
     spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::White() );
 
-    t += timeStep.GetTimeStep();
+    t += timeStep.GetDt();
     if( t > splineLen )
     {
       t -= splineLen;
@@ -151,7 +151,7 @@ int main( int argc, char* argv[] )
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.3f ) );
     spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Green() );
 
-    angle += timeStep.GetTimeStep();
+    angle += timeStep.GetDt();
     // Orbit dot
     ae::Vec3 rotPos = p + ae::Vec3( cosf(angle), sinf(angle), 0.0f ) * 0.5f;
     transform = ae::Matrix4::Translation( rotPos - ae::Vec3( 0.0f, 0.0f, 0.2f ) );

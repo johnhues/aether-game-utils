@@ -347,7 +347,7 @@ int main()
   while( !input.quit )
   {
     input.Pump();
-    float dt = ae::Max( 0.00001f, timeStep.GetDt() );
+    float dt = timeStep.GetDt();
 
     ui->NewFrame( &render, &input, dt );
 

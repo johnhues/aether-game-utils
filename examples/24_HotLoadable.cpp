@@ -99,7 +99,7 @@ bool Game::Update()
 	if( input.Get( ae::Key::Left ) ) { dir.x -= 1.0f; }
 	if( input.Get( ae::Key::Right ) ) { dir.x += 1.0f; }
 	dir.SafeNormalize();
-	pos += dir * 0.01f;
+	pos += dir * ( timeStep.GetDt() * 0.6f );
 
 	render.Activate();
 	render.Clear( ae::Color::AetherDarkPurple() );

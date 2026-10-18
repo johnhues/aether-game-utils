@@ -313,7 +313,7 @@ int main( int argc, char* argv[] )
 
 	auto Update = [&]() -> bool
 	{
-		const float dt = ae::Min( 0.1f, timeStep.GetDt() );
+		const float dt = timeStep.GetDt();
 		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 10000.0f );
 		const ae::Matrix4 worldToProj = viewToProj * worldToView;

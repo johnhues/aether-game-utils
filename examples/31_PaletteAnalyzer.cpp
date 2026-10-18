@@ -1587,7 +1587,7 @@ int main( int argc, char* argv[] )
 
 	auto Update = [&]() -> bool
 	{
-		const float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
+		const float dt = timeStep.GetDt();
 		input.Pump();
 		ui.NewFrame( &render, &input, dt );
 

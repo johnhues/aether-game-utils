@@ -21,6 +21,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
+// Draws a 128x128x128 grid of cubes, 2,097,152 instances and 25,165,824
+// triangles, with one ae::VertexBuffer::DrawInstanced() call. Each cube's
+// offset is read from a per instance ae::InstanceData buffer.
+//------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"

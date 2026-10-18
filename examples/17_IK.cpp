@@ -351,7 +351,7 @@ int main()
 	AE_INFO( "Run" );
 	auto Update = [&]()
 	{
-		const float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
+		const float dt = timeStep.GetDt();
 		input.Pump();
 
 		if( UpdateResources() )
