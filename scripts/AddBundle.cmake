@@ -257,8 +257,9 @@ function(ae_add_bundle BUNDLE_NAME)
 			"-lopenal"
 			"-s TEXTDECODER=2" # When marshalling C UTF-8 strings across the JS<->Wasm language boundary, favor smallest generated code size rather than performance
 			# "-s MINIMAL_RUNTIME=2" # Enable aggressive MINIMAL_RUNTIME mode.
-			"-s INITIAL_MEMORY=2GB" # Allocate the max possible safe memory, which for legacy reasons is 2GB. Leave it up to the browser/OS to decide how much of that memory to actually back with physical RAM.
-			"-s ALLOW_MEMORY_GROWTH=0"
+			"-s INITIAL_MEMORY=64MB" # Reserved up front by every instance; mobile browsers limit the total across all instances on a page.
+			"-s ALLOW_MEMORY_GROWTH=1" # Grows on demand up to the 2GB default maximum. JS must not hold views of wasm memory across calls into wasm.
+			"-s STACK_SIZE=1MB" # Matches the smallest desktop main thread stack (Windows).
 			"-s MIN_WEBGL_VERSION=2 -s MAX_WEBGL_VERSION=2" # Require WebGL 2 support in target browser, for smallest generated code size. (pass -s MIN_WEBGL_VERSION=1 to dual-target WebGL 1 and WebGL 2)
 			"-s ENVIRONMENT=web" # The generated build output is only to be expected to be run in a web browser, never in a native CLI shell, or in a web worker.
 			"-s ABORTING_MALLOC=0" # Fine tuning for code size: do not generate code to abort program execution on malloc() failures, that will not be interesting here.

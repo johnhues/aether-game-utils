@@ -391,7 +391,7 @@ namespace ae {
 #	elif _AE_APPLE_
 #		define AE_BREAK() __builtin_debugtrap()
 #	elif _AE_EMSCRIPTEN_
-#		define AE_BREAK() assert( 0 )
+#		define AE_BREAK() do { EM_ASM( { debugger; } ); abort(); } while(0)
 #	elif _AE_WASM_
 #		define AE_BREAK() __builtin_trap()
 #	elif defined( __aarch64__ )
@@ -3616,14 +3616,14 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 //------------------------------------------------------------------------------
 //! \def AE_ASSERT_IMPL
 //! Called with the formatted message after a failed assertion has been logged.
-//! Define before including aether.h to replace the default, which calls
-//! AE_BREAK().
+//! Define before including aether.h to replace the default, which flushes
+//! all output streams and calls AE_BREAK().
 //! Usage:
 //! \code
 //! #define AE_ASSERT_IMPL( msgStr ) MyFatalHandler( msgStr )
 //! \endcode
 #ifndef AE_ASSERT_IMPL
-#	define AE_ASSERT_IMPL( msgStr ) do { (void)(msgStr); AE_BREAK(); } while(0)
+#	define AE_ASSERT_IMPL( msgStr ) do { (void)(msgStr); fflush( nullptr ); AE_BREAK(); } while(0)
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 //! Logs a fatal message naming the failed expression and calls
