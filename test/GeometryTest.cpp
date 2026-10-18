@@ -1905,3 +1905,30 @@ REQUIRE( accResult.hits.Length() == 2 );
 REQUIRE( Approx( accResult.hits[ 0 ].distance, 3.0f ) );
 REQUIRE( Approx( accResult.hits[ 1 ].distance, 5.0f ) );
 }
+
+TEST_CASE( "BVH reaches every element past 32767 nodes", "[ae::BVH]" )
+{
+const ae::Tag tag = "test";
+const uint32_t count = 40000; // One element per leaf, roughly 80000 nodes
+ae::Array< ae::Vec3 > points = tag;
+for( uint32_t i = 0; i < count; i++ )
+{
+	points.Append( ae::Vec3( (float)i, 0.0f, 0.0f ) );
+}
+ae::BVH< ae::Vec3 > bvh = tag;
+bvh.Build( points.Data(), count, []( ae::Vec3 p ) { return ae::AABB( p, p ); }, 1 );
+REQUIRE( bvh.GetRoot() );
+
+uint32_t reached = 0;
+auto visit = [&]( auto&& visit, const ae::BVHNode* node ) -> void
+{
+	if( const ae::BVHLeaf< ae::Vec3 >* leaf = bvh.TryGetLeaf( node->leafIdx ) )
+	{
+		reached += leaf->count;
+	}
+	if( const ae::BVHNode* left = bvh.GetNode( node->leftIdx ) ) { visit( visit, left ); }
+	if( const ae::BVHNode* right = bvh.GetNode( node->rightIdx ) ) { visit( visit, right ); }
+};
+visit( visit, bvh.GetRoot() );
+REQUIRE( reached == count );
+}

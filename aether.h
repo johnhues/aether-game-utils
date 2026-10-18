@@ -3410,10 +3410,10 @@ inline std::ostream& operator<<( std::ostream& os, RectInt r )
 struct BVHNode
 {
 	ae::AABB aabb;
-	int16_t parentIdx = -1;
-	int16_t leftIdx = -1;
-	int16_t rightIdx = -1;
-	int16_t leafIdx = -1;
+	int32_t parentIdx = -1;
+	int32_t leftIdx = -1;
+	int32_t rightIdx = -1;
+	int32_t leafIdx = -1;
 };
 
 //------------------------------------------------------------------------------
@@ -13935,8 +13935,8 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 
 	BVHNode* parent = &m_nodes[ parentIdx ];
 	AE_ASSERT( parent->leftIdx == -1 && parent->rightIdx == -1 );
-	parent->leftIdx = (int16_t)m_nodes.Length();
-	parent->rightIdx = (int16_t)( m_nodes.Length() + 1 );
+	parent->leftIdx = (int32_t)m_nodes.Length();
+	parent->rightIdx = (int32_t)( m_nodes.Length() + 1 );
 	parent->aabb = leftAABB;
 	parent->aabb.Expand( rightAABB );
 
@@ -13948,9 +13948,9 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 	BVHNode* right = &m_nodes[ rightIdx ];
 	
 	left->aabb = leftAABB;
-	left->parentIdx = (int16_t)parentIdx;
+	left->parentIdx = (int32_t)parentIdx;
 	right->aabb = rightAABB;
-	right->parentIdx = (int16_t)parentIdx;
+	right->parentIdx = (int32_t)parentIdx;
 
 #if _AE_DEBUG_ && ( N == 0 )
 	if( m_limit )
@@ -13973,7 +13973,7 @@ void BVH< T, N >::SetLeaf( int32_t nodeIdx, T* data, uint32_t count )
 	}
 	else
 	{
-		node->leafIdx = (int16_t)m_leaves.Length();
+		node->leafIdx = (int32_t)m_leaves.Length();
 		leaf = &m_leaves.Append( {} );
 	}
 	leaf->data = data;
