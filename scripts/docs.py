@@ -12,8 +12,10 @@ in build_docs/, so the checked-in Doxyfile never has to be edited to preview
 something. Everything generated lands in build_docs/, which .gitignore covers.
 
 Tasks:
-  preview   builds the site into build_docs/html and serves it
-  publish   assembles the site into build_docs/publish, nothing served
+  preview   builds the web examples, then the site into build_docs/html, and
+            serves it
+  publish   builds the web examples, then assembles the site into
+            build_docs/publish, nothing served
   report    ranks what is still undocumented
 
 CLI: python3 scripts/docs.py [preview|publish|report] [--no-open] [--yes]
@@ -22,6 +24,7 @@ Naming a task runs it once and exits, skipping the menu.
 import argparse
 import contextlib
 import functools
+import gzip
 import html
 import http.server
 import json
@@ -29,8 +32,10 @@ import os
 import re
 import shutil
 import socket
+import signal
 import subprocess
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -53,6 +58,7 @@ DOXYFILE  = REPO_ROOT / "Doxyfile"
 BUILD_DIR = REPO_ROOT / "build_docs"
 DOCS_DIR  = REPO_ROOT / "docs"
 LOG_FILE  = BUILD_DIR / "doxygen.log"
+SERVE_LOG = BUILD_DIR / "serve.log"
 
 BUILD_CONFIGS = [ "Release", "RelWithDebInfo", "Debug" ]
 
@@ -64,11 +70,11 @@ PUBLISH_PORT = 8766
 TASKS = {
     "preview": (
         "Preview build",
-        "builds into build_docs/html and serves it"
+        "builds the examples and build_docs/html, serves it"
     ),
     "publish": (
         "Publish build",
-        "assembles the site into build_docs/publish, nothing served"
+        "builds the examples, assembles build_docs/publish"
     ),
     "report": (
         "Coverage report",
@@ -513,16 +519,60 @@ def open_path( path, allowed ):
 #------------------------------------------------------------------------------
 # Preview server
 #------------------------------------------------------------------------------
+# Formats that are already compressed, sent as they are.
+PRECOMPRESSED = { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".woff", ".woff2", ".ico" }
+gzipped = {} # path -> ( mtime, compressed bytes )
+
+
 class NoStoreHandler( http.server.SimpleHTTPRequestHandler ):
     """Serves the site without caching. A preview is regenerated in place, so a
-    cached stylesheet or script shows the previous run's site."""
+    cached stylesheet or script shows the previous run's site. Connections
+    stay open between requests and files are gzipped for browsers that accept
+    it, as a static host like GitHub Pages serves them."""
+
+    protocol_version = "HTTP/1.1"
 
     def end_headers( self ):
         self.send_header( "Cache-Control", "no-store" )
         super().end_headers()
 
-    def log_message( self, *args ):
-        pass
+    def do_GET( self ):
+        path = Path( self.translate_path( self.path ) )
+        if ( "gzip" not in self.headers.get( "Accept-Encoding", "" )
+             or path.suffix.lower() in PRECOMPRESSED or not path.is_file() ):
+            return super().do_GET()
+        mtime = path.stat().st_mtime_ns
+        cached = gzipped.get( path )
+        if not cached or cached[ 0 ] != mtime:
+            cached = ( mtime, gzip.compress( path.read_bytes(), 6 ) )
+            gzipped[ path ] = cached
+        self.send_response( 200 )
+        self.send_header( "Content-Type", self.guess_type( str( path ) ) )
+        self.send_header( "Content-Encoding", "gzip" )
+        self.send_header( "Content-Length", str( len( cached[ 1 ] ) ) )
+        self.send_header( "Vary", "Accept-Encoding" )
+        self.end_headers()
+        self.wfile.write( cached[ 1 ] )
+
+
+def serve_host():
+    """The address the server listens on: every interface when remote access
+    is on, this computer only otherwise."""
+    return "0.0.0.0" if remembered( "remote", False ) else "127.0.0.1"
+
+
+def serve_urls( port ):
+    """Where the site can be opened, the host name one only with remote
+    access on."""
+    urls = [ f"http://127.0.0.1:{port}/index.html" ]
+    if remembered( "remote", False ):
+        urls.append( f"http://{socket.gethostname()}:{port}/index.html" )
+    return urls
+
+
+def port_in_use( port ):
+    with socket.socket( socket.AF_INET, socket.SOCK_STREAM ) as probe:
+        return probe.connect_ex( ( "127.0.0.1", port ) ) == 0
 
 
 def serve_site( html_dir, port ):
@@ -530,17 +580,34 @@ def serve_site( html_dir, port ):
     listening. A
     page that embeds a live example only runs over http; the browser refuses to
     fetch its wasm from a file:// page. The server outlives this script, and
-    regenerating the site needs no restart."""
-    with socket.socket( socket.AF_INET, socket.SOCK_STREAM ) as probe:
-        if probe.connect_ex( ( "127.0.0.1", port ) ) == 0:
+    regenerating the site needs no restart. A server this script started on
+    another address is replaced."""
+    host = serve_host()
+    record = BUILD_DIR / f"serve.{port}.pid"
+    if port_in_use( port ):
+        try:
+            pid, running = record.read_text().split()
+        except ( OSError, ValueError ):
+            return "an earlier preview is still serving it, kill it to change remote access"
+        if running == host:
             return "an earlier preview is still serving it"
-    process = subprocess.Popen(
-        [ sys.executable, __file__, "--serve", str( html_dir ),
-          "--port", str( port ) ],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        start_new_session=True
-    )
-    return f"serving as pid {process.pid}, kill it to stop"
+        try:
+            os.kill( int( pid ), signal.SIGTERM )
+        except OSError:
+            return "an earlier preview is still serving it, kill it to change remote access"
+        for _ in range( 30 ):
+            if not port_in_use( port ):
+                break
+            time.sleep( 0.1 )
+    with open( SERVE_LOG, "a" ) as log:
+        process = subprocess.Popen(
+            [ sys.executable, __file__, "--serve", str( html_dir ),
+              "--port", str( port ), "--host", host ],
+            stdout=subprocess.DEVNULL, stderr=log,
+            start_new_session=True
+        )
+    record.write_text( f"{process.pid} {host}\n" )
+    return f"serving as pid {process.pid}, kill it to stop, requests in {shorten( SERVE_LOG )}"
 
 
 #------------------------------------------------------------------------------
@@ -946,9 +1013,11 @@ def finish_site( html_dir, args ):
 def task_publish( args ):
     """Assembles the site for publishing: the examples the pages reference are
     copied in rather than linked, and nothing is served."""
-    heading( "Site" )
     args.publishing = True
     html_dir = Path( args.out ).resolve() if args.out else BUILD_DIR / "publish"
+    if not args.config_dir:
+        build_examples( args.config or "Release" )
+    heading( "Site" )
     if html_dir.exists():
         shutil.rmtree( html_dir )
     with generating():
@@ -971,21 +1040,24 @@ def task_publish( args ):
 
     step( "Serving" )
     port = args.port or PUBLISH_PORT
-    url = f"http://127.0.0.1:{port}/index.html"
-    print( f"  {url}" )
+    urls = serve_urls( port )
+    for url in urls:
+        print( f"  {url}" )
     note( serve_site( html_dir, port ) )
 
     step( "Next" )
     note( f"upload {shorten( html_dir )}" )
-    open_path( url, not args.no_open and remembered( "open", True ) )
+    open_path( urls[ 0 ], not args.no_open and remembered( "open", True ) )
 
 
 def task_preview( args ):
-    heading( "Preview build" )
     args.publishing = False
     html_dir = Path( args.out ).resolve() if args.out else BUILD_DIR / "html"
     if not args.config:
         args.config = linked_config( html_dir ) or "Release"
+    if not args.config_dir:
+        build_examples( args.config )
+    heading( "Preview build" )
     if args.clean and html_dir.exists():
         # Doxygen leaves a page it no longer generates where it is, and the
         # preview serves it like any other.
@@ -1011,14 +1083,15 @@ def task_preview( args ):
     summarize_log()
 
     step( "Serving" )
-    url = f"http://127.0.0.1:{args.port or PREVIEW_PORT}/index.html"
-    print( f"  {url}" )
+    urls = serve_urls( args.port or PREVIEW_PORT )
+    for url in urls:
+        print( f"  {url}" )
     note( serve_site( html_dir, args.port or PREVIEW_PORT ) )
 
     step( "Next" )
     note( "'report' ranks what is still undocumented" )
     note( "edit doxygen-custom.css to restyle, DoxygenLayout.xml to rename tabs" )
-    open_path( url, not args.no_open and remembered( "open", True ) )
+    open_path( urls[ 0 ], not args.no_open and remembered( "open", True ) )
 
 
 def task_report( args ):
@@ -1144,6 +1217,8 @@ def choose_task( first, args ):
         print( f"\n   c  {'Config':<17} {dim( shown )}" )
         opens = "open in browser" if remembered( "open", True ) else "browser disabled"
         print( f"   o  {'On generate':<17} {dim( opens )}" )
+        remote = f"open to the network as {socket.gethostname()}" if remembered( "remote", False ) else "this computer only"
+        print( f"   r  {'Remote access':<17} {dim( remote )}" )
         where = shorten( emscripten_build_dir() / "examples" / shown )
         built = f"compiles and links {where} wasm"
         print( f"   b  {'Build examples':<17} {dim( built )}" )
@@ -1164,6 +1239,9 @@ def choose_task( first, args ):
             if choice == "o":
                 remember( "open", not remembered( "open", True ) )
                 break
+            if choice == "r":
+                remember( "remote", not remembered( "remote", False ) )
+                break
             if choice == "b":
                 build_examples( shown )
                 break
@@ -1172,7 +1250,7 @@ def choose_task( first, args ):
             if choice.isdigit() and 1 <= int( choice ) <= len( keys ):
                 return keys[ int( choice ) - 1 ]
             if choice:
-                print( dim( "   Pick a number, a task name, c, o, b, or q." ) )
+                print( dim( "   Pick a number, a task name, c, o, r, b, or q." ) )
         first = False
 
 
@@ -1230,7 +1308,7 @@ def main():
     )
     parser.add_argument(
         "--config-dir", metavar="DIR",
-        help="a build config's example directory, in place of --config"
+        help="a build config's example directory, in place of --config; not built"
     )
     parser.add_argument(
         "--out", metavar="DIR",
@@ -1247,12 +1325,15 @@ def main():
     parser.add_argument(
         "--replay", metavar="KEY", help=argparse.SUPPRESS
     )
+    parser.add_argument(
+        "--host", default="127.0.0.1", help=argparse.SUPPRESS
+    )
     args = parser.parse_args()
 
     if args.serve:
         handler = functools.partial( NoStoreHandler, directory=args.serve )
         http.server.ThreadingHTTPServer(
-            ( "127.0.0.1", args.port or PREVIEW_PORT ), handler ).serve_forever()
+            ( args.host, args.port or PREVIEW_PORT ), handler ).serve_forever()
         return
 
     heading( "aether-game-utils documentation builder" )

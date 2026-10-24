@@ -272,7 +272,7 @@ TAB_SIZE               = 4
 ALIASES                = "usage=@par 💡 Example^^" \
                          "output=@par Output:^^" \
                          "demo{1}=@par 🎮 Live^^@htmlonly<div class=\"ae-demo\" data-demo=\"\1\"></div>@endhtmlonly^^" \
-                         "demo{2}=@par 🎮 Live^^@htmlonly<div class=\"ae-demo\" data-demo=\"\1\" style=\"aspect-ratio:\2\"></div>@endhtmlonly^^"
+                         "demo{2}=@par 🎮 Live^^@htmlonly<div class=\"ae-demo\" data-demo=\"\1\" style=\"--ae-ratio:\2\"></div>@endhtmlonly^^"
 
 # Set the OPTIMIZE_OUTPUT_FOR_C tag to YES if your project consists of C sources
 # only. Doxygen will then generate output that is more tailored for C. For

@@ -62,14 +62,24 @@
 		running( demo, false );
 	}
 
+	// The bottom strip saying a frame is waiting its turn or starting; the
+	// example's own status replaces it once its page has loaded.
+	function label( demo, text )
+	{
+		const status = demo.querySelector( ".ae-demo-status" );
+		status.textContent = text;
+		status.hidden = !text;
+	}
+
 	function load( demo )
 	{
 		const frame = document.createElement( "iframe" );
 		frame.src = demo.dataset.demo + "/index.html";
-		frame.loading = "lazy";
+		label( demo, "Loading" );
 		frame.allow = "autoplay; fullscreen; gamepad; clipboard-write";
 		frame.addEventListener( "load", function()
 		{
+			label( demo, "" );
 			// An armed frame holds the keyboard, so Escape arrives in the
 			// example's document rather than this one.
 			try
@@ -98,8 +108,9 @@
 			{
 				arm( demo, false );
 			}
-			demo.classList.remove( "paused" );
+			demo.classList.remove( "paused", "ready" );
 			frame.remove();
+			label( demo, "" );
 		}
 	}
 
@@ -118,7 +129,49 @@
 				arm( demo, true );
 			} );
 			demo.appendChild( button );
+			// iOS zooms the page on a quick second tap, which here is game input
+			let lastTouchEnd = -Infinity;
+			demo.addEventListener( "touchend", function( event )
+			{
+				if( event.timeStamp - lastTouchEnd < 350 )
+				{
+					event.preventDefault();
+				}
+				lastTouchEnd = event.timeStamp;
+			}, { passive: false } );
+			const status = document.createElement( "div" );
+			status.className = "ae-demo-status";
+			status.hidden = true;
+			demo.appendChild( status );
 		} );
+
+		// Frames near the viewport load one at a time, nearest to its middle
+		// first, until each reports it is ready or halted.
+		const wanted = new Set();
+		let loading = null;
+		function loadNext()
+		{
+			if( loading )
+			{
+				return;
+			}
+			const middle = window.innerHeight / 2;
+			let nearestDistance = Infinity;
+			wanted.forEach( function( demo )
+			{
+				const rect = demo.getBoundingClientRect();
+				const distance = Math.abs( rect.top + rect.height / 2 - middle );
+				if( !demo.querySelector( "iframe" ) && distance < nearestDistance )
+				{
+					loading = demo;
+					nearestDistance = distance;
+				}
+			} );
+			if( loading )
+			{
+				load( loading );
+			}
+		}
 
 		if( "IntersectionObserver" in window )
 		{
@@ -126,16 +179,25 @@
 			{
 				entries.forEach( function( entry )
 				{
-					const loaded = !!entry.target.querySelector( "iframe" );
-					if( entry.isIntersecting && !loaded )
+					if( entry.isIntersecting )
 					{
-						load( entry.target );
+						wanted.add( entry.target );
+						if( !entry.target.querySelector( "iframe" ) )
+						{
+							label( entry.target, "Queued" );
+						}
 					}
-					else if( !entry.isIntersecting )
+					else
 					{
+						wanted.delete( entry.target );
+						if( loading === entry.target )
+						{
+							loading = null;
+						}
 						unload( entry.target );
 					}
 				} );
+				loadNext();
 			}, { rootMargin: "50% 0px" } );
 			demos.forEach( function( demo ) { observer.observe( demo ); } );
 		}
@@ -146,6 +208,29 @@
 
 		if( demos.length )
 		{
+			// A frame says when it has finished loading, which shows its play
+			// button, or that it halted. Either lets the next frame load.
+			window.addEventListener( "message", function( event )
+			{
+				const state = event.data && event.data.aeDemo;
+				if( state !== "ready" && state !== "halted" )
+				{
+					return;
+				}
+				demos.forEach( function( demo )
+				{
+					const frame = demo.querySelector( "iframe" );
+					if( frame && frame.contentWindow === event.source )
+					{
+						demo.classList.toggle( "ready", state === "ready" );
+						if( loading === demo )
+						{
+							loading = null;
+						}
+					}
+				} );
+				loadNext();
+			} );
 			document.addEventListener( "pointerdown", function( event )
 			{
 				demos.forEach( function( demo )
