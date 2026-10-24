@@ -12,7 +12,7 @@ For quickly creating small games or for supplementing existing projects. It prov
 * Providing utilities that naturally conform to game development best practices
 * Not overstepping or imposing a particular game engine architecture
 
-[`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) is a single-header which contains all of the functionality provided by the library. Only system libraries are included, no other external dependencies are required. A CMakeLists.txt file is provided for building examples and tests, but is not needed or recommended for including in your own project. Instead [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) is designed to be included as a single header file. C++17 or later is required. Neither exceptions nor RTTI are used.
+[`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) is a single-header which contains all of the functionality provided by the library. Only system libraries are included, no other external dependencies are required. A CMakeLists.txt file is provided for building examples and tests, but is not needed or recommended for including in your own project. Instead [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) is designed to be included as a single header file. C++20 or later is required. Neither exceptions nor RTTI are used.
 
 ---
 # Playable Example

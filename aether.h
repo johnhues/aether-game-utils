@@ -1222,7 +1222,6 @@ public:
 
 	// Comparison
 	bool operator==( const ae::Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
-	bool operator!=( const ae::Matrix4& o ) const { return !operator== ( o ); }
 	bool IsNAN() const;
 
 	// Define conversion functions etc for ae::Matrix4. See AE_CONFIG_FILE for more info.
@@ -1272,7 +1271,6 @@ public:
 	void Normalize();
 	Quaternion NormalizeCopy() const;
 	bool operator==( const Quaternion& q ) const;
-	bool operator!=( const Quaternion& q ) const;
 	Quaternion& operator*= ( const Quaternion& q );
 	Quaternion operator* ( const Quaternion& q ) const;
 	//! Returns the antipodal quaternion (negates all four components i,j,k,r).
@@ -1588,7 +1586,6 @@ public:
 	AABB( Vec3 p0, Vec3 p1 );
 	explicit AABB( const Sphere& sphere );
 	bool operator == ( const AABB& aabb ) const;
-	bool operator != ( const AABB& aabb ) const;
 
 	AABB& Expand( Vec3 p );
 	AABB& Expand( AABB other );
@@ -1641,7 +1638,6 @@ public:
 	OBB( const OBB& ) = default;
 	OBB( const Matrix4& transform );
 	bool operator == ( const OBB& obb ) const;
-	bool operator != ( const OBB& obb ) const;
 
 	void SetTransform( const Matrix4& transform );
 	Matrix4 GetTransform() const;
@@ -1726,7 +1722,6 @@ struct Color
 	static Color HSV( float hue, float saturation, float value );
 
 	bool operator == ( ae::Color o ) const { return r == o.r && g == o.g && b == o.b && a == o.a; }
-	bool operator != ( ae::Color o ) const { return !( operator == ( o ) ); }
 	ae::Color operator * ( ae::Color o ) const { return RGBA( r * o.r, g * o.g, b * o.b, a * o.a ); }
 	ae::Color& operator *= ( ae::Color o ) { r *= o.r; g *= o.g; b *= o.b; a *= o.a; return *this; }
 
@@ -1894,7 +1889,6 @@ public:
 	template< uint32_t N2 > Str<N> operator +( const Str<N2>& str ) const;
 	template< uint32_t N2 > void operator +=( const Str<N2>& str );
 	template< uint32_t N2 > bool operator ==( const Str<N2>& str ) const;
-	template< uint32_t N2 > bool operator !=( const Str<N2>& str ) const;
 	template< uint32_t N2 > bool operator <( const Str<N2>& str ) const;
 	template< uint32_t N2 > bool operator >( const Str<N2>& str ) const;
 	template< uint32_t N2 > bool operator <=( const Str<N2>& str ) const;
@@ -1902,7 +1896,6 @@ public:
 	Str<N> operator +( const char* str ) const;
 	void operator +=( const char* str );
 	bool operator ==( const char* str ) const;
-	bool operator !=( const char* str ) const;
 	bool operator <( const char* str ) const;
 	bool operator >( const char* str ) const;
 	bool operator <=( const char* str ) const;
@@ -1931,7 +1924,6 @@ public:
 private:
 	template< uint32_t N2 > friend class Str;
 	template< uint32_t N2 > friend bool operator ==( const char*, const Str< N2 >& );
-	template< uint32_t N2 > friend bool operator !=( const char*, const Str< N2 >& );
 	template< uint32_t N2 > friend bool operator <( const char*, const Str< N2 >& );
 	template< uint32_t N2 > friend bool operator >( const char*, const Str< N2 >& );
 	template< uint32_t N2 > friend bool operator <=( const char*, const Str< N2 >& );
@@ -1966,7 +1958,6 @@ struct UUID
 	static UUID Generate();
 
 	bool operator==( const UUID& other ) const;
-	bool operator!=( const UUID& other ) const;
 
 	// Define conversion functions etc for ae::UUID. See AE_CONFIG_FILE for more info.
 #ifdef AE_UUID_CLASS_CONFIG
@@ -2032,7 +2023,6 @@ public:
 	constexpr explicit Hash( U initialValue );
 	
 	constexpr bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
-	constexpr bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
 
 	constexpr Hash& HashString( const char* str );
 	Hash& HashData( const void* data, uint32_t length );
@@ -2077,7 +2067,7 @@ public:
 
 private:
 	bool m_hasValue = false;
-	alignas(T) std::byte m_value[ sizeof(T) ];
+	alignas(T) std::byte m_value[ sizeof(T) ] = {};
 };
 
 
@@ -2764,7 +2754,6 @@ public:
 		const T2& operator*() const { return *m_ptr; }
 		const pointer operator->() const { return m_ptr; }
 		friend bool operator== ( const Iterator& a, const Iterator& b ) { return a.m_ptr == b.m_ptr; };
-		friend bool operator!= ( const Iterator& a, const Iterator& b ) { return !( a == b ); };
 		Iterator& operator++();
 		Iterator operator++( int );
 		Iterator begin();
@@ -2882,7 +2871,6 @@ public:
 		const T& operator*() const { return *m_ptr; }
 		const pointer operator->() const { return m_ptr; }
 		friend bool operator== ( const Iterator& a, const Iterator& b ) { return a.m_ptr == b.m_ptr; };
-		friend bool operator!= ( const Iterator& a, const Iterator& b ) { return !( a == b ); };
 		Iterator& operator++();
 		Iterator operator++( int );
 		Iterator begin();
@@ -6647,7 +6635,6 @@ struct NetId
 	NetId( const NetId& ) = default;
 	explicit NetId( uint32_t id ) : m_id( id ) {}
 	bool operator==( const NetId& o ) const { return o.m_id == m_id; }
-	bool operator!=( const NetId& o ) const { return o.m_id != m_id; }
 	explicit operator bool () const { return m_id != 0; }
 	uint32_t GetInternalId() const { return m_id; }
 	void Serialize( BinaryStream* s ) { s->SerializeUInt32( m_id ); }
@@ -7343,7 +7330,6 @@ struct TypeId
 
 	constexpr operator uint32_t() const { return m_id; }
 	constexpr bool operator==( TypeId o ) const { return m_id == o.m_id; }
-	constexpr bool operator!=( TypeId o ) const { return m_id != o.m_id; }
 	constexpr bool operator<( TypeId o ) const { return m_id < o.m_id; }
 
 private:
@@ -10749,25 +10735,6 @@ bool operator ==( const char* str0, const Str<N>& str1 )
 
 template< uint32_t N >
 template< uint32_t N2 >
-bool Str< N >::operator !=( const Str<N2>& str ) const
-{
-	return !operator==( str );
-}
-
-template< uint32_t N >
-bool Str< N >::operator !=( const char* str ) const
-{
-	return !operator==( str );
-}
-
-template< uint32_t N >
-bool operator !=( const char* str0, const Str<N>& str1 )
-{
-	return !operator==( str0, str1 );
-}
-
-template< uint32_t N >
-template< uint32_t N2 >
 bool Str< N >::operator <( const Str<N2>& str ) const
 {
 	return strcmp( m_str, str.c_str() ) < 0;
@@ -10988,12 +10955,6 @@ template< uint32_t N >
 inline bool operator==( const std::string& str0, const ae::Str< N >& str1 )
 {
 	return str0 == str1.c_str();
-}
-
-template< uint32_t N >
-inline bool operator!=( const std::string& str0, const ae::Str< N >& str1 )
-{
-	return str0 != str1.c_str();
 }
 
 //------------------------------------------------------------------------------
@@ -17661,11 +17622,6 @@ bool Quaternion::operator==( const Quaternion& q ) const
 	return ( i == q.i ) && ( j == q.j ) && ( k == q.k ) && ( r == q.r );
 }
 
-bool Quaternion::operator!=( const Quaternion& q ) const
-{
-	return !operator==( q );
-}
-
 Quaternion& Quaternion::operator*= ( const Quaternion& q )
 {
 	//http://www.mathworks.com/help/aeroblks/quaternionmultiplication.html
@@ -18303,11 +18259,6 @@ bool AABB::operator == ( const AABB& aabb ) const
 	return ( aabb.m_min == m_min ) && ( aabb.m_max == m_max );
 }
 
-bool AABB::operator != ( const AABB& aabb ) const
-{
-	return !( operator == ( aabb ) );
-}
-
 AABB& AABB::Expand( ae::Vec3 p )
 {
 	m_min = ae::Min( p, m_min );
@@ -18501,11 +18452,6 @@ bool OBB::operator == ( const OBB& obb ) const
 		&& ( obb.m_axes[ 1 ] == m_axes[ 1 ] )
 		&& ( obb.m_axes[ 2 ] == m_axes[ 2 ] )
 		&& ( obb.m_halfSize == m_halfSize );
-}
-
-bool OBB::operator != ( const OBB& obb ) const
-{
-	return !( operator == ( obb ) );
 }
 
 void OBB::SetTransform( const ae::Matrix4& transform )
@@ -19497,7 +19443,6 @@ ae::UUID ae::UUID::Generate()
 }
 
 bool UUID::operator==( const UUID& other ) const { return memcmp( data, other.data, sizeof( data ) ) == 0; }
-bool UUID::operator!=( const UUID& other ) const { return memcmp( data, other.data, sizeof( data ) ) != 0; }
 
 std::ostream& operator<<( std::ostream& os, const ae::UUID& uuid )
 {

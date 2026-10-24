@@ -61,6 +61,10 @@ void aeCompactingAllocator::Expand( uint32_t totalBytes )
 
 aeCompactingAllocator::~aeCompactingAllocator()
 {
+  if( m_data )
+  {
+    m_Compact();
+  }
   AE_ASSERT_MSG( !m_tail, "Cannot be safely destroyed with existing allocations" );
 
   if( m_data )
@@ -92,21 +96,14 @@ void aeCompactingAllocator::m_Compact()
   m_tail = nullptr;
 
   uint8_t* open = m_data;
-  for( Header* current = first; current; current = current->next )
+  Header* next = nullptr;
+  for( Header* current = first; current; current = next )
   {
-    // Only compact current allocations. Freed headers will be squashed in Compact()
+    next = current->next;
+
+    // Only compact current allocations. Freed headers are dropped from the list
     if( !current->external )
     {
-      Header* prev = current->prev;
-      Header* next = current->next;
-      if( prev )
-      {
-        prev->next = next;
-      }
-      if( next )
-      {
-        next->prev = prev;
-      }
       continue;
     }
 
@@ -119,18 +116,18 @@ void aeCompactingAllocator::m_Compact()
       AE_ASSERT( open + current->size < m_data + m_size );
       memmove( open, current, sizeof( Header ) + current->size );
       current = (Header*)open;
-      
-      // Update linked list
-      current->prev = m_tail;
-      if( current->prev )
-      {
-        current->prev->next = current;
-      }
-      current->next = nullptr;
 
       // Update external pointer value
       *( current->external ) = open + sizeof( Header );
     }
+
+    // Update linked list
+    current->prev = m_tail;
+    if( current->prev )
+    {
+      current->prev->next = current;
+    }
+    current->next = nullptr;
 
     // Increment open offset based on current link in list
     open += sizeof( Header ) + current->size;

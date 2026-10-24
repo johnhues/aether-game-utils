@@ -323,7 +323,7 @@ TEST_CASE( "BinaryStream reader serialize basic values", "ae::BinaryStream" )
 
 	// Write
 	TestStruct test0;
-	AE_STATIC_ASSERT( std::is_pod_v< TestStruct > );
+	AE_STATIC_ASSERT( std::is_trivial_v< TestStruct > && std::is_standard_layout_v< TestStruct > );
 	memset( &test0, 0, sizeof(TestStruct) ); // Clear padding for memcmp
 	test0.Initialize();
 
@@ -332,7 +332,7 @@ TEST_CASE( "BinaryStream reader serialize basic values", "ae::BinaryStream" )
 
 	// Read
 	TestStruct test1;
-	AE_STATIC_ASSERT( std::is_pod_v< TestStruct > );
+	AE_STATIC_ASSERT( std::is_trivial_v< TestStruct > && std::is_standard_layout_v< TestStruct > );
 	memset( &test1, 0, sizeof(TestStruct) ); // Clear padding for memcmp
 	
 	ae::BinaryReader rStream( wStreamBuffer.Data(), wStreamBuffer.Length() );

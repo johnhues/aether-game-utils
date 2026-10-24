@@ -83,9 +83,11 @@ template< typename T >
 void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
 {
   AE_ASSERT( m_data );
-  AE_STATIC_ASSERT( std::is_pod< T >::value );
+  AE_STATIC_ASSERT( std::is_trivial< T >::value && std::is_standard_layout< T >::value );
   AE_STATIC_ASSERT( alignof( T ) <= kAlignment );
+  AE_STATIC_ASSERT( sizeof( Header ) % kAlignment == 0 );
   void** p = (void**)_p;
+  size = (uint32_t)( ( size + kAlignment - 1 ) & ~( kAlignment - 1 ) );
 
   // Move all allocations to front of m_data
   m_Compact();

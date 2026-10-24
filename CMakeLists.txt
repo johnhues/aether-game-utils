@@ -39,7 +39,7 @@ set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(AE_NAMESPACE aether-game-utils)
 
 if(NOT ${AE_LEAN_AND_MEAN})
-	set(CMAKE_CXX_STANDARD 17)
+	set(CMAKE_CXX_STANDARD 20)
 	set(CMAKE_CXX_STANDARD_REQUIRED ON)
 	Include("${AE_ROOT_DIR}/scripts/AddBundle.cmake")
 
