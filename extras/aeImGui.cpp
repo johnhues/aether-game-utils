@@ -257,6 +257,7 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 	{
 		input->scroll.delta = ae::Vec2( 0.0f );
 		input->scroll.inertia = ae::Vec2( 0.0f );
+		input->zoomDelta = 0.0f;
 	}
 	m_passThrough.Clear();
 	

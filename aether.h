@@ -4430,6 +4430,11 @@ public:
 	ae::Vec2 cursorMovement = ae::Vec2( 0.0f );
 	//! Mouse wheel and trackpad scrolling since the last frame
 	ae::ScrollState scroll;
+	//! Trackpad pinch zoom since the last frame, as the natural log of the
+	//! scale change. Positive when the fingers spread, add up across frames,
+	//! and expf() gives the scale factor. Always 0 on iOS and iPadOS. Touchscreen
+	//! pinches are pointers instead, see ae::Input::GetUnclaimedPointers().
+	float zoomDelta = 0.0f;
 
 // private:
 	Input( const Input& ) = delete;
@@ -22286,7 +22291,12 @@ EM_BOOL _aeEmscriptenHandleWheel( int eventType, const EmscriptenWheelEvent* whe
 	// DOM_DELTA_PIXEL (0) is already in virtual DPI points.
 	// DOM_DELTA_LINE (1) is a mouse wheel, three lines to a detent.
 	// DOM_DELTA_PAGE (2) is not handled — too coarse for camera/UI input.
-	if( wheelEvent->deltaMode != DOM_DELTA_PAGE )
+	// A trackpad pinch arrives as a wheel event holding ctrl without the key
+	if( wheelEvent->mouse.ctrlKey && !input->Get( ae::Key::LeftControl ) )
+	{
+		input->zoomDelta -= (float)wheelEvent->deltaY * 0.01f;
+	}
+	else if( wheelEvent->deltaMode != DOM_DELTA_PAGE )
 	{
 		const float scale = ( wheelEvent->deltaMode == DOM_DELTA_LINE ) ? ( _kScrollPointsPerNotch / 3.0f ) : 1.0f;
 		const float dx = (float)wheelEvent->deltaX * scale;
@@ -22482,6 +22492,26 @@ void Input::Initialize( Window* window )
 			Module.aeWheelTrackpad = legacy ? ( Math.abs( legacy + 3 * delta ) < 1 ) : ( e.deltaMode === 0 );
 		}, { capture: true, passive: true } );
 	} );
+	// @NOTE: Internal. Safari reports a trackpad pinch as gesture events,
+	// accumulated in Module.aeZoomDelta. Touchscreen gestures are left to the
+	// touch handlers.
+	EM_ASM( {
+		const canvas = document.getElementById( 'canvas' );
+		let touches = 0;
+		let lastScale = 1;
+		Module.aeZoomDelta = 0;
+		const countTouches = function( e ) { touches = e.touches.length; };
+		window.addEventListener( 'touchstart', countTouches, { capture: true, passive: true } );
+		window.addEventListener( 'touchend', countTouches, { capture: true, passive: true } );
+		window.addEventListener( 'touchcancel', countTouches, { capture: true, passive: true } );
+		canvas.addEventListener( 'gesturestart', function( e ) { e.preventDefault(); lastScale = 1; }, { passive: false } );
+		canvas.addEventListener( 'gesturechange', function( e )
+		{
+			e.preventDefault();
+			if( !touches ) { Module.aeZoomDelta += Math.log( e.scale / lastScale ); }
+			lastScale = e.scale;
+		}, { passive: false } );
+	} );
 	// @NOTE: Internal. Only a primary button drag keeps sending mouse moves
 	// once it leaves the canvas, explicit capture covers every button.
 	EM_ASM( {
@@ -22537,6 +22567,7 @@ void Input::m_TryNewFrame()
 		cursorMovement = ae::Vec2( 0.0f );
 		scroll.delta = ae::Vec2( 0.0f );
 		scroll.inertia = ae::Vec2( 0.0f );
+		zoomDelta = 0.0f;
 		// Discard touches that ended before they were adopted via PumpPointers().
 		// Per the staged API contract, ended touches are never returned.
 		for( int32_t i = (int32_t)m_newPointers.Length() - 1; i >= 0; i-- )
@@ -22758,6 +22789,12 @@ void Input::Pump()
 						}
 					}
 					break;
+				case NSEventTypeMagnify:
+					if( cursorWithinWindow )
+					{
+						zoomDelta += log1pf( (float)event.magnification );
+					}
+					break;
 				default:
 					break;
 			}
@@ -22830,6 +22867,7 @@ void Input::Pump()
 		_aeEmscriptenGetCanvasInfo( &width, &height, &scale );
 		m_window->m_UpdateSize( width, height, scale );
 		m_window->m_SyncMode();
+		zoomDelta += (float)EM_ASM_DOUBLE( { const zoomDelta = Module.aeZoomDelta; Module.aeZoomDelta = 0; return zoomDelta; } );
 	}
 #endif
 
@@ -30615,6 +30653,10 @@ void DebugCamera::Update( const UpdateParams& params )
 	if( !isTrackpad )
 	{
 		m_dist += scroll.y * 2.5f * zoomSpeed;
+	}
+	if( mouseEnabled )
+	{
+		m_dist *= expf( -input->zoomDelta );
 	}
 	m_dist = ae::Clip( m_dist, m_min, m_max );
 
