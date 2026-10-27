@@ -6375,6 +6375,8 @@ public:
 	void Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels, uint32_t maxAudioDatas );
 	void Terminate();
 	
+	//! Returns null when \p data is not a complete WAV file or no audio data
+	//! slots remain.
 	const AudioData* LoadWavFile( const uint8_t* data, uint32_t length );
 
 	void SetVolume( float volume );
@@ -32550,26 +32552,42 @@ void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* buffe
 	{
 		memcpy( &header, fileBuffer + fileOffset, sizeof(header) );
 		fileOffset += sizeof(header);
-		AE_ASSERT( ( fileSize - fileOffset ) >= header.chunkSize );
+		if( ( fileSize - fileOffset ) < header.chunkSize )
+		{
+			return; // Truncated
+		}
 		
 		if( memcmp( header.chunkId, "RIFF", 4 ) == 0 )
 		{
 			RiffChunk riff;
+			if( header.chunkSize < sizeof(riff) )
+			{
+				return;
+			}
 			memcpy( &riff, fileBuffer + fileOffset, sizeof(riff) );
-			AE_ASSERT( memcmp( riff.waveId, "WAVE", 4 ) == 0 );
+			if( memcmp( riff.waveId, "WAVE", 4 ) != 0 )
+			{
+				return;
+			}
 			fileOffset += sizeof(riff);
 		}
 		else
 		{
 			if( memcmp( header.chunkId, "fmt ", 4 ) == 0 )
 			{
-				AE_ASSERT( header.chunkSize >= sizeof(FormatChunk) );
+				if( header.chunkSize < sizeof(FormatChunk) )
+				{
+					return;
+				}
 				memcpy( &waveFormat, fileBuffer + fileOffset, sizeof(FormatChunk) );
 				hasReadFormat = true;
 			}
 			else if( memcmp( header.chunkId, "data", 4 ) == 0 )
 			{
-				AE_ASSERT( hasReadFormat );
+				if( !hasReadFormat )
+				{
+					return;
+				}
 				AE_ASSERT_MSG( dataSize == 0, "Combining WAV data chunks is currently not supported" );
 				
 				const uint8_t* data = ( fileBuffer + fileOffset );
@@ -32604,8 +32622,10 @@ void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* buffe
 		}
 	}
 
-	AE_ASSERT( hasReadFormat );
-	AE_ASSERT( dataSize );
+	if( !hasReadFormat || !dataSize )
+	{
+		return;
+	}
 	*lengthOut = dataSize / ( waveFormat.sampleRate * waveFormat.numChannels * waveFormat.bitsPerSample / 8.0f );
 #endif
 }
