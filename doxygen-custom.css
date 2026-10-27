@@ -422,3 +422,21 @@ div.ingroups a:hover {
 .ae-demo.armed .ae-demo-play {
 	display: none;
 }
+
+/* Measurements of the running example, under its frame. */
+.ae-demo-stats {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.15em 1.2em;
+	min-height: 1.6em;
+	margin: 0.4em auto 0;
+	font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-variant-numeric: tabular-nums;
+	color: var(--ae-muted);
+}
+
+.ae-demo-stats b {
+	font-weight: 600;
+	color: var(--ae-ink);
+}

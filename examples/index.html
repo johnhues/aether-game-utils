@@ -78,6 +78,115 @@
       <pre id="ae-status-log"></pre>
     </div>
     <script type='text/javascript'>
+      // Measures the running program for an embedding page, which reads it with
+      // aeStats.read(). aeStats.release() frees its graphics and audio immediately.
+      var aeRaf = window.requestAnimationFrame.bind( window );
+      var aeStats = ( function() {
+        var frames = 0, busy = 0, draws = 0, last = performance.now();
+        var api = '', renderer = '', gl = null, memory = null, wasmBytes = 0, downloadBytes = 0, readyMs = 0;
+        var textures = 0, buffers = 0;
+        var audioContexts = [], devices = [];
+
+        // Each animation frame callback is one main loop iteration, timed as CPU work.
+        window.requestAnimationFrame = function( callback ) {
+          return aeRaf( function( time ) {
+            var start = performance.now();
+            callback( time );
+            busy += performance.now() - start;
+            frames++;
+          } );
+        };
+
+        function countDraws( target, names ) {
+          names.forEach( function( name ) {
+            var original = target[ name ];
+            if( !original ) { return; }
+            target[ name ] = function() { draws++; return original.apply( this, arguments ); };
+          } );
+        }
+        function countLive( target, create, destroy, add ) {
+          var c = target[ create ], d = target[ destroy ];
+          target[ create ] = function() { add( 1 ); return c.apply( this, arguments ); };
+          target[ destroy ] = function( o ) { if( o ) { add( -1 ); } return d.apply( this, arguments ); };
+        }
+        var getContext = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function( type ) {
+          var context = getContext.apply( this, arguments );
+          if( context && !api && ( type === 'webgl2' || type === 'webgl' ) ) {
+            api = ( type === 'webgl2' ) ? 'WebGL 2' : 'WebGL';
+            gl = context;
+            renderer = context.getParameter( context.RENDERER );
+            countDraws( context, [ 'drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced', 'drawRangeElements' ] );
+            countLive( context, 'createTexture', 'deleteTexture', function( n ) { textures += n; } );
+            countLive( context, 'createBuffer', 'deleteBuffer', function( n ) { buffers += n; } );
+          }
+          else if( context && !api && type === 'webgpu' ) {
+            api = 'WebGPU';
+          }
+          return context;
+        };
+        if( window.GPURenderPassEncoder ) {
+          countDraws( GPURenderPassEncoder.prototype, [ 'draw', 'drawIndexed', 'drawIndirect', 'drawIndexedIndirect' ] );
+        }
+        if( window.GPUAdapter ) {
+          var requestDevice = GPUAdapter.prototype.requestDevice;
+          GPUAdapter.prototype.requestDevice = function() {
+            return requestDevice.apply( this, arguments ).then( function( device ) { devices.push( device ); return device; } );
+          };
+        }
+        [ 'AudioContext', 'webkitAudioContext' ].forEach( function( name ) {
+          var Original = window[ name ];
+          if( !Original ) { return; }
+          var Tracked = function() {
+            var context = new ( Original.bind.apply( Original, [ null ].concat( Array.prototype.slice.call( arguments ) ) ) )();
+            audioContexts.push( context );
+            return context;
+          };
+          Tracked.prototype = Original.prototype;
+          window[ name ] = Tracked;
+        } );
+
+        return {
+          wasm: function( instance, bytes ) {
+            wasmBytes = bytes;
+            for( var name in instance.exports ) {
+              if( instance.exports[ name ] instanceof WebAssembly.Memory ) { memory = instance.exports[ name ]; }
+            }
+          },
+          downloaded: function( bytes ) { downloadBytes += bytes; },
+          ready: function() { readyMs = performance.now(); },
+          release: function() {
+            var lose = gl && gl.getExtension( 'WEBGL_lose_context' );
+            if( lose ) { lose.loseContext(); }
+            devices.forEach( function( device ) { device.destroy(); } );
+            audioContexts.forEach( function( context ) { if( context.state !== 'closed' ) { context.close(); } } );
+            gl = null; memory = null; devices = []; audioContexts = [];
+          },
+          // Rates cover the time since the previous read.
+          read: function() {
+            var now = performance.now(), elapsed = ( now - last ) / 1000;
+            var result = {
+              fps: frames / elapsed,
+              frameMs: frames ? busy / frames : 0,
+              draws: frames ? draws / frames : 0,
+              api: api,
+              renderer: renderer,
+              width: gl ? gl.drawingBufferWidth : 0,
+              height: gl ? gl.drawingBufferHeight : 0,
+              pixelRatio: window.devicePixelRatio || 1,
+              textures: textures,
+              buffers: buffers,
+              heapBytes: memory ? memory.buffer.byteLength : 0,
+              wasmBytes: wasmBytes,
+              downloadBytes: downloadBytes,
+              readyMs: readyMs
+            };
+            frames = 0; busy = 0; draws = 0; last = now;
+            return result;
+          }
+        };
+      } )();
+
       var aeStatus = ( function() {
         var root = document.getElementById( 'ae-status' );
         var text = document.getElementById( 'ae-status-text' );
@@ -95,12 +204,12 @@
           function frame() {
             if( halted ) { return; }
             idleFrames = Object.keys( files ).length ? 0 : idleFrames + 1;
-            if( idleFrames < 10 ) { requestAnimationFrame( frame ); }
-            else { notify( 'ready' ); }
+            if( idleFrames < 10 ) { aeRaf( frame ); }
+            else { aeStats.ready(); notify( 'ready' ); }
           }
           booting = false;
           show();
-          requestAnimationFrame( frame );
+          aeRaf( frame );
         }
 
         // Tells an embedding page this program is 'ready' or 'halted'.
@@ -130,7 +239,7 @@
             if( recent.length > 12 ) { recent.shift(); }
           },
           progress: function( url, loaded, total, finished ) {
-            if( finished ) { delete files[ url ]; }
+            if( finished ) { delete files[ url ]; aeStats.downloaded( loaded ); }
             else { files[ url ] = [ loaded, total ]; }
             show();
           },
@@ -153,6 +262,14 @@
         if( e.timeStamp - aeLastTouchEnd < 350 ) { e.preventDefault(); }
         aeLastTouchEnd = e.timeStamp;
       }, { passive: false } );
+
+      // Leaving releases graphics and audio now rather than at garbage collection.
+      // A page restored from the back-forward cache has lost them, so it starts over.
+      window.addEventListener( 'pagehide', function() {
+        if( Module.pauseMainLoop ) { Module.pauseMainLoop(); }
+        aeStats.release();
+      } );
+      window.addEventListener( 'pageshow', function( e ) { if( e.persisted ) { location.reload(); } } );
 
       window.addEventListener( 'error', function( e ) { aeStatus.halt( e.message || 'error' ); } );
       window.addEventListener( 'unhandledrejection', function( e ) { aeStatus.halt( String( e.reason ) ); } );
@@ -192,9 +309,12 @@
         onAbort: function( what ) { aeStatus.halt( what || 'aborted' ); },
         onRuntimeInitialized: function() { aeStatus.start(); },
         instantiateWasm: function( imports, receiveInstance ) {
+          var wasmBytes = 0;
           aeWasmBytes.then( function( bytes ) {
+            wasmBytes = bytes.length;
             return WebAssembly.instantiate( bytes, imports );
           } ).then( function( result ) {
+            aeStats.wasm( result.instance, wasmBytes );
             receiveInstance( result.instance, result.module );
           } ).catch( function( error ) {
             aeStatus.halt( String( error ) );
