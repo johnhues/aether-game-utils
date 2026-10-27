@@ -347,6 +347,8 @@ function(ae_add_bundle BUNDLE_NAME)
 					${RESOURCE_PATH}
 					$<TARGET_FILE_DIR:${AEAB_TARGET_NAME}>/${RESOURCE_RELATIVE}
 			)
+			# Relinks when the resource changes so the copy above runs (Ninja and Makefile generators)
+			set_property(TARGET ${AEAB_TARGET_NAME} APPEND PROPERTY LINK_DEPENDS ${RESOURCE_PATH})
 		endforeach()
 	endif()
 	
