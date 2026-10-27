@@ -54,8 +54,8 @@ int main( int argc, char* argv[] )
 		input.Initialize( &window );
 		audio.Initialize( 1, 3, 0, 2 );
 		timeStep.SetTimeStep( 1.0f / 60.0f );
-		musicFile = fs.Read( ae::FileSystem::Root::Data, "music.wav", 5.0f );
-		sfxFile = fs.Read( ae::FileSystem::Root::Data, "sound.wav", 5.0f );
+		musicFile = fs.Read( ae::FileSystem::Root::Data, "music.wav", 0.0f );
+		sfxFile = fs.Read( ae::FileSystem::Root::Data, "sound.wav", 0.0f );
 		return true;
 	};
 	auto LoadAudio = [&]( const ae::File*& file, const ae::AudioData*& audioData )

@@ -92,7 +92,7 @@ int main( int argc, char* argv[] )
 		textRender.Initialize( 1, 1024 * 8 );
 		fontShader.Initialize( kVertShader, kFragShader );
 		fontShader.SetBlending( true );
-		fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
+		fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 0.0f );
 		input.SetText( "Try typing.\nCopy and paste should also work.\nResizing the window will rearrange the text.\n" );
 		return true;
 	};

@@ -89,7 +89,7 @@ int main( int argc, char* argv[] )
 		spriteRenderer.Initialize( 1, 16 );
 		spriteShader.Initialize( kVertexShader, kFragmentShader, nullptr, 0 );
 		spriteShader.SetBlending( true );
-		file = fileSystem.Read( ae::FileSystem::Root::Data, "circle.tga", 2.5f );
+		file = fileSystem.Read( ae::FileSystem::Root::Data, "circle.tga", 0.0f );
 		AE_INFO( "Load texture '#'...", file ? file->GetURL() : "null" );
 		return true;
 	};
