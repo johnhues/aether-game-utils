@@ -10,6 +10,21 @@
         -webkit-touch-callout: none;
         -webkit-user-select: none;
       }
+      /* Scrollable by 1px and never chaining, so a trackpad scroll over a frame
+         holding this page stops here instead of scrolling the embedding page. */
+      html {
+        height: 100%;
+        overflow: auto;
+        overscroll-behavior: none;
+        scrollbar-width: none;
+      }
+      html::-webkit-scrollbar {
+        display: none;
+      }
+      body {
+        margin: 0;
+        height: calc( 100% + 1px );
+      }
       #canvas {
         position: fixed;
         width: 100%;
