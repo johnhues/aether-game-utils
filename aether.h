@@ -3934,6 +3934,9 @@ public:
 	int32_t GetWidth() const;
 	//! Virtual DPI window height @TODO: Content or window height in dpi units?
 	int32_t GetHeight() const;
+	//! The whole window from ( 0, 0 ) to ( GetWidth(), GetHeight() ), in the
+	//! same virtual DPI window space as ae::Input mouse and touch positions.
+	ae::Rect GetArea() const;
 	//! Get the safe area of the window: the area not obscured by notches,
 	//! rounded corners, or other display cutouts. Coordinates are in
 	//! virtual DPI window space. Note that the windows content area (graphics
@@ -21680,6 +21683,11 @@ int32_t Window::GetWidth() const
 int32_t Window::GetHeight() const
 {
 	return m_height;
+}
+
+ae::Rect Window::GetArea() const
+{
+	return ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( (float)m_width, (float)m_height ) );
 }
 
 uint32_t Window::GetDrawWidth() const
