@@ -20634,7 +20634,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 		case WM_CLOSE:
 		{
 			PostQuitMessage( 0 );
-			break;
+			return 0; // The window stays open, see ae::Input::quit
 		}
 		default:
 			break;
@@ -21570,6 +21570,7 @@ void Window::m_Initialize( const char* frameStorageKey )
 
 void Window::Terminate()
 {
+	// @TODO: Destroy the native window, it currently lives until the process exits
 	if( m_backBuffer )
 	{
 		ae::Delete( m_backBuffer );
