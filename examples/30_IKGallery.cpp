@@ -290,6 +290,7 @@ int main( int argc, char* argv[] )
 				viewportTarget.AddDepth( ae::Texture::Filter::Nearest, ae::Texture::Wrap::Clamp );
 			}
 			ImGui::Image( (ImTextureID)(intptr_t)viewportTarget.GetTexture( 0 )->GetTexture(), contentSize, ImVec2( 0.0f, 1.0f ), ImVec2( 1.0f, 0.0f ) );
+			ui.PassThrough();
 			viewportHovered = ImGui::IsWindowHovered();
 			viewportMin = ImGui::GetItemRectMin();
 			viewportSize = contentSize;
@@ -329,7 +330,7 @@ int main( int argc, char* argv[] )
 					closestDistanceSq = distanceSq;
 				}
 			}
-			if( hovered >= 0 && input.GetMouseReleaseLeft() )
+			if( hovered >= 0 && ImGui::IsMouseReleased( ImGuiMouseButton_Left ) )
 			{
 				Focus( hovered );
 			}
@@ -343,8 +344,12 @@ int main( int argc, char* argv[] )
 			stepOnce = true;
 		}
 
-		camera.SetInputEnabled( viewportHovered );
-		camera.Update( &input, dt );
+		const float windowHeight = (float)window.GetHeight();
+		const ae::Rect viewport = ae::Rect::FromPoints(
+			ae::Vec2( viewportMin.x, windowHeight - viewportMin.y - viewportSize.y ),
+			ae::Vec2( viewportMin.x + viewportSize.x, windowHeight - viewportMin.y )
+		);
+		camera.Update( { .input = &input, .dt = dt, .yFov = 0.9f, .viewport = viewport } );
 		if( camera.GetMode() != ae::DebugCamera::Mode::None )
 		{
 			hovered = -1;

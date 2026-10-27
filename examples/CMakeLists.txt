@@ -526,6 +526,18 @@ ae_add_bundle("Palette Analyzer"
 	LIBS "ae;ae_extras;ae_loaders;imgui"
 )
 
+# Multi Pointer
+ae_add_bundle("Multi Pointer"
+	TARGET_NAME "32_multi_pointer"
+	BUNDLE_ID "io.aether.MultiPointer"
+	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "32_MultiPointer.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES};data/font.tga"
+	LIBS "ae"
+)
+
 if(EMSCRIPTEN)
 	ae_add_bundle("WebGPU Async"
 		TARGET_NAME "28_webgpu_async"

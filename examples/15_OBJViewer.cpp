@@ -121,7 +121,7 @@ int main( int argc, char* argv[] )
 		fs.GetRootDir( ae::FileSystem::Root::Data, &dataDir );
 		AE_INFO( "data dir: '#'", dataDir );
 
-		file = fs.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
+		file = fs.Read( ae::FileSystem::Root::Data, "bunny.obj", 0.0f );
 		AE_INFO( "Start loading '#'", file->GetURL() );
 		AE_INFO( "Run" );
 		return true;
@@ -129,7 +129,7 @@ int main( int argc, char* argv[] )
 	auto Update = [&]()
 	{
 		input.Pump();
-		camera.Update( &input, timeStep.GetDt() );
+		camera.Update( { .input = &input, .dt = timeStep.GetDt(), .yFov = 0.9f, .viewport = window.GetArea() } );
 		spinVelocity = input.Get( ae::Key::Space ) ? ( spinVelocity + timeStep.GetDt() ) : ae::Max( 0.0f, spinVelocity - timeStep.GetDt() * 2.0f );
 		spin += timeStep.GetDt() * spinVelocity;
 		render.Activate();

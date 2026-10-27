@@ -4146,48 +4146,35 @@ enum class Key : uint8_t
 enum class CursorState
 {
 	Normal, //!< Default visible state. Automatically set when the app loses focus.
-	HiddenAndCaptured, //!< The cursor will not be visible and only ae::MouseState::movement is tracked.
+	HiddenAndCaptured, //!< The cursor will not be visible and only ae::Input::cursorMovement is tracked.
 	HiddenUntilMoved, //!< The cursor will be hidden until it is moved by the user.
-	Hidden //!< The cursor will not be visible, but ae::MouseState::position is still tracked.
+	Hidden //!< The cursor will not be visible, but ae::Input::hoverPos is still tracked.
 };
 
 //------------------------------------------------------------------------------
-// ae::MouseState struct
+// ae::ScrollState struct
 //------------------------------------------------------------------------------
-struct MouseState
+struct ScrollState
 {
-	bool leftButton = false;
-	bool middleButton = false;
-	bool rightButton = false;
-	//! This value is useful for cursors. In window space coordinates in points
-	//! (are not affected by window scale factor). Do not use it for calculating
-	//! cursor movement, as the values can jump due to OS control; ie. don't
-	//! subtract mouse position values across frames. ae::MouseState::movement
-	//! should be used for changes in cursor position.
-	ae::Vec2 position = ae::Vec2( 0.0f );
-	//! Describes the change in cursor position since the last frame. Useful for
-	//! drag input, flicks, gestures etc. Window space coordinates in points
-	//! (are not affected by window scale factor). Cursor jumps are filtered
-	//! when the mouse is captured and when the window becomes active, so this
-	//! always represents true user interaction.
-	ae::Vec2 movement = ae::Vec2( 0.0f );
 	//! Scroll driven directly by a mouse wheel or a trackpad. In virtual DPI
 	//! points. Is reset each frame. Excludes trackpad momentum, so this has the
-	//! same characteristics on all platforms. Add this and \p scrollInertia
-	//! when momentum is wanted. A wheel detent produces
+	//! same characteristics on all platforms. Add this and \p inertia when
+	//! momentum is wanted. A wheel detent produces
 	//! ae::Input::GetScrollPointsPerNotch() points. Follows the OS natural
 	//! scrolling direction, so it matches the affordance the user expects from
 	//! their device; negate it when ae::Input::GetScrollDirectionInverted() to
 	//! work in physical direction instead.
-	ae::Vec2 scroll = ae::Vec2( 0.0f );
-	//! The simulated trackpad momentum continuation that follows \p scroll once
+	ae::Vec2 delta = ae::Vec2( 0.0f );
+	//! The simulated trackpad momentum continuation that follows \p delta once
 	//! the user lifts their finger. In virtual DPI points. Is reset each frame.
 	//! Is always zero on platforms without OS momentum (all others than MacOS).
-	//! Add it to \p scroll for a native feeling glide in an editor or other
+	//! Add it to \p delta for a native feeling glide in an editor or other
 	//! tool UI; leave it out where behavior must match across platforms and
 	//! instead supply your own smoothing.
-	ae::Vec2 scrollInertia = ae::Vec2( 0.0f );
-	bool usingTouch = false;
+	ae::Vec2 inertia = ae::Vec2( 0.0f );
+	//! True when the last scroll came from a continuous surface such as a
+	//! trackpad, rather than wheel detents.
+	bool isTrackpad = false;
 };
 
 //------------------------------------------------------------------------------
@@ -4239,58 +4226,96 @@ struct GamepadState // @TODO: Rename Gamepad
 };
 
 //------------------------------------------------------------------------------
-// ae::Touch constants
+// ae::InputPointer constants
 //------------------------------------------------------------------------------
-const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
-const uint32_t kMaxTouchSamples = 64; //!< Max number of position samples stored for each touch
+const uint32_t kMaxInputPointers = 32; //!< Max number of pointers supported by ae::Input
+const uint32_t kMaxInputPointerSamples = 64; //!< Max number of position samples stored for each pointer
 
 //------------------------------------------------------------------------------
-// ae::Touch struct
+// ae::InputPointerButton enum
 //------------------------------------------------------------------------------
-struct Touch
+//! The press an ae::InputPointer represents, which lives from press to release.
+//! Each held mouse button is a separate pointer, so a chord is several pointers.
+enum class InputPointerButton : uint8_t
 {
+	Primary, //!< A touch, or the left mouse button
+	Secondary, //!< The right mouse button
+	Tertiary //!< The middle mouse button
+};
+
+//------------------------------------------------------------------------------
+// ae::InputPointerSource enum
+//------------------------------------------------------------------------------
+//! The device an ae::InputPointer comes from
+enum class InputPointerSource : uint8_t
+{
+	Mouse, //!< A mouse or trackpad
+	Touch //!< A finger or stylus. On iOS a mouse or trackpad is only reported as the mouse when UIApplicationSupportsIndirectInputEvents is set.
+};
+
+//------------------------------------------------------------------------------
+// ae::InputPointer struct
+//------------------------------------------------------------------------------
+//! \demo{examples/32_multi_pointer,16/10}
+struct InputPointer
+{
+	//! Unique among all live pointers regardless of source, never 0
 	uint32_t id = 0;
+	ae::InputPointerButton button = ae::InputPointerButton::Primary;
+	ae::InputPointerSource source = ae::InputPointerSource::Touch;
+
 	struct Sample
 	{
 		double time; // Relative to ae::GetTime()
 		ae::Vec2 position; // Relative to the virtual window size (ie. not affected by window scale factor)
 	};
 	//! The oldest position sample is at index 0, and the newest is at index
-	//! ( length - 1 ). Position samples are added on every system input event,
-	//! so the time between samples is not fixed. Once max samples is reached
-	//! the sample that contributes the least to the 'shape' of the curve formed
-	//! by the consecutive samples is removed to make room for the new sample.
-	ae::Array< Sample, kMaxTouchSamples > samples;
-	//! True after the user releases or cancels the touch. The touch remains
-	//! visible via ae::Input::GetTouches() until ae::Input::ReleaseTouch() is
-	//! called. samples is not modified after the touch ends.
+	//! (length - 1). Position samples are added on every system input event, so
+	//! the time between samples is not fixed. Once max samples is reached the
+	//! sample that contributes the least to the 'shape' of the curve formed by
+	//! the consecutive samples is removed to make room for the new sample.
+	ae::Array< Sample, kMaxInputPointerSamples > samples;
+	//! True after the touch lifts or is cancelled, or the mouse button is released.
+	//! The pointer remains visible via ae::Input::GetPointers() until
+	//! ae::Input::ReleasePointer() is called. Nothing is modified after it ends.
 	bool ended = false;
 
 	ae::Vec2 Position() const;
 	ae::Vec2 StartPosition() const;
+	//! Position() relative to StartPosition(), eg. for a virtual stick. Ignores
+	//! the path between, see MaxStartDistance() to tell a tap from a drag.
 	ae::Vec2 StartDelta() const;
 	bool Ended() const { return ended; }
 	double Lifetime() const;
+	//! The furthest Position() has been from StartPosition(), which tells a tap
+	//! from a drag that returned to where it started.
+	float MaxStartDistance() const { return _maxStartDistance; }
 
 	// Internal: appends a sample, simplifying the stored curve when full.
 	void _AppendSample( double time, ae::Vec2 position );
+	uint32_t _platformId = 0; // Internal: the platform's identifier, which may repeat
+	float _maxStartDistance = 0.0f; // Internal: see MaxStartDistance()
 };
 
-using TouchArray = ae::Array< ae::Touch*, ae::kMaxTouches >;
+using InputPointerArray = ae::Array< ae::InputPointer*, ae::kMaxInputPointers >;
 
 //------------------------------------------------------------------------------
 // ae::Input class
 //------------------------------------------------------------------------------
 class Input
 {
-#define AE_INPUT_PRESS( value, property ) value.property && !value##Prev.property
-#define AE_INPUT_RELEASE( value, property ) !value.property && value##Prev.property
 	
 public:
 	Input();
 	void Initialize( Window* window );
 	void Terminate();
 	void Pump();
+
+	//! Set by ae::Input::Pump() when the user asks to quit, eg. by closing the
+	//! window or with Cmd+Q, and never cleared. Exit the main loop once set.
+	//! Never set on the web or iOS.
+	bool quit = false;
+
 	//--------------------------------------------------------------------------
 	// Mouse; Cursor & Scroll
 	//--------------------------------------------------------------------------
@@ -4305,17 +4330,11 @@ public:
 	//! Returns true while the OS cursor is not drawn.
 	bool GetCursorHidden() const;
 	//! Returns true while the cursor is locked to the center of the window and
-	//! ae::MouseState::movement is the only source of cursor input. Locking is
+	//! ae::Input::cursorMovement is the only source of cursor input. Locking is
 	//! requested with ae::CursorState::HiddenAndCaptured, and is not immediate
 	//! on all platforms.
 	bool GetCursorLocked() const;
-	inline bool GetMousePressLeft() const { return AE_INPUT_PRESS( mouse, leftButton ); }
-	inline bool GetMousePressMid() const { return AE_INPUT_PRESS( mouse, middleButton ); }
-	inline bool GetMousePressRight() const { return AE_INPUT_PRESS( mouse, rightButton ); }
-	inline bool GetMouseReleaseLeft() const { return AE_INPUT_RELEASE( mouse, leftButton ); }
-	inline bool GetMouseReleaseMid() const { return AE_INPUT_RELEASE( mouse, middleButton ); }
-	inline bool GetMouseReleaseRight() const { return AE_INPUT_RELEASE( mouse, rightButton ); }
-	//! Returns true when ae::MouseState::scroll runs opposite to the physical
+	//! Returns true when ae::ScrollState::delta runs opposite to the physical
 	//! motion of the device, because the OS natural scrolling setting is on
 	//! (macOS only, always false elsewhere). Scroll values already account for
 	//! this, so most callers can ignore it. Negate them when you need to follow
@@ -4323,7 +4342,7 @@ public:
 	bool GetScrollDirectionInverted() const { return m_naturalScroll; }
 	//! Virtual DPI points produced by one wheel detent. Fixed per platform so a
 	//! detent feels the same everywhere rather than tracking each OS. Divide
-	//! ae::MouseState::scroll by this to work in whole notches, which suits
+	//! ae::ScrollState::delta by this to work in whole notches, which suits
 	//! stepping through a list; prefer the raw points for anything continuous.
 	float GetScrollPointsPerNotch() const;
 
@@ -4362,42 +4381,64 @@ public:
 	inline bool GetGamepadPressDown( uint32_t idx = 0 ) const { return gamepads[ idx ].down && !gamepadsPrev[ idx ].down; }
 	inline bool GetGamepadPressLeft( uint32_t idx = 0 ) const { return gamepads[ idx ].left && !gamepadsPrev[ idx ].left; }
 	inline bool GetGamepadPressRight( uint32_t idx = 0 ) const { return gamepads[ idx ].right && !gamepadsPrev[ idx ].right; }
-
-	//--------------------------------------------------------------------------
-	// Touch Screen
-	//--------------------------------------------------------------------------
-	//! Adopts the oldest un-pumped touch into the tracked set, making it
-	//! visible via ae::Input::GetTouches() until explicitly released with
-	//! ae::Input::ReleaseTouch(). Failure to release pumped touches will result
-	//! in new lost touches. It is safe to hold on to a pumped touch pointer
-	//! until it is released. Pumped touches will continue to be updated over
-	//! their lifetime. Returns the adopted touch, or nullptr if there are no
-	//! new touches. Touches are discarded if they start and end before
-	//! ae::Input::PumpTouches() is called.
-	const ae::Touch* PumpTouches();
-	//! Returns the touches the caller has opted into tracking via
-	//! ae::Input::PumpTouches() and have not yet released. Touches that have
-	//! not been pumped are not visible here. The array is returned by value so
-	//! it's safe to iterate through this result and call
-	//! ae::Input::ReleaseTouch() on all/any of the touches in any order
-	//! (although you should be careful not to access the internals of touches
-	//! in this array that you've already released).
-	ae::TouchArray GetTouches() const { return m_touches; }
-	//! Frees a touch returned by PumpTouches(). This **must** be called per
-	//! touch or internal limits will be hit and new touches may be discarded.
-	//! It is not safe to access a touch after it has been released.
-	void ReleaseTouch( const ae::Touch* touch );
-	
-	MouseState mouse;
-	MouseState mousePrev;
 	GamepadState gamepads[ 4 ];
 	GamepadState gamepadsPrev[ 4 ];
-	bool quit = false;
+
+	//--------------------------------------------------------------------------
+	// Pointers: touches, and mouse buttons (see ae::InputPointer::button and ae::InputPointer::source)
+	//--------------------------------------------------------------------------
+	//! Returns and claims the oldest unclaimed pointer, making it visible via
+	//! ae::Input::GetPointers() until explicitly released with
+	//! ae::Input::ReleasePointer(). Failure to release claimed pointers will
+	//! eventually result in no new pointers as the limit is reached. It is safe
+	//! to hold on to a claimed pointer until it is released. Claimed pointers
+	//! continue to be updated over their lifetime. Returns the claimed pointer,
+	//! or nullptr if there are no new pointers. A pointer can be returned while
+	//! already having ended, and is discarded by the next ae::Input::Pump() if
+	//! it was not claimed.
+	const ae::InputPointer* PumpPointers();
+	//! Returns the pointers claimed via ae::Input::PumpPointers() or
+	//! ae::Input::ClaimPointer() that have not yet released. The array is
+	//! returned by value so it's safe to iterate through this result and call
+	//! ae::Input::ReleasePointer() on all/any of the pointers in any order
+	//! (although you should be careful not to access the internals of pointers
+	//! in this array that you've already released).
+	ae::InputPointerArray GetPointers() const { return m_pointers; }
+	//! Returns live pointers nobody has claimed yet, oldest first, so systems
+	//! can inspect a gesture before deciding to own it. An unclaimed pointer is
+	//! visible on the frame it ends, and then is discarded by the next
+	//! ae::Input::Pump().
+	ae::InputPointerArray GetUnclaimedPointers() const { return m_newPointers; }
+	//! Claims \p pointer from ae::Input::GetUnclaimedPointers(), as
+	//! ae::Input::PumpPointers() does for the oldest. Returns false if it was
+	//! already claimed or discarded. Claimed pointers must be released with
+	//! ae::Input::ReleasePointer().
+	bool ClaimPointer( const ae::InputPointer* pointer );
+	//! Frees a pointer that was claimed. This **must** be called per pointer
+	//! or internal limits will be hit and new pointers may be discarded. It is
+	//! not safe to access a pointer after it has been released.
+	void ReleasePointer( const ae::InputPointer* pointer );
+	
+	//! The mouse cursor's position while a mouse is present, including while its
+	//! buttons are held, which are also pointers. Empty when input only comes from
+	//! touches.
+	ae::Optional< ae::Vec2 > hoverPos;
+	//! The change in cursor position since the last frame, in window units.
+	//! Cursor jumps are filtered when the mouse is captured and when the window
+	//! becomes active. The only cursor input while
+	//! ae::CursorState::HiddenAndCaptured.
+	ae::Vec2 cursorMovement = ae::Vec2( 0.0f );
+	//! Mouse wheel and trackpad scrolling since the last frame
+	ae::ScrollState scroll;
 
 // private:
 	Input( const Input& ) = delete;
 	void m_TryNewFrame();
 	void m_SetMousePos( ae::Vec2 pos );
+	void m_UpdateHoverPos();
+	ae::InputPointer* m_NewPointer( ae::Vec2 pos ); // Unclaimed with a unique id, null when full
+	ae::InputPointer* m_FindPointer( uint32_t id ); // Unclaimed or claimed, null once released
+	void m_UpdateMousePointer( ae::Vec2 pos ); // Call after every mouse button or move event
 	void m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement );
 	void m_WarpCursor( ae::Vec2 pos ); // Attempts to move the OS's cursor to the given position
 	void m_SetMouseCaptured( bool captured );
@@ -4423,11 +4464,21 @@ public:
 	bool m_gamepadRequiresFocus = true;
 	bool m_naturalScroll = false;
 	// Touch
-	using TouchPool = ae::ObjectPool< ae::Touch, ae::kMaxTouches >;
-	TouchPool m_touchPool;
-	TouchArray m_newTouches;
-	TouchArray m_touches;
-	uint32_t m_touchIndex = 0; // 0 is invalid
+	using InputPointerPool = ae::ObjectPool< ae::InputPointer, ae::kMaxInputPointers >;
+	InputPointerPool m_pointerPool;
+	InputPointerArray m_newPointers;
+	InputPointerArray m_pointers;
+	uint32_t m_pointerIndex = 0; // 0 is invalid
+	// Platform cursor and button state, exposed via ae::Input::hoverPos and the mouse button pointers
+	ae::Vec2 m_cursorPos = ae::Vec2( 0.0f );
+	bool m_leftButton = false;
+	bool m_middleButton = false;
+	bool m_rightButton = false;
+	// A pointer per mouse button, created on press and ended on release. Not
+	// remade mid-press if released early by its claimant.
+	uint32_t m_mousePointerIds[ 3 ] = {};
+	bool m_mouseButtonsHeld[ 3 ] = {};
+	bool m_cursorSeen = false; // A mouse has reported a position
 };
 
 /* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
@@ -5646,8 +5697,8 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::DebugCamera class
-//! A camera utility which provides basic functionality for mouse and keyboard
-//! navigation.
+//! A camera utility which provides basic functionality for mouse, keyboard and
+//! touch navigation.
 //! Mouse (non-trackpad) controls require the key set with
 //! ae::DebugCamera::SetModifierKey(), LeftAlt by default. Controls are:
 //!     Orbit: [Modifier]+LMB
@@ -5657,6 +5708,12 @@ private:
 //!     Orbit: scroll
 //!     Pan: Shift + scroll
 //!     Zoom: Pinch or ctrl + scroll
+//! Touch controls claim a single touch only once it drags, leaving taps for
+//! the app. Touches the app claims first are ignored.
+//!     Orbit: one finger drag
+//!     Pan: two finger drag
+//!     Zoom: two finger pinch
+//! Two fingers blend pan and zoom, weighted heavily towards whichever dominates.
 //------------------------------------------------------------------------------
 class DebugCamera
 {
@@ -5680,9 +5737,21 @@ public:
 	void SetRotation( ae::Vec2 angles );
 	//! Updates pivot and position over time
 	void Refocus( ae::Vec3 pivot, float snappiness = 2.5f );
+	//! Describes the frame the camera is drawn in. \p input and \p yFov are required.
+	struct UpdateParams
+	{
+		ae::Input* input = nullptr;
+		float dt = 0.0f;
+		//! The vertical field of view in radians the camera is drawn with.
+		float yFov = 0.0f;
+		//! Where the camera is drawn, in the same window units as ae::Input
+		//! mouse and touch positions. Gestures only start inside it, and an
+		//! empty viewport ends any gesture and ignores input.
+		ae::Rect viewport;
+	};
 	//! Call this every frame even when no input has taken place so refocus works as expected.
 	//! See ae::DebugCamera::SetInputEnabled() if you would like to prevent the camera from moving.
-	void Update( ae::Input* input, float dt );
+	void Update( const UpdateParams& params );
 
 	//! Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
 	Mode GetMode() const;
@@ -5706,6 +5775,8 @@ public:
 
 private:
 	void m_Precalculate();
+	// Claims and releases touches, applying their gesture. Returns true while a gesture is active.
+	bool m_UpdatePointers( const UpdateParams& params );
 	// Params
 	float m_min = 1.0f;
 	float m_max = ae::MaxValue< float >();
@@ -5714,6 +5785,14 @@ private:
 	bool m_inputEnabled = true;
 	ae::Optional< ae::Key > m_modifierKey = ae::Key::LeftAlt;
 	Mode m_mode = Mode::None;
+	// Touch
+	ae::Array< const ae::InputPointer*, 3 > m_pointers;
+	const ae::InputPointer* m_mousePointer = nullptr; // Claimed once dragged, so clicks stay available
+	ae::Vec2 m_touchCenter = ae::Vec2( 0.0f );
+	float m_touchSpread = 0.0f; // Average distance of the fingers from their center
+	ae::Vec2 m_touchPanRecent = ae::Vec2( 0.0f ); // Net center movement, decaying over time
+	float m_touchZoomRecent = 0.0f; // Net separation change, decaying over time
+	ae::Optional< float > m_touchZoomWeight; // 0 pans, 1 zooms, empty until two fingers move
 	ae::Vec3 m_refocusPos = ae::Vec3( 0.0f );
 	float m_refocusSnappiness = 0.0f;
 	bool m_refocus = false;
@@ -20861,8 +20940,34 @@ public:
 		};
 		self.multipleTouchEnabled = YES;
 		_touchIds = [NSMapTable weakToStrongObjectsMapTable];
+		UIHoverGestureRecognizer* hover = [[UIHoverGestureRecognizer alloc] initWithTarget:self action:@selector(aeHover:)];
+		hover.cancelsTouchesInView = NO;
+		[self addGestureRecognizer:hover];
 	}
 	return self;
+}
+// Mouse and trackpad cursor movement while no button is held
+- (void)aeHover:(UIHoverGestureRecognizer*)recognizer
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input || !input->m_window ) { return; }
+	input->m_TryNewFrame();
+	const CGPoint p = [recognizer locationInView:self];
+	input->m_SetMousePos( ae::Vec2( (float)p.x, (float)input->m_window->GetHeight() - (float)p.y ) );
+}
+// Mouse and trackpad presses arrive as touches, requires UIApplicationSupportsIndirectInputEvents
+- (BOOL)aeHandleIndirectPointer:(UITouch*)uiTouch event:(UIEvent*)event ended:(BOOL)ended
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( uiTouch.type != UITouchTypeIndirectPointer || !input || !input->m_window ) { return NO; }
+	const UIEventButtonMask buttons = ended ? 0 : event.buttonMask;
+	const ae::Vec2 pos = [self aePosForTouch:uiTouch];
+	input->m_SetMousePos( pos );
+	input->m_leftButton = ( buttons & UIEventButtonMaskPrimary );
+	input->m_rightButton = ( buttons & UIEventButtonMaskSecondary );
+	input->m_middleButton = ( buttons & UIEventButtonMaskForButtonNumber( 3 ) );
+	input->m_UpdateMousePointer( pos );
+	return YES;
 }
 - (ae::Vec2)aePosForTouch:(UITouch*)t
 {
@@ -20871,16 +20976,10 @@ public:
 	const float height = ( input && input->m_window ) ? (float)input->m_window->GetHeight() : (float)self.bounds.size.height;
 	return ae::Vec2( (float)p.x, height - (float)p.y );
 }
-- (ae::Touch*)aeFindTouchById:(uint32_t)id
+- (ae::InputPointer*)aeFindTouchById:(uint32_t)id
 {
 	ae::Input* input = ae::_Globals::Get()->input;
-	if( !input ) { return nullptr; }
-	const auto matchFn = [&]( ae::Touch* t ){ return t->id == id; };
-	int32_t idx = input->m_newTouches.FindFn( matchFn );
-	if( idx >= 0 ) { return input->m_newTouches[ idx ]; }
-	idx = input->m_touches.FindFn( matchFn );
-	if( idx >= 0 ) { return input->m_touches[ idx ]; }
-	return nullptr;
+	return input ? input->m_FindPointer( id ) : nullptr;
 }
 - (void)touchesBegan:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
 {
@@ -20889,14 +20988,10 @@ public:
 	input->m_TryNewFrame();
 	for( UITouch* uiTouch in touches )
 	{
-		if( input->m_newTouches.Full() ) { break; }
-		ae::Touch* touch = input->m_touchPool.New();
+		if( [self aeHandleIndirectPointer:uiTouch event:event ended:NO] ) { continue; }
+		ae::InputPointer* touch = input->m_NewPointer( [self aePosForTouch:uiTouch] );
 		if( !touch ) { break; }
-		input->m_touchIndex++;
-		if( input->m_touchIndex == 0 ) { input->m_touchIndex = 1; }
-		touch->id = input->m_touchIndex;
-		touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
-		input->m_newTouches.Append( touch );
+		touch->source = ae::InputPointerSource::Touch;
 		[_touchIds setObject:@(touch->id) forKey:uiTouch];
 	}
 }
@@ -20907,9 +21002,10 @@ public:
 	input->m_TryNewFrame();
 	for( UITouch* uiTouch in touches )
 	{
+		if( [self aeHandleIndirectPointer:uiTouch event:event ended:NO] ) { continue; }
 		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
 		if( !idNum ) { continue; }
-		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		ae::InputPointer* touch = [self aeFindTouchById:idNum.unsignedIntValue];
 		if( touch && !touch->ended )
 		{
 			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
@@ -20923,9 +21019,10 @@ public:
 	input->m_TryNewFrame();
 	for( UITouch* uiTouch in touches )
 	{
+		if( [self aeHandleIndirectPointer:uiTouch event:event ended:YES] ) { continue; }
 		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
 		if( !idNum ) { continue; }
-		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		ae::InputPointer* touch = [self aeFindTouchById:idNum.unsignedIntValue];
 		if( touch )
 		{
 			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
@@ -20941,9 +21038,10 @@ public:
 	input->m_TryNewFrame();
 	for( UITouch* uiTouch in touches )
 	{
+		if( [self aeHandleIndirectPointer:uiTouch event:event ended:YES] ) { continue; }
 		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
 		if( !idNum ) { continue; }
-		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		ae::InputPointer* touch = [self aeFindTouchById:idNum.unsignedIntValue];
 		if( touch ) { touch->ended = true; }
 		[_touchIds removeObjectForKey:uiTouch];
 	}
@@ -21231,6 +21329,12 @@ void Window::m_UpdateFocused( bool focused )
 		// @TODO: Input::m_UpdateFocused()
 		input->SetCursorState( ae::CursorState::Normal );
 		input->m_mousePosSet = false;
+		// Held input is released; its key and button ups go to the newly focused window
+		memset( input->m_keys, 0, sizeof(input->m_keys) );
+		input->m_leftButton = false;
+		input->m_rightButton = false;
+		input->m_middleButton = false;
+		input->m_UpdateMousePointer( input->m_cursorPos );
 	}
 }
 
@@ -22187,11 +22291,11 @@ EM_BOOL _aeEmscriptenHandleWheel( int eventType, const EmscriptenWheelEvent* whe
 		const float scale = ( wheelEvent->deltaMode == DOM_DELTA_LINE ) ? ( _kScrollPointsPerNotch / 3.0f ) : 1.0f;
 		const float dx = (float)wheelEvent->deltaX * scale;
 		const float dy = -(float)wheelEvent->deltaY * scale; // Negate Y: browser positive=down, aether positive=up
-		input->mouse.usingTouch = EM_ASM_INT( { return Module.aeWheelTrackpad ? 1 : 0; } );
+		input->scroll.isTrackpad = EM_ASM_INT( { return Module.aeWheelTrackpad ? 1 : 0; } );
 		// Browsers report deltas the OS scroll direction has already been applied
 		// to, and expose no momentum phase, so everything is user driven scroll
-		input->mouse.scroll.x += dx;
-		input->mouse.scroll.y += dy;
+		input->scroll.delta.x += dx;
+		input->scroll.delta.y += dy;
 	}
 	return true;
 }
@@ -22212,9 +22316,10 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 	
 	const ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY );
 	input->m_SetMousePos( pos, ae::Vec2( mouseEvent->movementX, -mouseEvent->movementY ) );
-	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
-	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
-	input->mouse.middleButton = ( mouseEvent->buttons & 4 );
+	input->m_leftButton = ( mouseEvent->buttons & 1 );
+	input->m_rightButton = ( mouseEvent->buttons & 2 );
+	input->m_middleButton = ( mouseEvent->buttons & 4 );
+	input->m_UpdateMousePointer( pos );
 
 	// Pointer lock is only granted from a user activation event, and must be
 	// requested synchronously within it.
@@ -22244,7 +22349,7 @@ EM_BOOL _aeEmscriptenHandleLockError( int eventType, const void* reserved, void*
 	Input* input = (Input*)userData;
 	if( const ae::Vec2* p = input->m_capturedMousePos.TryGet() )
 	{
-		input->mouse.position = *p;
+		input->m_cursorPos = *p;
 	}
 	return true;
 }
@@ -22263,26 +22368,25 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 		ae::Vec2 pos( (float)emTouch->targetX, (float)emTouch->targetY );
 		pos.y = input->m_window->GetHeight() - pos.y;
 		const uint32_t id = (uint32_t)emTouch->identifier;
-		const auto matchFn = [&]( ae::Touch* t ){ return t->id == id; };
-		ae::Touch* touch = nullptr;
-		int32_t idx = input->m_newTouches.FindFn( matchFn );
-		if( idx >= 0 ) { touch = input->m_newTouches[ idx ]; }
+		// Identifiers are reused once a touch lifts, so ended touches never match
+		const auto matchFn = [&]( ae::InputPointer* t ){ return t->_platformId == id && t->source == ae::InputPointerSource::Touch && !t->ended; };
+		ae::InputPointer* touch = nullptr;
+		int32_t idx = input->m_newPointers.FindFn( matchFn );
+		if( idx >= 0 ) { touch = input->m_newPointers[ idx ]; }
 		else
 		{
-			idx = input->m_touches.FindFn( matchFn );
-			if( idx >= 0 ) { touch = input->m_touches[ idx ]; }
+			idx = input->m_pointers.FindFn( matchFn );
+			if( idx >= 0 ) { touch = input->m_pointers[ idx ]; }
 		}
 		switch( eventType )
 		{
 			case EMSCRIPTEN_EVENT_TOUCHSTART:
 			{
 				if( touch ) { break; } // Already known
-				if( input->m_newTouches.Full() ) { break; }
-				touch = input->m_touchPool.New();
+				touch = input->m_NewPointer( pos );
 				if( !touch ) { break; }
-				touch->id = id;
-				touch->_AppendSample( now, pos );
-				input->m_newTouches.Append( touch );
+				touch->source = ae::InputPointerSource::Touch;
+				touch->_platformId = id;
 				break;
 			}
 			case EMSCRIPTEN_EVENT_TOUCHEND:
@@ -22311,6 +22415,10 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 		}
 	}
 
+	// @TODO: Every touch is captured, so a page embedding the canvas can't
+	// scroll over it. ae::Input should let the program declare, each frame
+	// (immediate mode), rectangles that capture scrolls per direction, and let
+	// the rest propagate like a scrollable sub-frame in a web page.
 	return true;
 }
 
@@ -22370,7 +22478,8 @@ void Input::Initialize( Window* window )
 		{
 			const legacy = e.wheelDeltaY || e.wheelDeltaX;
 			const delta = e.wheelDeltaY ? e.deltaY : e.deltaX;
-			Module.aeWheelTrackpad = legacy ? ( legacy === -3 * delta ) : ( e.deltaMode === 0 );
+			// A trackpad's legacy delta is -3 * delta, truncated by WebKit
+			Module.aeWheelTrackpad = legacy ? ( Math.abs( legacy + 3 * delta ) < 1 ) : ( e.deltaMode === 0 );
 		}, { capture: true, passive: true } );
 	} );
 	// @NOTE: Internal. Only a primary button drag keeps sending mouse moves
@@ -22425,18 +22534,17 @@ void Input::m_TryNewFrame()
 	if( m_pendingNewFrame )
 	{
 		memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-		mousePrev = mouse;
-		mouse.movement = ae::Vec2( 0.0f );
-		mouse.scroll = ae::Vec2( 0.0f );
-		mouse.scrollInertia = ae::Vec2( 0.0f );
-		// Discard touches that ended before they were adopted via PumpTouches().
+		cursorMovement = ae::Vec2( 0.0f );
+		scroll.delta = ae::Vec2( 0.0f );
+		scroll.inertia = ae::Vec2( 0.0f );
+		// Discard touches that ended before they were adopted via PumpPointers().
 		// Per the staged API contract, ended touches are never returned.
-		for( int32_t i = (int32_t)m_newTouches.Length() - 1; i >= 0; i-- )
+		for( int32_t i = (int32_t)m_newPointers.Length() - 1; i >= 0; i-- )
 		{
-			if( m_newTouches[ i ]->ended )
+			if( m_newPointers[ i ]->ended )
 			{
-				m_touchPool.Delete( m_newTouches[ i ] );
-				m_newTouches.Remove( i );
+				m_pointerPool.Delete( m_newPointers[ i ] );
+				m_newPointers.Remove( i );
 			}
 		}
 		m_pendingNewFrame = false;
@@ -22470,30 +22578,30 @@ void Input::Pump()
 			switch( msg.message )
 			{
 				case WM_LBUTTONDOWN:
-					mouse.leftButton = true;
+					m_leftButton = true;
 					break;
 				case WM_LBUTTONUP:
-					mouse.leftButton = false;
+					m_leftButton = false;
 					break;
 				case WM_MBUTTONDOWN:
-					mouse.middleButton = true;
+					m_middleButton = true;
 					break;
 				case WM_MBUTTONUP:
-					mouse.middleButton = false;
+					m_middleButton = false;
 					break;
 				case WM_RBUTTONDOWN:
-					mouse.rightButton = true;
+					m_rightButton = true;
 					break;
 				case WM_RBUTTONUP:
-					mouse.rightButton = false;
+					m_rightButton = false;
 					break;
 				case WM_MOUSEWHEEL:
 					// Detents, converted to points. Windows has no OS scroll
 					// direction setting and no momentum phase
-					mouse.scroll.y += ( GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA ) * _kScrollPointsPerNotch;
+					scroll.delta.y += ( GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA ) * _kScrollPointsPerNotch;
 					break;
 				case WM_MOUSEHWHEEL:
-					mouse.scroll.x += ( GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA ) * _kScrollPointsPerNotch;
+					scroll.delta.x += ( GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA ) * _kScrollPointsPerNotch;
 					break;
 				case WM_CHAR:
 				{
@@ -22522,6 +22630,24 @@ void Input::Pump()
 						m_text.pop_back();
 					}
 					break;
+			}
+			switch( msg.message )
+			{
+				case WM_MOUSEMOVE:
+				case WM_LBUTTONDOWN:
+				case WM_LBUTTONUP:
+				case WM_MBUTTONDOWN:
+				case WM_MBUTTONUP:
+				case WM_RBUTTONDOWN:
+				case WM_RBUTTONUP:
+				{
+					// Captured while held so the release is received outside the window
+					const bool held = m_leftButton || m_middleButton || m_rightButton;
+					if( held && GetCapture() != msg.hwnd ) { SetCapture( msg.hwnd ); }
+					else if( !held && GetCapture() == msg.hwnd ) { ReleaseCapture(); }
+					m_UpdateMousePointer( ae::Vec2( (float)GET_X_LPARAM( msg.lParam ), m_window->GetHeight() - (float)GET_Y_LPARAM( msg.lParam ) ) );
+					break;
+				}
 			}
 		}
 		TranslateMessage( &msg );
@@ -22582,71 +22708,72 @@ void Input::Pump()
 			bool anyClick = false;
 			switch( event.type )
 			{
-				// @NOTE: Move events are not sent if any mouse button is clicked
-				case NSEventTypeMouseMoved:
-				case NSEventTypeLeftMouseDragged:
-				case NSEventTypeRightMouseDragged:
-				case NSEventTypeOtherMouseDragged:
-					if( cursorWithinWindow )
-					{
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-					}
-					break;
 				case NSEventTypeLeftMouseDown:
 					if( cursorWithinWindow )
 					{
-						mouse.leftButton = true;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						m_leftButton = true;
 						anyClick = true;
 					}
 					break;
 				case NSEventTypeLeftMouseUp:
-					mouse.leftButton = false;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					m_leftButton = false;
 					break;
 				case NSEventTypeRightMouseDown:
 					if( cursorWithinWindow )
 					{
-						mouse.rightButton = true;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						m_rightButton = true;
 						anyClick = true;
 					}
 					break;
 				case NSEventTypeRightMouseUp:
-					mouse.rightButton = false;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					m_rightButton = false;
 					break;
 				case NSEventTypeOtherMouseDown:
 					if( cursorWithinWindow )
 					{
-						mouse.middleButton = true;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						m_middleButton = true;
 						anyClick = true;
 					}
 					break;
 				case NSEventTypeOtherMouseUp:
-					mouse.middleButton = false;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					m_middleButton = false;
 					break;
 				case NSEventTypeScrollWheel:
 					if( cursorWithinWindow )
 					{
-						mouse.usingTouch = [event hasPreciseScrollingDeltas]; // @NOTE: Scroll is never NSEventSubtypeTouch
+						scroll.isTrackpad = [event hasPreciseScrollingDeltas];
 						// Precise devices report points already, wheels report detents
-						const float scale = mouse.usingTouch ? 1.0f : _kScrollPointsPerNotch;
+						const float scale = scroll.isTrackpad ? 1.0f : _kScrollPointsPerNotch;
 						const float dx = (float)event.scrollingDeltaX * scale;
 						const float dy = (float)event.scrollingDeltaY * scale;
 						if( event.momentumPhase == NSEventPhaseNone )
 						{
-							mouse.scroll.x += dx;
-							mouse.scroll.y += dy;
+							scroll.delta.x += dx;
+							scroll.delta.y += dy;
 						}
 						else
 						{
-							mouse.scrollInertia.x += dx;
-							mouse.scrollInertia.y += dy;
+							scroll.inertia.x += dx;
+							scroll.inertia.y += dy;
 						}
 					}
+					break;
+				default:
+					break;
+			}
+			switch( event.type )
+			{
+				case NSEventTypeMouseMoved:
+				case NSEventTypeLeftMouseDragged:
+				case NSEventTypeRightMouseDragged:
+				case NSEventTypeOtherMouseDragged:
+				case NSEventTypeLeftMouseDown:
+				case NSEventTypeLeftMouseUp:
+				case NSEventTypeRightMouseDown:
+				case NSEventTypeRightMouseUp:
+				case NSEventTypeOtherMouseDown:
+				case NSEventTypeOtherMouseUp:
+					m_UpdateMousePointer( cursorLocalPos );
 					break;
 				default:
 					break;
@@ -22710,7 +22837,7 @@ void Input::Pump()
 	// Mouse capture
 	if( m_captureMouse )
 	{
-		mouse.movement = ae::Vec2( 0.0f );
+		cursorMovement = ae::Vec2( 0.0f );
 		if( m_window )
 		{
 			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
@@ -22718,12 +22845,12 @@ void Input::Pump()
 			// Mouse pos is previously set elsewhere, so when the mouse position is set
 			// to the window center the movement vector needs to be reversed.
 			m_SetMousePos( localCenter );
-			mouse.movement = -mouse.movement;
+			cursorMovement = -cursorMovement;
 		}
 	}
 #endif
 
-	if( m_wantedCursorState == ae::CursorState::HiddenUntilMoved && mouse.movement != ae::Vec2( 0.0f ) )
+	if( m_wantedCursorState == ae::CursorState::HiddenUntilMoved && cursorMovement != ae::Vec2( 0.0f ) )
 	{
 		m_wantedCursorState = ae::CursorState::Normal;
 	}
@@ -23292,6 +23419,69 @@ void Input::Pump()
 			|| fabsf(gp.leftAnalog.x) > 0.0f || fabsf(gp.leftAnalog.y) > 0.0f
 			|| fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
 	}
+	m_UpdateHoverPos();
+}
+
+void Input::m_UpdateHoverPos()
+{
+	hoverPos = m_cursorSeen ? ae::Optional< ae::Vec2 >( m_cursorPos ) : ae::Optional< ae::Vec2 >();
+}
+
+ae::InputPointer* Input::m_NewPointer( ae::Vec2 pos )
+{
+	ae::InputPointer* pointer = m_newPointers.Full() ? nullptr : m_pointerPool.New();
+	if( !pointer )
+	{
+		AE_WARN( "Pointer discarded, # claimed pointers have not been released with ae::Input::ReleasePointer()", m_pointers.Length() );
+		return nullptr;
+	}
+	m_pointerIndex++;
+	if( m_pointerIndex == 0 ) { m_pointerIndex = 1; }
+	pointer->id = m_pointerIndex;
+	pointer->_AppendSample( ae::GetTime(), pos );
+	m_newPointers.Append( pointer );
+	return pointer;
+}
+
+ae::InputPointer* Input::m_FindPointer( uint32_t id )
+{
+	if( !id ) { return nullptr; }
+	const auto matchFn = [ id ]( const ae::InputPointer* p ){ return p->id == id; };
+	int32_t idx = m_newPointers.FindFn( matchFn );
+	if( idx >= 0 ) { return m_newPointers[ idx ]; }
+	idx = m_pointers.FindFn( matchFn );
+	if( idx >= 0 ) { return m_pointers[ idx ]; }
+	return nullptr;
+}
+
+void Input::m_UpdateMousePointer( ae::Vec2 pos )
+{
+	// Indexed by ae::InputPointerButton
+	const bool held[ 3 ] = { m_leftButton, m_rightButton, m_middleButton };
+	for( uint32_t i = 0; i < 3; i++ )
+	{
+		ae::InputPointer* pointer = m_FindPointer( m_mousePointerIds[ i ] );
+		if( held[ i ] && !m_mouseButtonsHeld[ i ] )
+		{
+			pointer = m_NewPointer( pos );
+			if( pointer )
+			{
+				pointer->button = (ae::InputPointerButton)i;
+				pointer->source = ae::InputPointerSource::Mouse;
+			}
+			m_mousePointerIds[ i ] = pointer ? pointer->id : 0;
+		}
+		else if( pointer && pointer->Position() != pos )
+		{
+			pointer->_AppendSample( ae::GetTime(), pos );
+		}
+		if( !held[ i ] )
+		{
+			if( pointer ) { pointer->ended = true; }
+			m_mousePointerIds[ i ] = 0;
+		}
+		m_mouseButtonsHeld[ i ] = held[ i ];
+	}
 }
 
 void Input::SetCursorState( ae::CursorState state )
@@ -23393,7 +23583,7 @@ bool Input::GetPrev( ae::Key key ) const
 	return m_keysPrev[ static_cast< int >( key ) ];
 }
 
-ae::Vec2 Touch::Position() const
+ae::Vec2 InputPointer::Position() const
 {
 	if( samples.Length() )
 	{
@@ -23406,7 +23596,12 @@ ae::Vec2 Touch::Position() const
 	}
 }
 
-ae::Vec2 Touch::StartPosition() const
+ae::Vec2 InputPointer::StartDelta() const
+{
+	return Position() - StartPosition();
+}
+
+ae::Vec2 InputPointer::StartPosition() const
 {
 	if( samples.Length() )
 	{
@@ -23419,12 +23614,7 @@ ae::Vec2 Touch::StartPosition() const
 	}
 }
 
-ae::Vec2 Touch::StartDelta() const
-{
-	return Position() - StartPosition();
-}
-
-double Touch::Lifetime() const
+double InputPointer::Lifetime() const
 {
 	if( samples.Length() < 2 )
 	{
@@ -23433,7 +23623,7 @@ double Touch::Lifetime() const
 	return samples[ samples.Length() - 1 ].time - samples[ 0 ].time;
 }
 
-void Touch::_AppendSample( double time, ae::Vec2 position )
+void InputPointer::_AppendSample( double time, ae::Vec2 position )
 {
 	if( samples.Full() )
 	{
@@ -23458,46 +23648,61 @@ void Touch::_AppendSample( double time, ae::Vec2 position )
 		samples.Remove( dropIdx );
 	}
 	samples.Append( { time, position } );
+	_maxStartDistance = ae::Max( _maxStartDistance, ( position - samples[ 0 ].position ).Length() );
 }
 
-const ae::Touch* Input::PumpTouches()
+const ae::InputPointer* Input::PumpPointers()
 {
-	if( !m_newTouches.Length() || m_touches.Full() )
+	if( !m_newPointers.Length() || m_pointers.Full() )
 	{
 		return nullptr;
 	}
-	ae::Touch* result = m_newTouches[ 0 ];
-	m_newTouches.Remove( 0 );
-	m_touches.Append( result );
+	ae::InputPointer* result = m_newPointers[ 0 ];
+	m_newPointers.Remove( 0 );
+	m_pointers.Append( result );
 	return result;
 }
 
-void Input::ReleaseTouch( const ae::Touch* touch )
+bool Input::ClaimPointer( const ae::InputPointer* pointer )
 {
-	const int32_t idx = m_touches.Find( touch );
+	const int32_t idx = m_newPointers.Find( pointer );
+	if( idx < 0 || m_pointers.Full() )
+	{
+		return false;
+	}
+	m_newPointers.Remove( idx );
+	m_pointers.Append( const_cast< ae::InputPointer* >( pointer ) );
+	return true;
+}
+
+void Input::ReleasePointer( const ae::InputPointer* pointer )
+{
+	const int32_t idx = m_pointers.Find( pointer );
 	if( idx >= 0 )
 	{
-		m_touches.Remove( idx );
-		m_touchPool.Delete( const_cast< ae::Touch* >( touch ) );
+		m_pointers.Remove( idx );
+		m_pointerPool.Delete( const_cast< ae::InputPointer* >( pointer ) );
 	}
 }
 
 void Input::m_SetMousePos( ae::Vec2 pos )
 {
 	AE_ASSERT( m_window );
+	m_cursorSeen = true;
 	if( m_mousePosSet )
 	{
-		mouse.movement += pos - mouse.position;
+		cursorMovement += pos - m_cursorPos;
 	}
-	mouse.position = pos;
+	m_cursorPos = pos;
 	m_mousePosSet = true;
 }
 
 void Input::m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement )
 {
 	AE_ASSERT( m_window );
-	mouse.movement += movement;
-	mouse.position = pos;
+	m_cursorSeen = true;
+	cursorMovement += movement;
+	m_cursorPos = pos;
 	m_mousePosSet = true;
 }
 
@@ -23539,7 +23744,7 @@ void Input::m_SetMouseCaptured( bool captured )
 		if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
 		{
 			m_WarpCursor( *pos );
-			mouse.position = *pos;
+			m_cursorPos = *pos;
 		}
 	}
 	m_UpdateCursorHidden();
@@ -23555,7 +23760,7 @@ void Input::m_ApplyMouseCapture( bool capture )
 	if( capture )
 	{
 		// Remember original cursor position
-		m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( mouse.position ) : ae::Optional< ae::Vec2 >();
+		m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( m_cursorPos ) : ae::Optional< ae::Vec2 >();
 		m_UpdateCursorHidden();
 		const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
 		m_WarpCursor( localCenter );
@@ -23565,7 +23770,7 @@ void Input::m_ApplyMouseCapture( bool capture )
 	{
 		// Restore original cursor position
 		m_WarpCursor( *pos );
-		mouse.position = *pos;
+		m_cursorPos = *pos;
 	}
 }
 
@@ -23579,7 +23784,7 @@ void Input::m_UpdateCursorHidden()
 #if _AE_EMSCRIPTEN_
 	// The cursor is only hidden over the canvas, so a drag that leaves it shows
 	// the cursor again
-	const ae::Vec2 pos = mouse.position;
+	const ae::Vec2 pos = m_cursorPos;
 	const bool over = ( pos.x >= 0.0f && pos.y >= 0.0f &&
 		pos.x < m_window->GetWidth() && pos.y < m_window->GetHeight() );
 	EM_ASM( {
@@ -30119,39 +30324,192 @@ void DebugCamera::SetModifierKey( ae::Optional< ae::Key > key )
 	m_modifierKey = key;
 }
 
-void DebugCamera::Update( ae::Input* input, float dt )
+bool DebugCamera::m_UpdatePointers( const UpdateParams& params )
 {
-	AE_ASSERT_MSG( input, "Input system is required to update debug camera" );
+	ae::Input* input = params.input;
+	const ae::Vec2 viewportSize = params.viewport.GetSize();
+	const bool enabled = m_inputEnabled && viewportSize.x > 0.0f && viewportSize.y > 0.0f;
+	bool fingersChanged = false;
+	for( int32_t i = (int32_t)m_pointers.Length() - 1; i >= 0; i-- )
+	{
+		if( !enabled || m_pointers[ i ]->Ended() )
+		{
+			input->ReleasePointer( m_pointers[ i ] );
+			m_pointers.Remove( i );
+			fingersChanged = true;
+		}
+	}
+	if( !enabled )
+	{
+		return false;
+	}
+
+	// Claim fingers joining a gesture, or start one once two fingers are down
+	// or a single finger drags
+	const auto canClaim = [ &params ]( const ae::InputPointer* touch )
+	{
+		return touch->source == ae::InputPointerSource::Touch && !touch->Ended() && params.viewport.Contains( touch->StartPosition() );
+	};
+	const ae::InputPointerArray unclaimed = input->GetUnclaimedPointers();
+	uint32_t live = 0;
+	bool dragging = false;
+	for( const ae::InputPointer* touch : unclaimed )
+	{
+		if( canClaim( touch ) )
+		{
+			live++;
+			dragging = dragging || touch->MaxStartDistance() > 10.0f;
+		}
+	}
+	if( m_pointers.Length() || live >= 2 || dragging )
+	{
+		for( const ae::InputPointer* touch : unclaimed )
+		{
+			if( !m_pointers.Full() && canClaim( touch ) && input->ClaimPointer( touch ) )
+			{
+				m_pointers.Append( touch );
+				fingersChanged = true;
+			}
+		}
+	}
+	const uint32_t count = m_pointers.Length();
+	if( !count )
+	{
+		return false;
+	}
+
+	ae::Vec2 center( 0.0f );
+	for( const ae::InputPointer* touch : m_pointers ) { center += touch->Position(); }
+	center /= (float)count;
+	float spread = 0.0f;
+	for( const ae::InputPointer* touch : m_pointers ) { spread += ( touch->Position() - center ).Length(); }
+	spread /= (float)count;
+	// A finger joining or lifting moves the center, so the gesture restarts from here
+	if( fingersChanged )
+	{
+		m_touchCenter = center;
+		m_touchSpread = spread;
+		m_touchPanRecent = ae::Vec2( 0.0f );
+		m_touchZoomRecent = 0.0f;
+		m_touchZoomWeight.Clear();
+	}
+	const ae::Vec2 movement = center - m_touchCenter;
+	const float spreadChange = spread - m_touchSpread;
+	m_touchCenter = center;
+	m_touchSpread = spread;
+
+	if( count == 2 )
+	{
+		// Two fingers blend pan and zoom, weighted heavily towards whichever
+		// has moved more recently. Net motion is compared, so a hand's back
+		// and forth jitter cancels out.
+		const float decay = expf( -params.dt / 0.25f );
+		m_touchPanRecent = m_touchPanRecent * decay + movement;
+		m_touchZoomRecent = m_touchZoomRecent * decay + spreadChange * 2.0f;
+		const float pan = m_touchPanRecent.Length();
+		const float zoom = ae::Abs( m_touchZoomRecent );
+		// Blending starts once one has moved at least twice as far
+		const float* weight = m_touchZoomWeight.TryGet();
+		if( ae::Max( pan, zoom ) > 10.0f && ( weight || zoom > pan * 2.0f || pan > zoom * 2.0f ) )
+		{
+			const float ratio = zoom / ( pan + zoom );
+			const float bias = powf( ratio, 4.0f );
+			const float target = bias / ( bias + powf( 1.0f - ratio, 4.0f ) );
+			m_touchZoomWeight = weight ? ae::DtLerp( *weight, 3.25f, params.dt, target ) : target;
+		}
+
+		m_mode = Mode::Pan;
+		m_refocus = false;
+		if( const float* zoomWeight = m_touchZoomWeight.TryGet() )
+		{
+			if( spread > 1.0f && spread - spreadChange > 1.0f )
+			{
+				m_dist *= powf( ( spread - spreadChange ) / spread, *zoomWeight );
+			}
+			// World units per window unit at the pivot's distance
+			const float panSpeed = 2.0f * m_dist * tanf( params.yFov * 0.5f ) / params.viewport.GetHeight();
+			const ae::Vec2 panMovement = movement * ( 1.0f - *zoomWeight );
+			m_pivot -= m_right * ( panMovement.x * panSpeed );
+			m_pivot -= m_up * ( panMovement.y * panSpeed );
+			m_mode = ( *zoomWeight > 0.5f ) ? Mode::Zoom : Mode::Pan;
+		}
+	}
+	else if( count == 1 )
+	{
+		m_mode = Mode::Rotate;
+		m_yaw -= movement.x * 0.005f;
+		m_pitch += movement.y * 0.005f;
+		m_pitch = ae::Clip( m_pitch, -ae::HALF_PI * 0.99f, ae::HALF_PI * 0.99f );
+	}
+	return true;
+}
+
+void DebugCamera::Update( const UpdateParams& params )
+{
+	ae::Input* input = params.input;
+	const float dt = params.dt;
+	AE_ASSERT_MSG( input, "ae::DebugCamera::UpdateParams::input is required" );
+	AE_ASSERT_MSG( params.yFov > 0.0f, "ae::DebugCamera::UpdateParams::yFov is required" );
+
+	// Touch gestures take over from the mouse while active. Mouse gestures
+	// only start inside the viewport, then continue outside it.
+	const bool touching = m_UpdatePointers( params );
+	const ae::Vec2 viewportSize = params.viewport.GetSize();
+	const bool hasViewport = viewportSize.x > 0.0f && viewportSize.y > 0.0f;
+	if( m_mousePointer && ( m_mousePointer->Ended() || !m_inputEnabled || !hasViewport ) )
+	{
+		input->ReleasePointer( m_mousePointer );
+		m_mousePointer = nullptr;
+	}
+	// A pointer per held mouse button, indexed by ae::InputPointerButton
+	const ae::InputPointer* mousePointers[ 3 ] = {};
+	if( m_mousePointer )
+	{
+		mousePointers[ (uint32_t)m_mousePointer->button ] = m_mousePointer;
+	}
+	for( const ae::InputPointer* pointer : input->GetUnclaimedPointers() )
+	{
+		if( pointer->source == ae::InputPointerSource::Mouse && !pointer->Ended() && params.viewport.Contains( pointer->StartPosition() ) )
+		{
+			const ae::InputPointer*& slot = mousePointers[ (uint32_t)pointer->button ];
+			if( !slot ) { slot = pointer; }
+		}
+	}
+	const bool mousePressed = mousePointers[ 0 ] || mousePointers[ 1 ] || mousePointers[ 2 ];
+	const ae::Vec2* hoverPos = input->hoverPos.TryGet();
+	const bool mouseInViewport = hoverPos && params.viewport.Contains( *hoverPos );
+	const bool mouseEnabled = m_inputEnabled && hasViewport && !touching && ( m_mode != Mode::None || mouseInViewport || mousePressed );
 
 	// Input
-	const ae::Vec2 movement = m_inputEnabled ? ae::Vec2( input->mouse.movement ) : ae::Vec2( 0.0f );
+	const ae::Vec2 movement = mouseEnabled ? input->cursorMovement : ae::Vec2( 0.0f );
 	// Momentum included so trackpad panning and zooming glide as expected
-	const ae::Vec2 scrollPoints = input->mouse.scroll + input->mouse.scrollInertia;
-	const ae::Vec2 scroll = m_inputEnabled ? ( scrollPoints * 0.01f ) : ae::Vec2( 0.0f );
+	const ae::Vec2 scrollPoints = input->scroll.delta + input->scroll.inertia;
+	const ae::Vec2 scroll = mouseEnabled ? ( scrollPoints * 0.01f ) : ae::Vec2( 0.0f );
 	const ae::Key* modifierKey = m_modifierKey.TryGet();
-	const bool modifierHeld = m_inputEnabled ? ( !modifierKey || input->Get( *modifierKey ) ) : false;
-	const bool shift = m_inputEnabled ? input->Get( ae::Key::LeftShift ) : false;
-	const bool control = m_inputEnabled ? input->Get( ae::Key::LeftControl ) : false;
-	const bool command = m_inputEnabled ? input->Get( ae::Key::LeftSuper ) : false;
-	const bool modifier = m_inputEnabled ? ( ( control || command ) && ( !control || !command ) ) : false; // Either but not both
-	const bool usingTouch = m_inputEnabled ? input->mouse.usingTouch : false;
-	const bool lmb = ( m_inputEnabled && !usingTouch ) ? input->mouse.leftButton : false;
-	const bool mmb = ( m_inputEnabled && !usingTouch ) ? input->mouse.middleButton : false;
-	const bool rmb = ( m_inputEnabled && !usingTouch ) ? input->mouse.rightButton : false;
-	const bool isTouching = usingTouch && ( input->mouse.leftButton || input->mouse.middleButton || input->mouse.rightButton );
-	const bool isTouchScrolling = usingTouch && scroll.LengthSquared();
+	const bool modifierHeld = mouseEnabled ? ( !modifierKey || input->Get( *modifierKey ) ) : false;
+	const bool shift = mouseEnabled ? input->Get( ae::Key::LeftShift ) : false;
+	const bool control = mouseEnabled ? input->Get( ae::Key::LeftControl ) : false;
+	const bool command = mouseEnabled ? input->Get( ae::Key::LeftSuper ) : false;
+	const bool modifier = mouseEnabled ? ( ( control || command ) && ( !control || !command ) ) : false; // Either but not both
+	const bool isTrackpad = mouseEnabled ? input->scroll.isTrackpad : false;
+	const bool lmb = mouseEnabled && mousePointers[ (uint32_t)ae::InputPointerButton::Primary ];
+	const bool mmb = mouseEnabled && mousePointers[ (uint32_t)ae::InputPointerButton::Tertiary ];
+	const bool rmb = mouseEnabled && mousePointers[ (uint32_t)ae::InputPointerButton::Secondary ];
+	const bool isTrackpadScrolling = isTrackpad && scroll.LengthSquared();
+	// A held button drives the mode with the cursor, otherwise trackpad scrolling does
+	const bool scrollDriven = isTrackpad && !lmb && !mmb && !rmb;
 
 	// Update mode
 	Mode nextMode = m_mode;
-	if( modifier && isTouchScrolling ) // It's possible to right click
+	if( modifier && isTrackpadScrolling ) // It's possible to right click
 	{
 		nextMode = Mode::Zoom;
 	}
-	else if( ( modifierHeld && mmb ) || ( shift && isTouchScrolling ) )
+	else if( ( modifierHeld && mmb ) || ( shift && isTrackpadScrolling ) )
 	{
 		nextMode = Mode::Pan;
 	}
-	else if( ( modifierHeld && lmb ) || isTouchScrolling )
+	else if( ( modifierHeld && lmb ) || isTrackpadScrolling )
 	{
 		nextMode = Mode::Rotate;
 	}
@@ -30169,6 +30527,10 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	{
 		nextMode = Mode::None;
 	}
+	if( touching )
+	{
+		nextMode = m_mode; // Set by the touch gesture
+	}
 
 	// Delay releasing the mouse so checks to mouse click up etc. fail
 	if( m_preventModeExitImm )
@@ -30178,6 +30540,14 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	else
 	{
 		m_moveAccum += movement.Length();
+	}
+	// The button driving the current mode is claimed once dragged
+	const ae::InputPointer* modePointer = ( m_mode == Mode::Rotate ) ? mousePointers[ (uint32_t)ae::InputPointerButton::Primary ]
+		: ( m_mode == Mode::Pan ) ? mousePointers[ (uint32_t)ae::InputPointerButton::Tertiary ]
+		: ( m_mode == Mode::Zoom ) ? mousePointers[ (uint32_t)ae::InputPointerButton::Secondary ] : nullptr;
+	if( !m_mousePointer && modePointer && m_moveAccum >= 5.0f && input->ClaimPointer( modePointer ) )
+	{
+		m_mousePointer = modePointer;
 	}
 	// Change modes
 	if( m_mode != nextMode )
@@ -30211,7 +30581,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	{
 		// Assume right handed coordinate system
 		// The focal point should move in the direction that the users hand is moving
-		if( usingTouch )
+		if( scrollDriven )
 		{
 			m_yaw += scroll.x * 0.35f;
 			m_pitch += scroll.y * 0.35f;
@@ -30230,7 +30600,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	// Zoom
 	if( m_mode == Mode::Zoom )
 	{
-		if( usingTouch )
+		if( scrollDriven )
 		{
 			m_dist -= scroll.y * 12.0f * zoomSpeed;
 			m_dist += scroll.x * 12.0f * zoomSpeed;
@@ -30241,8 +30611,8 @@ void DebugCamera::Update( ae::Input* input, float dt )
 			m_dist -= movement.x * 0.1f * zoomSpeed;
 		}
 	}
-	// Don't zoom when scrolling with touch
-	if( !usingTouch )
+	// Don't zoom when scrolling with a trackpad
+	if( !isTrackpad )
 	{
 		m_dist += scroll.y * 2.5f * zoomSpeed;
 	}
@@ -30256,7 +30626,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	{
 		m_refocus = false; // Cancel refocus
 	
-		if( usingTouch )
+		if( scrollDriven )
 		{
 			m_pivot -= m_right * ( scroll.x * 2.0f * panSpeed );
 			m_pivot += m_up * ( scroll.y * 2.0f * panSpeed );

@@ -1203,8 +1203,15 @@ void EditorProgram::Run()
 		r0 += timeStep.GetDt() * 0.6f;
 		r1 += timeStep.GetDt() * 0.75f;
 
-		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse || ImGuizmo::IsOver() );
-		camera.Update( &input, GetDt() );
+		{
+			const float scaleFactor = window.GetScaleFactor();
+			const ae::RectInt renderRectInt = GetRenderRect();
+			const ae::Rect renderRect = ae::Rect::FromPoints(
+				ae::Vec2( renderRectInt.GetPos() ) / scaleFactor,
+				ae::Vec2( renderRectInt.GetPos() + renderRectInt.GetSize() ) / scaleFactor
+			);
+			camera.Update( { .input = &input, .dt = GetDt(), .yFov = GetFOV(), .viewport = renderRect } );
+		}
 
 		const ae::Int2 oldSize( m_gameTarget.GetWidth(), m_gameTarget.GetHeight() );
 		const ae::Int2 targetSize = GetRenderRect().GetSize();
@@ -1231,7 +1238,8 @@ void EditorProgram::Run()
 				ae::Vec2( renderRectInt.GetPos() + renderRectInt.GetSize() ) / scaleFactor
 			);
 			
-			ae::Vec2 mouseGameWindowPixelPos( input.mouse.position );
+			const ImVec2 imMousePos = ImGui::GetMousePos();
+			ae::Vec2 mouseGameWindowPixelPos = ImGui::IsMousePosValid( &imMousePos ) ? ae::Vec2( imMousePos.x, window.GetHeight() - imMousePos.y ) : ae::Vec2( 0.0f );
 			mouseGameWindowPixelPos -= ae::Vec2( renderRect.GetMin() );
 			
 			ae::Vec2 mouseGameWindowNdcPos = mouseGameWindowPixelPos / ae::Vec2( renderRect.GetSize() );
@@ -2718,7 +2726,7 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 	else
 	{
 		// Handle selection release and box select before updating hovered entities
-		if( !program->input.mouse.leftButton && program->input.mousePrev.leftButton ) // Release
+		if( ImGui::IsMouseReleased( ImGuiMouseButton_Left ) ) // Release
 		{
 			m_boxSelectStart = std::nullopt;
 
@@ -2768,11 +2776,11 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 		bool doPickingHover = false;
 		m_hoverEntities.Clear();
 		const ae::Vec2 mousePos( ImGui::GetMousePos().x, ImGui::GetMousePos().y );
-		if( !program->input.mouse.leftButton ) // No press, just cursor hover
+		if( !ImGui::IsMouseDown( ImGuiMouseButton_Left ) ) // No press, just cursor hover
 		{
 			doPickingHover = true;
 		}
-		else if( !program->input.mousePrev.leftButton ) // Initial press
+		else if( ImGui::IsMouseClicked( ImGuiMouseButton_Left ) ) // Initial press
 		{
 			m_boxSelectStart = mousePos;
 		}

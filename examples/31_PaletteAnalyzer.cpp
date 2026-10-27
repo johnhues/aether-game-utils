@@ -1507,7 +1507,7 @@ int main( int argc, char* argv[] )
 		ae::DebugCamera camera = ae::Axis::Z;
 		ae::DebugLines debugLines;
 		ae::RenderTarget viewportTarget;
-		bool viewportHovered = false;
+		ae::Rect viewport; // Window units, empty until the view is first drawn
 		ColorGroup groups[ kMaxGroups ];
 		int32_t selectedGroup = 0;
 		int32_t blendSpace = (int32_t)BlendSpace::LCh;
@@ -2204,7 +2204,12 @@ int main( int argc, char* argv[] )
 			}
 			ImGui::Image( (ImTextureID)(intptr_t)solid.viewportTarget.GetTexture( 0 )->GetTexture(),
 				ImVec2( (float)targetWidth, (float)targetHeight ), ImVec2( 0.0f, 1.0f ), ImVec2( 1.0f, 0.0f ) );
-			solid.viewportHovered = ImGui::IsItemHovered();
+			ui.PassThrough();
+			const float windowHeight = (float)window.GetHeight();
+			solid.viewport = ae::Rect::FromPoints(
+				ae::Vec2( ImGui::GetItemRectMin().x, windowHeight - ImGui::GetItemRectMax().y ),
+				ae::Vec2( ImGui::GetItemRectMax().x, windowHeight - ImGui::GetItemRectMin().y )
+			);
 		}
 		ImGui::End();
 
@@ -2269,8 +2274,7 @@ int main( int argc, char* argv[] )
 		}
 
 		// Cylinder: L* up the axis, chroma as radius, hue as angle.
-		solid.camera.SetInputEnabled( solid.viewportHovered );
-		solid.camera.Update( &input, dt );
+		solid.camera.Update( { .input = &input, .dt = dt, .yFov = 0.9f, .viewport = solid.viewport } );
 		solid.debugLines.Clear();
 		{
 			const ae::Color guide = ae::Color::SRGB8( 70, 78, 90 );

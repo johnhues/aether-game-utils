@@ -150,7 +150,7 @@ int main( int argc, char* argv[] )
 	auto Update = [&]() -> bool
 	{
 		input.Pump();
-		camera.Update( &input, timeStep.GetDt() );
+		camera.Update( { .input = &input, .dt = timeStep.GetDt(), .yFov = 0.9f, .viewport = window.GetArea() } );
 
 		r0 += timeStep.GetDt() * 0.6f;
 		r1 += timeStep.GetDt() * 0.75f;

@@ -229,6 +229,7 @@ function(ae_add_bundle BUNDLE_NAME)
 				XCODE_ATTRIBUTE_INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad
 					"UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
 				XCODE_ATTRIBUTE_INFOPLIST_KEY_ITSAppUsesNonExemptEncryption NO
+				XCODE_ATTRIBUTE_INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents YES
 			)
 			target_link_libraries(${AEAB_TARGET_NAME} PRIVATE
 				"-framework UIKit" "-framework Foundation" "-framework QuartzCore"

@@ -25,8 +25,8 @@ int main( int argc, char* argv[] )
 	ae::PushOutInfo player;
 	float yaw = 0.0f;
 	float pitch = 0.0f;
-	const ae::Touch* moveTouch = nullptr;
-	const ae::Touch* lookTouch = nullptr;
+	const ae::InputPointer* moveTouch = nullptr;
+	const ae::InputPointer* lookTouch = nullptr;
 	ae::Vec2 lookLastPos = ae::Vec2( 0.0f );
 
 	auto Initialize = [&]()
@@ -42,8 +42,8 @@ int main( int argc, char* argv[] )
 		shader.SetCulling( ae::Culling::CounterclockwiseFront );
 		shader.SetDepthWrite( true );
 		shader.SetDepthTest( true );
-		geoFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.obj", 2.5f );
-		textureFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.tga", 2.5f );
+		geoFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.obj", 0.0f );
+		textureFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.tga", 0.0f );
 
 		player.sphere.radius = 0.7f;
 		player.sphere.center = ae::Vec3( 0.0f, player.sphere.radius, 0.0f );
@@ -77,22 +77,27 @@ int main( int argc, char* argv[] )
 		if( fileSystem.GetFileStatusCount( ae::File::Status::Success ) == fileSystem.GetFileCount() )
 		{
 			// Misc input
-			if( lookTouch && lookTouch->Ended() ) { input.ReleaseTouch( lookTouch ); lookTouch = nullptr; }
-			if( moveTouch && moveTouch->Ended() ) { input.ReleaseTouch( moveTouch ); moveTouch = nullptr; }
-			while( const ae::Touch* t = input.PumpTouches() )
+			if( lookTouch && lookTouch->Ended() ) { input.ReleasePointer( lookTouch ); lookTouch = nullptr; }
+			if( moveTouch && moveTouch->Ended() ) { input.ReleasePointer( moveTouch ); moveTouch = nullptr; }
+			while( const ae::InputPointer* t = input.PumpPointers() )
 			{
+				if( t->source == ae::InputPointerSource::Mouse ) // The mouse looks with the captured cursor
+				{
+					if( t->button == ae::InputPointerButton::Primary ) { input.SetCursorState( ae::CursorState::HiddenAndCaptured ); }
+					input.ReleasePointer( t );
+					continue;
+				}
 				const bool onLeft = ( t->StartPosition().x < window.GetWidth() / 2.0f );
 				if( !moveTouch && onLeft ) { moveTouch = t; }
 				else if( !lookTouch ) { lookTouch = t; lookLastPos = t->StartPosition(); }
-				else { input.ReleaseTouch( t ); }
+				else { input.ReleasePointer( t ); }
 			}
 			const float displaySize = ae::Min( window.GetWidth(), window.GetHeight() );
 			const ae::Vec3 forward( -cosf( yaw ) * cosf( pitch ), sinf( pitch ), sinf( yaw ) * cosf( pitch ) );
 			const ae::Vec3 right( forward.z, 0.0f, -forward.x );
-			if( input.GetMousePressLeft() ) { input.SetCursorState( ae::CursorState::HiddenAndCaptured ); }
 			if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetCursorState( window.GetFullScreen() ? ae::CursorState::HiddenAndCaptured : ae::CursorState::Normal ); }
 			if( input.GetPress( ae::Key::Escape ) ) { input.SetCursorState( ae::CursorState::Normal ); window.SetFullScreen( false ); }
-			if( input.GetCursorLocked() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
+			if( input.GetCursorLocked() ) { yaw -= input.cursorMovement.x * 0.001f; pitch += input.cursorMovement.y * 0.001f; }
 
 			// Camera input
 			yaw -= input.gamepads[ 0 ].rightAnalog.x * 2.0f * dt;

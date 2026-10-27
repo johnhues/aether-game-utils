@@ -115,6 +115,11 @@ private:
 	ae::VertexBuffer m_triangle, m_quad;
 
 	ae::Matrix4 m_worldToProj;
+	// One pointer drives the folders, a finger or the mouse
+	const ae::InputPointer* m_pointer = nullptr;
+	ae::Vec2 m_cursorPos = ae::Vec2( 0.0f ); // Window units
+	bool m_leftHeld = false;
+	bool m_rightHeld = false;
 	enum class State
 	{
 		Idle,
@@ -180,8 +185,26 @@ void Program::Terminate()
 bool Program::Tick()
 {
 	m_input.Pump();
+	if( m_pointer && m_pointer->Ended() )
+	{
+		m_input.ReleasePointer( m_pointer );
+		m_pointer = nullptr;
+	}
+	bool claimedNow = false;
+	while( const ae::InputPointer* pointer = m_input.PumpPointers() )
+	{
+		if( m_pointer ) { m_input.ReleasePointer( pointer ); continue; }
+		m_pointer = pointer;
+		claimedNow = true;
+	}
+	// A pointer claimed already ended is a click within one frame, so it's down until the next
+	const bool down = m_pointer && ( claimedNow || !m_pointer->Ended() );
+	const bool leftDown = down && m_pointer->button == ae::InputPointerButton::Primary;
+	const bool rightDown = down && m_pointer->button == ae::InputPointerButton::Secondary;
+	if( m_pointer ) { m_cursorPos = m_pointer->Position(); }
+	else if( const ae::Vec2* hoverPos = m_input.hoverPos.TryGet() ) { m_cursorPos = *hoverPos; }
 	
-	const ae::Vec2 currentCursorPos = ae::Vec2( m_input.mouse.position ) * m_window.GetScaleFactor();
+	const ae::Vec2 currentCursorPos = m_cursorPos * m_window.GetScaleFactor();
 
 	int32_t hoverIdx = m_currentFolder->subFolders.FindLastFn( [&]( const Folder* folder )
 	{
@@ -191,7 +214,7 @@ bool Program::Tick()
 	Folder* hoverFolder = ( hoverIdx >= 0 ) ? m_currentFolder->subFolders[ hoverIdx ] : nullptr;
 	bool hoverFolderIsSelected = ( m_selected.Find( hoverFolder ) >= 0 );
 
-	if( m_input.mouse.leftButton && !m_input.mousePrev.leftButton ) // Start left click
+	if( leftDown && !m_leftHeld ) // Start left click
 	{
 		if( m_rightClick && m_rightClickRect.Contains( currentCursorPos ) )
 		{
@@ -232,7 +255,7 @@ bool Program::Tick()
 		}
 		m_rightClick = false;
 	}
-	else if( !m_input.mouse.leftButton && m_input.mouse.rightButton && !m_input.mousePrev.rightButton ) // Right click
+	else if( !leftDown && rightDown && !m_rightHeld ) // Right click
 	{
 		if( !m_rightClick || !m_rightClickRect.Contains( currentCursorPos ) )
 		{
@@ -267,7 +290,7 @@ bool Program::Tick()
 	} );
 	DrawFolders();
 
-	if( m_input.mouse.leftButton ) // Holding mouse left
+	if( leftDown ) // Holding mouse left
 	{
 		if( m_state == State::BoxSelect )
 		{
@@ -277,7 +300,7 @@ bool Program::Tick()
 			DrawRect( m_selectRect, ae::Color::AetherBlue().ScaleA( 0.5f ) );
 		}
 	}
-	else if( m_input.mousePrev.leftButton ) // Release mouse left
+	else if( m_leftHeld ) // Release mouse left
 	{
 		if( m_state == State::BoxSelect )
 		{
@@ -311,6 +334,8 @@ bool Program::Tick()
 	}
 
 	DrawCursor();
+	m_leftHeld = leftDown;
+	m_rightHeld = rightDown;
 
 	m_gfx.Present();
 	m_timeStep.Tick();
@@ -345,7 +370,7 @@ void Program::DrawWindow()
 void Program::DrawCursor()
 {
 	ae::UniformList uniformList;
-	ae::Vec2 mousePos = ae::Vec2( m_input.mouse.position ) * m_window.GetScaleFactor();
+	const ae::Vec2 mousePos = m_cursorPos * m_window.GetScaleFactor();
 
 	ae::Matrix4 localToWorld = ae::Matrix4::Translation( mousePos.x - 2.0f, mousePos.y + 4.0f, 0.0f ) * ae::Matrix4::Scaling( 30.0f );
 	uniformList.Set( "u_worldToProj", m_worldToProj * localToWorld );
@@ -362,7 +387,7 @@ void Program::DrawCursor()
 
 void Program::DrawFolders()
 {
-	const ae::Vec2 currentCursorPos = m_input.mouse.position * m_window.GetScaleFactor();
+	const ae::Vec2 currentCursorPos = m_cursorPos * m_window.GetScaleFactor();
 	const ae::Vec2 dragOffset = currentCursorPos - m_dragStart;
 	for( const Folder* folder : m_currentFolder->subFolders )
 	{

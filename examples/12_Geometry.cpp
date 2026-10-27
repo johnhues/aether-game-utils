@@ -91,7 +91,7 @@ int main( int argc, char* argv[] )
 		timeStep.SetTimeStep( 1.0f / 60.0f );
 		fileSystem.Initialize( "data", "ae", "geometry" );
 		debug.Initialize( 2048 );
-		fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
+		fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 0.0f );
 		AE_INFO( "Loading '#'", fontFile->GetURL() );
 		meshShader.Initialize(
 			R"(
@@ -117,7 +117,7 @@ int main( int argc, char* argv[] )
 		);
 		meshShader.SetDepthWrite( true );
 		meshShader.SetDepthTest( true );
-		objFile = fileSystem.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
+		objFile = fileSystem.Read( ae::FileSystem::Root::Data, "bunny.obj", 0.0f );
 		AE_INFO( "Loading '#'", objFile->GetURL() );
 		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 		camera.SetModifierKey( {} );
@@ -175,7 +175,7 @@ int main( int argc, char* argv[] )
 		{
 			camera.Refocus( ae::Vec3( 0.0f ) );
 		}
-		camera.Update( &input, dt );
+		camera.Update( { .input = &input, .dt = dt, .yFov = ae::QUARTER_PI, .viewport = window.GetArea() } );
 
 		render.Activate();
 		render.Clear( ae::Color::AetherDarkPurple() );
