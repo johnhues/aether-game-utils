@@ -4547,7 +4547,9 @@ public:
 	//! ae::FileSystem::Read...() methods as it will work the most consistently
 	//! on all platforms.</b> Returns an ae::File object to be freed later
 	//! with ae::FileSystem::Destroy(). A zero or negative \p timeoutSec value
-	//! will disable the timeout.
+	//! will disable the timeout. On the web, a page defining
+	//! Module['aeFileProgress']( url, loaded, total, finished ) receives each
+	//! request's progress, with total 0 when the size is unknown.
 	const ae::File* Read( Root root, const char* url, float timeoutSec );
 	//! Loads a file asynchronously from disk or from the network (@TODO: currently
 	//! only in emscripten builds). Returns an ae::File object to be freed
@@ -23878,9 +23880,11 @@ extern "C" void EMSCRIPTEN_KEEPALIVE _ae_em_free( void* p )
 EM_JS( void, _ae_FileSystem_ReadImpl, ( const char* url, void* arg, uint32_t timeoutMs ),
 {
 	var handled = false; // Prevent double-calling callbacks
+	var urlStr = UTF8ToString(url);
+	var progress = Module['aeFileProgress'];
 	var xhr = new XMLHttpRequest();
 	xhr.timeout = timeoutMs;
-	xhr.open('GET', UTF8ToString(url), true);
+	xhr.open('GET', urlStr, true);
 	xhr.responseType = 'arraybuffer';
 	xhr.ontimeout = function xhr_ontimeout() {
 		if (!handled) {
@@ -23922,7 +23926,15 @@ EM_JS( void, _ae_FileSystem_ReadImpl, ( const char* url, void* arg, uint32_t tim
 			__ae_FileSystem_ReadFail(arg, 0, false);
 		}
 	};
-	xhr.onloadend = function xhr_onloadend() {
+	xhr.onprogress = function xhr_onprogress(e) {
+		if (progress) {
+			progress(urlStr, e.loaded, e.lengthComputable ? e.total : 0, false);
+		}
+	};
+	xhr.onloadend = function xhr_onloadend(e) {
+		if (progress) {
+			progress(urlStr, e.loaded, e.lengthComputable ? e.total : 0, true);
+		}
 		// Safety net: catches edge cases where other handlers don't fire
 		if (!handled) {
 			handled = true;
@@ -23933,6 +23945,9 @@ EM_JS( void, _ae_FileSystem_ReadImpl, ( const char* url, void* arg, uint32_t tim
 	try {
 		xhr.send(null);
 	} catch(e) {
+		if (progress) {
+			progress(urlStr, 0, 0, true);
+		}
 		if (!handled) {
 			handled = true;
 			__ae_FileSystem_ReadFail(arg, 0, false);
