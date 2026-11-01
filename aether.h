@@ -21198,10 +21198,23 @@ uint32_t _ae_GetCurrentFramebuffer();
 // ae::Screen functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
+// Target for this instance's Module['canvas'], for Emscripten functions that
+// take a canvas selector
+const char* _aeEmscriptenCanvas()
+{
+	const bool hasCanvas = EM_ASM_INT( {
+		if( !Module['canvas'] ) { return 0; }
+		specialHTMLTargets[ '!canvas' ] = Module['canvas'];
+		return 1;
+	} );
+	AE_ASSERT_MSG( hasCanvas, "Module['canvas'] must be set to this instance's canvas element" );
+	return "!canvas";
+}
+
 void _aeEmscriptenGetCanvasInfo( int32_t* widthOut, int32_t* heightOut, float* scaleOut )
 {
 	double width, height;
-	if( emscripten_get_element_css_size( "#canvas", &width, &height ) != EMSCRIPTEN_RESULT_SUCCESS )
+	if( emscripten_get_element_css_size( _aeEmscriptenCanvas(), &width, &height ) != EMSCRIPTEN_RESULT_SUCCESS )
 	{
 		AE_FAIL_MSG( "Failed to get canvas size" );
 	}
@@ -21612,7 +21625,7 @@ void Window::m_Initialize( const char* frameStorageKey )
 	attrs.alpha = 0;
 	attrs.majorVersion = ae::GLMajorVersion();
 	attrs.minorVersion = ae::GLMinorVersion();
-	m_context = emscripten_webgl_create_context( "canvas", &attrs );
+	m_context = emscripten_webgl_create_context( _aeEmscriptenCanvas(), &attrs );
 	AE_ASSERT( m_context > 0 );
 	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
 	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
@@ -22027,7 +22040,7 @@ void Window::m_SetMode( ae::Window::Mode mode )
 		strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_DEFAULT;
 		strategy.canvasResolutionScaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF;
 		strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
-		emscripten_request_fullscreen_strategy( "canvas", true, &strategy );
+		emscripten_request_fullscreen_strategy( _aeEmscriptenCanvas(), true, &strategy );
 	}
 	else
 	{
@@ -22338,7 +22351,7 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 	{
 		input->m_mousePosSet = false;
 		input->m_capturedMousePos = ae::Optional< ae::Vec2 >( pos );
-		emscripten_request_pointerlock( "canvas", true );
+		emscripten_request_pointerlock( _aeEmscriptenCanvas(), true );
 	}
 
 	return true;
@@ -22481,7 +22494,7 @@ void Input::Initialize( Window* window )
 	emscripten_set_touchcancel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	// @NOTE: Internal. Window level wheel listeners are passive in Chrome, so
 	// preventDefault() is ignored there and the page scrolls.
-	emscripten_set_wheel_callback( "#canvas", this, true, &_aeEmscriptenHandleWheel );
+	emscripten_set_wheel_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleWheel );
 	// @NOTE: Internal. Sets Module.aeWheelTrackpad before each canvas wheel event
 	EM_ASM( {
 		window.addEventListener( 'wheel', function( e )
@@ -22496,7 +22509,7 @@ void Input::Initialize( Window* window )
 	// accumulated in Module.aeZoomDelta. Touchscreen gestures are left to the
 	// touch handlers.
 	EM_ASM( {
-		const canvas = document.getElementById( 'canvas' );
+		const canvas = Module['canvas'];
 		let touches = 0;
 		let lastScale = 1;
 		Module.aeZoomDelta = 0;
@@ -22515,7 +22528,7 @@ void Input::Initialize( Window* window )
 	// @NOTE: Internal. Only a primary button drag keeps sending mouse moves
 	// once it leaves the canvas, explicit capture covers every button.
 	EM_ASM( {
-		const canvas = document.getElementById( 'canvas' );
+		const canvas = Module['canvas'];
 		canvas.addEventListener( 'pointerdown', function( e )
 		{
 			canvas.setPointerCapture( e.pointerId );
@@ -22855,11 +22868,11 @@ void Input::Pump()
 			// @NOTE: This is a hack to fix the canvas style when the size is
 			// not specified by the web page. This is needed in particular for
 			// the default Emscripten template.
-			EM_ASM( { document.getElementById('canvas').style.width = '100%'; } );
-			EM_ASM( { document.getElementById('canvas').style.height = '100%'; } );
+			EM_ASM( { Module['canvas'].style.width = '100%'; } );
+			EM_ASM( { Module['canvas'].style.height = '100%'; } );
 			// This is needed in addition to the width and height above to fix the
 			// aspect ratio when the canvas is resized so the height is not zero.
-			EM_ASM( { document.getElementById('canvas').style.aspectRatio = '2 / 1'; } );
+			EM_ASM( { Module['canvas'].style.aspectRatio = '2 / 1'; } );
 		}
 
 		int32_t width, height;
@@ -23826,7 +23839,7 @@ void Input::m_UpdateCursorHidden()
 	const bool over = ( pos.x >= 0.0f && pos.y >= 0.0f &&
 		pos.x < m_window->GetWidth() && pos.y < m_window->GetHeight() );
 	EM_ASM( {
-		const style = document.getElementById( 'canvas' ).style;
+		const style = Module['canvas'].style;
 		const cursor = $0 ? 'none' : 'auto';
 		if( style.cursor !== cursor ) { style.cursor = cursor; }
 	}, hide && over );
@@ -29103,7 +29116,7 @@ void GraphicsDevice::Activate()
 			// is determined by the web page. This function sets the emscripten
 			// managed back buffer size.
 			if( m_window->GetLoggingEnabled() ) { AE_INFO( "resize #x#", contentWidth, contentHeight ); }
-			emscripten_set_canvas_element_size( "canvas", contentWidth, contentHeight );
+			emscripten_set_canvas_element_size( _aeEmscriptenCanvas(), contentWidth, contentHeight );
 			m_HandleResize( contentWidth, contentHeight );
 		}
 #else
