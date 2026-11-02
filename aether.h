@@ -3909,6 +3909,8 @@ public:
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
 	// @TODO: InitializeWindowed
 	bool Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor, const char* frameStorageKey );
+	//! Destroys the native window. Terminate the ae::Input and
+	//! ae::GraphicsDevice using this window first.
 	void Terminate();
 
 	void SetTitle( const char* title );
@@ -5462,11 +5464,6 @@ public:
 	void* m_context = nullptr;
 #endif
 	int32_t m_defaultFbo = -1;
-	
-	VertexBuffer m_renderQuad;
-	Shader m_renderShaderRGB;
-	Shader m_renderShaderSRGB;
-	bool m_rgbToSrgb = false;
 };
 
 //------------------------------------------------------------------------------
@@ -8334,7 +8331,15 @@ struct _Globals
 	ae::Map< ae::TypeId, ae::ClassType*, kMaxMetaTypes, ae::Hash32, ae::MapMode::Stable > classTypes;
 
 	// Platform
-	class GraphicsDevice* graphicsDevice = nullptr;
+	// ae::RenderTarget resources, owned by the ae::GraphicsDevice
+	struct
+	{
+		bool initialized = false;
+		VertexBuffer quad;
+		Shader shaderRGB;
+		Shader shaderSRGB;
+		bool rgbToSrgb = false;
+	} render;
 	class _Application* application = nullptr;
 	void* eaglLayer = nullptr; // iOS: CAEAGLLayer, set by aeApplicationDelegate before Window init
 	class Input* input = nullptr;
@@ -20819,10 +20824,11 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
 {
-	AE_ASSERT( _aeWindow );
-	AE_ASSERT( _aeWindow->input );
 	// @TODO: Prevent Q from being sent to the window?
-	_aeWindow->input->quit = true;
+	if( _aeWindow && _aeWindow->input )
+	{
+		_aeWindow->input->quit = true;
+	}
 	return NSTerminateCancel;
 }
 - (void)ae_orderFrontStandardAboutPanel:(id)sender
@@ -20936,10 +20942,9 @@ public:
 		CAEAGLLayer* layer = (CAEAGLLayer*)self.layer;
 		layer.opaque = YES;
 		layer.contentsScale = [UIScreen mainScreen].scale;
-		// SRGBA8 matches macOS's NSOpenGLPFAColorSize=24 default backing: the
-		// framebuffer auto-applies linear→sRGB on fragment write, so SRGB
-		// textures and linear shading round-trip correctly to display. The
-		// drawable is fully overwritten by GraphicsDevice::Present each frame.
+		// SRGBA8 encodes linear→sRGB on fragment write, so GraphicsDevice::Present
+		// skips manual encoding on iOS. The drawable is fully overwritten by
+		// GraphicsDevice::Present each frame.
 		layer.drawableProperties = @{
 			kEAGLDrawablePropertyColorFormat : kEAGLColorFormatSRGBA8,
 		};
@@ -21394,7 +21399,7 @@ void Window::m_Initialize( const char* frameStorageKey )
 	ex.hCursor = LoadCursor( NULL, IDC_ARROW );
 	ex.hbrBackground = (HBRUSH)GetStockObject( BLACK_BRUSH );
 	ex.lpszClassName = WNDCLASSNAME;
-	if( !RegisterClassEx( &ex ) ) // Create the window
+	if( !RegisterClassEx( &ex ) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS )
 	{
 		AE_FAIL_MSG( "Failed to register window. Error: #", GetLastError() );
 	}
@@ -21699,12 +21704,55 @@ void Window::m_Initialize( const char* frameStorageKey )
 
 void Window::Terminate()
 {
-	// @TODO: Destroy the native window, it currently lives until the process exits
+	AE_ASSERT_MSG( !input, "Terminate the ae::Input using this window first" );
+	AE_ASSERT_MSG( !graphicsDevice, "Terminate the ae::GraphicsDevice using this window first" );
 	if( m_backBuffer )
 	{
 		ae::Delete( m_backBuffer );
 		m_backBuffer = nullptr;
 	}
+#if _AE_WINDOWS_
+	if( window )
+	{
+		HWND hwnd = (HWND)window;
+#if AE_ENABLE_OPENGL
+		if( m_context )
+		{
+			if( wglGetCurrentContext() == (HGLRC)m_context )
+			{
+				wglMakeCurrent( nullptr, nullptr );
+			}
+			wglDeleteContext( (HGLRC)m_context );
+			m_context = nullptr;
+		}
+#endif
+		DestroyWindow( hwnd );
+		window = nullptr;
+	}
+#elif _AE_OSX_
+	if( window )
+	{
+		NSWindow* nsWindow = (NSWindow*)window;
+#if AE_ENABLE_OPENGL
+		if( m_context && [NSOpenGLContext currentContext] == (NSOpenGLContext*)m_context )
+		{
+			[NSOpenGLContext clearCurrentContext];
+		}
+		m_context = nullptr;
+#endif
+		aeApplicationDelegate* applicationDelegate = (aeApplicationDelegate*)[NSApp delegate];
+		if( applicationDelegate.aeWindow == this )
+		{
+			applicationDelegate.aeWindow = nullptr;
+		}
+		aeWindowDelegate* windowDelegate = (aeWindowDelegate*)nsWindow.delegate;
+		nsWindow.delegate = nil;
+		[windowDelegate release];
+		[NSApp removeWindowsItem:nsWindow];
+		[nsWindow close];
+		window = nullptr;
+	}
+#endif
 }
 
 void Window::ActivateContext()
@@ -22552,8 +22600,11 @@ void Input::Initialize( Window* window )
 	[nsWindow orderFrontRegardless];
 	[GCController setShouldMonitorBackgroundEvents: YES];
 	m_naturalScroll = [[NSUserDefaults standardUserDefaults] boolForKey:@"com.apple.swipescrolldirection"];
-	// Triggers applicationWillFinishLaunching/applicationDidFinishLaunching.
-	[[NSApplication sharedApplication] run];
+	// Triggers applicationWillFinishLaunching/applicationDidFinishLaunching, once per process.
+	if( ![[NSRunningApplication currentApplication] isFinishedLaunching] )
+	{
+		[[NSApplication sharedApplication] run];
+	}
 #endif
 
 	Pump(); // Pump once to process any system window creation events
@@ -22570,6 +22621,11 @@ void Input::Terminate()
 	{
 		ae::_Globals::Get()->input = nullptr;
 	}
+	if( m_window && m_window->input == this )
+	{
+		m_window->input = nullptr;
+	}
+	m_window = nullptr;
 }
 
 void Input::m_TryNewFrame()
@@ -28752,19 +28808,19 @@ void RenderTarget::Clear( Color color )
 void RenderTarget::Render( const Shader* shader, const UniformList& uniforms )
 {
 	_Globals* globals = ae::_Globals::Get();
-	AE_ASSERT( globals->graphicsDevice );
+	AE_ASSERT( globals->render.initialized );
 
 	glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 	AE_CHECK_GL_ERROR();
 	
-	globals->graphicsDevice->m_renderQuad.Bind( shader, uniforms );
-	globals->graphicsDevice->m_renderQuad.Draw();
+	globals->render.quad.Bind( shader, uniforms );
+	globals->render.quad.Draw();
 }
 
 void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 {
 	_Globals* globals = ae::_Globals::Get();
-	AE_ASSERT( globals->graphicsDevice );
+	AE_ASSERT( globals->render.initialized );
 
 	glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 	AE_CHECK_GL_ERROR();
@@ -28772,11 +28828,9 @@ void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 	UniformList uniforms;
 	uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
 	uniforms.Set( "u_tex", GetTexture( textureIndex ) );
-	Shader* shader = globals->graphicsDevice->m_rgbToSrgb
-		? &globals->graphicsDevice->m_renderShaderSRGB
-		: &globals->graphicsDevice->m_renderShaderRGB;
-	globals->graphicsDevice->m_renderQuad.Bind( shader, uniforms );
-	globals->graphicsDevice->m_renderQuad.Draw();
+	Shader* shader = globals->render.rgbToSrgb ? &globals->render.shaderSRGB : &globals->render.shaderRGB;
+	globals->render.quad.Bind( shader, uniforms );
+	globals->render.quad.Draw();
 }
 
 const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
@@ -28886,8 +28940,8 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
 	_Globals* globals = ae::_Globals::Get();
-	AE_ASSERT_MSG( !globals->graphicsDevice, "Only one instance of ae::GraphicsDevice is supported" );
-	globals->graphicsDevice = this;
+	AE_ASSERT_MSG( !globals->render.initialized, "Only one instance of ae::GraphicsDevice is supported" );
+	globals->render.initialized = true;
 
 	AE_ASSERT( window );
 	AE_ASSERT( window->GetWidth() && window->GetHeight() );
@@ -29010,18 +29064,16 @@ void GraphicsDevice::Initialize( class Window* window )
 		{ _kQuadVertPos[ 3 ], _kQuadVertUvs[ 3 ] },
 	};
 	AE_STATIC_ASSERT( countof( quadVerts ) == _kQuadVertCount );
-	m_renderQuad.Initialize( sizeof( Vertex ), sizeof( _kQuadIndex ), _kQuadVertCount, _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
-	m_renderQuad.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
-	m_renderQuad.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( Vertex, uv ) );
-	m_renderQuad.UploadVertices( 0, quadVerts, _kQuadVertCount );
-	m_renderQuad.UploadIndices( 0, _kQuadIndices, _kQuadIndexCount );
+	globals->render.quad.Initialize( sizeof( Vertex ), sizeof( _kQuadIndex ), _kQuadVertCount, _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+	globals->render.quad.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
+	globals->render.quad.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( Vertex, uv ) );
+	globals->render.quad.UploadVertices( 0, quadVerts, _kQuadVertCount );
+	globals->render.quad.UploadIndices( 0, _kQuadIndices, _kQuadIndexCount );
 	AE_CHECK_GL_ERROR();
 
-	// @NOTE: GL_FRAMEBUFFER_SRGB is not completely reliable on every platform (web, wide color
-	// display targets, etc), mostly because of limited control over the back buffer format.
-	// On web its not possible to specify the back buffer format, but browsers typically expect SRGB anyway.
-	// On OpenGLES GL_FRAMEBUFFER_SRGB is always enabled.
-	// Because of all of this it's easiest to convert to SRGB manually on non-OpenGLES platforms.
+	// @NOTE: Only the iOS back buffer encodes sRGB on write (kEAGLColorFormatSRGBA8). Other
+	// platforms have no portable sRGB default framebuffer (WebGL has none), so displays expecting
+	// sRGB are given manually encoded output by the AE_SRGB_TARGET variant.
 	const char* vertexStr = R"(
 		AE_UNIFORM_HIGHP mat4 u_localToNdc;
 		AE_IN_HIGHP vec2 a_uv;
@@ -29043,16 +29095,16 @@ void GraphicsDevice::Initialize( class Window* window )
 				vec3 higher = vec3(1.055) * pow(color.rgb, vec3(1.0/2.4)) - vec3(0.055);
 				vec3 lower = color.rgb * vec3(12.92);
 				AE_COLOR.rgb = mix(higher, lower, cutoff);
-				// Always full opacity when converting to srgb. Blending does not work without GL_FRAMEBUFFER_SRGB.
+				// Always opaque, blending manually encoded values is not linear
 				AE_COLOR.a = 1.0;
 			#else
 				AE_COLOR = color;
 			#endif
 		})";
 	const char* srgbDefine = "#define AE_SRGB_TARGET";
-	m_renderShaderRGB.Initialize( vertexStr, fragStr, nullptr, 0 );
-	m_renderShaderRGB.SetBlending( true );  // This is required on some implementations of OpenGL for GL_FRAMEBUFFER_SRGB to work
-	m_renderShaderSRGB.Initialize( vertexStr, fragStr, &srgbDefine, 1 ); // Do not blend when manually converting to srgb without GL_FRAMEBUFFER_SRGB
+	globals->render.shaderRGB.Initialize( vertexStr, fragStr, nullptr, 0 );
+	globals->render.shaderRGB.SetBlending( true );
+	globals->render.shaderSRGB.Initialize( vertexStr, fragStr, &srgbDefine, 1 );
 	AE_CHECK_GL_ERROR();
 	
 	Activate(); // Init primary render target
@@ -29080,13 +29132,19 @@ void GraphicsDevice::Terminate()
 	if( m_context )
 	{
 		_Globals* globals = ae::_Globals::Get();
-		AE_ASSERT( globals->graphicsDevice == this );
-		globals->graphicsDevice = nullptr;
+		AE_ASSERT( globals->render.initialized );
+		globals->render.initialized = false;
 
-		m_renderShaderSRGB.Terminate();
-		m_renderShaderRGB.Terminate();
-		m_renderQuad.Terminate();
+		globals->render.shaderSRGB.Terminate();
+		globals->render.shaderRGB.Terminate();
+		globals->render.quad.Terminate();
+		m_canvas.Terminate();
 
+		if( m_window && m_window->graphicsDevice == this )
+		{
+			m_window->graphicsDevice = nullptr;
+		}
+		m_window = nullptr;
 		m_context = 0;
 	}
 }
@@ -29162,15 +29220,16 @@ void GraphicsDevice::Present()
 	AE_CHECK_GL_ERROR();
 	
 	// @NOTE: Conversion to srgb is only needed for the back buffer. The rest of the pipeline should be implemented as linear.
+	_Globals* globals = ae::_Globals::Get();
 #if _AE_IOS_
-	// SRGB conversion is automatic on ios/OpenGLES because GL_FRAMEBUFFER_SRGB is always on
-	m_rgbToSrgb = false;
+	// The iOS drawable is kEAGLColorFormatSRGBA8, which encodes on write
+	globals->render.rgbToSrgb = false;
 #else
 	// Currently all platforms expect the back buffer contents to be in sRGB space
-	m_rgbToSrgb = true;
+	globals->render.rgbToSrgb = true;
 #endif
 	m_canvas.Render2D( 0, ae::Rect::FromCenterAndSize( ae::Vec2( 0.0f ), ae::Vec2( 2.0f ) ), 0.5f );
-	m_rgbToSrgb = false;
+	globals->render.rgbToSrgb = false;
 	
 	AE_CHECK_GL_ERROR();
 	m_window->Present();
