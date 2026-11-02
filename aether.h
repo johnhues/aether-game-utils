@@ -21950,9 +21950,11 @@ Window::Mode Window::m_QueryMode() const
 	}
 	return Mode::Windowed;
 #elif _AE_EMSCRIPTEN_
-	EmscriptenFullscreenChangeEvent s;
-	emscripten_get_fullscreen_status( &s );
-	return s.isFullscreen ? Mode::Fullscreen : Mode::Windowed;
+	const bool fullscreen = EM_ASM_INT( {
+		const element = document.fullscreenElement || document.webkitFullscreenElement;
+		return ( element && element.contains( Module['canvas'] ) ) ? 1 : 0;
+	} );
+	return fullscreen ? Mode::Fullscreen : Mode::Windowed;
 #else
 	return m_mode;
 #endif
@@ -22092,8 +22094,11 @@ void Window::m_SetMode( ae::Window::Mode mode )
 	}
 	else
 	{
-		if( GetLoggingEnabled() ) { AE_INFO( "exit full screen" ); }
-		emscripten_exit_fullscreen();
+		if( m_QueryMode() == Mode::Fullscreen )
+		{
+			if( GetLoggingEnabled() ) { AE_INFO( "exit full screen" ); }
+			emscripten_exit_fullscreen();
+		}
 	}
 #endif
 	m_SyncMode();
@@ -22409,7 +22414,8 @@ EM_BOOL _aeEmscriptenHandleLockChange( int eventType, const EmscriptenPointerloc
 {
 	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_POINTERLOCKCHANGE );
 	Input* input = (Input*)userData;
-	input->m_SetMouseCaptured( pointerlockChangeEvent->isActive );
+	const bool locked = EM_ASM_INT( { return document.pointerLockElement === Module['canvas'] ? 1 : 0; } );
+	input->m_SetMouseCaptured( locked );
 	return true;
 }
 
@@ -22418,6 +22424,10 @@ EM_BOOL _aeEmscriptenHandleLockError( int eventType, const void* reserved, void*
 {
 	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_POINTERLOCKERROR );
 	Input* input = (Input*)userData;
+	if( input->m_wantedCursorState != ae::CursorState::HiddenAndCaptured || input->m_captureMouse )
+	{
+		return false; // Another canvas on the page requested the lock
+	}
 	if( const ae::Vec2* p = input->m_capturedMousePos.TryGet() )
 	{
 		input->m_cursorPos = *p;
@@ -22529,23 +22539,21 @@ void Input::Initialize( Window* window )
 	}
 
 #if _AE_EMSCRIPTEN_
-	emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleKey );
-	emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleKey );
-	emscripten_set_mousedown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
-	emscripten_set_mouseup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
-	emscripten_set_mousemove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
-	emscripten_set_mouseenter_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
-	emscripten_set_mouseleave_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
-	emscripten_set_touchstart_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
-	emscripten_set_touchend_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
-	emscripten_set_touchmove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
-	emscripten_set_touchcancel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
-	// @NOTE: Internal. Window level wheel listeners are passive in Chrome, so
-	// preventDefault() is ignored there and the page scrolls.
-	emscripten_set_wheel_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleWheel );
-	// @NOTE: Internal. Sets Module.aeWheelTrackpad before each canvas wheel event
+	emscripten_set_keydown_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleKey );
+	emscripten_set_keyup_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleKey );
+	emscripten_set_mousedown_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleMouse );
+	emscripten_set_mouseup_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleMouse );
+	emscripten_set_mousemove_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleMouse );
+	emscripten_set_mouseenter_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleMouse );
+	emscripten_set_mouseleave_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleMouse );
+	emscripten_set_touchstart_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleTouch );
+	emscripten_set_touchend_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleTouch );
+	emscripten_set_touchmove_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleTouch );
+	emscripten_set_touchcancel_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleTouch );
+	// @NOTE: Internal. Sets Module.aeWheelTrackpad before each canvas wheel
+	// event, so it must be registered before the wheel callback below.
 	EM_ASM( {
-		window.addEventListener( 'wheel', function( e )
+		Module['canvas'].addEventListener( 'wheel', function( e )
 		{
 			const legacy = e.wheelDeltaY || e.wheelDeltaX;
 			const delta = e.wheelDeltaY ? e.deltaY : e.deltaX;
@@ -22553,6 +22561,9 @@ void Input::Initialize( Window* window )
 			Module.aeWheelTrackpad = legacy ? ( Math.abs( legacy + 3 * delta ) < 1 ) : ( e.deltaMode === 0 );
 		}, { capture: true, passive: true } );
 	} );
+	// @NOTE: Internal. Window level wheel listeners are passive in Chrome, so
+	// preventDefault() is ignored there and the page scrolls.
+	emscripten_set_wheel_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleWheel );
 	// @NOTE: Internal. Safari reports a trackpad pinch as gesture events,
 	// accumulated in Module.aeZoomDelta. Touchscreen gestures are left to the
 	// touch handlers.
@@ -22561,10 +22572,10 @@ void Input::Initialize( Window* window )
 		let touches = 0;
 		let lastScale = 1;
 		Module.aeZoomDelta = 0;
-		const countTouches = function( e ) { touches = e.touches.length; };
-		window.addEventListener( 'touchstart', countTouches, { capture: true, passive: true } );
-		window.addEventListener( 'touchend', countTouches, { capture: true, passive: true } );
-		window.addEventListener( 'touchcancel', countTouches, { capture: true, passive: true } );
+		const countTouches = function( e ) { touches = e.targetTouches.length; };
+		canvas.addEventListener( 'touchstart', countTouches, { capture: true, passive: true } );
+		canvas.addEventListener( 'touchend', countTouches, { capture: true, passive: true } );
+		canvas.addEventListener( 'touchcancel', countTouches, { capture: true, passive: true } );
 		canvas.addEventListener( 'gesturestart', function( e ) { e.preventDefault(); lastScale = 1; }, { passive: false } );
 		canvas.addEventListener( 'gesturechange', function( e )
 		{
@@ -22574,16 +22585,42 @@ void Input::Initialize( Window* window )
 		}, { passive: false } );
 	} );
 	// @NOTE: Internal. Only a primary button drag keeps sending mouse moves
-	// once it leaves the canvas, explicit capture covers every button.
+	// once it leaves the canvas, explicit capture covers every button. The
+	// mouse handlers prevent the default mousedown focus, so focus explicitly.
 	EM_ASM( {
 		const canvas = Module['canvas'];
 		canvas.addEventListener( 'pointerdown', function( e )
 		{
 			canvas.setPointerCapture( e.pointerId );
+			canvas.focus( { preventScroll: true } );
 		} );
 	} );
-	emscripten_set_focus_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
-	emscripten_set_blur_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
+	// @NOTE: Internal. Keys go to the focused canvas, which is focused on load
+	// unless the document is unfocused or something else on the page has focus.
+	emscripten_set_focus_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleFocus );
+	emscripten_set_blur_callback( _aeEmscriptenCanvas(), this, true, &_aeEmscriptenHandleFocus );
+	const bool canvasFocused = EM_ASM_INT( {
+		const canvas = Module['canvas'];
+		if( !canvas.hasAttribute( 'tabindex' ) ) { canvas.tabIndex = -1; }
+		// Zero specificity, so page styles take precedence
+		canvas.setAttribute( 'data-ae-canvas', '' );
+		if( !document.getElementById( 'ae-canvas-style' ) )
+		{
+			const style = document.createElement( 'style' );
+			style.id = 'ae-canvas-style';
+			style.textContent = ':where( canvas[data-ae-canvas]:focus ) { outline: none; }';
+			document.head.appendChild( style );
+		}
+		if( document.hasFocus() && ( !document.activeElement || document.activeElement === document.body ) )
+		{
+			canvas.focus( { preventScroll: true } );
+		}
+		return ( document.hasFocus() && document.activeElement === canvas ) ? 1 : 0;
+	} );
+	if( canvasFocused )
+	{
+		m_window->m_UpdateFocused( true );
+	}
 	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
 	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, true, &_aeEmscriptenHandleLockChange );
 	emscripten_set_pointerlockerror_callback( EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, true, &_aeEmscriptenHandleLockError );
@@ -23474,12 +23511,19 @@ void Input::Pump()
 #elif _AE_EMSCRIPTEN_
 	if( emscripten_sample_gamepad_data() == EMSCRIPTEN_RESULT_SUCCESS )
 	{
+		const bool readGamepads = !m_gamepadRequiresFocus || ( m_window && m_window->GetFocused() );
 		const uint32_t gamepadCount = emscripten_get_num_gamepads();
 		for( uint32_t i = 0; i < gamepadCount; i++ )
 		{
 			GamepadState& gp = gamepads[ i ];
 			EmscriptenGamepadEvent gamepadState;
-			if( emscripten_get_gamepad_status( i, &gamepadState ) == EMSCRIPTEN_RESULT_SUCCESS )
+			if( !readGamepads )
+			{
+				gp = GamepadState();
+				gp.playerIndex = i;
+				gp.connected = ( emscripten_get_gamepad_status( i, &gamepadState ) == EMSCRIPTEN_RESULT_SUCCESS );
+			}
+			else if( emscripten_get_gamepad_status( i, &gamepadState ) == EMSCRIPTEN_RESULT_SUCCESS )
 			{
 				gp.connected = true;
 				gp.leftAnalog = Vec2( gamepadState.axis[ 0 ], -gamepadState.axis[ 1 ] );
