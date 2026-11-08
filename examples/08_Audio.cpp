@@ -142,5 +142,9 @@ int main( int argc, char* argv[] )
 		fs.DestroyAll();
 		return 0;
 	};
-	return ae::Application( argc, argv, Initialize, Update, Terminate );
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }

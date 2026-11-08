@@ -3850,41 +3850,56 @@ ae::Array< ae::Screen, 16 > GetScreens();
 int main( int argc, char* argv[] )
 {
 	// ...
-	auto init = []() { return true; };
-	auto update = []() { return true; };
-	auto terminate = []() { return 0; };
-	return ae::Application( argc, argv, init, update, terminate );
+	auto Initialize = []() { return true; };
+	auto Update = []() { return true; };
+	auto Terminate = []() { return 0; };
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }
 #endif
 //------------------------------------------------------------------------------
 using AppInitializeFn = ae::Function< bool(), 256 >;
 using AppUpdateFn = ae::Function< bool(), 256 >;
 using AppTerminateFn = ae::Function< int32_t(), 256 >;
+using AppSuspendFn = ae::Function< void(), 256 >;
+using AppResumeFn = ae::Function< void(), 256 >;
+//! A program's lifecycle callbacks, see ae::Application().
+struct ApplicationParams
+{
+	//! Called once at startup. This is a good place to initialize an
+	//! ae::Window, ae::GraphicsDevice, and ae::Input combo. Return false to
+	//! skip \p update and call \p terminate immediately.
+	AppInitializeFn initialize;
+	//! Called each frame. Return false to quit the application.
+	AppUpdateFn update;
+	//! Called once at termination, whether or not \p initialize succeeded.
+	//! Best effort: iOS never calls it, and the web may not. Save anything that
+	//! matters in \p suspend instead.
+	AppTerminateFn terminate;
+	//! Optional. Called when the system may end the program without further
+	//! notice, eg. when an iOS app is backgrounded or a web page is hidden.
+	//! Before returning, save game state and free resource memory (textures,
+	//! meshes, audio) to reduce memory pressure while in the background, so the
+	//! program can resume instead of restarting. \p update is not called again
+	//! until \p resume. Never called on desktop.
+	AppSuspendFn suspend;
+	//! Optional. Called after \p suspend, before \p update is called again.
+	//! Reload what \p suspend freed.
+	AppResumeFn resume;
+};
 //! Call this function to drive a program's lifecycle identically on platforms
 //! that own the main loop and platforms that don't. This function wraps the
-//! platform specific mechanisms that drive the main loop, and calls the given
-//! functions when appropriate.
+//! platform specific mechanisms that drive the main loop, and calls the
+//! functions in \p params when appropriate. On platforms where the system owns
+//! the main loop (iOS and web) this function does not return.
 //! \param argc Forward from main()
 //! \param argv Forward from main()
-//! \param initialize Called once at startup. This is a good place to initialize
-//! an ae::Window, ae::GraphicsDevice, and ae::Input combo. The given function
-//! should return true if initialization succeeds, and should return false if
-//! \p update calls should be skipped and \p terminate should be called immediately.
-//! \param update Called each frame. Return false from your given function to
-//! quit the application. Note that this is called by the system on platforms
-//! where the system owns the main loop (like iOS and web).
-//! \param terminate For platforms where the program controls its life-cycle
-//! (desktop operating systems): Called once at termination, whether or not the
-//! \p initialize succeeded. On platforms where the system owns the main
-//! loop (iOS and web): Terminate may never be called.
-//! \return The return value of \p terminate
-int32_t Application(
-	int32_t argc,
-	char* argv[],
-	const AppInitializeFn& initialize,
-	const AppUpdateFn& update,
-	const AppTerminateFn& terminate
-);
+//! \param params The program's lifecycle callbacks
+//! \return The return value of ae::ApplicationParams::terminate
+int32_t Application( int32_t argc, char* argv[], const ApplicationParams& params );
 
 //! @}
 
@@ -20913,10 +20928,11 @@ namespace ae {
 class _Application
 {
 public:
-	AppInitializeFn Initialize;
-	AppUpdateFn Update;
-	AppTerminateFn Terminate;
+	ApplicationParams params;
 	int32_t Run( int32_t argc, char* argv[] );
+	void Suspend(); // Calls params.suspend once per suspension
+	void Resume(); // Calls params.resume if suspended
+	bool suspended = false;
 };
 
 //------------------------------------------------------------------------------
@@ -21133,21 +21149,31 @@ public:
 	// Provide the CAEAGLLayer so Window::Initialize() can attach its
 	// renderbuffer, then run the app's Initialize callback.
 	ae::_Globals::Get()->eaglLayer = (__bridge void*)self.viewController.glView.layer;
-	if( !ae::_Globals::Get()->application->Initialize() )
+	if( !ae::_Globals::Get()->application->params.initialize() )
 	{
-		const int32_t termResult = ae::_Globals::Get()->application->Terminate();
+		const int32_t termResult = ae::_Globals::Get()->application->params.terminate();
 		exit( termResult );
 	}
 	self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick: )];
 	[self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
 	return YES;
 }
+- (void)applicationDidEnterBackground:(UIApplication*)app
+{
+	self.displayLink.paused = YES; // No GL calls while in the background
+	ae::_Globals::Get()->application->Suspend();
+}
+- (void)applicationWillEnterForeground:(UIApplication*)app
+{
+	ae::_Globals::Get()->application->Resume();
+	self.displayLink.paused = NO;
+}
 - (void)tick:(CADisplayLink*)link
 {
-	if( !ae::_Globals::Get()->application->Update() )
+	if( !ae::_Globals::Get()->application->params.update() )
 	{
 		[link invalidate];
-		const int32_t termResult = ae::_Globals::Get()->application->Terminate();
+		const int32_t termResult = ae::_Globals::Get()->application->params.terminate();
 		exit( termResult );
 	}
 }
@@ -21169,31 +21195,60 @@ int32_t _Application::Run( int32_t argc, char* argv[] )
 #else
 	(void)argc;
 	(void)argv;
-	if( !Initialize() )
+	if( !params.initialize() )
 	{
-		return Terminate();
+		return params.terminate();
 	}
 #	if _AE_EMSCRIPTEN_
-		emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
+		// visibilitychange also precedes pagehide when the page is left
+		emscripten_set_visibilitychange_callback( this, true, []( int32_t, const EmscriptenVisibilityChangeEvent* e, void* userData ) -> EM_BOOL
+		{
+			_Application* app = (_Application*)userData;
+			if( e->hidden )
+			{
+				app->Suspend();
+				emscripten_pause_main_loop();
+			}
+			else
+			{
+				app->Resume();
+				emscripten_resume_main_loop();
+			}
+			return false;
+		} );
+		emscripten_set_main_loop_arg( []( void* fn ) { ( *(AppUpdateFn*)fn )(); }, &params.update, 0, 1 );
 #	else
-		while( Update() ) {}
+		while( params.update() ) {}
 #	endif
-	return Terminate();
+	return params.terminate();
 #endif
+}
+
+void _Application::Suspend()
+{
+	if( !suspended )
+	{
+		suspended = true;
+		if( params.suspend ) { params.suspend(); }
+	}
+}
+
+void _Application::Resume()
+{
+	if( suspended )
+	{
+		suspended = false;
+		if( params.resume ) { params.resume(); }
+	}
 }
 
 //------------------------------------------------------------------------------
 // ae::Application
 //------------------------------------------------------------------------------
-int32_t Application( int32_t argc, char* argv[],
-	const AppInitializeFn& initialize,
-	const AppUpdateFn& update,
-	const AppTerminateFn& terminate )
+int32_t Application( int32_t argc, char* argv[], const ApplicationParams& params )
 {
 	_Application app;
-	app.Initialize = initialize;
-	app.Update = update;
-	app.Terminate = terminate;
+	app.params = params;
 	return app.Run( argc, argv );
 }
 

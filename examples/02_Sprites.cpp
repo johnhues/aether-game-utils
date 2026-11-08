@@ -149,5 +149,9 @@ int main( int argc, char* argv[] )
 		window.Terminate();
 		return 0;
 	};
-	return ae::Application( argc, argv, Initialize, Update, Terminate );
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }

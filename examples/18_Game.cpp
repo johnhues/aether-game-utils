@@ -300,5 +300,9 @@ int main( int argc, char* argv[] )
 	};
 	auto update = [ & ]() { return engine.Update(); };
 	auto terminate = [ & ]() { return engine.Terminate(); };
-	return ae::Application( argc, argv, initialize, update, terminate );
+	return ae::Application( argc, argv, {
+		.initialize = initialize,
+		.update = update,
+		.terminate = terminate,
+	} );
 }

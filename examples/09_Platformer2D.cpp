@@ -466,9 +466,9 @@ struct Game
 int main( int argc, char* argv[] )
 {
 	Game game;
-	return ae::Application( argc, argv,
-		{ &game, &Game::Initialize },
-		{ &game, &Game::Tick },
-		{ &game, &Game::Terminate }
-	);
+	return ae::Application( argc, argv, {
+		.initialize = { &game, &Game::Initialize },
+		.update = { &game, &Game::Tick },
+		.terminate = { &game, &Game::Terminate },
+	} );
 }
