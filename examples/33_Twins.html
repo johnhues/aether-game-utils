@@ -88,12 +88,26 @@
           const twin = await aether.instantiate( 'index.wasm', canvas, {
             print: function( text ) { console.log( '[' + index + '] ' + text ); },
             onHalt: function( reason ) { halt( '[' + index + '] ' + reason ); },
+            imports: {
+              twin: {
+                Index: function() { return index; },
+                // @NOTE: Placeholder. Linked through aether.js internals until twin calls have an API
+                Call: function( fn, args, size )
+                {
+                  const self = twins[ index ] && twins[ index ]._exports;
+                  const other = twins[ 1 - index ] && twins[ 1 - index ]._exports;
+                  if( !self || !other ) { return; }
+                  const data = new Uint8Array( self.memory.buffer, args, size ).slice();
+                  const ptr = other.TwinAlloc( size );
+                  new Uint8Array( other.memory.buffer, ptr, size ).set( data );
+                  other.TwinInvoke( fn, ptr );
+                  other.TwinFree( ptr );
+                },
+              },
+            },
           } );
           twins.push( twin );
         }
-        // @NOTE: Placeholder. Linked through aether.js internals until twin calls have an API
-        twins[ 0 ]._module.aeTwin = twins[ 1 ]._module;
-        twins[ 1 ]._module.aeTwin = twins[ 0 ]._module;
         window.aeInstance = {
           pause: function() { twins.forEach( function( t ) { t.pause(); } ); },
           resume: function() { twins.forEach( function( t ) { t.resume(); } ); },

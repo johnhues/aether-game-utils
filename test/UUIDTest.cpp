@@ -229,7 +229,6 @@ TEST_CASE( "UUID v7 randomness distribution", "[uuid][uuid7]" )
 	REQUIRE( randBValues.size() >= numUUIDs * 0.99 );
 }
 
-#ifndef __EMSCRIPTEN__
 TEST_CASE( "UUID v7 concurrent generation", "[uuid][uuid7]" )
 {
 	const int numThreads = 4;
@@ -266,7 +265,6 @@ TEST_CASE( "UUID v7 concurrent generation", "[uuid][uuid7]" )
 	
 	REQUIRE( allUUIDs.size() == numThreads * uuidsPerThread );
 }
-#endif
 
 TEST_CASE( "UUID v7 sortability by timestamp", "[uuid][uuid7]" )
 {

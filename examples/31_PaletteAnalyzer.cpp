@@ -858,7 +858,7 @@ public:
 		AE_ASSERT( !m_running );
 		m_complete = false;
 		m_running = true;
-#if _AE_EMSCRIPTEN_
+#if _AE_WASM_
 		fn();
 		m_complete = true;
 #else
@@ -879,7 +879,7 @@ public:
 	{
 		if( m_running )
 		{
-#if !_AE_EMSCRIPTEN_
+#if !_AE_WASM_
 			m_thread.join();
 #endif
 			m_running = false;
@@ -1490,7 +1490,7 @@ int main( int argc, char* argv[] )
 	int32_t overlayIndex = -1;
 	bool compareAll = true;
 	bool sortByLightness = true;
-	char hexBuffer[ 16 ] = "";
+	char hexBuffer[ 32 ] = "";
 	char blendHexA[ 16 ] = "";
 	char blendHexB[ 16 ] = "";
 	float blendT = 0.5f;
@@ -1847,7 +1847,7 @@ int main( int argc, char* argv[] )
 			}
 			ImGui::Dummy( ImVec2( rampWidth, rampHeight ) );
 
-			char blendText[ 16 ] = "";
+			char blendText[ 32 ] = "";
 			ae::Color blended;
 			if( hasA && hasB )
 			{

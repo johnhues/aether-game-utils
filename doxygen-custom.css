@@ -323,7 +323,7 @@ div.ingroups a:hover {
 /* ===========================================================================
    Live example viewport
    ---------------------------------------------------------------------------
-   The emscripten build of an example, embedded in the page it documents.
+   The web build of an example, embedded in the page it documents.
    doxygen-demo.js fills the frame on play and arms it on click; an unarmed
    frame ignores the pointer so the page scrolls under the cursor. Press
    Escape or click the page to hand input back.
@@ -362,7 +362,7 @@ div.ingroups a:hover {
 
 /* Dims the example while it is not taking input, and takes its touches so
    the page scrolls over it. @TODO: Remove once ae::Input captures scrolls,
-   see the note at _aeEmscriptenHandleTouch(). */
+   see the note at the touch listeners in aether.js. */
 .ae-demo::after {
 	content: "";
 	position: absolute;

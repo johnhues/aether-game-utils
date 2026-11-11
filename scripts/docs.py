@@ -713,16 +713,16 @@ def add_demo_script( html_dir ):
 
 
 
-def emscripten_build_dir():
-    """Where the emscripten preset writes, read from CMakePresets.json so a
-    renamed build directory does not leave the preview pointing at nothing."""
+def web_build_dir():
+    """Where the wasi preset writes, read from CMakePresets.json so a renamed
+    build directory does not leave the preview pointing at nothing."""
     presets = REPO_ROOT / "CMakePresets.json"
     if presets.exists():
         import json
         for preset in json.loads( presets.read_text() ).get( "configurePresets", [] ):
-            if preset.get( "name" ) == "emscripten" and preset.get( "binaryDir" ):
+            if preset.get( "name" ) == "wasi" and preset.get( "binaryDir" ):
                 return Path( preset[ "binaryDir" ].replace( "${sourceDir}", str( REPO_ROOT ) ) )
-    return REPO_ROOT / "build_emscripten"
+    return REPO_ROOT / "build_wasi"
 
 
 def linked_config( html_dir ):
@@ -749,7 +749,7 @@ def referenced_examples( html_dir ):
 
 def place_examples( html_dir, source, copy=False ):
     """Puts the built web examples where a demo frame looks for them, and says
-    what it did. A config name links the directory the emscripten build writes
+    what it did. A config name links the directory the wasi build writes
     to, so a rebuild needs no regeneration; "published" copies docs/examples,
     which is what the site ships."""
     target = html_dir / "examples"
@@ -759,7 +759,7 @@ def place_examples( html_dir, source, copy=False ):
         shutil.rmtree( target )
 
     named = source in BUILD_CONFIGS
-    source = emscripten_build_dir() / "examples" / source if named else Path( source )
+    source = web_build_dir() / "examples" / source if named else Path( source )
     if not source.is_dir():
         return f"none: {source} does not exist"
     built = len( [ p for p in source.iterdir() if p.is_dir() and any( p.iterdir() ) ] )
@@ -781,21 +781,21 @@ def place_examples( html_dir, source, copy=False ):
 
 
 def build_examples( config ):
-    """Builds the web examples for a config with the emscripten presets,
+    """Builds the web examples for a config with the wasi presets,
     configuring first when the build directory has never been configured."""
     heading( f"Build {config} Examples" )
-    if not ( emscripten_build_dir() / "CMakeCache.txt" ).exists():
-        if not os.environ.get( "EMSDK" ):
-            sys.exit( "ERROR: the emscripten preset needs EMSDK set; source "
-                      "emsdk_env.sh first" )
+    if not ( web_build_dir() / "CMakeCache.txt" ).exists():
+        if not os.environ.get( "WASI_SDK_PATH" ):
+            sys.exit( "ERROR: the wasi preset needs WASI_SDK_PATH set to the "
+                      "wasi-sdk install directory" )
         step( "Configuring" )
-        if subprocess.run( [ "cmake", "--preset", "emscripten" ], cwd=REPO_ROOT ).returncode:
-            sys.exit( "ERROR: configuring the emscripten preset failed" )
+        if subprocess.run( [ "cmake", "--preset", "wasi" ], cwd=REPO_ROOT ).returncode:
+            sys.exit( "ERROR: configuring the wasi preset failed" )
     step( "Building" )
-    preset = f"emscripten-{config.lower()}"
+    preset = f"wasi-{config.lower()}"
     if subprocess.run( [ "cmake", "--build", "--preset", preset ], cwd=REPO_ROOT ).returncode:
         sys.exit( f"ERROR: building {preset} failed" )
-    note( f"built into {shorten( emscripten_build_dir() / 'examples' / config )}" )
+    note( f"built into {shorten( web_build_dir() / 'examples' / config )}" )
 
 
 #------------------------------------------------------------------------------
@@ -1334,7 +1334,7 @@ def choose_config( args ):
     return and q all keep the current one."""
     print( "\n " + bold( "Config" ) + "\n" )
     for i, name in enumerate( BUILD_CONFIGS, 1 ):
-        where = f"linked from {emscripten_build_dir().name}/examples/{name}"
+        where = f"linked from {web_build_dir().name}/examples/{name}"
         current = args.config or linked_config( BUILD_DIR / "html" ) or "Release"
         print( f"   {i}  {'*' if name == current else ' '} {name:<15} {dim( where )}" )
     print( f"\n   q  {'Back':<17} {dim( 'or escape' )}" )
@@ -1367,7 +1367,7 @@ def choose_task( first, args ):
         print( f"   o  {'On generate':<17} {dim( opens )}" )
         remote = f"open to the network as {socket.gethostname()}" if remembered( "remote", False ) else "this computer only"
         print( f"   r  {'Remote access':<17} {dim( remote )}" )
-        where = shorten( emscripten_build_dir() / "examples" / shown )
+        where = shorten( web_build_dir() / "examples" / shown )
         built = f"compiles and links {where} wasm"
         print( f"   b  {'Build examples':<17} {dim( built )}" )
         print( f"   q  {'Quit':<17} {dim( 'or escape' )}" )

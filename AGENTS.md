@@ -68,26 +68,32 @@ is missing.
 | Platform | Build dir | Compile command |
 |----------|-----------|-----------------|
 | Desktop (macOS) | `build_vscode` (Ninja Multi-Config) | `cmake --build build_vscode --config RelWithDebInfo --target test` |
-| Web (Emscripten) | `build_emscripten` (Ninja Multi-Config) | `source <path-to-emsdk>/emsdk_env.sh && cmake --build build_emscripten --config RelWithDebInfo --target test` |
-| iOS (Xcode, arm64) | `build_ios` | `cmake --build build_ios --config RelWithDebInfo --target test -- -allowProvisioningUpdates -destination generic/platform=iOS` |
+| Web (wasi-sdk) | `build_wasi` (Ninja Multi-Config) | `cmake --build build_wasi --config RelWithDebInfo` (no `test` target: wasi-sdk has no exceptions) |
+| iOS (Xcode, arm64) | `build_ios` | `cmake --build build_ios --config RelWithDebInfo --target test -- -allowProvisioningUpdates` |
 
 Notes:
 - CI (`.github/workflows/`) covers desktop (macOS, Ubuntu clang/gcc/mingw,
-  Windows) and web (`emscripten.yml`) but **not iOS** — run the iOS compile
+  Windows) and web (`web.yml`) but **not iOS** — run the iOS compile
   check locally.
+- `test/config/check.sh native|wasi|emscripten` builds every supported
+  combination of the `AE_ENABLE_*` feature flags and checks each unsupported one
+  fails with only its `#error`. CI runs it in every workflow but `windows.yml`.
+- `web.yml` also builds `test/emscripten` (`test/emscripten/build.sh`, needs
+  `emcc` on the PATH), which checks `aether.h` still compiles cleanly as a guest
+  of an Emscripten program. Emscripten is not otherwise a dependency.
 - The iOS build may stop at the code-signing/link step without provisioning; a
   clean *compile* of all sources is the signal that matters for header
   compatibility.
-- Configure commands for `build_emscripten` (`emcmake cmake -S . -B build_emscripten -G "Ninja
-  Multi-Config"`) and `build_ios` (Xcode generator + `scripts/ios.toolchain.cmake`)
-  live in the VS Code tasks (`.vscode/tasks.json`).
+- Configure commands for `build_wasi` (`cmake --preset wasi`, with `WASI_SDK_PATH`
+  set to the wasi-sdk install directory) and `build_ios` (Xcode generator +
+  `scripts/ios.toolchain.cmake`) live in the VS Code tasks (`.vscode/tasks.json`).
 - Never configure into a plain `build/`. Every toolchain gets its own `build_*`
   directory, so editor, sweep and container caches cannot collide. `.gitignore`
   covers `build` and `build_*`. The workflows use `build_ci`.
 
 ### Full toolchain sweep — `scripts/coverage_build.sh`
 Pre-merge sweep that builds every toolchain in one run. Slow (~20-40 min: a fresh
-`build_emscripten` and a Dockerized `act` run are the long poles), so run it via a
+`build_coverage_wasi` and a Dockerized `act` run are the long poles), so run it via a
 build agent / in the background, never inline. `set -xeuo pipefail` — it aborts at
 the first failure; the `+ `-prefixed trace line just before the error names the
 failing command.
@@ -102,12 +108,13 @@ Stages, in order:
    on non-Windows hosts** — to Windows-compile-check from macOS/Linux use this
    toolchain; "no Windows machine" does not mean "no Windows coverage". Re-enable the
    `wine` line to actually run the Windows test binary.
-6. **Emscripten** — `emcmake cmake -B build_emscripten`, then `node .../test.js`.
+6. **Web** — `build_coverage_wasi` with the wasi-sdk toolchain (compile only), then
+   `test/emscripten/build.sh` when `emcc` is on the PATH.
 7. **act** — `act -W .github/workflows/ubuntu_clang.yml` runs the Ubuntu-clang GitHub
    Actions workflow locally in Docker (the gcc/mingw workflow runs are commented out).
 
 Prerequisites (all currently installed on this machine): Docker running (the script
-opens with `docker info`), `emcmake` (emsdk on PATH), `act`, `node`, the MinGW
+opens with `docker info`), `WASI_SDK_PATH`, `emcc` (optional, emsdk on PATH), `act`, `node`, the MinGW
 toolchain (`x86_64-w64-mingw32-g++`), and `wine` (only if the mingw test run is
 re-enabled). `AE_LEAN_AND_MEAN` is intentionally OFF here for iteration speed; CI
 builds the test suite with it ON, so a green local sweep does not exercise that

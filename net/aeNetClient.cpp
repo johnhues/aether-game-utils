@@ -24,10 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aeNet.h"
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#include "ae/EmSocket.h"
-#else
+#if !_AE_WASM_
 #include "enet/enet.h"
 #endif
 
@@ -53,11 +50,7 @@ namespace
     AetherClient pub;
     struct
     {
-#ifdef __EMSCRIPTEN__
-      EmSocket sock;
-      uint8_t connBuffer[ 2048 ];
-      double prevTime;
-#else
+#if !_AE_WASM_
       ENetHost* host;
 #endif
     } priv;
@@ -103,8 +96,9 @@ void AetherClient_Connect( AetherClient* _ac )
     return;
   }
 
-#ifdef __EMSCRIPTEN__
-  ac->priv.sock.Connect( ac->pub.serverAddress.host, ac->pub.serverAddress.port );
+#if _AE_WASM_
+  // @TODO: A web transport. Until then connecting fails.
+  return;
 #else
   ENetAddress address;
   enet_address_set_host( &address, ac->pub.serverAddress.host );
@@ -120,10 +114,7 @@ AetherClient* AetherClient_New( ae::UUID uuid, const char* ip, uint16_t port )
 {
   AetherClientInternal* ac = new AetherClientInternal();
 
-#ifdef __EMSCRIPTEN__
-  ac->priv.sock.Initialize( ac->priv.connBuffer, sizeof(ac->priv.connBuffer) );
-  ac->priv.prevTime = 0.0;
-#else
+#if !_AE_WASM_
   enet_initialize();
   ac->priv.host = enet_host_create( nullptr, 1, 2, 0, 0 );
   AE_ASSERT( ac->priv.host );
@@ -148,7 +139,7 @@ void AetherClient_Disconnect( AetherClient* _ac )
 	return;
   }
 	
-#ifndef __EMSCRIPTEN__
+#if !_AE_WASM_
   ENetPeer* peer = ac->priv.host->peerCount ? ac->priv.host->peers : nullptr;
   if( peer && peer->state == ENET_PEER_STATE_CONNECTED )
   {
@@ -173,7 +164,7 @@ void AetherClient_Delete( AetherClient* _ac )
   }
   ac->pub.allPlayers.Clear();
 
-#ifndef __EMSCRIPTEN__
+#if !_AE_WASM_
   ENetPeer* peer = ac->priv.host->peerCount ? ac->priv.host->peers : nullptr;
   if( peer && peer->state == ENET_PEER_STATE_CONNECTED )
   {
@@ -215,78 +206,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
 {
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
   
-#ifdef __EMSCRIPTEN__
-
-  double t = emscripten_get_now();
-  float dt = ( t - ac->priv.prevTime ) / 1000.0;
-  ac->priv.prevTime = t;
-
-  EmSocket* s = &ac->priv.sock;
-  if( !s->IsOpen() )
-  {
-    ac->pub.isConnected = false;
-    ac->pub.m_isConnecting = false;
-    return false;
-  }
-  else if( s->Service( dt ) )
-  {
-    if( ac->pub.m_isConnecting )
-    {
-      ac->pub.isConnected = true;
-      ac->pub.m_isConnecting = false;
-
-      // AE_LOG( "EMSCRIPTEN Connect" );
-      
-      AetherMsgConnect msg;
-      msg.uuid = ac->pub.localPlayer->uuid;
-      
-      SendInfo info;
-      info.msgId = kSysMsgPlayerConnect;
-      info.length = sizeof(AetherMsgConnect);
-      info.data = &msg;
-      info.reliable = true;
-      AetherClient_QueueSend( _ac, &info );
-      
-      infoOut->msgId = kSysMsgServerConnect;
-      // infoOut->player = ac->pub.localPlayer;
-      infoOut->data.Clear();
-      
-      return true;
-    }
-
-    uint8_t msg[ kEmMaxMessageSize ];
-    while( 1 )
-    {
-      uint32_t msgLength = s->Recv( msg, sizeof(msg) );
-      if( msgLength == 0 )
-      {
-        break;
-      }
-
-      AetherServerHeader header = *(AetherServerHeader*)msg;
-      uint8_t* data = msg + sizeof(header);
-      uint32_t length = msgLength - sizeof(header);
-
-      // AE_LOG( "server seq %u", header.msgSeq );
-      
-      if( header.msgId & kSysMsgMask )
-      {
-        if( AetherClient_SystemReceive( ac, header, data, length, infoOut ) )
-        {
-          return true;
-        }
-      }
-      else
-      {
-        infoOut->msgId = header.msgId;
-        // infoOut->player = nullptr;
-        infoOut->data.AppendArray( data, length );
-        return true;
-      }
-    }
-  }
-
-#else
+#if !_AE_WASM_
 
   ENetEvent e;
   memset( &e, 0, sizeof(e) );
@@ -405,11 +325,9 @@ void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info )
   AE_ASSERT( info->msgId != kInvalidAetherMsgId );
 
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
-#ifdef __EMSCRIPTEN__
-  if( !ac->pub.isConnected )
-  {
-    return;
-  }
+#if _AE_WASM_
+  (void)ac;
+  return;
 #else
   ENetPeer* peer = ac->priv.host->peers;
   if( peer->state != ENET_PEER_STATE_CONNECTED )
@@ -424,14 +342,7 @@ void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info )
 	header.msgId = info->msgId;
 	header.uuid = ac->pub.localPlayer->uuid;
 	
-#ifdef __EMSCRIPTEN__
-	AE_ASSERT( dataLength <= kEmMaxMessageSize);
-	uint8_t data[ kEmMaxMessageSize ];
-	memcpy( data, &header, sizeof(header) );
-	memcpy( data + sizeof(AetherClientHeader), info->data, info->length );
-
-  ac->priv.sock.Send( data, dataLength );
-#else
+#if !_AE_WASM_
   bool reliable = info->reliable;
   uint32_t flags = reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
   int32_t channel = reliable ? kNetChannelReliable : kNetChannelUnreliable;
@@ -446,7 +357,7 @@ void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info )
 
 void AetherClient_SendAll( AetherClient* _ac )
 {
-#ifndef __EMSCRIPTEN__
+#if !_AE_WASM_
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
   enet_host_flush( ac->priv.host );
 #endif

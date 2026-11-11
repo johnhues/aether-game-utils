@@ -28,26 +28,24 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include <emscripten.h>
 
 //------------------------------------------------------------------------------
 // Twin calls
 //------------------------------------------------------------------------------
-// Copies \p size bytes into the twin instance's heap and calls \p fn there with
-// them. Function pointers are table indices, identical in both instances.
-EM_JS( void, _TwinCall, ( void* fn, const void* args, uint32_t size ), {
-	const twin = Module['aeTwin'];
-	if( !twin ) { return; }
-	const dst = twin['_malloc']( size );
-	twin['HEAPU8'].set( HEAPU8.subarray( args, args + size ), dst );
-	twin['_TwinInvoke']( fn, dst );
-	twin['_free']( dst );
-} );
+// Provided by the page as the 'twin' import module, see 33_Twins.html.
+// TwinCall() copies \p size bytes into the twin instance's memory and calls
+// \p fn there with them. Function pointers are table indices, identical in
+// both instances.
+extern "C" __attribute__(( import_module( "twin" ), import_name( "Call" ) )) void _TwinCall( void* fn, const void* args, uint32_t size );
+extern "C" __attribute__(( import_module( "twin" ), import_name( "Index" ) )) int32_t _TwinIndex();
 
-extern "C" EMSCRIPTEN_KEEPALIVE void TwinInvoke( void* fn, const void* args )
+// Called by the twin instance's page
+extern "C" __attribute__(( export_name( "TwinInvoke" ) )) void TwinInvoke( void* fn, const void* args )
 {
 	( (void(*)( const void* ))fn )( args );
 }
+extern "C" __attribute__(( export_name( "TwinAlloc" ) )) void* TwinAlloc( uint32_t size ) { return malloc( size ); }
+extern "C" __attribute__(( export_name( "TwinFree" ) )) void TwinFree( void* p ) { free( p ); }
 
 template< auto Fn, typename T >
 void _TwinTrampoline( const void* data )
@@ -127,7 +125,7 @@ ae::Vec3 GetPointerRay( const ae::DebugCamera& camera, ae::Vec2 pos, ae::Vec2 si
 //------------------------------------------------------------------------------
 int main( int argc, char* argv[] )
 {
-	const int32_t twinIndex = EM_ASM_INT( { return Module['aeTwinIndex'] | 0; } );
+	const int32_t twinIndex = _TwinIndex();
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;

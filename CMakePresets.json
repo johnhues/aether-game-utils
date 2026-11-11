@@ -54,12 +54,12 @@
 			"binaryDir": "${sourceDir}/build_coverage_ios"
 		},
 		{
-			"name": "emscripten",
-			"displayName": "Emscripten",
-			"description": "Web build via Emscripten. Requires EMSDK env var in the shell (typically sourced from emsdk_env.sh in your .zprofile/.zshrc).",
+			"name": "wasi",
+			"displayName": "Web (wasi-sdk)",
+			"description": "Web build with wasi-sdk, hosted in the browser by aether.js. Requires the WASI_SDK_PATH env var in the shell, set to the wasi-sdk install directory.",
 			"generator": "Ninja Multi-Config",
-			"binaryDir": "${sourceDir}/build_emscripten",
-			"toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+			"binaryDir": "${sourceDir}/build_wasi",
+			"toolchainFile": "$env{WASI_SDK_PATH}/share/cmake/wasi-sdk-p1.cmake",
 			"cacheVariables": {
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
 				"AE_LEAN_AND_MEAN": "OFF",
@@ -81,8 +81,7 @@
 			"configurePreset": "ios",
 			"configuration": "Debug",
 			"nativeToolOptions": [
-				"-allowProvisioningUpdates",
-				"-destination", "generic/platform=iOS"
+				"-allowProvisioningUpdates"
 			]
 		},
 		{
@@ -91,14 +90,13 @@
 			"configurePreset": "ios-coverage",
 			"configuration": "Debug",
 			"nativeToolOptions": [
-				"-allowProvisioningUpdates",
-				"-destination", "generic/platform=iOS"
+				"-allowProvisioningUpdates"
 			]
 		},
 		{
-			"name": "emscripten-debug",
+			"name": "wasi-debug",
 			"displayName": "Debug",
-			"configurePreset": "emscripten",
+			"configurePreset": "wasi",
 			"configuration": "Debug"
 		},
 		{
@@ -113,14 +111,13 @@
 			"configurePreset": "ios",
 			"configuration": "RelWithDebInfo",
 			"nativeToolOptions": [
-				"-allowProvisioningUpdates",
-				"-destination", "generic/platform=iOS"
+				"-allowProvisioningUpdates"
 			]
 		},
 		{
-			"name": "emscripten-relwithdebinfo",
+			"name": "wasi-relwithdebinfo",
 			"displayName": "RelWithDebInfo",
-			"configurePreset": "emscripten",
+			"configurePreset": "wasi",
 			"configuration": "RelWithDebInfo"
 		},
 		{
@@ -135,14 +132,13 @@
 			"configurePreset": "ios",
 			"configuration": "Release",
 			"nativeToolOptions": [
-				"-allowProvisioningUpdates",
-				"-destination", "generic/platform=iOS"
+				"-allowProvisioningUpdates"
 			]
 		},
 		{
-			"name": "emscripten-release",
+			"name": "wasi-release",
 			"displayName": "Release",
-			"configurePreset": "emscripten",
+			"configurePreset": "wasi",
 			"configuration": "Release"
 		}
 	]

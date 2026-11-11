@@ -1,5 +1,5 @@
 # A single-header C++ collection of cross platform utilities
-[![Emscripten](https://github.com/johnhues/aether-game-utils/actions/workflows/emscripten.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/emscripten.yml)
+[![Web](https://github.com/johnhues/aether-game-utils/actions/workflows/web.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/web.yml)
 [![MacOS](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml)
 [![Windows](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml)
 [![Ubuntu clang](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml)
@@ -44,7 +44,7 @@ extern const char* kFragmentShader;
 //------------------------------------------------------------------------------
 // Main function
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
 	// Platform and core systems
 	ae::Window window;
@@ -183,18 +183,19 @@ int main()
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	// Terminate
-	fileSystem.DestroyAll();
-	input.Terminate();
-	graphicsDevice.Terminate();
-	window.Terminate();
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		fileSystem.DestroyAll();
+		input.Terminate();
+		graphicsDevice.Terminate();
+		window.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, {
+		.initialize = []() { return true; },
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }
 
 //------------------------------------------------------------------------------

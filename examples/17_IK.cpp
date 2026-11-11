@@ -111,7 +111,7 @@ void UpdateResource( ae::FileSystem* fileSystem, const ae::File** _resourceFile,
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
 	AE_INFO( "Initialize" );
 
@@ -726,18 +726,19 @@ int main()
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	AE_INFO( "Terminate" );
-	ae::Delete( vertices );
-	vertices = nullptr;
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_INFO( "Terminate" );
+		ae::Delete( vertices );
+		vertices = nullptr;
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, {
+		.initialize = []() { return true; },
+		.update = [ &Update ]() { return Update(); },
+		.terminate = Terminate,
+	} );
 }

@@ -3,11 +3,11 @@
 //------------------------------------------------------------------------------
 // Proof that the raw WebGPU C API (webgpu.h) is portable across:
 //   - iOS via wgpu-native (Metal backend, prebuilt static lib)
-//   - Web via emdawnwebgpu (Emscripten port)
+//   - Web via aether.js
 //
 // Renders a colored triangle on both platforms with the same shared code path.
 // No ae::Window / ae::GraphicsDevice / ae::Shader / ae::VertexBuffer — raw
-// WebGPU plus the bare minimum of UIKit (iOS) and emscripten loop glue (web).
+// WebGPU plus the bare minimum of UIKit (iOS) and ae::Application (web).
 //------------------------------------------------------------------------------
 #include "aether.h"
 #include <webgpu/webgpu.h>
@@ -15,10 +15,6 @@
 	#import <UIKit/UIKit.h>
 	#import <QuartzCore/CAMetalLayer.h>
 	#import <QuartzCore/CADisplayLink.h>
-#endif
-#if _AE_EMSCRIPTEN_
-	#include <emscripten.h>
-	#include <emscripten/html5.h>
 #endif
 
 //------------------------------------------------------------------------------
@@ -231,13 +227,11 @@ static void CreateSurfaceMetal( AppState* s, void* metalLayer )
 	s->surface = wgpuInstanceCreateSurface( s->instance, &surfDesc );
 }
 #endif
-#if _AE_EMSCRIPTEN_
-static void CreateSurfaceCanvas( AppState* s, const char* selector )
+#if AE_ENABLE_AETHER_JS
+// aether.js gives a surface without a source the program's canvas
+static void CreateSurfaceCanvas( AppState* s )
 {
-	WGPUEmscriptenSurfaceSourceCanvasHTMLSelector src = WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
-	src.selector = WgpuStr( selector );
 	WGPUSurfaceDescriptor surfDesc = WGPU_SURFACE_DESCRIPTOR_INIT;
-	surfDesc.nextInChain = &src.chain;
 	s->surface = wgpuInstanceCreateSurface( s->instance, &surfDesc );
 }
 #endif
@@ -336,7 +330,7 @@ static bool Frame( AppState* s )
 	wgpuCommandEncoderRelease( enc );
 	wgpuTextureViewRelease( view );
 
-#if !_AE_EMSCRIPTEN_
+#if !_AE_WASM_
 	// On the web the browser presents automatically when the JS task returns.
 	wgpuSurfacePresent( s->surface );
 #endif
@@ -459,11 +453,12 @@ int main( int argc, char* argv[] )
 #if _AE_IOS_
 	@autoreleasepool { UIApplicationMain( argc, argv, nil, @"AEWGPUTriangleAppDelegate" ); }
 	return 0; // unreachable
-#elif _AE_EMSCRIPTEN_
-	const int canvasW = (int)EM_ASM_INT({ return Module.canvas ? Module.canvas.width : 1280; });
-	const int canvasH = (int)EM_ASM_INT({ return Module.canvas ? Module.canvas.height : 720; });
+#elif AE_ENABLE_AETHER_JS
+	const ae::Screen canvas = ae::GetScreens()[ 0 ];
+	const uint32_t canvasW = (uint32_t)( canvas.size.x * canvas.scaleFactor );
+	const uint32_t canvasH = (uint32_t)( canvas.size.y * canvas.scaleFactor );
 	s_app.instance = wgpuCreateInstance( nullptr );
-	CreateSurfaceCanvas( &s_app, "#canvas" );
+	CreateSurfaceCanvas( &s_app );
 	WGPURequestAdapterOptions opts = {};
 	opts.powerPreference = WGPUPowerPreference_HighPerformance;
 	opts.compatibleSurface = s_app.surface;
@@ -473,11 +468,14 @@ int main( int argc, char* argv[] )
 	cb.userdata1 = &s_app;
 	wgpuInstanceRequestAdapter( s_app.instance, &opts, cb );
 	s_app.adapterRequested = true;
-	s_app.width = (uint32_t)canvasW;
-	s_app.height = (uint32_t)canvasH;
-	AE_LOG( "Emscripten WebGPU triangle init: # x #", canvasW, canvasH );
-	emscripten_set_main_loop_arg( []( void* ud ) { Frame( (AppState*)ud ); }, &s_app, 0, 1 );
-	return 0;
+	s_app.width = canvasW;
+	s_app.height = canvasH;
+	AE_LOG( "Web WebGPU triangle init: # x #", canvasW, canvasH );
+	return ae::Application( argc, argv, {
+		.initialize = []() { return true; },
+		.update = []() { return Frame( &s_app ); },
+		.terminate = []() { TermWebGPU( &s_app ); return 0; },
+	} );
 #else
 	(void)argc; (void)argv;
 	return 0; // Not built for desktop / Android.

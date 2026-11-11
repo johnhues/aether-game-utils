@@ -26,16 +26,6 @@ RUN apt update -qq && \
 	apt install -y --no-install-recommends kitware-archive-keyring cmake ninja-build && \
 	rm -rf /var/lib/apt/lists/*
 
-# Install Emscripten SDK
-RUN git clone https://github.com/emscripten-core/emsdk.git /opt/emsdk && \
-	cd /opt/emsdk && \
-	./emsdk install latest && \
-	./emsdk activate latest
-
-ENV EMSDK=/opt/emsdk
-ENV EMSDK_QUIET=1
-ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:${PATH}"
-
 # Only for local development, not needed for github workflows
 # WORKDIR /workspace
 # CMD ["/bin/bash"]

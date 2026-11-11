@@ -69,7 +69,7 @@ void ae::EditorMesh::Load( const ae::OBJLoader& file )
 	}
 }
 
-#if !_AE_WASM_
+#if !_AE_WASM_ || _AE_WASI_
 
 #if _AE_WINDOWS_
 	#pragma warning( disable : 4018 ) // signed/unsigned mismatch
@@ -951,7 +951,7 @@ static void SetEditorAppIcon()
 	_EditorSetAppIcon( pixels.Data(), kEditorIconSize, kEditorIconSize );
 }
 #else
-// @TODO: Windows, Linux and Emscripten
+// @TODO: Windows, Linux and the web
 static void SetEditorAppIcon() {}
 #endif
 
@@ -1497,7 +1497,7 @@ bool Editor::Initialize( const EditorParams& params )
 
 void Editor::Terminate()
 {
-#if !_AE_EMSCRIPTEN_
+#if !_AE_WASM_
 	m_sock.Disconnect();
 #endif
 
@@ -1747,7 +1747,7 @@ void Editor::m_Read()
 
 void Editor::m_Connect()
 {
-#if !_AE_EMSCRIPTEN_
+#if !_AE_WASM_
 	if( m_params->port && !m_sock.IsConnected() )
 	{
 		m_sock.Connect( ae::Socket::Protocol::TCP, "localhost", m_params->port );
@@ -5581,4 +5581,4 @@ void Editor::m_Fork()
 }
 
 } // End ae namespace
-#endif // !_AE_WASM_
+#endif // !_AE_WASM_ || _AE_WASI_

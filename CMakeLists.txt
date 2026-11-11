@@ -47,7 +47,7 @@ if(NOT ${AE_LEAN_AND_MEAN})
 		add_definitions(-D_UNICODE -DUNICODE) # use unicode
 		add_definitions(-D_CRT_SECURE_NO_WARNINGS) # disable standard library warnings on windows
 	endif()
-	add_compile_options(-fno-rtti) # Disable RTTI (not used in aether)
+	add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>) # Disable RTTI (not used in aether)
 
 	message("Generator information:")
 	message("  CMAKE_GENERATOR: ${CMAKE_GENERATOR}")
@@ -69,8 +69,13 @@ if(NOT ${AE_LEAN_AND_MEAN})
 	message("  CMAKE_C_COMPILER_VERSION: ${CMAKE_C_COMPILER_VERSION}")
 endif()
 
+# wasi-sdk's C++ library is built without exceptions
+if(WASI)
+	add_compile_options(-fno-exceptions)
+endif()
+
 # Platform classification
-if(IOS OR EMSCRIPTEN OR ANDROID)
+if(IOS OR WASI OR ANDROID)
 	set(_ae_desktop_default OFF)
 else()
 	set(_ae_desktop_default ON)
@@ -86,8 +91,8 @@ if (IOS)
 	else()
 		message(SEND_ERROR "Could not find OpenGLES")
 	endif()
-elseif(EMSCRIPTEN)
-	list(APPEND AE_DEPS_LIBRARIES GL)
+elseif(WASI)
+	# aether.js provides OpenGL ES 3 as wasm imports
 else()
 	set(OpenGL_GL_PREFERENCE GLVND) # See https://cmake.org/cmake/help/latest/policy/CMP0072.html
 	find_package(OpenGL REQUIRED)
@@ -198,7 +203,7 @@ if(NOT ${AE_LEAN_AND_MEAN})
 	target_compile_options(ae PUBLIC -fno-exceptions)
 endif()
 # shared library (needed for hotloading)
-if(NOT EMSCRIPTEN)
+if(NOT WASI)
 	add_ae_library(ae_shared SHARED)
 	if(NOT ${AE_LEAN_AND_MEAN})
 		target_compile_options(ae_shared PUBLIC -fno-exceptions)
@@ -213,5 +218,7 @@ endif()
 if(NOT ${AE_LEAN_AND_MEAN})
 	add_subdirectory(net)
 	add_subdirectory(examples)
-	add_subdirectory(test)
+	if(NOT WASI) # Tests need exceptions
+		add_subdirectory(test)
+	endif()
 endif()

@@ -30,7 +30,6 @@
 #include <vector>
 #include <string>
 
-#ifndef __EMSCRIPTEN__
 TEST_CASE( "Scratch concurrent allocations are thread local", "[scratch]" )
 {
 	constexpr int numThreads = 4;
@@ -108,4 +107,3 @@ TEST_CASE( "Scratch concurrent allocations are thread local", "[scratch]" )
 		REQUIRE( success[ t ] );
 	}
 }
-#endif

@@ -32,6 +32,11 @@ if(NOT imgui_FOUND)
 		${imgui_SOURCE_DIR}/backends
 	)
 	target_compile_definitions(imgui PRIVATE GL_SILENCE_DEPRECATION GLES_SILENCE_DEPRECATION)
+	if(WASI)
+		# OpenGL ES 3 from aether.js, and no shell to open files with
+		target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_ES3 IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS)
+		target_include_directories(imgui PRIVATE "${AE_ROOT_DIR}/extras/wasi")
+	endif()
 	target_compile_options(imgui PRIVATE
 		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nontrivial-memaccess>
 		$<$<CXX_COMPILER_ID:GNU>:-Wno-class-memaccess>
@@ -109,7 +114,7 @@ if(APPLE)
 endif()
 
 set(AE_EXAMPLE_SOURCES Common.h)
-if(EMSCRIPTEN)
+if(WASI)
 	add_compile_definitions(DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/data")
 	set(AE_EXAMPLE_RESOURCES "index.html;index.webmanifest;data/WebIcon.png")
 elseif(APPLE)
@@ -409,7 +414,7 @@ if(APPLE)
 elseif(MINGW)
 	target_link_libraries("22_read_me" PUBLIC -static-libgcc -static-libstdc++)
 	target_link_libraries("22_read_me" PUBLIC comdlg32 gdi32 imm32 ole32 setupapi shell32 user32 version winmm ws2_32 xinput opengl32)
-elseif(EMSCRIPTEN)
+elseif(WASI)
 elseif(UNIX)
 	target_link_libraries("22_read_me" PUBLIC GL)
 endif()
@@ -501,9 +506,9 @@ ae_add_bundle("SDF to Mesh"
 	RESOURCES "${AE_EXAMPLE_RESOURCES}"
 	LIBS "ae"
 )
-if(EMSCRIPTEN)
+if(WASI)
 	# Desktop sized: octree recursion needs the stack, the voxels and debug lines the memory
-	target_link_options("27_sdf_to_mesh" PRIVATE "-sSTACK_SIZE=8MB" "-sMAXIMUM_MEMORY=1GB")
+	target_link_options("27_sdf_to_mesh" PRIVATE "-Wl,-z,stack-size=8388608" "-Wl,--max-memory=1073741824")
 endif()
 
 # IK Gallery
@@ -542,20 +547,7 @@ ae_add_bundle("Multi Pointer"
 	LIBS "ae"
 )
 
-if(EMSCRIPTEN)
-	ae_add_bundle("WebGPU Async"
-		TARGET_NAME "28_webgpu_async"
-		BUNDLE_ID "io.aether.WebgpuAsync"
-		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
-		MAJOR_MINOR_PATCH_VERSION "0.0.0"
-		ICNS_FILE "data/Icon.icns"
-		SRC_FILES "28_WebGPUAsync.cpp"
-		RESOURCES "${AE_EXAMPLE_RESOURCES}"
-		LIBS "ae"
-	)
-	target_compile_options("28_webgpu_async" PRIVATE "--use-port=emdawnwebgpu")
-	target_link_options("28_webgpu_async" PRIVATE "--use-port=emdawnwebgpu")
-
+if(WASI)
 	# Its page runs two instances of the program and links them
 	ae_add_bundle("Twins"
 		TARGET_NAME "33_twins"
@@ -567,7 +559,6 @@ if(EMSCRIPTEN)
 		RESOURCES "33_Twins.html;data/WebIcon.png"
 		LIBS "ae"
 	)
-	target_link_options("33_twins" PRIVATE "-sEXPORTED_FUNCTIONS=_main,_malloc,_free")
 	add_custom_command(TARGET "33_twins" POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
 			"${CMAKE_CURRENT_SOURCE_DIR}/33_Twins.html"
@@ -575,27 +566,62 @@ if(EMSCRIPTEN)
 	)
 endif()
 
-if(IOS OR EMSCRIPTEN)
-	if(IOS)
-		FetchContent_Declare(
-			wgpu_native_ios_dl
-			URL "https://github.com/gfx-rs/wgpu-native/releases/download/v29.0.0.0/wgpu-ios-aarch64-release.zip"
-			URL_HASH SHA256=aad4ea7c293dc3215e2fa16492599fc579455ae04665210816c23f84474e03f1
-		)
-		FetchContent_MakeAvailable(wgpu_native_ios_dl)
-		add_library(wgpu_native_ios STATIC IMPORTED GLOBAL)
-		set_target_properties(wgpu_native_ios PROPERTIES
-			IMPORTED_LOCATION "${wgpu_native_ios_dl_SOURCE_DIR}/lib/libwgpu_native.a"
-			INTERFACE_INCLUDE_DIRECTORIES "${wgpu_native_ios_dl_SOURCE_DIR}/include"
-		)
-		# wgpu-native (Metal backend) link surface on iOS.
-		target_link_libraries(wgpu_native_ios INTERFACE
-			"-framework Metal" "-framework MetalKit"
-			"-framework IOSurface" "-framework CoreGraphics"
-			"-framework QuartzCore" "-framework Foundation"
-		)
-	endif()
+# WebGPU
+if(WASI)
+	# webgpu.h as used by wgpu-native v29, with every function imported from
+	# aether.js and callbacks called through the exported function table
+	set(_ae_webgpu_dir "${CMAKE_BINARY_DIR}/_deps/webgpu-headers")
+	file(DOWNLOAD
+		"https://raw.githubusercontent.com/webgpu-native/webgpu-headers/7d3186c3dd2c708703524027b46b8703534ab3cc/webgpu.h"
+		"${_ae_webgpu_dir}/webgpu.h"
+		EXPECTED_HASH SHA256=4ab5756e314c274c6c889c662c100e897dba4bfb2673f6ec5b104d47361100e6
+	)
+	# <webgpu/webgpu.h> includes the real header, then redeclares each function
+	# as an import from aether.js's webgpu module
+	file(STRINGS "${_ae_webgpu_dir}/webgpu.h" _ae_webgpu_lines REGEX "^WGPU_EXPORT .*\\) WGPU_FUNCTION_ATTRIBUTE;$")
+	set(_ae_webgpu_wrapper "#include \"../../webgpu.h\"\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n")
+	foreach(_ae_line ${_ae_webgpu_lines})
+		string(REGEX REPLACE "^WGPU_EXPORT (.*[ *])(wgpu[A-Za-z0-9]+)\\((.*)\\) WGPU_FUNCTION_ATTRIBUTE;$"
+			"__attribute__((import_module(\"webgpu\"), import_name(\"\\2\"))) \\1\\2(\\3);" _ae_line "${_ae_line}")
+		string(APPEND _ae_webgpu_wrapper "${_ae_line}\n")
+	endforeach()
+	string(APPEND _ae_webgpu_wrapper "#ifdef __cplusplus\n}\n#endif\n")
+	file(CONFIGURE OUTPUT "${_ae_webgpu_dir}/include/webgpu/webgpu.h" CONTENT "${_ae_webgpu_wrapper}" @ONLY)
+	add_library(webgpu_wasi INTERFACE)
+	target_include_directories(webgpu_wasi INTERFACE "${_ae_webgpu_dir}/include")
+	target_link_options(webgpu_wasi INTERFACE "-Wl,--export-table")
 
+	ae_add_bundle("WebGPU Async"
+		TARGET_NAME "28_webgpu_async"
+		BUNDLE_ID "io.aether.WebgpuAsync"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+		MAJOR_MINOR_PATCH_VERSION "0.0.0"
+		ICNS_FILE "data/Icon.icns"
+		SRC_FILES "28_WebGPUAsync.cpp"
+		RESOURCES "${AE_EXAMPLE_RESOURCES}"
+		LIBS "ae;webgpu_wasi"
+	)
+elseif(IOS)
+	FetchContent_Declare(
+		wgpu_native_ios_dl
+		URL "https://github.com/gfx-rs/wgpu-native/releases/download/v29.0.0.0/wgpu-ios-aarch64-release.zip"
+		URL_HASH SHA256=aad4ea7c293dc3215e2fa16492599fc579455ae04665210816c23f84474e03f1
+		DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+	)
+	FetchContent_MakeAvailable(wgpu_native_ios_dl)
+	add_library(wgpu_native_ios STATIC IMPORTED GLOBAL)
+	set_target_properties(wgpu_native_ios PROPERTIES
+		IMPORTED_LOCATION "${wgpu_native_ios_dl_SOURCE_DIR}/lib/libwgpu_native.a"
+		INTERFACE_INCLUDE_DIRECTORIES "${wgpu_native_ios_dl_SOURCE_DIR}/include"
+	)
+	# wgpu-native (Metal backend) link surface on iOS.
+	target_link_libraries(wgpu_native_ios INTERFACE
+		"-framework Metal" "-framework MetalKit"
+		"-framework IOSurface" "-framework CoreGraphics"
+		"-framework QuartzCore" "-framework Foundation"
+	)
+endif()
+if(IOS OR WASI)
 	ae_add_bundle("WebGPU Triangle"
 		TARGET_NAME "29_webgpu_triangle"
 		BUNDLE_ID "io.aether.WebgpuTriangle"
@@ -608,9 +634,7 @@ if(IOS OR EMSCRIPTEN)
 	)
 	if(IOS)
 		target_link_libraries("29_webgpu_triangle" PRIVATE wgpu_native_ios)
-	endif()
-	if(EMSCRIPTEN)
-		target_compile_options("29_webgpu_triangle" PRIVATE "--use-port=emdawnwebgpu")
-		target_link_options("29_webgpu_triangle" PRIVATE "--use-port=emdawnwebgpu")
+	else()
+		target_link_libraries("29_webgpu_triangle" PRIVATE webgpu_wasi)
 	endif()
 endif()

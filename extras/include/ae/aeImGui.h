@@ -32,7 +32,7 @@
 #include "aether.h"
 
 // Push warning disables for imgui includes
-#if _AE_EMSCRIPTEN_
+#if _AE_WASM_
 	#pragma GCC diagnostic push
 	#if defined(__clang__) && __clang_major__ >= 15
 		#pragma GCC diagnostic ignored "-Wnontrivial-memaccess"
@@ -67,7 +67,7 @@
 #pragma GCC diagnostic pop
 
 // Pop warning disables for imgui includes
-#if _AE_EMSCRIPTEN_
+#if _AE_WASM_
 	#pragma GCC diagnostic pop
 #elif _AE_WINDOWS_
 	#pragma warning( pop )
