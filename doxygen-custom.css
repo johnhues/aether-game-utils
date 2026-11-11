@@ -440,3 +440,12 @@ div.ingroups a:hover {
 	font-weight: 600;
 	color: var(--ae-ink);
 }
+
+/* Long types in a table wrap, rather than squeezing its description column. */
+table.markdownTable td span.tt,
+table.markdownTable td code {
+	white-space: normal;
+}
+table.markdownTable td:last-child {
+	width: 45%;
+}

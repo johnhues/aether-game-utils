@@ -92,253 +92,108 @@
       <div id="ae-status-bar"><div id="ae-status-fill"></div></div>
       <pre id="ae-status-log"></pre>
     </div>
-    <script type='text/javascript'>
-      // Measures the running program for an embedding page, which reads it with
-      // aeStats.read(). aeStats.release() frees its graphics and audio immediately.
-      var aeRaf = window.requestAnimationFrame.bind( window );
-      var aeStats = ( function() {
-        var frames = 0, busy = 0, draws = 0, last = performance.now();
-        var api = '', renderer = '', gl = null, memory = null, wasmBytes = 0, downloadBytes = 0, readyMs = 0;
-        var textures = 0, buffers = 0;
-        var audioContexts = [], devices = [];
+    <script type="module">
+      // Runs this directory's program with aether.js. An embedding page, like
+      // the documentation, controls it through window.aeInstance and learns
+      // that it is 'ready' or 'halted' from a message.
+      import * as aether from './aether.js';
 
-        // Each animation frame callback is one main loop iteration, timed as CPU work.
-        window.requestAnimationFrame = function( callback ) {
-          return aeRaf( function( time ) {
-            var start = performance.now();
-            callback( time );
-            busy += performance.now() - start;
-            frames++;
-          } );
-        };
+      const root = document.getElementById( 'ae-status' );
+      const text = document.getElementById( 'ae-status-text' );
+      const fill = document.getElementById( 'ae-status-fill' );
+      const log = document.getElementById( 'ae-status-log' );
+      const canvas = document.getElementById( 'canvas' );
+      const recent = []; // Last lines printed, shown when the program halts
+      const files = {}; // url -> [ loaded, total ] while a request is in flight
+      let halted = false;
+      let booting = true; // Shown as loading until the program has started
+      let downloadBytes = 0;
+      let readyMs = 0;
 
-        function countDraws( target, names ) {
-          names.forEach( function( name ) {
-            var original = target[ name ];
-            if( !original ) { return; }
-            target[ name ] = function() { draws++; return original.apply( this, arguments ); };
-          } );
+      function notify( state ) {
+        if( window.parent !== window ) { window.parent.postMessage( { aeDemo: state }, '*' ); }
+      }
+
+      function kb( bytes ) { return Math.ceil( bytes / 1024 ).toLocaleString() + ' KB'; }
+
+      function show() {
+        if( halted ) { return; }
+        const names = [];
+        let loaded = 0, total = 0, sized = true;
+        for( const url in files ) {
+          names.push( url.split( '/' ).pop() );
+          loaded += files[ url ][ 0 ];
+          total += files[ url ][ 1 ];
+          sized = sized && files[ url ][ 1 ] > 0;
         }
-        function countLive( target, create, destroy, add ) {
-          var c = target[ create ], d = target[ destroy ];
-          target[ create ] = function() { add( 1 ); return c.apply( this, arguments ); };
-          target[ destroy ] = function( o ) { if( o ) { add( -1 ); } return d.apply( this, arguments ); };
-        }
-        var getContext = HTMLCanvasElement.prototype.getContext;
-        HTMLCanvasElement.prototype.getContext = function( type ) {
-          var context = getContext.apply( this, arguments );
-          if( context && !api && ( type === 'webgl2' || type === 'webgl' ) ) {
-            api = ( type === 'webgl2' ) ? 'WebGL 2' : 'WebGL';
-            gl = context;
-            renderer = context.getParameter( context.RENDERER );
-            countDraws( context, [ 'drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced', 'drawRangeElements' ] );
-            countLive( context, 'createTexture', 'deleteTexture', function( n ) { textures += n; } );
-            countLive( context, 'createBuffer', 'deleteBuffer', function( n ) { buffers += n; } );
-          }
-          else if( context && !api && type === 'webgpu' ) {
-            api = 'WebGPU';
-          }
-          return context;
-        };
-        if( window.GPURenderPassEncoder ) {
-          countDraws( GPURenderPassEncoder.prototype, [ 'draw', 'drawIndexed', 'drawIndirect', 'drawIndexedIndirect' ] );
-        }
-        if( window.GPUAdapter ) {
-          var requestDevice = GPUAdapter.prototype.requestDevice;
-          GPUAdapter.prototype.requestDevice = function() {
-            return requestDevice.apply( this, arguments ).then( function( device ) { devices.push( device ); return device; } );
-          };
-        }
-        [ 'AudioContext', 'webkitAudioContext' ].forEach( function( name ) {
-          var Original = window[ name ];
-          if( !Original ) { return; }
-          var Tracked = function() {
-            var context = new ( Original.bind.apply( Original, [ null ].concat( Array.prototype.slice.call( arguments ) ) ) )();
-            audioContexts.push( context );
-            return context;
-          };
-          Tracked.prototype = Original.prototype;
-          window[ name ] = Tracked;
-        } );
+        root.hidden = !names.length && !booting;
+        text.textContent = names.length ? 'Loading ' + names.join( ', ' ) + ' · ' + kb( loaded ) + ( sized ? ' of ' + kb( total ) : '' ) : 'Loading';
+        fill.style.width = sized ? Math.min( 100, 100 * loaded / total ) + '%' : '0';
+      }
 
-        return {
-          wasm: function( instance, bytes ) {
-            wasmBytes = bytes;
-            for( var name in instance.exports ) {
-              if( instance.exports[ name ] instanceof WebAssembly.Memory ) { memory = instance.exports[ name ]; }
-            }
-          },
-          downloaded: function( bytes ) { downloadBytes += bytes; },
-          ready: function() { readyMs = performance.now(); },
-          release: function() {
-            var lose = gl && gl.getExtension( 'WEBGL_lose_context' );
-            if( lose ) { lose.loseContext(); }
-            devices.forEach( function( device ) { device.destroy(); } );
-            audioContexts.forEach( function( context ) { if( context.state !== 'closed' ) { context.close(); } } );
-            gl = null; memory = null; devices = []; audioContexts = [];
-          },
-          // Rates cover the time since the previous read.
-          read: function() {
-            var now = performance.now(), elapsed = ( now - last ) / 1000;
-            var result = {
-              fps: frames / elapsed,
-              frameMs: frames ? busy / frames : 0,
-              draws: frames ? draws / frames : 0,
-              api: api,
-              renderer: renderer,
-              width: gl ? gl.drawingBufferWidth : 0,
-              height: gl ? gl.drawingBufferHeight : 0,
-              pixelRatio: window.devicePixelRatio || 1,
-              textures: textures,
-              buffers: buffers,
-              heapBytes: memory ? memory.buffer.byteLength : 0,
-              wasmBytes: wasmBytes,
-              downloadBytes: downloadBytes,
-              readyMs: readyMs
-            };
-            frames = 0; busy = 0; draws = 0; last = now;
-            return result;
-          }
-        };
-      } )();
+      function print( line ) {
+        console.log( line );
+        recent.push( line );
+        if( recent.length > 12 ) { recent.shift(); }
+      }
 
-      var aeStatus = ( function() {
-        var root = document.getElementById( 'ae-status' );
-        var text = document.getElementById( 'ae-status-text' );
-        var fill = document.getElementById( 'ae-status-fill' );
-        var log = document.getElementById( 'ae-status-log' );
-        var recent = []; // Last lines printed, shown when the program halts
-        var files = {}; // url -> [ loaded, total ] while a request is in flight
-        var halted = false;
-        var booting = true; // Until the runtime is up, shown as loading even with nothing in flight
+      function halt( reason ) {
+        if( halted ) { return; }
+        halted = true;
+        root.className = 'halted';
+        root.hidden = false;
+        text.textContent = 'Stopped: ' + reason;
+        log.textContent = recent.join( '\n' );
+        notify( 'halted' );
+      }
 
-        // Tells an embedding page this program is ready to play, once no file
-        // has been loading for several consecutive frames.
-        function awaitReady() {
-          var idleFrames = 0;
-          function frame() {
-            if( halted ) { return; }
-            idleFrames = Object.keys( files ).length ? 0 : idleFrames + 1;
-            if( idleFrames < 10 ) { aeRaf( frame ); }
-            else { aeStats.ready(); notify( 'ready' ); }
-          }
-          booting = false;
-          show();
-          aeRaf( frame );
-        }
+      function progress( url, loaded, total, finished ) {
+        if( finished ) { delete files[ url ]; downloadBytes += loaded; }
+        else { files[ url ] = [ loaded, total ]; }
+        show();
+      }
 
-        // Tells an embedding page this program is 'ready' or 'halted'.
-        function notify( state ) {
-          if( window.parent !== window ) { window.parent.postMessage( { aeDemo: state }, '*' ); }
-        }
-
-        function kb( bytes ) { return Math.ceil( bytes / 1024 ).toLocaleString() + ' KB'; }
-
-        function show() {
+      // Ready to play once no file has been loading for several consecutive frames
+      function awaitReady() {
+        let idleFrames = 0;
+        function frame() {
           if( halted ) { return; }
-          var names = [], loaded = 0, total = 0, sized = true;
-          for( var url in files ) {
-            names.push( url.split( '/' ).pop() );
-            loaded += files[ url ][ 0 ];
-            total += files[ url ][ 1 ];
-            sized = sized && files[ url ][ 1 ] > 0;
-          }
-          root.hidden = !names.length && !booting;
-          text.textContent = names.length ? 'Loading ' + names.join( ', ' ) + ' · ' + kb( loaded ) + ( sized ? ' of ' + kb( total ) : '' ) : 'Loading';
-          fill.style.width = sized ? Math.min( 100, 100 * loaded / total ) + '%' : '0';
+          idleFrames = Object.keys( files ).length ? 0 : idleFrames + 1;
+          if( idleFrames < 10 ) { requestAnimationFrame( frame ); }
+          else { readyMs = performance.now(); notify( 'ready' ); }
         }
-
-        return {
-          print: function( line ) {
-            recent.push( line );
-            if( recent.length > 12 ) { recent.shift(); }
-          },
-          progress: function( url, loaded, total, finished ) {
-            if( finished ) { delete files[ url ]; aeStats.downloaded( loaded ); }
-            else { files[ url ] = [ loaded, total ]; }
-            show();
-          },
-          start: awaitReady,
-          halt: function( reason ) {
-            if( halted ) { return; }
-            halted = true;
-            root.className = 'halted';
-            root.hidden = false;
-            text.textContent = 'Stopped: ' + reason;
-            log.textContent = recent.join( '\n' );
-            notify( 'halted' );
-          }
-        };
-      } )();
+        booting = false;
+        show();
+        requestAnimationFrame( frame );
+      }
 
       // iOS zooms the page on a quick second tap, which here is game input
-      var aeLastTouchEnd = -Infinity;
+      let lastTouchEnd = -Infinity;
       document.addEventListener( 'touchend', function( e ) {
-        if( e.timeStamp - aeLastTouchEnd < 350 ) { e.preventDefault(); }
-        aeLastTouchEnd = e.timeStamp;
+        if( e.timeStamp - lastTouchEnd < 350 ) { e.preventDefault(); }
+        lastTouchEnd = e.timeStamp;
       }, { passive: false } );
+      canvas.oncontextmenu = function( e ) { e.preventDefault(); e.stopPropagation(); return false; };
+      window.addEventListener( 'error', function( e ) { halt( e.message || 'error' ); } );
+      window.addEventListener( 'unhandledrejection', function( e ) { halt( String( e.reason ) ); } );
 
-      // Leaving releases graphics and audio now rather than at garbage collection.
-      // A page restored from the back-forward cache has lost them, so it starts over.
-      window.addEventListener( 'pagehide', function() {
-        if( Module.pauseMainLoop ) { Module.pauseMainLoop(); }
-        aeStats.release();
-      } );
-      window.addEventListener( 'pageshow', function( e ) { if( e.persisted ) { location.reload(); } } );
-
-      window.addEventListener( 'error', function( e ) { aeStatus.halt( e.message || 'error' ); } );
-      window.addEventListener( 'unhandledrejection', function( e ) { aeStatus.halt( String( e.reason ) ); } );
-
-      // Downloads the wasm alongside index.js, reporting progress. Compressed responses report no total.
-      var aeWasmBytes = ( function( url ) {
-        return fetch( url ).then( function( response ) {
-          if( !response.ok ) { throw new Error( url + ' HTTP ' + response.status ); }
-          var total = response.headers.get( 'Content-Encoding' ) ? 0 : +response.headers.get( 'Content-Length' ) || 0;
-          var reader = response.body.getReader();
-          var chunks = [], loaded = 0;
-          function pump() {
-            return reader.read().then( function( chunk ) {
-              if( chunk.done ) { return; }
-              chunks.push( chunk.value );
-              loaded += chunk.value.length;
-              aeStatus.progress( url, loaded, total, false );
-              return pump();
-            } );
-          }
-          return pump().then( function() {
-            var bytes = new Uint8Array( loaded ), offset = 0;
-            chunks.forEach( function( c ) { bytes.set( c, offset ); offset += c.length; } );
-            aeStatus.progress( url, loaded, total, true );
-            return bytes;
-          } );
-        } );
-      } )( 'index.wasm' );
-
-      var Module = {
-        preRun: [],
-        postRun: [],
-        print: function( text ) { console.log( text ); aeStatus.print( text ); },
-        printErr: function( text ) { console.log( text ); aeStatus.print( text ); },
-        canvas: document.getElementById( 'canvas' ),
-        aeFileProgress: aeStatus.progress,
-        onAbort: function( what ) { aeStatus.halt( what || 'aborted' ); },
-        onRuntimeInitialized: function() { aeStatus.start(); },
-        instantiateWasm: function( imports, receiveInstance ) {
-          var wasmBytes = 0;
-          aeWasmBytes.then( function( bytes ) {
-            wasmBytes = bytes.length;
-            return WebAssembly.instantiate( bytes, imports );
-          } ).then( function( result ) {
-            aeStats.wasm( result.instance, wasmBytes );
-            receiveInstance( result.instance, result.module );
-          } ).catch( function( error ) {
-            aeStatus.halt( String( error ) );
-          } );
-          return {};
-        },
-      };
-      Module.canvas.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); return false; }
+      try {
+        const instance = await aether.instantiate( 'index.wasm', canvas, { print: print, onProgress: progress, onHalt: halt } );
+        window.aeInstance = {
+          pause: instance.pause,
+          resume: instance.resume,
+          terminate: instance.terminate,
+          stats: function() { return Object.assign( instance.stats(), { downloadBytes: downloadBytes, readyMs: readyMs } ); },
+        };
+        // Leaving frees graphics and audio now rather than at garbage collection.
+        // A page restored from the back-forward cache has lost them, so it starts over.
+        window.addEventListener( 'pagehide', function() { instance.terminate(); } );
+        window.addEventListener( 'pageshow', function( e ) { if( e.persisted ) { location.reload(); } } );
+        awaitReady();
+      }
+      catch( error ) {
+        halt( String( error.message || error ) );
+      }
     </script>
-    <script async type="text/javascript" src="index.js" onerror="aeStatus.halt( 'index.js failed to load' )"></script>
   </body>
 </html>

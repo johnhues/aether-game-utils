@@ -949,10 +949,156 @@ def write_main_page():
     return len( bundles )
 
 
+#------------------------------------------------------------------------------
+# Web page
+#------------------------------------------------------------------------------
+# The Web page, from the WEB_PAGE block in aether.h followed by the aether.js
+# API, so each stays documented in its own file. The aether.js header comment
+# introduces the API, and each documented export and typedef becomes a section.
+JS_FILE = REPO_ROOT / "aether.js"
+WEB_PAGE = BUILD_DIR / "web.md"
+WEB_BLOCK = re.compile( r"^//! \\cond WEB_PAGE\n(.*?)^//! \\endcond", re.M | re.S )
+JSDOC = re.compile( r"/\*\*(.*?)\*/\s*(export\s+(?:async\s+)?(function|const)\s+(\w+)\s*(\([^)]*\))?)?", re.S )
+# Sections in reading order, the rest follow in file order
+JS_ORDER = [ "instantiate", "InstantiateOptions", "AetherInstance", "AetherStats", "abiVersion" ]
+
+
+def js_header( text ):
+    """The header comment after the license, as prose and indented code."""
+    blocks = text.split( "//------------------------------------------------------------------------------\n" )
+    lines = [ l[ 3: ] if l.startswith( "// " ) else l[ 2: ] for l in blocks[ 3 ].split( "\n" ) if l.startswith( "//" ) ]
+    return lines
+
+
+def js_braced( text ):
+    """Splits '{type} rest' into the type and the rest, braces may nest."""
+    if not text.startswith( "{" ):
+        return "", text
+    depth = 0
+    for i, c in enumerate( text ):
+        depth += ( c == "{" ) - ( c == "}" )
+        if depth == 0:
+            return text[ 1:i ].strip(), text[ i + 1: ].strip()
+    return text, ""
+
+
+def js_block( body ):
+    """A JSDoc comment as its description and its tags, continuation lines
+    joined onto the tag they continue. The description keeps its paragraphs
+    and list items on their own lines."""
+    lines = [ re.sub( r"^\s*\* ?", "", l ) for l in body.strip( "*\n " ).split( "\n" ) ]
+    description, tags = [], []
+    for line in lines:
+        tag = re.match( r"@(param|property|returns|typedef)\s+(.*)", line.strip() )
+        if tag:
+            tags.append( [ tag.group( 1 ), tag.group( 2 ) ] )
+        elif tags:
+            tags[ -1 ][ 1 ] += " " + line.strip()
+        elif not line.strip() or line.startswith( "- " ) or not description or not description[ -1 ]:
+            description.append( line.strip() )
+        else:
+            description[ -1 ] += " " + line.strip()
+    # Code names are JavaScript, never links to the C++ symbols they may share a name with
+    text = re.sub( r"`(\w+)`", r"`%\1`", "\n".join( description ).strip() )
+    return text, tags
+
+
+def js_note( text ):
+    """Moves an '@NOTE: Placeholder.' tail out of a description."""
+    match = re.search( r"\s*@NOTE: Placeholder\.\s*(.*)$", text, re.S )
+    if not match:
+        return text, ""
+    return text[ :match.start() ], match.group( 1 ).strip()
+
+
+def js_cell( text ):
+    return text.replace( "|", "\\|" ).replace( "\n", " " )
+
+
+def js_type( text ):
+    """A type in code, linking the types this page documents."""
+    linked = re.fullmatch( r"(?:Promise<)?(\w+)>?", text )
+    if linked and linked.group( 1 ) in JS_ORDER:
+        ref = f'\\ref aether_js_{linked.group( 1 ).lower()} "{linked.group( 1 )}"'
+        return ( "`Promise` of " if text.startswith( "Promise<" ) else "" ) + ref
+    return "`" + text.replace( "|", " or " ) + "`"
+
+
+def write_web_page():
+    """Writes the Web page and returns how many aether.js sections it has."""
+    block = WEB_BLOCK.search( ( REPO_ROOT / "aether.h" ).read_text() )
+    if not block:
+        sys.exit( "ERROR: aether.h has no WEB_PAGE block for the Web page" )
+    out = [ "# Web {#web}", "" ]
+    out += [ re.sub( r"^//! ?", "", line ) for line in block.group( 1 ).rstrip( "\n" ).split( "\n" ) ]
+    out += [ "", "Two instances of one program on a page, each on its own canvas and calling into the other:", "", "\\demo{examples/33_twins,2/1}", "" ]
+    out += [ "---", "", "## aether.js {#aether_js}", "" ]
+    text = JS_FILE.read_text()
+    code = False
+    for line in js_header( text ):
+        if line.startswith( "@NOTE: Placeholder." ):
+            line = "\\note " + line[ len( "@NOTE: Placeholder." ): ].strip()
+        indented = line.startswith( "  " )
+        if indented and not code:
+            out += [ "```js" ]
+        elif not indented and code:
+            out += [ "```" ]
+        code = indented
+        out += [ line[ 2: ] if indented else line ]
+    if code:
+        out += [ "```" ]
+    out += [ "" ]
+
+    sections = {}
+    for match in JSDOC.finditer( text ):
+        description, tags = js_block( match.group( 1 ) )
+        typedef = next( ( t[ 1 ] for t in tags if t[ 0 ] == "typedef" ), None )
+        if typedef:
+            name = js_braced( typedef )[ 1 ]
+            title = name
+        elif match.group( 4 ):
+            name = match.group( 4 )
+            title = name + re.sub( r"\s*=[^,)]*?(?=\s*[,)])", "", match.group( 5 ) or "" )
+        else:
+            continue
+        description, placeholder = js_note( description )
+        lines = [ "---", "", f"### {title} {{#aether_js_{name.lower()}}}", "" ]
+        if description:
+            lines += [ description, "" ]
+        if placeholder:
+            lines += [ f"\\note {placeholder}", "" ]
+        rows = []
+        for kind, value in tags:
+            if kind not in ( "param", "property" ):
+                continue
+            type_, rest = js_braced( value )
+            member = re.match( r"(\[[^\]]+\]|\S+)\s*(.*)", rest )
+            label, about = member.group( 1 ), member.group( 2 )
+            optional = label.startswith( "[" )
+            label = label.strip( "[]" )
+            about, note = js_note( about )
+            if note:
+                about += f" *Placeholder: {note}*"
+            rows.append( f"| `{label}`{' (optional)' if optional else ''} | {js_type( type_ )} | {js_cell( about )} |" )
+        if rows:
+            heading = "Parameter" if tags[ 0 ][ 0 ] == "param" else "Property"
+            lines += [ f"| {heading} | Type | Description |", "|---|---|---|" ] + rows + [ "" ]
+        returns = next( ( t[ 1 ] for t in tags if t[ 0 ] == "returns" ), None )
+        if returns:
+            type_, about = js_braced( returns )
+            lines += [ f"**Returns** {js_type( type_ )}: {about}", "" ]
+        sections[ name ] = lines
+    for name in JS_ORDER + [ n for n in sections if n not in JS_ORDER ]:
+        out += sections.get( name, [] )
+    WEB_PAGE.write_text( "\n".join( out ) + "\n" )
+    return len( sections )
+
+
 def main_page_overrides():
-    """Points doxygen at the main page copy in place of README.md."""
+    """Points doxygen at the main page copy in place of README.md, and adds
+    the Web page."""
     return {
-        "INPUT": doxyfile_value( "INPUT" ).replace( "README.md", str( shorten( MAIN_PAGE ) ) ),
+        "INPUT": doxyfile_value( "INPUT" ).replace( "README.md", str( shorten( MAIN_PAGE ) ) ) + " " + str( shorten( WEB_PAGE ) ),
         "USE_MDFILE_AS_MAINPAGE": shorten( MAIN_PAGE ),
     }
 
@@ -1023,6 +1169,7 @@ def task_publish( args ):
     with generating():
         step( "Generating HTML" )
         print( f"  {write_main_page()} examples listed" )
+        print( f"  {write_web_page()} aether.js sections on the Web page" )
         doxyfile = write_doxyfile( "publish", {
             **main_page_overrides(),
             "OUTPUT_DIRECTORY": html_dir.parent,
@@ -1066,6 +1213,7 @@ def task_preview( args ):
     with generating():
         step( "Generating HTML" )
         print( f"  {write_main_page()} examples listed" )
+        print( f"  {write_web_page()} aether.js sections on the Web page" )
         overrides = {
             **main_page_overrides(),
             "OUTPUT_DIRECTORY": BUILD_DIR,

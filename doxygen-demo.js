@@ -7,12 +7,14 @@
 {
 	"use strict";
 
+	// The running example, see aether.js. The example's page sets it once the
+	// program has started.
 	function runtime( demo )
 	{
 		const frame = demo.querySelector( "iframe" );
 		try
 		{
-			return frame && frame.contentWindow && frame.contentWindow.Module;
+			return frame && frame.contentWindow && frame.contentWindow.aeInstance;
 		}
 		catch( error )
 		{
@@ -22,18 +24,18 @@
 
 	function running( demo, run )
 	{
-		const module = runtime( demo );
-		if( !module || !module.pauseMainLoop || !module.resumeMainLoop )
+		const instance = runtime( demo );
+		if( !instance )
 		{
 			return false;
 		}
 		if( run )
 		{
-			module.resumeMainLoop();
+			instance.resume();
 		}
 		else
 		{
-			module.pauseMainLoop();
+			instance.pause();
 		}
 		demo.classList.toggle( "paused", !run );
 		return true;
@@ -108,19 +110,18 @@
 			{
 				arm( demo, false );
 			}
-			running( demo, false );
-			try
+			const instance = runtime( demo );
+			if( instance )
 			{
-				frame.contentWindow.aeStats.release();
+				instance.terminate();
 			}
-			catch( error ) {}
 			demo.classList.remove( "paused", "ready" );
 			frame.remove();
 			label( demo, "" );
 		}
 	}
 
-	// The line under a frame, measured by the example's page through aeStats.
+	// The line under a frame, measured by the example's aeInstance.stats().
 	function size( bytes )
 	{
 		return bytes >= 1048576 ? ( bytes / 1048576 ).toFixed( 1 ) + " MB" : Math.ceil( bytes / 1024 ) + " KB";
@@ -131,9 +132,8 @@
 		let read = null;
 		try
 		{
-			const frame = demo.querySelector( "iframe" );
-			const measure = frame && frame.contentWindow.aeStats;
-			read = measure && measure.read();
+			const instance = runtime( demo );
+			read = instance && instance.stats();
 		}
 		catch( error ) {}
 		const items = [];
@@ -163,8 +163,6 @@
 			if( read.width )
 			{
 				add( read.width + "×" + read.height, "@" + read.pixelRatio + "x", "Drawing buffer size and device pixel ratio" );
-				add( read.textures, "textures", "Live WebGL textures" );
-				add( read.buffers, "buffers", "Live WebGL buffers" );
 			}
 			if( read.heapBytes )
 			{

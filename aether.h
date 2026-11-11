@@ -3903,6 +3903,34 @@ int32_t Application( int32_t argc, char* argv[], const ApplicationParams& params
 
 //! @}
 
+//------------------------------------------------------------------------------
+// Web documentation, which scripts/docs.py combines with aether.js into the
+// Web page
+//------------------------------------------------------------------------------
+//! \cond WEB_PAGE
+//! A program built with wasi-sdk runs in a browser through aether.js, which
+//! ships beside aether.h. Build it with:
+//! \code
+//! clang++ --target=wasm32-wasip1 -std=c++20 -fno-exceptions -O2 -mexec-model=reactor game.cpp -o game.wasm
+//! \endcode
+//! Then run it from a page on the same origin as aether.js, see \ref aether_js.
+//!
+//! ## Lifecycle {#web_lifecycle}
+//! main() runs as on every other platform, and ae::Application() hands
+//! control to aether.js without returning. initialize runs before
+//! instantiate() resolves, update runs each animation frame, suspend runs when
+//! the page is hidden and resume when it is shown again, and terminate runs
+//! when the page calls terminate().
+//!
+//! ## DOM ownership {#web_dom_ownership}
+//! An instance only touches the canvas it is given. Its input listeners,
+//! focus, cursor, pointer lock and fullscreen are scoped to that canvas.
+//! Exceptions: ae::Window::SetTitle() sets the page title, and one shared style
+//! element hides the canvas focus outline.
+//! \endcond
+//------------------------------------------------------------------------------
+// @TODO: Import the OpenGL functions from a 'gl' module before 1.0
+
 //! \addtogroup Platform
 //! @{
 //------------------------------------------------------------------------------
@@ -22658,7 +22686,7 @@ void Input::Initialize( Window* window )
 		const canvas = Module['canvas'];
 		if( !canvas.hasAttribute( 'tabindex' ) ) { canvas.tabIndex = -1; }
 		// Zero specificity, so page styles take precedence
-		canvas.setAttribute( 'data-ae-canvas', '' );
+		canvas.setAttribute( 'data-ae-canvas', 'true' );
 		if( !document.getElementById( 'ae-canvas-style' ) )
 		{
 			const style = document.createElement( 'style' );

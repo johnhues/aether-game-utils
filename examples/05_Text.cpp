@@ -132,12 +132,12 @@ int main( int argc, char* argv[] )
 		{
 			const ae::Rect region = ae::Rect::FromPoints( ae::Vec2( kCharWidth * kCharScale ), ae::Vec2( render.GetWidth() - kCharWidth * kCharScale, render.GetHeight() - kCharWidth * kCharScale ) );
 			textRender.AddText( 0, displayText.c_str(), &font, region, kCharHeight * kCharScale, ( kCharHeight + 1 ) * kCharScale, ae::Color::Green() );
+			ae::UniformList uniforms;
+			uniforms.Set( "u_textToNdc", textToNdc );
+			uniforms.Set( "u_tex", &fontTexture );
+			textRender.SetParams( 0, &fontShader, uniforms );
+			textRender.Render();
 		}
-		ae::UniformList uniforms;
-		uniforms.Set( "u_textToNdc", textToNdc );
-		uniforms.Set( "u_tex", &fontTexture );
-		textRender.SetParams( 0, &fontShader, uniforms );
-		textRender.Render();
 		render.Present();
 
 		timeStep.Tick();

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <link rel="icon" type="image/png" href="data/WebIcon.png">
+    <title>Twins</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+        overscroll-behavior: none;
+        touch-action: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      /* Two canvases side by side, stacked on portrait screens */
+      #twins {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        gap: 2px;
+        background: #333;
+      }
+      @media ( orientation: portrait ) {
+        #twins { flex-direction: column; }
+      }
+      #twins canvas {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        background: #000;
+      }
+      /* The reason a twin halted, over everything */
+      #ae-status {
+        position: fixed;
+        inset: 0;
+        display: none;
+        padding: 1em;
+        background: rgba( 0, 0, 0, 0.85 );
+        color: #f88;
+        font: 14px monospace;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="twins">
+      <canvas id="twin0"></canvas>
+      <canvas id="twin1"></canvas>
+    </div>
+    <div id="ae-status"></div>
+    <script type="module">
+      // Runs two instances of this directory's program with aether.js, each on
+      // its own canvas, and links them so each can call into the other. An
+      // embedding page controls both through window.aeInstance.
+      import * as aether from './aether.js';
+
+      const status = document.getElementById( 'ae-status' );
+      const halt = function( reason )
+      {
+        status.textContent += 'Stopped: ' + reason + '\n';
+        status.style.display = 'block';
+        if( window.parent !== window ) { window.parent.postMessage( { aeDemo: 'halted' }, '*' ); }
+      };
+      window.addEventListener( 'error', function( e ) { halt( e.message ); } );
+      window.addEventListener( 'unhandledrejection', function( e ) { halt( String( e.reason ) ); } );
+
+      // iOS zooms the page on a quick second tap, which here is game input
+      let lastTouchEnd = -Infinity;
+      document.addEventListener( 'touchend', function( e )
+      {
+        if( e.timeStamp - lastTouchEnd < 350 ) { e.preventDefault(); }
+        lastTouchEnd = e.timeStamp;
+      }, { passive: false } );
+
+      try
+      {
+        const twins = [];
+        for( const index of [ 0, 1 ] )
+        {
+          const canvas = document.getElementById( 'twin' + index );
+          canvas.oncontextmenu = function( e ) { e.preventDefault(); return false; };
+          // Instances of the same program share one download and compile
+          const twin = await aether.instantiate( 'index.wasm', canvas, {
+            print: function( text ) { console.log( '[' + index + '] ' + text ); },
+            onHalt: function( reason ) { halt( '[' + index + '] ' + reason ); },
+          } );
+          twins.push( twin );
+        }
+        // @NOTE: Placeholder. Linked through aether.js internals until twin calls have an API
+        twins[ 0 ]._module.aeTwin = twins[ 1 ]._module;
+        twins[ 1 ]._module.aeTwin = twins[ 0 ]._module;
+        window.aeInstance = {
+          pause: function() { twins.forEach( function( t ) { t.pause(); } ); },
+          resume: function() { twins.forEach( function( t ) { t.resume(); } ); },
+          terminate: function() { twins.forEach( function( t ) { t.terminate(); } ); },
+          stats: function()
+          {
+            const all = twins.map( function( t ) { return t.stats(); } );
+            return Object.assign( {}, all[ 0 ], {
+              frameMs: all[ 0 ].frameMs + all[ 1 ].frameMs,
+              draws: all[ 0 ].draws + all[ 1 ].draws,
+              heapBytes: all[ 0 ].heapBytes + all[ 1 ].heapBytes,
+            } );
+          },
+        };
+        window.addEventListener( 'pagehide', function() { window.aeInstance.terminate(); } );
+        window.addEventListener( 'pageshow', function( e ) { if( e.persisted ) { location.reload(); } } );
+        if( window.parent !== window ) { window.parent.postMessage( { aeDemo: 'ready' }, '*' ); }
+      }
+      catch( e )
+      {
+        halt( String( e.message || e ) );
+      }
+    </script>
+  </body>
+</html>

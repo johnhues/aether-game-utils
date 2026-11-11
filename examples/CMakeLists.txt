@@ -501,6 +501,10 @@ ae_add_bundle("SDF to Mesh"
 	RESOURCES "${AE_EXAMPLE_RESOURCES}"
 	LIBS "ae"
 )
+if(EMSCRIPTEN)
+	# Desktop sized: octree recursion needs the stack, the voxels and debug lines the memory
+	target_link_options("27_sdf_to_mesh" PRIVATE "-sSTACK_SIZE=8MB" "-sMAXIMUM_MEMORY=1GB")
+endif()
 
 # IK Gallery
 ae_add_bundle("IK Gallery"
@@ -551,6 +555,24 @@ if(EMSCRIPTEN)
 	)
 	target_compile_options("28_webgpu_async" PRIVATE "--use-port=emdawnwebgpu")
 	target_link_options("28_webgpu_async" PRIVATE "--use-port=emdawnwebgpu")
+
+	# Its page runs two instances of the program and links them
+	ae_add_bundle("Twins"
+		TARGET_NAME "33_twins"
+		BUNDLE_ID "io.aether.Twins"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+		MAJOR_MINOR_PATCH_VERSION "0.0.0"
+		ICNS_FILE "data/Icon.icns"
+		SRC_FILES "33_Twins.cpp"
+		RESOURCES "33_Twins.html;data/WebIcon.png"
+		LIBS "ae"
+	)
+	target_link_options("33_twins" PRIVATE "-sEXPORTED_FUNCTIONS=_main,_malloc,_free")
+	add_custom_command(TARGET "33_twins" POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			"${CMAKE_CURRENT_SOURCE_DIR}/33_Twins.html"
+			"$<TARGET_FILE_DIR:33_twins>/index.html"
+	)
 endif()
 
 if(IOS OR EMSCRIPTEN)

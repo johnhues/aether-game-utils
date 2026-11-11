@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 
+# aether.h and aether.js live one directory up
+set(_AE_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/..")
+
 # Meta property info for targets
 if(NOT AE_CMAKE_PROPERTY_LIST)
 	execute_process(COMMAND cmake --help-property-list OUTPUT_VARIABLE AE_CMAKE_PROPERTY_LIST)
@@ -256,6 +259,8 @@ function(ae_add_bundle BUNDLE_NAME)
 	elseif(EMSCRIPTEN)
 		set(_AE_EM_LINKER_FLAGS
 			"-lopenal"
+			"-s MODULARIZE=1 -s EXPORT_ES6=1" # index.js is a module exporting a factory, which aether.js instantiates
+			"-s EXPORTED_RUNTIME_METHODS=HEAPU8" # aether.js reports the size of the program's memory
 			"-s TEXTDECODER=2" # When marshalling C UTF-8 strings across the JS<->Wasm language boundary, favor smallest generated code size rather than performance
 			# "-s MINIMAL_RUNTIME=2" # Enable aggressive MINIMAL_RUNTIME mode.
 			"-s INITIAL_MEMORY=16MB" # Reserved up front by every instance; mobile browsers can refuse even a single 64MB memory.
@@ -337,6 +342,12 @@ function(ae_add_bundle BUNDLE_NAME)
 			OUTPUT_NAME "index"
 			SUFFIX ${_AE_EM_OUT_SUFFIX}
 		)
+		add_custom_command(TARGET ${AEAB_TARGET_NAME} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"${_AE_ROOT_DIR}/aether.js"
+				$<TARGET_FILE_DIR:${AEAB_TARGET_NAME}>/aether.js
+		)
+		set_property(TARGET ${AEAB_TARGET_NAME} APPEND PROPERTY LINK_DEPENDS "${_AE_ROOT_DIR}/aether.js")
 	endif()
 	
 	if(NOT APPLE)
