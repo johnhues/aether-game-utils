@@ -77,6 +77,8 @@ public:
 		const ae::File* file = nullptr;
 	};
 	const struct MeshResource* GetMeshResource( const char* name );
+	//! True once every requested mesh has finished loading, successfully or not.
+	bool MeshesLoaded() const;
 	ae::Map< ae::Str128, MeshResource* > meshResources = TAG_SMALL_ENGINE;
 	ae::Texture2D defaultTexture;
 	// ae::Texture2D fontTexture;

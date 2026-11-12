@@ -858,7 +858,7 @@ public:
 		AE_ASSERT( !m_running );
 		m_complete = false;
 		m_running = true;
-#if _AE_EMSCRIPTEN_
+#if _AE_WASM_
 		fn();
 		m_complete = true;
 #else
@@ -879,7 +879,7 @@ public:
 	{
 		if( m_running )
 		{
-#if !_AE_EMSCRIPTEN_
+#if !_AE_WASM_
 			m_thread.join();
 #endif
 			m_running = false;
@@ -1490,7 +1490,7 @@ int main( int argc, char* argv[] )
 	int32_t overlayIndex = -1;
 	bool compareAll = true;
 	bool sortByLightness = true;
-	char hexBuffer[ 16 ] = "";
+	char hexBuffer[ 32 ] = "";
 	char blendHexA[ 16 ] = "";
 	char blendHexB[ 16 ] = "";
 	float blendT = 0.5f;
@@ -1507,7 +1507,7 @@ int main( int argc, char* argv[] )
 		ae::DebugCamera camera = ae::Axis::Z;
 		ae::DebugLines debugLines;
 		ae::RenderTarget viewportTarget;
-		bool viewportHovered = false;
+		ae::Rect viewport; // Window units, empty until the view is first drawn
 		ColorGroup groups[ kMaxGroups ];
 		int32_t selectedGroup = 0;
 		int32_t blendSpace = (int32_t)BlendSpace::LCh;
@@ -1559,6 +1559,7 @@ int main( int argc, char* argv[] )
 		solid.debugLines.SetXRayEnabled( false );
 		solid.camera.Reset( ae::Vec3( 0.0f, 0.0f, 1.0f ), ae::Vec3( 3.5f, 3.5f, 2.5f ) );
 		solid.camera.SetDistanceLimits( 0.5f, 20.0f );
+		solid.camera.SetModifierKey( {} );
 
 		// Seeded from the groups already in this palette. Membership is by slot
 		// index, so these follow position rather than color.
@@ -1586,7 +1587,7 @@ int main( int argc, char* argv[] )
 
 	auto Update = [&]() -> bool
 	{
-		const float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
+		const float dt = timeStep.GetDt();
 		input.Pump();
 		ui.NewFrame( &render, &input, dt );
 
@@ -1846,7 +1847,7 @@ int main( int argc, char* argv[] )
 			}
 			ImGui::Dummy( ImVec2( rampWidth, rampHeight ) );
 
-			char blendText[ 16 ] = "";
+			char blendText[ 32 ] = "";
 			ae::Color blended;
 			if( hasA && hasB )
 			{
@@ -2203,7 +2204,12 @@ int main( int argc, char* argv[] )
 			}
 			ImGui::Image( (ImTextureID)(intptr_t)solid.viewportTarget.GetTexture( 0 )->GetTexture(),
 				ImVec2( (float)targetWidth, (float)targetHeight ), ImVec2( 0.0f, 1.0f ), ImVec2( 1.0f, 0.0f ) );
-			solid.viewportHovered = ImGui::IsItemHovered();
+			ui.PassThrough();
+			const float windowHeight = (float)window.GetHeight();
+			solid.viewport = ae::Rect::FromPoints(
+				ae::Vec2( ImGui::GetItemRectMin().x, windowHeight - ImGui::GetItemRectMax().y ),
+				ae::Vec2( ImGui::GetItemRectMax().x, windowHeight - ImGui::GetItemRectMin().y )
+			);
 		}
 		ImGui::End();
 
@@ -2268,8 +2274,7 @@ int main( int argc, char* argv[] )
 		}
 
 		// Cylinder: L* up the axis, chroma as radius, hue as angle.
-		solid.camera.SetInputEnabled( solid.viewportHovered );
-		solid.camera.Update( &input, dt );
+		solid.camera.Update( { .input = &input, .dt = dt, .yFov = 0.9f, .viewport = solid.viewport } );
 		solid.debugLines.Clear();
 		{
 			const ae::Color guide = ae::Color::SRGB8( 70, 78, 90 );
@@ -2373,5 +2378,9 @@ int main( int argc, char* argv[] )
 		return 0;
 	};
 
-	return ae::Application( argc, argv, Initialize, Update, Terminate );
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }

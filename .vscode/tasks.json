@@ -2,7 +2,7 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Em: Start Web Server",
+			"label": "Web: Start Web Server",
 			"type": "shell",
 			"command": "python3 -m http.server 58000",
 			"isBackground": true,
@@ -32,12 +32,12 @@
 			}
 		},
 		{
-			"label": "Em: Configure",
+			"label": "Web: Configure",
 			"type": "shell",
 			"command": "cmake",
 			"args": [
 				"--preset",
-				"emscripten"
+				"wasi"
 			],
 			"options": {
 				"cwd": "${workspaceFolder}"
@@ -54,45 +54,18 @@
 			}
 		},
 		{
-			"label": "Em: Build Test",
+			"label": "Web: Build Current",
 			"type": "shell",
 			"command": "cmake",
 			"args": [
 				"--build",
-				"${workspaceFolder}/build_emscripten",
-				"--config",
-				"RelWithDebInfo",
-				"--target",
-				"test"
-			],
-			"dependsOn": "Em: Configure",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"presentation": {
-				"reveal": "silent"
-			},
-			"icon": {
-				"id": "tools",
-				"color": "terminal.ansiYellow"
-			}
-		},
-		{
-			"label": "Em: Build Current",
-			"type": "shell",
-			"command": "cmake",
-			"args": [
-				"--build",
-				"${workspaceFolder}/build_emscripten",
+				"${workspaceFolder}/build_wasi",
 				"--config",
 				"RelWithDebInfo",
 				"--target",
 				"${command:cmake.buildTargetName}"
 			],
-			"dependsOn": "Em: Configure",
+			"dependsOn": "Web: Configure",
 			"options": {
 				"cwd": "${workspaceFolder}"
 			},
@@ -108,15 +81,15 @@
 			}
 		},
 		{
-			"label": "Em: Launch Current (Safari)",
+			"label": "Web: Launch Current (Safari)",
 			"type": "shell",
 			"command": "open",
 			"args": [
 				"-a",
 				"Safari",
-				"http://localhost:58000/build_emscripten/examples/RelWithDebInfo/${command:cmake.buildTargetName}/"
+				"http://localhost:58000/build_wasi/examples/RelWithDebInfo/${command:cmake.buildTargetName}/"
 			],
-			"dependsOn": "Em: Build Current",
+			"dependsOn": "Web: Build Current",
 			"options": {
 				"cwd": "${workspaceFolder}"
 			},
@@ -136,15 +109,15 @@
 			}
 		},
 		{
-			"label": "Em: Launch Current (Firefox)",
+			"label": "Web: Launch Current (Firefox)",
 			"type": "shell",
 			"command": "open",
 			"args": [
 				"-a",
 				"Firefox",
-				"http://localhost:58000/build_emscripten/examples/RelWithDebInfo/${command:cmake.buildTargetName}/"
+				"http://localhost:58000/build_wasi/examples/RelWithDebInfo/${command:cmake.buildTargetName}/"
 			],
-			"dependsOn": "Em: Build Current",
+			"dependsOn": "Web: Build Current",
 			"options": {
 				"cwd": "${workspaceFolder}"
 			},

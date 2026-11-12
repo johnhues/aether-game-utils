@@ -13,8 +13,8 @@ IMAGE_NAME="aether-build"
 #
 # ubuntu_mingw needs amd64: arm64 wine hangs starting an x86_64 PE in
 # experimental ARM64EC mode. Everything else runs on the host architecture:
-# Rosetta cannot translate node's JIT, so an amd64 container aborts the
-# emscripten workflow on Apple Silicon.
+# Rosetta cannot translate node's JIT, so node aborts in an amd64 container on
+# Apple Silicon.
 for PLATFORM in amd64 arm64; do
 	docker buildx build --platform "linux/${PLATFORM}" -t "${IMAGE_NAME}:${PLATFORM}" --load .
 	echo "Built ${IMAGE_NAME}:${PLATFORM}"

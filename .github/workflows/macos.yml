@@ -13,3 +13,5 @@ jobs:
         run: make -C build_ci all -j$(nproc)
       - name: Test
         run: build_ci/test/test
+      - name: Configurations
+        run: test/config/check.sh native

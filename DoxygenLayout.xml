@@ -7,6 +7,7 @@
     <tab type="user" url="@ref tutorial" title="Tutorial"/>
     <tab type="pages" visible="no" title="" intro=""/>
     <tab type="topics" visible="yes" title="Utilities" intro=""/>
+    <tab type="user" url="@ref web" title="Web" visible="yes"/>
     <tab type="modules" visible="yes" title="" intro="">
       <tab type="modulelist" visible="yes" title="" intro=""/>
       <tab type="modulemembers" visible="yes" title="" intro=""/>

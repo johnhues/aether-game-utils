@@ -101,6 +101,7 @@ int main( int argc, char* argv[] )
 		timeStep.SetTimeStep( 1.0f / 60.0f );
 		fs.Initialize( DATA_DIR, "ae", "obj_viewer" );
 		camera.SetDistanceLimits( 0.25f, 10.0f );
+		camera.SetModifierKey( {} );
 		debugLines.Initialize( 1024 );
 
 		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
@@ -120,7 +121,7 @@ int main( int argc, char* argv[] )
 		fs.GetRootDir( ae::FileSystem::Root::Data, &dataDir );
 		AE_INFO( "data dir: '#'", dataDir );
 
-		file = fs.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
+		file = fs.Read( ae::FileSystem::Root::Data, "bunny.obj", 0.0f );
 		AE_INFO( "Start loading '#'", file->GetURL() );
 		AE_INFO( "Run" );
 		return true;
@@ -128,7 +129,7 @@ int main( int argc, char* argv[] )
 	auto Update = [&]()
 	{
 		input.Pump();
-		camera.Update( &input, timeStep.GetDt() );
+		camera.Update( { .input = &input, .dt = timeStep.GetDt(), .yFov = 0.9f, .viewport = window.GetArea() } );
 		spinVelocity = input.Get( ae::Key::Space ) ? ( spinVelocity + timeStep.GetDt() ) : ae::Max( 0.0f, spinVelocity - timeStep.GetDt() * 2.0f );
 		spin += timeStep.GetDt() * spinVelocity;
 		render.Activate();
@@ -218,5 +219,9 @@ int main( int argc, char* argv[] )
 		window.Terminate();
 		return 0;
 	};
-	return ae::Application( argc, argv, Initialize, Update, Terminate );
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }

@@ -5,12 +5,10 @@
 // Logs which frame each callback completes on; once the device is ready, an
 // empty command buffer is submitted every frame to verify the device works.
 //------------------------------------------------------------------------------
-#if defined( __EMSCRIPTEN__ )
-
+#include "aether.h"
+#if AE_ENABLE_AETHER_JS
 #include <cstdio>
 #include <cstdint>
-#include <emscripten.h>
-#include <emscripten/html5.h>
 #include <webgpu/webgpu.h>
 
 //------------------------------------------------------------------------------
@@ -73,9 +71,8 @@ static void OnAdapterReady( WGPURequestAdapterStatus status, WGPUAdapter adapter
 //------------------------------------------------------------------------------
 // Frame
 //------------------------------------------------------------------------------
-static void Frame( void* userdata )
+static bool Frame( AsyncState* s )
 {
-	AsyncState* s = (AsyncState*)userdata;
 	const uint32_t f = s->frame;
 
 	if( !s->adapterRequested )
@@ -137,6 +134,7 @@ static void Frame( void* userdata )
 	}
 
 	s->frame++;
+	return true;
 }
 
 //------------------------------------------------------------------------------
@@ -148,9 +146,8 @@ int main( int argc, char* argv[] )
 {
 	printf( "28_WebGPUAsync: proving WGPU adapter/device acquisition cannot be synchronous in the browser\n" );
 
-	// wgpuCreateInstance with a null descriptor returns the emdawnwebgpu
-	// sentinel WGPUInstance handle -- there is no real JS-side instance, the
-	// request* calls dispatch directly against navigator.gpu.
+	// aether.js returns navigator.gpu as the instance, so the request* calls
+	// dispatch directly against it.
 	s_state.instance = wgpuCreateInstance( nullptr );
 	if( !s_state.instance )
 	{
@@ -158,8 +155,11 @@ int main( int argc, char* argv[] )
 		return 1;
 	}
 
-	emscripten_set_main_loop_arg( Frame, &s_state, 0, 1 );
-	return 0;
+	return ae::Application( argc, argv, {
+		.initialize = []() { return true; },
+		.update = []() { return Frame( &s_state ); },
+		.terminate = []() { return 0; },
+	} );
 }
 
 #else

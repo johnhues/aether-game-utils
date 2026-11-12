@@ -91,7 +91,7 @@ int main( int argc, char* argv[] )
 		timeStep.SetTimeStep( 1.0f / 60.0f );
 		fileSystem.Initialize( "data", "ae", "geometry" );
 		debug.Initialize( 2048 );
-		fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
+		fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 0.0f );
 		AE_INFO( "Loading '#'", fontFile->GetURL() );
 		meshShader.Initialize(
 			R"(
@@ -117,9 +117,10 @@ int main( int argc, char* argv[] )
 		);
 		meshShader.SetDepthWrite( true );
 		meshShader.SetDepthTest( true );
-		objFile = fileSystem.Read( ae::FileSystem::Root::Data, "bunny.obj", 2.5f );
+		objFile = fileSystem.Read( ae::FileSystem::Root::Data, "bunny.obj", 0.0f );
 		AE_INFO( "Loading '#'", objFile->GetURL() );
 		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
+		camera.SetModifierKey( {} );
 		AE_INFO( "Run" );
 		return true;
 	};
@@ -158,7 +159,7 @@ int main( int argc, char* argv[] )
 
 	auto Update = [&]()
 	{
-		const float dt = timeStep.GetTimeStep();
+		const float dt = timeStep.GetDt();
 		input.Pump();
 
 		if( UpdateResources() )
@@ -174,7 +175,7 @@ int main( int argc, char* argv[] )
 		{
 			camera.Refocus( ae::Vec3( 0.0f ) );
 		}
-		camera.Update( &input, dt );
+		camera.Update( { .input = &input, .dt = dt, .yFov = ae::QUARTER_PI, .viewport = window.GetArea() } );
 
 		render.Activate();
 		render.Clear( ae::Color::AetherDarkPurple() );
@@ -194,7 +195,7 @@ int main( int argc, char* argv[] )
 			text.Add( ae::Vec3( ae::Vec3::ProjectPoint( worldToUI, worldPos ).GetXY() ), ae::Vec2( text.GetFontSize() * 2.0f ), str, color, 0, 0 );
 		};
 		
-		ae::Str256 infoText = "";
+		ae::Str512 infoText = "";
 
 		// Edit ray direction
 		ae::Vec3 ray;
@@ -210,8 +211,8 @@ int main( int argc, char* argv[] )
 			static ae::Vec3 s_rayDir = -s_raySource.SafeNormalizeCopy();
 			static float s_rayLength = 12.0f;
 			
-			if( input.Get( ae::Key::Num1 ) ) s_rayLength -= 0.016f;
-			if( input.Get( ae::Key::Num2 ) ) s_rayLength += 0.016f;
+			if( input.Get( ae::Key::Num1 ) ) s_rayLength -= dt;
+			if( input.Get( ae::Key::Num2 ) ) s_rayLength += dt;
 			s_rayLength = ae::Clip( s_rayLength, 0.0f, 16.0f );
 			
 			if( input.Get( ae::Key::G ) )
@@ -251,8 +252,8 @@ int main( int argc, char* argv[] )
 				infoText.Append( "Scale: 3-4\n" );
 				
 				static float s_triangleScale = 1.0f;
-				if( input.Get( ae::Key::Num3 ) ) s_triangleScale -= 0.016f;
-				if( input.Get( ae::Key::Num4 ) ) s_triangleScale += 0.016f;
+				if( input.Get( ae::Key::Num3 ) ) s_triangleScale -= dt;
+				if( input.Get( ae::Key::Num4 ) ) s_triangleScale += dt;
 				s_triangleScale = ae::Max( 0.0f, s_triangleScale );
 				ae::Vec3 triangle[] =
 				{
@@ -269,8 +270,8 @@ int main( int argc, char* argv[] )
 				debug.AddLine( triangleCenter, triangleCenter + normal, ae::Color::Red() );
 
 				static float r = 1.0f;
-				if( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
-				if( input.Get( ae::Key::Num4 ) ) r += 0.016f;
+				if( input.Get( ae::Key::Num3 ) ) r -= dt;
+				if( input.Get( ae::Key::Num4 ) ) r += dt;
 				r = ae::Clip( r, 0.01f, 8.0f );
 				
 				bool ccw = true;
@@ -324,12 +325,12 @@ int main( int argc, char* argv[] )
 				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
 				infoText.Append( "Radius: 3-4\n" );
 				
-				if( input.Get( ae::Key::D ) ) { s_spherePos.x += 0.01f; }
-				if( input.Get( ae::Key::A ) ) { s_spherePos.x -= 0.01f; }
-				if( input.Get( ae::Key::W ) ) { s_spherePos.y += 0.01f; }
-				if( input.Get( ae::Key::S ) ) { s_spherePos.y -= 0.01f; }
-				if( input.Get( ae::Key::E ) ) { s_spherePos.z += 0.01f; }
-				if( input.Get( ae::Key::Q ) ) { s_spherePos.z -= 0.01f; }
+				if( input.Get( ae::Key::D ) ) { s_spherePos.x += dt * 0.6f; }
+				if( input.Get( ae::Key::A ) ) { s_spherePos.x -= dt * 0.6f; }
+				if( input.Get( ae::Key::W ) ) { s_spherePos.y += dt * 0.6f; }
+				if( input.Get( ae::Key::S ) ) { s_spherePos.y -= dt * 0.6f; }
+				if( input.Get( ae::Key::E ) ) { s_spherePos.z += dt * 0.6f; }
+				if( input.Get( ae::Key::Q ) ) { s_spherePos.z -= dt * 0.6f; }
 				if( input.Get( ae::Key::Num3 ) ) s_sphereRadius -= dt;
 				if( input.Get( ae::Key::Num4 ) ) s_sphereRadius += dt;
 				s_sphereRadius = ae::Max( 0.01f, s_sphereRadius );
@@ -441,8 +442,8 @@ int main( int argc, char* argv[] )
 				debug.AddLine( triangleCenter, triangleCenter + normal, ae::Color::Red() );
 				
 				static float r = 1.0f;
-				if( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
-				if( input.Get( ae::Key::Num4 ) ) r += 0.016f;
+				if( input.Get( ae::Key::Num3 ) ) r -= dt;
+				if( input.Get( ae::Key::Num4 ) ) r += dt;
 				r = ae::Clip( r, 0.01f, 8.0f );
 
 				ae::Vec3 nearestIntersectionPoint;
@@ -478,12 +479,12 @@ int main( int argc, char* argv[] )
 				infoText.Append( "Flip Normal: F\n" );
 				
 				if( input.GetPress( ae::Key::Space ) ) { rayTest = !rayTest; }
-				if( input.Get( ae::Key::Num3 ) ) a0 -= 0.016f;
-				if( input.Get( ae::Key::Num4 ) ) a0 += 0.016f;
-				if( input.Get( ae::Key::Num5 ) ) a1 -= 0.016f;
-				if( input.Get( ae::Key::Num6 ) ) a1 += 0.016f;
-				if( input.Get( ae::Key::Num7 ) ) d -= 0.016f;
-				if( input.Get( ae::Key::Num8 ) ) d += 0.016f;
+				if( input.Get( ae::Key::Num3 ) ) a0 -= dt;
+				if( input.Get( ae::Key::Num4 ) ) a0 += dt;
+				if( input.Get( ae::Key::Num5 ) ) a1 -= dt;
+				if( input.Get( ae::Key::Num6 ) ) a1 += dt;
+				if( input.Get( ae::Key::Num7 ) ) d -= dt;
+				if( input.Get( ae::Key::Num8 ) ) d += dt;
 				bool flipNormal = input.Get( ae::Key::F );
 				
 				ae::Vec2 xy( ae::Cos( a0 ), ae::Sin( a0 ) );
@@ -559,19 +560,19 @@ int main( int argc, char* argv[] )
 				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
 				infoText.Append( "Scale: I,J,K,L,U,O\n" );
 				
-				if( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
-				if( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
-				if( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
-				if( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
-				if( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
-				if( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
+				if( input.Get( ae::Key::D ) ) { s_translation.x += dt * 0.6f; }
+				if( input.Get( ae::Key::A ) ) { s_translation.x -= dt * 0.6f; }
+				if( input.Get( ae::Key::W ) ) { s_translation.y += dt * 0.6f; }
+				if( input.Get( ae::Key::S ) ) { s_translation.y -= dt * 0.6f; }
+				if( input.Get( ae::Key::E ) ) { s_translation.z += dt * 0.6f; }
+				if( input.Get( ae::Key::Q ) ) { s_translation.z -= dt * 0.6f; }
 				
-				if( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
-				if( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
-				if( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
-				if( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
-				if( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
-				if( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
+				if( input.Get( ae::Key::L ) ) { s_scale.x += dt * 4.2f; }
+				if( input.Get( ae::Key::J ) ) { s_scale.x -= dt * 4.2f; }
+				if( input.Get( ae::Key::I ) ) { s_scale.y += dt * 4.2f; }
+				if( input.Get( ae::Key::K ) ) { s_scale.y -= dt * 4.2f; }
+				if( input.Get( ae::Key::O ) ) { s_scale.z += dt * 4.2f; }
+				if( input.Get( ae::Key::U ) ) { s_scale.z -= dt * 4.2f; }
 				s_scale = ae::Max( ae::Vec3( 0.0f ), s_scale );
 				
 				ae::Matrix4 transform = ae::Matrix4::Translation( s_translation );
@@ -583,8 +584,8 @@ int main( int argc, char* argv[] )
 				
 				if( input.Get( ae::Key::Space ) )
 				{
-					s_pa += 0.007f;
-					s_pb += 0.01f;
+					s_pa += dt * 0.42f;
+					s_pb += dt * 0.6f;
 				}
 				
 				ae::Vec3 p( 0.0f );
@@ -634,24 +635,24 @@ int main( int argc, char* argv[] )
 				infoText.Append( "Scale: I,J,K,L,U,O\n" );
 				infoText.Append( "Rotate: Z,X,C\n" );
 				
-				if( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
-				if( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
-				if( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
-				if( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
-				if( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
-				if( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
+				if( input.Get( ae::Key::D ) ) { s_translation.x += dt * 0.6f; }
+				if( input.Get( ae::Key::A ) ) { s_translation.x -= dt * 0.6f; }
+				if( input.Get( ae::Key::W ) ) { s_translation.y += dt * 0.6f; }
+				if( input.Get( ae::Key::S ) ) { s_translation.y -= dt * 0.6f; }
+				if( input.Get( ae::Key::E ) ) { s_translation.z += dt * 0.6f; }
+				if( input.Get( ae::Key::Q ) ) { s_translation.z -= dt * 0.6f; }
 				
-				if( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
-				if( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
-				if( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
-				if( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
-				if( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
-				if( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
+				if( input.Get( ae::Key::L ) ) { s_scale.x += dt * 4.2f; }
+				if( input.Get( ae::Key::J ) ) { s_scale.x -= dt * 4.2f; }
+				if( input.Get( ae::Key::I ) ) { s_scale.y += dt * 4.2f; }
+				if( input.Get( ae::Key::K ) ) { s_scale.y -= dt * 4.2f; }
+				if( input.Get( ae::Key::O ) ) { s_scale.z += dt * 4.2f; }
+				if( input.Get( ae::Key::U ) ) { s_scale.z -= dt * 4.2f; }
 				s_scale = ae::Max( ae::Vec3( 0.0f ), s_scale );
 				
-				if( input.Get( ae::Key::Z ) ) { s_rotation.x += 0.01f; }
-				if( input.Get( ae::Key::X ) ) { s_rotation.y += 0.01f; }
-				if( input.Get( ae::Key::C ) ) { s_rotation.z += 0.01f; }
+				if( input.Get( ae::Key::Z ) ) { s_rotation.x += dt * 0.6f; }
+				if( input.Get( ae::Key::X ) ) { s_rotation.y += dt * 0.6f; }
+				if( input.Get( ae::Key::C ) ) { s_rotation.z += dt * 0.6f; }
 				
 				ae::Matrix4 transform = ae::Matrix4::Translation( s_translation );
 				transform *= ae::Matrix4::RotationX( s_rotation.x );
@@ -663,8 +664,8 @@ int main( int argc, char* argv[] )
 				
 				if( input.Get( ae::Key::Space ) )
 				{
-					s_pa += 0.007f;
-					s_pb += 0.01f;
+					s_pa += dt * 0.42f;
+					s_pb += dt * 0.6f;
 				}
 				
 				ae::Vec3 p( 0.0f );
@@ -745,13 +746,13 @@ int main( int argc, char* argv[] )
 				debug.AddLine( ae::Vec3( 0.0f ), p, ae::Color::Black() );
 
 				static float s_dtLerp = 0.0f;
-				s_dtLerp = ae::DtLerpAngle( s_dtLerp, 4.0f, timeStep.GetTimeStep(), s_setAngle );
+				s_dtLerp = ae::DtLerpAngle( s_dtLerp, 4.0f, dt, s_setAngle );
 				ae::Vec3 l = camera.GetRight();
 				l = l.RotateCopy( camera.GetPosition(), s_dtLerp );
 				debug.AddLine( ae::Vec3( 0.0f ), l, ae::Color::Green() );
 
 				static float s_lerpAmt = 0.0f;
-				s_lerpAmt += timeStep.GetTimeStep();
+				s_lerpAmt += dt;
 				s_lerpAmt = ae::Min( s_lerpAmt, 1.0f );
 				float lerpAngle = ae::LerpAngle( s_setAnglePrev, s_setAngle, s_lerpAmt );
 				ae::Vec3 l2 = camera.GetRight();
@@ -760,8 +761,8 @@ int main( int argc, char* argv[] )
 
 				static float s_turnerAngle = 0.0f;
 				static float s_turnerVel = 0.0f;
-				if( input.Get( ae::Key::Num1 ) ) { s_turnerVel -= timeStep.GetTimeStep(); }
-				if( input.Get( ae::Key::Num2 ) ) { s_turnerVel += timeStep.GetTimeStep(); }
+				if( input.Get( ae::Key::Num1 ) ) { s_turnerVel -= dt; }
+				if( input.Get( ae::Key::Num2 ) ) { s_turnerVel += dt; }
 				if( input.Get( ae::Key::Num3 ) ) { s_turnerVel = 0.0f; }
 				if( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) )
 				{
@@ -769,7 +770,7 @@ int main( int argc, char* argv[] )
 					s_setAngle = s_turnerAngle;
 					s_lerpAmt = 0.0f;
 				}
-				s_turnerAngle += s_turnerVel * timeStep.GetTimeStep();
+				s_turnerAngle += s_turnerVel * dt;
 				ae::Vec3 t = camera.GetRight();
 				t = t.RotateCopy( camera.GetPosition(), s_turnerAngle );
 				debug.AddLine( ae::Vec3( 0.0f ), t, ae::Color::Red() );
@@ -798,18 +799,18 @@ int main( int argc, char* argv[] )
 					const ae::Vec3 halfSize = aabb.GetHalfSize() * scale;
 					aabb = ae::AABB( aabb.GetCenter() - halfSize, aabb.GetCenter() + halfSize );
 				};
-				if( input.Get( ae::Key::W ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::S ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, -0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::A ) ) { TranslateAABB( s_aabb0, ae::Vec3( -0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::D ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::Q ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.0f, -0.5f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::E ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.0f, 0.5f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::I ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::K ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, -0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::J ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( -0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::L ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::U ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.0f, -0.5f ) * timeStep.GetTimeStep() ); }
-				if( input.Get( ae::Key::O ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.0f, 0.5f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::W ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.5f, 0.0f ) * dt ); }
+				if( input.Get( ae::Key::S ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, -0.5f, 0.0f ) * dt ); }
+				if( input.Get( ae::Key::A ) ) { TranslateAABB( s_aabb0, ae::Vec3( -0.5f, 0.0f, 0.0f ) * dt ); }
+				if( input.Get( ae::Key::D ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.5f, 0.0f, 0.0f ) * dt ); }
+				if( input.Get( ae::Key::Q ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.0f, -0.5f ) * dt ); }
+				if( input.Get( ae::Key::E ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.0f, 0.5f ) * dt ); }
+				if( input.Get( ae::Key::I ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.5f, 0.0f ) * dt ); }
+				if( input.Get( ae::Key::K ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, -0.5f, 0.0f ) * dt ); }
+				if( input.Get( ae::Key::J ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( -0.5f, 0.0f, 0.0f ) * dt ); }
+				if( input.Get( ae::Key::L ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.5f, 0.0f, 0.0f ) * dt ); }
+				if( input.Get( ae::Key::U ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.0f, -0.5f ) * dt ); }
+				if( input.Get( ae::Key::O ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.0f, 0.5f ) * dt ); }
 				const bool overlap = s_aabb0.Intersect( s_aabb1 );
 				debug.AddAABB( s_aabb0, overlap ? ae::Color::Red() : ae::Color::Green() );
 				debug.AddAABB( s_aabb1, overlap ? ae::Color::Red() : ae::Color::Green() );
@@ -824,24 +825,24 @@ int main( int argc, char* argv[] )
 				infoText.Append( "Scale: I,J,K,L,U,O\n" );
 				infoText.Append( "Rotate: Z,X,C\n" );
 				
-				if( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
-				if( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
-				if( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
-				if( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
-				if( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
-				if( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
+				if( input.Get( ae::Key::D ) ) { s_translation.x += dt * 0.6f; }
+				if( input.Get( ae::Key::A ) ) { s_translation.x -= dt * 0.6f; }
+				if( input.Get( ae::Key::W ) ) { s_translation.y += dt * 0.6f; }
+				if( input.Get( ae::Key::S ) ) { s_translation.y -= dt * 0.6f; }
+				if( input.Get( ae::Key::E ) ) { s_translation.z += dt * 0.6f; }
+				if( input.Get( ae::Key::Q ) ) { s_translation.z -= dt * 0.6f; }
 				
-				if( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
-				if( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
-				if( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
-				if( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
-				if( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
-				if( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
+				if( input.Get( ae::Key::L ) ) { s_scale.x += dt * 4.2f; }
+				if( input.Get( ae::Key::J ) ) { s_scale.x -= dt * 4.2f; }
+				if( input.Get( ae::Key::I ) ) { s_scale.y += dt * 4.2f; }
+				if( input.Get( ae::Key::K ) ) { s_scale.y -= dt * 4.2f; }
+				if( input.Get( ae::Key::O ) ) { s_scale.z += dt * 4.2f; }
+				if( input.Get( ae::Key::U ) ) { s_scale.z -= dt * 4.2f; }
 				s_scale = ae::Max( ae::Vec3( 0.1f ), s_scale );
 				
-				if( input.Get( ae::Key::Z ) ) { s_rotation.x += 0.01f; }
-				if( input.Get( ae::Key::X ) ) { s_rotation.y += 0.01f; }
-				if( input.Get( ae::Key::C ) ) { s_rotation.z += 0.01f; }
+				if( input.Get( ae::Key::Z ) ) { s_rotation.x += dt * 0.6f; }
+				if( input.Get( ae::Key::X ) ) { s_rotation.y += dt * 0.6f; }
+				if( input.Get( ae::Key::C ) ) { s_rotation.z += dt * 0.6f; }
 				
 				ae::Matrix4 modelToWorld = ae::Matrix4::Translation( s_translation );
 				modelToWorld *= ae::Matrix4::RotationX( s_rotation.x );
@@ -924,8 +925,8 @@ int main( int argc, char* argv[] )
 				debug.AddLine( triangleCenter, triangleCenter + normal, ae::Color::Red() );
 
 				static float r = 0.5f;
-				if( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
-				if( input.Get( ae::Key::Num4 ) ) r += 0.016f;
+				if( input.Get( ae::Key::Num3 ) ) r -= dt;
+				if( input.Get( ae::Key::Num4 ) ) r += dt;
 				r = ae::Clip( r, 0.01f, 8.0f );
 
 				bool ccw = true;
@@ -951,6 +952,8 @@ int main( int argc, char* argv[] )
 			default:
 				break;
 		}
+		infoText.Append( "------------------------\n" );
+		infoText.Append( "Previous/Next Test: Left/Right\n" );
 
 		int newlineCount = 0;
 		const char* infoStr = infoText.c_str();
@@ -982,5 +985,9 @@ int main( int argc, char* argv[] )
 		window.Terminate();
 		return 0;
 	};
-	return ae::Application( argc, argv, Initialize, Update, Terminate );
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }

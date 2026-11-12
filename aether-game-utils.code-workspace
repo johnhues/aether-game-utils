@@ -4,13 +4,6 @@
 			"path": "."
 		}
 	],
-	"extensions": {
-		"recommendations": [
-			"llvm-vs-code-extensions.lldb-dap",
-			"ms-vscode.cmake-tools",
-			"ms-vscode.cpptools"
-		]
-	},
 	"settings": {
 		"clangd.arguments": [
 			// @TODO: Should have a consistent path for all build types, maybe symlinked

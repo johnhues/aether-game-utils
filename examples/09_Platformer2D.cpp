@@ -200,7 +200,7 @@ private:
 	HotSpotObject* m_body = nullptr;
 	float m_canJumpTimer = 0.0f;
 	float m_jumpHoldTimer = 0.0f;
-	float m_tapJumpHoldTimer = 0.0f; // Keeps jumpButton effective after a tap
+	bool m_jumpButtonPrev = false;
 };
 
 //------------------------------------------------------------------------------
@@ -229,53 +229,32 @@ void Player::Update( HotSpotWorld* world, ae::Window* window, ae::Input* input, 
 {
 	const uint32_t tile = world->GetTile( HotSpotWorld::_GetTilePos( m_body->GetPosition() ) );
 
-	// Touch controls: any touch is a virtual stick centered on its start
-	// position; releasing a short, mostly-stationary touch fires a jump and
-	// keeps the jump button effective for the normal hold window.
+	// Input
+	const float kTouchDeadzone = 0.2f;
 	const float kStickRadius = ae::Min( window->GetWidth(), window->GetHeight() ) / 6.0f;
-	const float kTapMaxMovementSqr = 16.0f * 16.0f;
-	const double kTapMaxDuration = 0.25;
-	while( input->PumpTouches() ) {} // Adopt every new touch this frame
+	const float kTapMaxMovement = 16.0f;
 	ae::Vec2 stick( 0.0f );
-	bool jumpTap = false;
-	for( ae::Touch* t : input->GetTouches() )
+	ae::Optional< float > jumpTap; // Seconds the longest tap ending this frame was held
+	for( const ae::InputPointer* t : input->GetUnclaimedPointers() )
 	{
-		const ae::Vec2 delta = t->StartDelta();
-		if( t->Ended() )
-		{
-			const float distSqr = delta.LengthSquared();
-			if( distSqr < kTapMaxMovementSqr && t->Lifetime() < kTapMaxDuration )
-			{
-				jumpTap = true;
-			}
-			input->ReleaseTouch( t );
-			continue;
-		}
-		stick += ae::Vec2( delta ) / kStickRadius;
+		if( t->source != ae::InputPointerSource::Touch ) { continue; }
+		if( !t->Ended() ) { stick += t->StartDelta() / kStickRadius; }
+		else if( t->MaxStartDistance() < kTapMaxMovement ) { jumpTap = ae::Max( jumpTap.Get( 0.0f ), (float)t->Lifetime() ); }
 	}
 	stick = stick.TrimCopy( 1.0f );
-	if( jumpTap ) { m_tapJumpHoldTimer = kJumpHoldTimeMax; }
-	m_tapJumpHoldTimer = ae::Max( 0.0f, m_tapJumpHoldTimer - dt );
-
-	const float kTouchDeadzone = 0.2f;
-	const bool touchUp = stick.y > kTouchDeadzone;
-	const bool touchDown = stick.y < -kTouchDeadzone;
-	const bool touchLeft = stick.x < -kTouchDeadzone;
-	const bool touchRight = stick.x > kTouchDeadzone;
-	const bool touchJump = touchUp || jumpTap || ( m_tapJumpHoldTimer > 0.0f );
-
-	const bool up = input->Get( ae::Key::Up ) || ( input->gamepads[ 0 ].leftAnalog.y > 0.1f ) || ( input->gamepads[ 0 ].dpad.y > 0 ) || touchUp;
-	const bool down = input->Get( ae::Key::Down ) || ( input->gamepads[ 0 ].leftAnalog.y < -0.1f ) || ( input->gamepads[ 0 ].dpad.y < 0 ) || touchDown;
-	const bool left = input->Get( ae::Key::Left ) || ( input->gamepads[ 0 ].leftAnalog.x < -0.1f ) || ( input->gamepads[ 0 ].dpad.x < 0 ) || touchLeft;
-	const bool right = input->Get( ae::Key::Right ) || ( input->gamepads[ 0 ].leftAnalog.x > 0.1f ) || ( input->gamepads[ 0 ].dpad.x > 0 ) || touchRight;
-	const bool jumpButton = ( input->Get( ae::Key::Up ) || input->Get( ae::Key::Space ) || input->gamepads[ 0 ].a || touchJump );
+	const ae::GamepadState* gamepad = &input->gamepads[ 0 ];
+	const bool up = ( stick.y > kTouchDeadzone ) || input->Get( ae::Key::Up ) || ( gamepad->leftAnalog.y > 0.1f ) || ( gamepad->dpad.y > 0 );
+	const bool down = ( stick.y < -kTouchDeadzone ) || input->Get( ae::Key::Down ) || ( gamepad->leftAnalog.y < -0.1f ) || ( gamepad->dpad.y < 0 );
+	const bool left = ( stick.x < -kTouchDeadzone ) || input->Get( ae::Key::Left ) || ( gamepad->leftAnalog.x < -0.1f ) || ( gamepad->dpad.x < 0 );
+	const bool right = ( stick.x > kTouchDeadzone ) || input->Get( ae::Key::Right ) || ( gamepad->leftAnalog.x > 0.1f ) || ( gamepad->dpad.x > 0 );
+	const bool jumpButton = ( stick.y > kTouchDeadzone ) || ( input->Get( ae::Key::Up ) || input->Get( ae::Key::Space ) || gamepad->a );
 
 	m_canJumpTimer -= dt;
 
 	// Water
 	if( tile == kTile_Water )
 	{
-		if( jumpButton || up ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kSwimUp ) ); }
+		if( jumpButton || jumpTap.TryGet() || up ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kSwimUp ) ); }
 		if( down ) { m_body->AddForce( ae::Vec2( 0.0f, -kPlayerMass * kSwimDown ) ); }
 
 		if( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
@@ -289,7 +268,7 @@ void Player::Update( HotSpotWorld* world, ae::Window* window, ae::Input* input, 
 	else if( tile == kTile_Foliage )
 	{
 		bool input = false;
-		if( jumpButton || up ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kMoveHorizontal * 0.5f ) ); input = true; }
+		if( jumpButton || jumpTap.TryGet() || up ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kMoveHorizontal * 0.5f ) ); input = true; }
 		if( down ) { m_body->AddForce( ae::Vec2( 0.0f, -kPlayerMass * kMoveHorizontal ) ); input = true; }
 		if( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kMoveHorizontal * 0.5f, 0.0f ) ); input = true; }
 		if( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kMoveHorizontal * 0.5f, 0.0f ) ); input = true; }
@@ -304,20 +283,23 @@ void Player::Update( HotSpotWorld* world, ae::Window* window, ae::Input* input, 
 		if( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kMoveHorizontal, 0.0f ) ); }
 		if( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kMoveHorizontal, 0.0f ) ); }
 
-		if( CanJump() && jumpButton )
+		if( CanJump() && ( jumpButton || jumpTap.TryGet() ) )
 		{
-			// Cancel previous downward velocity for last kJumpMaxAirTime seconds
-			// to get full jump height
+			// Cancel previous downward velocity for last kJumpMaxAirTime seconds to get full jump height
 			ae::Vec2 vel = m_body->GetVelocity();
 			vel.y = 0.0f;
 			m_body->SetVelocity( vel );
 
 			m_canJumpTimer = 0.0f;
-			m_jumpHoldTimer = kJumpHoldTimeMax;
+			// A held button keeps holding until released, a tap holds for as long as it was held
+			m_jumpHoldTimer = jumpButton ? kJumpHoldTimeMax : ae::Min( jumpTap.Get( 0.0f ), kJumpHoldTimeMax );
 			m_body->AddImpulse( ae::Vec2( 0.0f, kPlayerMass * kJumpInitial ) );
 		}
-
-		if( m_jumpHoldTimer > 0.0f && jumpButton )
+		else if( !jumpButton && m_jumpButtonPrev )
+		{
+			m_jumpHoldTimer = 0.0f;
+		}
+		if( m_jumpHoldTimer > 0.0f )
 		{
 			m_jumpHoldTimer -= dt;
 			m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kJumpHold ) );
@@ -325,6 +307,7 @@ void Player::Update( HotSpotWorld* world, ae::Window* window, ae::Input* input, 
 
 		m_body->AddGravity( ae::Vec2( 0.0f, -kGravity ) );
 	}
+	m_jumpButtonPrev = jumpButton;
 }
 
 void Player::Render( ae::SpriteRenderer* spriteRender )
@@ -483,9 +466,9 @@ struct Game
 int main( int argc, char* argv[] )
 {
 	Game game;
-	return ae::Application( argc, argv,
-		{ &game, &Game::Initialize },
-		{ &game, &Game::Tick },
-		{ &game, &Game::Terminate }
-	);
+	return ae::Application( argc, argv, {
+		.initialize = { &game, &Game::Initialize },
+		.update = { &game, &Game::Tick },
+		.terminate = { &game, &Game::Terminate },
+	} );
 }

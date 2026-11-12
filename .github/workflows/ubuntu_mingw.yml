@@ -20,3 +20,5 @@ jobs:
         env:
           WINEPREFIX: /tmp/wineprefix
         run: wine build_ci/test/test.exe
+      - name: Configurations
+        run: CXX=x86_64-w64-mingw32-g++ test/config/check.sh native

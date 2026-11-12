@@ -61,13 +61,10 @@
 #define _AE_MSVC_ 0
 #define _AE_MINGW_ 0
 #define _AE_LINUX_ 0
-#define _AE_EMSCRIPTEN_ 0
 #define _AE_WASM_ 0
 #define _AE_WASI_ 0
-#if defined(__EMSCRIPTEN__)
-	#undef _AE_EMSCRIPTEN_
-	#define _AE_EMSCRIPTEN_ 1
-#elif defined(__APPLE__)
+#define _AE_EMSCRIPTEN_ 0
+#if defined(__APPLE__)
 	#include "TargetConditionals.h"
 	#if TARGET_OS_IPHONE
 		#undef _AE_IOS_
@@ -94,6 +91,8 @@
 	#undef _AE_LINUX_
 	#define _AE_LINUX_ 1
 #elif defined(__wasi__)
+	// _AE_WASM_ is any WebAssembly build. _AE_WASI_ is a wasi-sdk build, with
+	// the WASI system interface.
 	#undef _AE_WASM_
 	#define _AE_WASM_ 1
 	#undef _AE_WASI_
@@ -101,6 +100,12 @@
 #elif defined(__wasm__)
 	#undef _AE_WASM_
 	#define _AE_WASM_ 1
+	// A guest of an Emscripten program, which owns the page, its WebGL context
+	// and main loop. ae::Window, ae::Input and ae::Application require aether.js.
+	#if defined(__EMSCRIPTEN__)
+		#undef _AE_EMSCRIPTEN_
+		#define _AE_EMSCRIPTEN_ 1
+	#endif
 #else
 	#error "Platform not supported"
 #endif
@@ -171,11 +176,50 @@
 //------------------------------------------------------------------------------
 //! Define as 0 before including aether.h to disable OpenGL dependency.
 //! Render class method bodies become empty stubs. Intended for headless
-//! server builds and command-line tools. A future AE_ENABLE_WINDOW flag
-//! will handle OS window dependency separately.
+//! server builds and command-line tools. See AE_ENABLE_APPLICATION for the
+//! window dependency.
 //------------------------------------------------------------------------------
 #ifndef AE_ENABLE_OPENGL
 	#define AE_ENABLE_OPENGL 1
+#endif
+
+//------------------------------------------------------------------------------
+// AE_ENABLE_AETHER_JS define
+//------------------------------------------------------------------------------
+//! Defaults to 1 in wasi-sdk builds, which then import aether.js's modules and
+//! only run under aether.js in a browser, see \ref web. Define as 0 for a
+//! wasi-sdk build hosted elsewhere, which then reads files synchronously and
+//! defaults AE_ENABLE_APPLICATION to 0.
+//------------------------------------------------------------------------------
+#ifndef AE_ENABLE_AETHER_JS
+	#define AE_ENABLE_AETHER_JS _AE_WASI_
+#endif
+#if AE_ENABLE_AETHER_JS && !_AE_WASI_
+	#error "AE_ENABLE_AETHER_JS requires a wasi-sdk build"
+	#undef AE_ENABLE_AETHER_JS
+	#define AE_ENABLE_AETHER_JS 0
+#endif
+
+//------------------------------------------------------------------------------
+// AE_ENABLE_APPLICATION define
+//------------------------------------------------------------------------------
+//! Define as 0 before including aether.h to disable the ae::Window, ae::Input
+//! and ae::Application backend. Their methods become empty stubs, and
+//! ae::Application() fails. Defaults to 0 in WebAssembly builds without
+//! AE_ENABLE_AETHER_JS, which have no backend.
+//------------------------------------------------------------------------------
+#ifndef AE_ENABLE_APPLICATION
+	#define AE_ENABLE_APPLICATION ( !_AE_WASM_ || AE_ENABLE_AETHER_JS )
+#endif
+#if AE_ENABLE_AETHER_JS && !AE_ENABLE_APPLICATION
+	#error "AE_ENABLE_AETHER_JS requires AE_ENABLE_APPLICATION"
+	#undef AE_ENABLE_APPLICATION
+	#define AE_ENABLE_APPLICATION 1
+#endif
+#if AE_ENABLE_APPLICATION && _AE_WASM_ && !AE_ENABLE_AETHER_JS
+	#error "AE_ENABLE_APPLICATION has no backend in this WebAssembly build, see AE_ENABLE_AETHER_JS"
+	#undef AE_ENABLE_APPLICATION
+	#define AE_ENABLE_APPLICATION 0
 #endif
 
 //------------------------------------------------------------------------------
@@ -360,10 +404,6 @@
 	#endif
 #elif _AE_WINDOWS_
 	#include <intrin.h>
-#elif _AE_EMSCRIPTEN_
-	#include <emscripten.h>
-	#include <emscripten/html5.h>
-	#include <webgl/webgl1.h> // For Emscripten WebGL API headers (see also webgl/webgl1_ext.h and webgl/webgl2.h)
 #endif
 #if !_AE_WINDOWS_ && !_AE_WASM_
 	#include <cxxabi.h>
@@ -390,8 +430,6 @@ namespace ae {
 #		define AE_BREAK() __debugbreak()
 #	elif _AE_APPLE_
 #		define AE_BREAK() __builtin_debugtrap()
-#	elif _AE_EMSCRIPTEN_
-#		define AE_BREAK() assert( 0 )
 #	elif _AE_WASM_
 #		define AE_BREAK() __builtin_trap()
 #	elif defined( __aarch64__ )
@@ -535,9 +573,11 @@ template< typename T > using _EnableIfFractional = std::enable_if_t< std::is_flo
 #if _AE_WASM_
 #	define AE_WASM_IMPORT( _m ) extern "C" __attribute__( ( import_module( #_m ) ) )
 #	define AE_WASM_EXPORT extern "C" __attribute__( ( visibility( "default" ) ) )
+#	define _AE_WASM_IMPORT( _m, _n ) extern "C" __attribute__( ( import_module( #_m ), import_name( #_n ) ) )
 #else
 #	define AE_WASM_IMPORT( _m )
 #	define AE_WASM_EXPORT
+#	define _AE_WASM_IMPORT( _m, _n )
 #endif
 // clang-format on
 
@@ -585,7 +625,7 @@ struct _InlineArray< T, 0 >
 //! \brief Process, time, clipboard, and debugger utilities.
 //! @{
 //------------------------------------------------------------------------------
-//! Returns the process ID on Windows, OSX, and Linux. Returns 0 with Emscripten builds.
+//! Returns the process ID on Windows, OSX, and Linux. Returns 0 on the web.
 uint32_t GetPID();
 //! Returns the number of virtual cores available.
 uint32_t GetMaxConcurrentThreads();
@@ -1222,7 +1262,6 @@ public:
 
 	// Comparison
 	bool operator==( const ae::Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
-	bool operator!=( const ae::Matrix4& o ) const { return !operator== ( o ); }
 	bool IsNAN() const;
 
 	// Define conversion functions etc for ae::Matrix4. See AE_CONFIG_FILE for more info.
@@ -1272,7 +1311,6 @@ public:
 	void Normalize();
 	Quaternion NormalizeCopy() const;
 	bool operator==( const Quaternion& q ) const;
-	bool operator!=( const Quaternion& q ) const;
 	Quaternion& operator*= ( const Quaternion& q );
 	Quaternion operator* ( const Quaternion& q ) const;
 	//! Returns the antipodal quaternion (negates all four components i,j,k,r).
@@ -1588,7 +1626,6 @@ public:
 	AABB( Vec3 p0, Vec3 p1 );
 	explicit AABB( const Sphere& sphere );
 	bool operator == ( const AABB& aabb ) const;
-	bool operator != ( const AABB& aabb ) const;
 
 	AABB& Expand( Vec3 p );
 	AABB& Expand( AABB other );
@@ -1641,7 +1678,6 @@ public:
 	OBB( const OBB& ) = default;
 	OBB( const Matrix4& transform );
 	bool operator == ( const OBB& obb ) const;
-	bool operator != ( const OBB& obb ) const;
 
 	void SetTransform( const Matrix4& transform );
 	Matrix4 GetTransform() const;
@@ -1726,7 +1762,6 @@ struct Color
 	static Color HSV( float hue, float saturation, float value );
 
 	bool operator == ( ae::Color o ) const { return r == o.r && g == o.g && b == o.b && a == o.a; }
-	bool operator != ( ae::Color o ) const { return !( operator == ( o ) ); }
 	ae::Color operator * ( ae::Color o ) const { return RGBA( r * o.r, g * o.g, b * o.b, a * o.a ); }
 	ae::Color& operator *= ( ae::Color o ) { r *= o.r; g *= o.g; b *= o.b; a *= o.a; return *this; }
 
@@ -1894,7 +1929,6 @@ public:
 	template< uint32_t N2 > Str<N> operator +( const Str<N2>& str ) const;
 	template< uint32_t N2 > void operator +=( const Str<N2>& str );
 	template< uint32_t N2 > bool operator ==( const Str<N2>& str ) const;
-	template< uint32_t N2 > bool operator !=( const Str<N2>& str ) const;
 	template< uint32_t N2 > bool operator <( const Str<N2>& str ) const;
 	template< uint32_t N2 > bool operator >( const Str<N2>& str ) const;
 	template< uint32_t N2 > bool operator <=( const Str<N2>& str ) const;
@@ -1902,7 +1936,6 @@ public:
 	Str<N> operator +( const char* str ) const;
 	void operator +=( const char* str );
 	bool operator ==( const char* str ) const;
-	bool operator !=( const char* str ) const;
 	bool operator <( const char* str ) const;
 	bool operator >( const char* str ) const;
 	bool operator <=( const char* str ) const;
@@ -1931,7 +1964,6 @@ public:
 private:
 	template< uint32_t N2 > friend class Str;
 	template< uint32_t N2 > friend bool operator ==( const char*, const Str< N2 >& );
-	template< uint32_t N2 > friend bool operator !=( const char*, const Str< N2 >& );
 	template< uint32_t N2 > friend bool operator <( const char*, const Str< N2 >& );
 	template< uint32_t N2 > friend bool operator >( const char*, const Str< N2 >& );
 	template< uint32_t N2 > friend bool operator <=( const char*, const Str< N2 >& );
@@ -1966,7 +1998,6 @@ struct UUID
 	static UUID Generate();
 
 	bool operator==( const UUID& other ) const;
-	bool operator!=( const UUID& other ) const;
 
 	// Define conversion functions etc for ae::UUID. See AE_CONFIG_FILE for more info.
 #ifdef AE_UUID_CLASS_CONFIG
@@ -2032,7 +2063,6 @@ public:
 	constexpr explicit Hash( U initialValue );
 	
 	constexpr bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
-	constexpr bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
 
 	constexpr Hash& HashString( const char* str );
 	Hash& HashData( const void* data, uint32_t length );
@@ -2077,7 +2107,7 @@ public:
 
 private:
 	bool m_hasValue = false;
-	alignas(T) std::byte m_value[ sizeof(T) ];
+	alignas(T) std::byte m_value[ sizeof(T) ] = {};
 };
 
 
@@ -2764,7 +2794,6 @@ public:
 		const T2& operator*() const { return *m_ptr; }
 		const pointer operator->() const { return m_ptr; }
 		friend bool operator== ( const Iterator& a, const Iterator& b ) { return a.m_ptr == b.m_ptr; };
-		friend bool operator!= ( const Iterator& a, const Iterator& b ) { return !( a == b ); };
 		Iterator& operator++();
 		Iterator operator++( int );
 		Iterator begin();
@@ -2882,7 +2911,6 @@ public:
 		const T& operator*() const { return *m_ptr; }
 		const pointer operator->() const { return m_ptr; }
 		friend bool operator== ( const Iterator& a, const Iterator& b ) { return a.m_ptr == b.m_ptr; };
-		friend bool operator!= ( const Iterator& a, const Iterator& b ) { return !( a == b ); };
 		Iterator& operator++();
 		Iterator operator++( int );
 		Iterator begin();
@@ -3410,10 +3438,10 @@ inline std::ostream& operator<<( std::ostream& os, RectInt r )
 struct BVHNode
 {
 	ae::AABB aabb;
-	int16_t parentIdx = -1;
-	int16_t leftIdx = -1;
-	int16_t rightIdx = -1;
-	int16_t leafIdx = -1;
+	int32_t parentIdx = -1;
+	int32_t leftIdx = -1;
+	int32_t rightIdx = -1;
+	int32_t leafIdx = -1;
 };
 
 //------------------------------------------------------------------------------
@@ -3616,14 +3644,14 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 //------------------------------------------------------------------------------
 //! \def AE_ASSERT_IMPL
 //! Called with the formatted message after a failed assertion has been logged.
-//! Define before including aether.h to replace the default, which calls
-//! AE_BREAK().
+//! Define before including aether.h to replace the default, which flushes
+//! all output streams and calls AE_BREAK().
 //! Usage:
 //! \code
 //! #define AE_ASSERT_IMPL( msgStr ) MyFatalHandler( msgStr )
 //! \endcode
 #ifndef AE_ASSERT_IMPL
-#	define AE_ASSERT_IMPL( msgStr ) do { (void)(msgStr); AE_BREAK(); } while(0)
+#	define AE_ASSERT_IMPL( msgStr ) do { (void)(msgStr); fflush( nullptr ); AE_BREAK(); } while(0)
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 //! Logs a fatal message naming the failed expression and calls
@@ -3862,43 +3890,91 @@ ae::Array< ae::Screen, 16 > GetScreens();
 int main( int argc, char* argv[] )
 {
 	// ...
-	auto init = []() { return true; };
-	auto update = []() { return true; };
-	auto terminate = []() { return 0; };
-	return ae::Application( argc, argv, init, update, terminate );
+	auto Initialize = []() { return true; };
+	auto Update = []() { return true; };
+	auto Terminate = []() { return 0; };
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }
 #endif
 //------------------------------------------------------------------------------
 using AppInitializeFn = ae::Function< bool(), 256 >;
 using AppUpdateFn = ae::Function< bool(), 256 >;
 using AppTerminateFn = ae::Function< int32_t(), 256 >;
+using AppSuspendFn = ae::Function< void(), 256 >;
+using AppResumeFn = ae::Function< void(), 256 >;
+//! A program's lifecycle callbacks, see ae::Application().
+struct ApplicationParams
+{
+	//! Called once at startup. This is a good place to initialize an
+	//! ae::Window, ae::GraphicsDevice, and ae::Input combo. Return false to
+	//! skip \p update and call \p terminate immediately.
+	AppInitializeFn initialize;
+	//! Called each frame. Return false to quit the application.
+	AppUpdateFn update;
+	//! Called once at termination, whether or not \p initialize succeeded.
+	//! Best effort: iOS never calls it, and the web may not. Save anything that
+	//! matters in \p suspend instead.
+	AppTerminateFn terminate;
+	//! Optional. Called when the system may end the program without further
+	//! notice, eg. when an iOS app is backgrounded or a web page is hidden.
+	//! Before returning, save game state and free resource memory (textures,
+	//! meshes, audio) to reduce memory pressure while in the background, so the
+	//! program can resume instead of restarting. \p update is not called again
+	//! until \p resume. Never called on desktop.
+	AppSuspendFn suspend;
+	//! Optional. Called after \p suspend, before \p update is called again.
+	//! Reload what \p suspend freed.
+	AppResumeFn resume;
+};
 //! Call this function to drive a program's lifecycle identically on platforms
 //! that own the main loop and platforms that don't. This function wraps the
-//! platform specific mechanisms that drive the main loop, and calls the given
-//! functions when appropriate.
+//! platform specific mechanisms that drive the main loop, and calls the
+//! functions in \p params when appropriate. On platforms where the system owns
+//! the main loop (iOS and web) this function does not return.
 //! \param argc Forward from main()
 //! \param argv Forward from main()
-//! \param initialize Called once at startup. This is a good place to initialize
-//! an ae::Window, ae::GraphicsDevice, and ae::Input combo. The given function
-//! should return true if initialization succeeds, and should return false if
-//! \p update calls should be skipped and \p terminate should be called immediately.
-//! \param update Called each frame. Return false from your given function to
-//! quit the application. Note that this is called by the system on platforms
-//! where the system owns the main loop (like iOS and web).
-//! \param terminate For platforms where the program controls its life-cycle
-//! (desktop operating systems): Called once at termination, whether or not the
-//! \p initialize succeeded. On platforms where the system owns the main
-//! loop (iOS and web): Terminate may never be called.
-//! \return The return value of \p terminate
-int32_t Application(
-	int32_t argc,
-	char* argv[],
-	const AppInitializeFn& initialize,
-	const AppUpdateFn& update,
-	const AppTerminateFn& terminate
-);
+//! \param params The program's lifecycle callbacks
+//! \return The return value of ae::ApplicationParams::terminate
+int32_t Application( int32_t argc, char* argv[], const ApplicationParams& params );
 
 //! @}
+
+//------------------------------------------------------------------------------
+// Web documentation, which scripts/docs.py combines with aether.js into the
+// Web page
+//------------------------------------------------------------------------------
+//! \cond WEB_PAGE
+//! A program built with wasi-sdk runs in a browser through aether.js, which
+//! ships beside aether.h. Build it with:
+//! \code
+//! clang++ --target=wasm32-wasip1 -std=c++20 -fno-exceptions -O2 -mexec-model=reactor game.cpp -o game.wasm
+//! \endcode
+//! Then run it from a page on the same origin as aether.js, see \ref aether_js.
+//!
+//! ## Lifecycle {#web_lifecycle}
+//! main() runs as on every other platform, and ae::Application() hands
+//! control to aether.js without returning. initialize runs before
+//! instantiate() resolves, update runs each animation frame, suspend runs when
+//! the page is hidden and resume when it is shown again, and terminate runs
+//! when the page calls terminate().
+//!
+//! ## DOM ownership {#web_dom_ownership}
+//! An instance only touches the canvas it is given. Its input listeners,
+//! focus, cursor, pointer lock and fullscreen are scoped to that canvas.
+//! Exceptions: ae::Window::SetTitle() sets the page title, and one shared style
+//! element hides the canvas focus outline.
+//!
+//! ## Emscripten {#web_emscripten}
+//! aether.h also compiles into an Emscripten program, which owns the page, the
+//! WebGL context and the main loop. ae::Shader, ae::VertexBuffer and the other
+//! rendering utilities draw with its current context. ae::Window,
+//! ae::GraphicsDevice, ae::Input, ae::Application and ae::FileSystem::Read()
+//! need aether.js.
+//! \endcond
 
 //! \addtogroup Platform
 //! @{
@@ -3921,6 +3997,8 @@ public:
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
 	// @TODO: InitializeWindowed
 	bool Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor, const char* frameStorageKey );
+	//! Destroys the native window. Terminate the ae::Input and
+	//! ae::GraphicsDevice using this window first.
 	void Terminate();
 
 	void SetTitle( const char* title );
@@ -3946,6 +4024,9 @@ public:
 	int32_t GetWidth() const;
 	//! Virtual DPI window height @TODO: Content or window height in dpi units?
 	int32_t GetHeight() const;
+	//! The whole window from ( 0, 0 ) to ( GetWidth(), GetHeight() ), in the
+	//! same virtual DPI window space as ae::Input mouse and touch positions.
+	ae::Rect GetArea() const;
 	//! Get the safe area of the window: the area not obscured by notches,
 	//! rounded corners, or other display cutouts. Coordinates are in
 	//! virtual DPI window space. Note that the windows content area (graphics
@@ -3998,14 +4079,9 @@ public:
 	void m_UpdateBackBuffer();
 	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
 	ae::Int2 m_nativeToAe( ae::Int2 pos, ae::Int2 size );
-	bool m_fixCanvasStyle = false;
 	void* window = nullptr;
 	class GraphicsDevice* graphicsDevice = nullptr;
-#if _AE_EMSCRIPTEN_
-	EMSCRIPTEN_WEBGL_CONTEXT_HANDLE m_context = 0;
-#else
 	void* m_context = nullptr;
-#endif
 	uint32_t m_defaultFramebuffer = 0;
 #if _AE_IOS_
 	// Depth lives on the GraphicsDevice canvas, not here.
@@ -4155,48 +4231,35 @@ enum class Key : uint8_t
 enum class CursorState
 {
 	Normal, //!< Default visible state. Automatically set when the app loses focus.
-	HiddenAndCaptured, //!< The cursor will not be visible and only ae::MouseState::movement is tracked.
+	HiddenAndCaptured, //!< The cursor will not be visible and only ae::Input::cursorMovement is tracked.
 	HiddenUntilMoved, //!< The cursor will be hidden until it is moved by the user.
-	Hidden //!< The cursor will not be visible, but ae::MouseState::position is still tracked.
+	Hidden //!< The cursor will not be visible, but ae::Input::hoverPos is still tracked.
 };
 
 //------------------------------------------------------------------------------
-// ae::MouseState struct
+// ae::ScrollState struct
 //------------------------------------------------------------------------------
-struct MouseState
+struct ScrollState
 {
-	bool leftButton = false;
-	bool middleButton = false;
-	bool rightButton = false;
-	//! This value is useful for cursors. In window space coordinates in points
-	//! (are not affected by window scale factor). Do not use it for calculating
-	//! cursor movement, as the values can jump due to OS control; ie. don't
-	//! subtract mouse position values across frames. ae::MouseState::movement
-	//! should be used for changes in cursor position.
-	ae::Vec2 position = ae::Vec2( 0.0f );
-	//! Describes the change in cursor position since the last frame. Useful for
-	//! drag input, flicks, gestures etc. Window space coordinates in points
-	//! (are not affected by window scale factor). Cursor jumps are filtered
-	//! when the mouse is captured and when the window becomes active, so this
-	//! always represents true user interaction.
-	ae::Vec2 movement = ae::Vec2( 0.0f );
 	//! Scroll driven directly by a mouse wheel or a trackpad. In virtual DPI
 	//! points. Is reset each frame. Excludes trackpad momentum, so this has the
-	//! same characteristics on all platforms. Add this and \p scrollInertia
-	//! when momentum is wanted. A wheel detent produces
+	//! same characteristics on all platforms. Add this and \p inertia when
+	//! momentum is wanted. A wheel detent produces
 	//! ae::Input::GetScrollPointsPerNotch() points. Follows the OS natural
 	//! scrolling direction, so it matches the affordance the user expects from
 	//! their device; negate it when ae::Input::GetScrollDirectionInverted() to
 	//! work in physical direction instead.
-	ae::Vec2 scroll = ae::Vec2( 0.0f );
-	//! The simulated trackpad momentum continuation that follows \p scroll once
+	ae::Vec2 delta = ae::Vec2( 0.0f );
+	//! The simulated trackpad momentum continuation that follows \p delta once
 	//! the user lifts their finger. In virtual DPI points. Is reset each frame.
 	//! Is always zero on platforms without OS momentum (all others than MacOS).
-	//! Add it to \p scroll for a native feeling glide in an editor or other
+	//! Add it to \p delta for a native feeling glide in an editor or other
 	//! tool UI; leave it out where behavior must match across platforms and
 	//! instead supply your own smoothing.
-	ae::Vec2 scrollInertia = ae::Vec2( 0.0f );
-	bool usingTouch = false;
+	ae::Vec2 inertia = ae::Vec2( 0.0f );
+	//! True when the last scroll came from a continuous surface such as a
+	//! trackpad, rather than wheel detents.
+	bool isTrackpad = false;
 };
 
 //------------------------------------------------------------------------------
@@ -4248,58 +4311,96 @@ struct GamepadState // @TODO: Rename Gamepad
 };
 
 //------------------------------------------------------------------------------
-// ae::Touch constants
+// ae::InputPointer constants
 //------------------------------------------------------------------------------
-const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
-const uint32_t kMaxTouchSamples = 64; //!< Max number of position samples stored for each touch
+const uint32_t kMaxInputPointers = 32; //!< Max number of pointers supported by ae::Input
+const uint32_t kMaxInputPointerSamples = 64; //!< Max number of position samples stored for each pointer
 
 //------------------------------------------------------------------------------
-// ae::Touch struct
+// ae::InputPointerButton enum
 //------------------------------------------------------------------------------
-struct Touch
+//! The press an ae::InputPointer represents, which lives from press to release.
+//! Each held mouse button is a separate pointer, so a chord is several pointers.
+enum class InputPointerButton : uint8_t
 {
+	Primary, //!< A touch, or the left mouse button
+	Secondary, //!< The right mouse button
+	Tertiary //!< The middle mouse button
+};
+
+//------------------------------------------------------------------------------
+// ae::InputPointerSource enum
+//------------------------------------------------------------------------------
+//! The device an ae::InputPointer comes from
+enum class InputPointerSource : uint8_t
+{
+	Mouse, //!< A mouse or trackpad
+	Touch //!< A finger or stylus. On iOS a mouse or trackpad is only reported as the mouse when UIApplicationSupportsIndirectInputEvents is set.
+};
+
+//------------------------------------------------------------------------------
+// ae::InputPointer struct
+//------------------------------------------------------------------------------
+//! \demo{examples/32_multi_pointer,16/10}
+struct InputPointer
+{
+	//! Unique among all live pointers regardless of source, never 0
 	uint32_t id = 0;
+	ae::InputPointerButton button = ae::InputPointerButton::Primary;
+	ae::InputPointerSource source = ae::InputPointerSource::Touch;
+
 	struct Sample
 	{
 		double time; // Relative to ae::GetTime()
 		ae::Vec2 position; // Relative to the virtual window size (ie. not affected by window scale factor)
 	};
 	//! The oldest position sample is at index 0, and the newest is at index
-	//! ( length - 1 ). Position samples are added on every system input event,
-	//! so the time between samples is not fixed. Once max samples is reached
-	//! the sample that contributes the least to the 'shape' of the curve formed
-	//! by the consecutive samples is removed to make room for the new sample.
-	ae::Array< Sample, kMaxTouchSamples > samples;
-	//! True after the user releases or cancels the touch. The touch remains
-	//! visible via ae::Input::GetTouches() until ae::Input::ReleaseTouch() is
-	//! called. samples is not modified after the touch ends.
+	//! (length - 1). Position samples are added on every system input event, so
+	//! the time between samples is not fixed. Once max samples is reached the
+	//! sample that contributes the least to the 'shape' of the curve formed by
+	//! the consecutive samples is removed to make room for the new sample.
+	ae::Array< Sample, kMaxInputPointerSamples > samples;
+	//! True after the touch lifts or is cancelled, or the mouse button is released.
+	//! The pointer remains visible via ae::Input::GetPointers() until
+	//! ae::Input::ReleasePointer() is called. Nothing is modified after it ends.
 	bool ended = false;
 
 	ae::Vec2 Position() const;
 	ae::Vec2 StartPosition() const;
+	//! Position() relative to StartPosition(), eg. for a virtual stick. Ignores
+	//! the path between, see MaxStartDistance() to tell a tap from a drag.
 	ae::Vec2 StartDelta() const;
 	bool Ended() const { return ended; }
 	double Lifetime() const;
+	//! The furthest Position() has been from StartPosition(), which tells a tap
+	//! from a drag that returned to where it started.
+	float MaxStartDistance() const { return _maxStartDistance; }
 
 	// Internal: appends a sample, simplifying the stored curve when full.
 	void _AppendSample( double time, ae::Vec2 position );
+	uint32_t _platformId = 0; // Internal: the platform's identifier, which may repeat
+	float _maxStartDistance = 0.0f; // Internal: see MaxStartDistance()
 };
 
-using TouchArray = ae::Array< ae::Touch*, ae::kMaxTouches >;
+using InputPointerArray = ae::Array< ae::InputPointer*, ae::kMaxInputPointers >;
 
 //------------------------------------------------------------------------------
 // ae::Input class
 //------------------------------------------------------------------------------
 class Input
 {
-#define AE_INPUT_PRESS( value, property ) value.property && !value##Prev.property
-#define AE_INPUT_RELEASE( value, property ) !value.property && value##Prev.property
 	
 public:
 	Input();
 	void Initialize( Window* window );
 	void Terminate();
 	void Pump();
+
+	//! Set by ae::Input::Pump() when the user asks to quit, eg. by closing the
+	//! window or with Cmd+Q, and never cleared. Exit the main loop once set.
+	//! Never set on the web or iOS.
+	bool quit = false;
+
 	//--------------------------------------------------------------------------
 	// Mouse; Cursor & Scroll
 	//--------------------------------------------------------------------------
@@ -4314,17 +4415,11 @@ public:
 	//! Returns true while the OS cursor is not drawn.
 	bool GetCursorHidden() const;
 	//! Returns true while the cursor is locked to the center of the window and
-	//! ae::MouseState::movement is the only source of cursor input. Locking is
+	//! ae::Input::cursorMovement is the only source of cursor input. Locking is
 	//! requested with ae::CursorState::HiddenAndCaptured, and is not immediate
 	//! on all platforms.
 	bool GetCursorLocked() const;
-	inline bool GetMousePressLeft() const { return AE_INPUT_PRESS( mouse, leftButton ); }
-	inline bool GetMousePressMid() const { return AE_INPUT_PRESS( mouse, middleButton ); }
-	inline bool GetMousePressRight() const { return AE_INPUT_PRESS( mouse, rightButton ); }
-	inline bool GetMouseReleaseLeft() const { return AE_INPUT_RELEASE( mouse, leftButton ); }
-	inline bool GetMouseReleaseMid() const { return AE_INPUT_RELEASE( mouse, middleButton ); }
-	inline bool GetMouseReleaseRight() const { return AE_INPUT_RELEASE( mouse, rightButton ); }
-	//! Returns true when ae::MouseState::scroll runs opposite to the physical
+	//! Returns true when ae::ScrollState::delta runs opposite to the physical
 	//! motion of the device, because the OS natural scrolling setting is on
 	//! (macOS only, always false elsewhere). Scroll values already account for
 	//! this, so most callers can ignore it. Negate them when you need to follow
@@ -4332,7 +4427,7 @@ public:
 	bool GetScrollDirectionInverted() const { return m_naturalScroll; }
 	//! Virtual DPI points produced by one wheel detent. Fixed per platform so a
 	//! detent feels the same everywhere rather than tracking each OS. Divide
-	//! ae::MouseState::scroll by this to work in whole notches, which suits
+	//! ae::ScrollState::delta by this to work in whole notches, which suits
 	//! stepping through a list; prefer the raw points for anything continuous.
 	float GetScrollPointsPerNotch() const;
 
@@ -4371,42 +4466,69 @@ public:
 	inline bool GetGamepadPressDown( uint32_t idx = 0 ) const { return gamepads[ idx ].down && !gamepadsPrev[ idx ].down; }
 	inline bool GetGamepadPressLeft( uint32_t idx = 0 ) const { return gamepads[ idx ].left && !gamepadsPrev[ idx ].left; }
 	inline bool GetGamepadPressRight( uint32_t idx = 0 ) const { return gamepads[ idx ].right && !gamepadsPrev[ idx ].right; }
-
-	//--------------------------------------------------------------------------
-	// Touch Screen
-	//--------------------------------------------------------------------------
-	//! Adopts the oldest un-pumped touch into the tracked set, making it
-	//! visible via ae::Input::GetTouches() until explicitly released with
-	//! ae::Input::ReleaseTouch(). Failure to release pumped touches will result
-	//! in new lost touches. It is safe to hold on to a pumped touch pointer
-	//! until it is released. Pumped touches will continue to be updated over
-	//! their lifetime. Returns the adopted touch, or nullptr if there are no
-	//! new touches. Touches are discarded if they start and end before
-	//! ae::Input::PumpTouches() is called.
-	const ae::Touch* PumpTouches();
-	//! Returns the touches the caller has opted into tracking via
-	//! ae::Input::PumpTouches() and have not yet released. Touches that have
-	//! not been pumped are not visible here. The array is returned by value so
-	//! it's safe to iterate through this result and call
-	//! ae::Input::ReleaseTouch() on all/any of the touches in any order
-	//! (although you should be careful not to access the internals of touches
-	//! in this array that you've already released).
-	ae::TouchArray GetTouches() const { return m_touches; }
-	//! Frees a touch returned by PumpTouches(). This **must** be called per
-	//! touch or internal limits will be hit and new touches may be discarded.
-	//! It is not safe to access a touch after it has been released.
-	void ReleaseTouch( const ae::Touch* touch );
-	
-	MouseState mouse;
-	MouseState mousePrev;
 	GamepadState gamepads[ 4 ];
 	GamepadState gamepadsPrev[ 4 ];
-	bool quit = false;
+
+	//--------------------------------------------------------------------------
+	// Pointers: touches, and mouse buttons (see ae::InputPointer::button and ae::InputPointer::source)
+	//--------------------------------------------------------------------------
+	//! Returns and claims the oldest unclaimed pointer, making it visible via
+	//! ae::Input::GetPointers() until explicitly released with
+	//! ae::Input::ReleasePointer(). Failure to release claimed pointers will
+	//! eventually result in no new pointers as the limit is reached. It is safe
+	//! to hold on to a claimed pointer until it is released. Claimed pointers
+	//! continue to be updated over their lifetime. Returns the claimed pointer,
+	//! or nullptr if there are no new pointers. A pointer can be returned while
+	//! already having ended, and is discarded by the next ae::Input::Pump() if
+	//! it was not claimed.
+	const ae::InputPointer* PumpPointers();
+	//! Returns the pointers claimed via ae::Input::PumpPointers() or
+	//! ae::Input::ClaimPointer() that have not yet released. The array is
+	//! returned by value so it's safe to iterate through this result and call
+	//! ae::Input::ReleasePointer() on all/any of the pointers in any order
+	//! (although you should be careful not to access the internals of pointers
+	//! in this array that you've already released).
+	ae::InputPointerArray GetPointers() const { return m_pointers; }
+	//! Returns live pointers nobody has claimed yet, oldest first, so systems
+	//! can inspect a gesture before deciding to own it. An unclaimed pointer is
+	//! visible on the frame it ends, and then is discarded by the next
+	//! ae::Input::Pump().
+	ae::InputPointerArray GetUnclaimedPointers() const { return m_newPointers; }
+	//! Claims \p pointer from ae::Input::GetUnclaimedPointers(), as
+	//! ae::Input::PumpPointers() does for the oldest. Returns false if it was
+	//! already claimed or discarded. Claimed pointers must be released with
+	//! ae::Input::ReleasePointer().
+	bool ClaimPointer( const ae::InputPointer* pointer );
+	//! Frees a pointer that was claimed. This **must** be called per pointer
+	//! or internal limits will be hit and new pointers may be discarded. It is
+	//! not safe to access a pointer after it has been released.
+	void ReleasePointer( const ae::InputPointer* pointer );
+	
+	//! The mouse cursor's position while a mouse is present, including while its
+	//! buttons are held, which are also pointers. Empty when input only comes from
+	//! touches.
+	ae::Optional< ae::Vec2 > hoverPos;
+	//! The change in cursor position since the last frame, in window units.
+	//! Cursor jumps are filtered when the mouse is captured and when the window
+	//! becomes active. The only cursor input while
+	//! ae::CursorState::HiddenAndCaptured.
+	ae::Vec2 cursorMovement = ae::Vec2( 0.0f );
+	//! Mouse wheel and trackpad scrolling since the last frame
+	ae::ScrollState scroll;
+	//! Trackpad pinch zoom since the last frame, as the natural log of the
+	//! scale change. Positive when the fingers spread, add up across frames,
+	//! and expf() gives the scale factor. Always 0 on iOS and iPadOS. Touchscreen
+	//! pinches are pointers instead, see ae::Input::GetUnclaimedPointers().
+	float zoomDelta = 0.0f;
 
 // private:
 	Input( const Input& ) = delete;
 	void m_TryNewFrame();
 	void m_SetMousePos( ae::Vec2 pos );
+	void m_UpdateHoverPos();
+	ae::InputPointer* m_NewPointer( ae::Vec2 pos ); // Unclaimed with a unique id, null when full
+	ae::InputPointer* m_FindPointer( uint32_t id ); // Unclaimed or claimed, null once released
+	void m_UpdateMousePointer( ae::Vec2 pos ); // Call after every mouse button or move event
 	void m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement );
 	void m_WarpCursor( ae::Vec2 pos ); // Attempts to move the OS's cursor to the given position
 	void m_SetMouseCaptured( bool captured );
@@ -4432,14 +4554,24 @@ public:
 	bool m_gamepadRequiresFocus = true;
 	bool m_naturalScroll = false;
 	// Touch
-	using TouchPool = ae::ObjectPool< ae::Touch, ae::kMaxTouches >;
-	TouchPool m_touchPool;
-	TouchArray m_newTouches;
-	TouchArray m_touches;
-	uint32_t m_touchIndex = 0; // 0 is invalid
+	using InputPointerPool = ae::ObjectPool< ae::InputPointer, ae::kMaxInputPointers >;
+	InputPointerPool m_pointerPool;
+	InputPointerArray m_newPointers;
+	InputPointerArray m_pointers;
+	uint32_t m_pointerIndex = 0; // 0 is invalid
+	// Platform cursor and button state, exposed via ae::Input::hoverPos and the mouse button pointers
+	ae::Vec2 m_cursorPos = ae::Vec2( 0.0f );
+	bool m_leftButton = false;
+	bool m_middleButton = false;
+	bool m_rightButton = false;
+	// A pointer per mouse button, created on press and ended on release. Not
+	// remade mid-press if released early by its claimant.
+	uint32_t m_mousePointerIds[ 3 ] = {};
+	bool m_mouseButtonsHeld[ 3 ] = {};
+	bool m_cursorSeen = false; // A mouse has reported a position
 };
 
-/* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
+/* Internal */ } extern "C" { uint8_t* _ae_OnFileLoaded( void* file, uint32_t length ); void _ae_OnFileFailed( void* file, uint32_t code, int32_t timeout ); } namespace ae {
 //! @}
 
 //------------------------------------------------------------------------------
@@ -4473,8 +4605,8 @@ public:
 	uint32_t GetRetryCount() const;
 
 private:
-	friend void ::_ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length );
-	friend void ::_ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout );
+	friend uint8_t* ::_ae_OnFileLoaded( void* file, uint32_t length );
+	friend void ::_ae_OnFileFailed( void* file, uint32_t code, int32_t timeout );
 	friend class FileSystem;
 	ae::Str256 m_url;
 	uint8_t* m_data = nullptr;
@@ -4552,14 +4684,15 @@ public:
 
 	// Asynchronous file loading
 	//! Loads a file asynchronously from disk or from the network (@TODO: currently
-	//! only in emscripten builds). <b>Prefer this function over all other
+	//! only asynchronous on the web). <b>Prefer this function over all other
 	//! ae::FileSystem::Read...() methods as it will work the most consistently
 	//! on all platforms.</b> Returns an ae::File object to be freed later
 	//! with ae::FileSystem::Destroy(). A zero or negative \p timeoutSec value
-	//! will disable the timeout.
+	//! will disable the timeout. On the web, the onProgress option of
+	//! aether.js instantiate() receives each request's progress.
 	const ae::File* Read( Root root, const char* url, float timeoutSec );
 	//! Loads a file asynchronously from disk or from the network (@TODO: currently
-	//! only in emscripten builds). Returns an ae::File object to be freed
+	//! only asynchronous on the web). Returns an ae::File object to be freed
 	//! later with ae::FileSystem::Destroy(). A zero or negative \p timeoutSec
 	//! value will disable the timeout.
 	const ae::File* Read( const char* url, float timeoutSec );
@@ -5306,7 +5439,7 @@ public:
 // ae::RenderTarget class
 //------------------------------------------------------------------------------
 //! A render target for offscreen rendering with color and depth attachments.
-//! \demo{examples/20_render_target,21/9}
+//! \demo{examples/20_render_target,4/3}
 //------------------------------------------------------------------------------
 class RenderTarget
 {
@@ -5404,20 +5537,13 @@ public:
 	void m_HandleResize( uint32_t width, uint32_t height );
 	Window* m_window = nullptr;
 	RenderTarget m_canvas;
-#if _AE_EMSCRIPTEN_
-	EMSCRIPTEN_WEBGL_CONTEXT_HANDLE m_context = 0;
+	void* m_context = nullptr;
+#if AE_ENABLE_AETHER_JS
 	double m_lastResize = 0.0;
 	int32_t m_resizeWidthPrev = 0;
 	int32_t m_resizeHeightPrev = 0;
-#else
-	void* m_context = nullptr;
 #endif
 	int32_t m_defaultFbo = -1;
-	
-	VertexBuffer m_renderQuad;
-	Shader m_renderShaderRGB;
-	Shader m_renderShaderSRGB;
-	bool m_rgbToSrgb = false;
 };
 
 //------------------------------------------------------------------------------
@@ -5653,12 +5779,23 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::DebugCamera class
-//! A camera utility which provides basic functionality for mouse and keyboard
-//! navigation. These controls mimic some popular CAD software, but are still
-//! slightly modified to be useable with a trackpad. The controls are:
-//! Orbit: (Alt+LMB)
-//! Pan: (Alt+MMB) or (Alt+touch scroll)
-//! Zoom: (Alt+RMB) or (Scroll)
+//! A camera utility which provides basic functionality for mouse, keyboard and
+//! touch navigation.
+//! Mouse (non-trackpad) controls require the key set with
+//! ae::DebugCamera::SetModifierKey(), LeftAlt by default. Controls are:
+//!     Orbit: [Modifier]+LMB
+//!     Pan: [Modifier]+MMB
+//!     Zoom: [Modifier]+RMB or Scroll
+//! Trackpad controls are:
+//!     Orbit: scroll
+//!     Pan: Shift + scroll
+//!     Zoom: Pinch or ctrl + scroll
+//! Touch controls claim a single touch only once it drags, leaving taps for
+//! the app. Touches the app claims first are ignored.
+//!     Orbit: one finger drag
+//!     Pan: two finger drag
+//!     Zoom: two finger pinch
+//! Two fingers blend pan and zoom, weighted heavily towards whichever dominates.
 //------------------------------------------------------------------------------
 class DebugCamera
 {
@@ -5675,13 +5812,28 @@ public:
 	void SetDistanceFromFocus( float distance );
 	//! Passing false cancels in progress input and prevents new input until called again with true. True by default.
 	void SetInputEnabled( bool enabled );
+	//! Mouse button input only starts while \p key is held, ae::Key::LeftAlt by
+	//! default. Pass {} for no modifier key. Does not affect in progress input.
+	void SetModifierKey( ae::Optional< ae::Key > key );
 	//! Sets the yaw and pitch of the camera. Updates the cameras position.
 	void SetRotation( ae::Vec2 angles );
 	//! Updates pivot and position over time
 	void Refocus( ae::Vec3 pivot, float snappiness = 2.5f );
+	//! Describes the frame the camera is drawn in. \p input and \p yFov are required.
+	struct UpdateParams
+	{
+		ae::Input* input = nullptr;
+		float dt = 0.0f;
+		//! The vertical field of view in radians the camera is drawn with.
+		float yFov = 0.0f;
+		//! Where the camera is drawn, in the same window units as ae::Input
+		//! mouse and touch positions. Gestures only start inside it, and an
+		//! empty viewport ends any gesture and ignores input.
+		ae::Rect viewport;
+	};
 	//! Call this every frame even when no input has taken place so refocus works as expected.
 	//! See ae::DebugCamera::SetInputEnabled() if you would like to prevent the camera from moving.
-	void Update( ae::Input* input, float dt );
+	void Update( const UpdateParams& params );
 
 	//! Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
 	Mode GetMode() const;
@@ -5705,13 +5857,24 @@ public:
 
 private:
 	void m_Precalculate();
+	// Claims and releases touches, applying their gesture. Returns true while a gesture is active.
+	bool m_UpdatePointers( const UpdateParams& params );
 	// Params
 	float m_min = 1.0f;
 	float m_max = ae::MaxValue< float >();
 	Axis m_worldUp = Axis::Z;
 	// Mode
 	bool m_inputEnabled = true;
+	ae::Optional< ae::Key > m_modifierKey = ae::Key::LeftAlt;
 	Mode m_mode = Mode::None;
+	// Touch
+	ae::Array< const ae::InputPointer*, 3 > m_pointers;
+	const ae::InputPointer* m_mousePointer = nullptr; // Claimed once dragged, so clicks stay available
+	ae::Vec2 m_touchCenter = ae::Vec2( 0.0f );
+	float m_touchSpread = 0.0f; // Average distance of the fingers from their center
+	ae::Vec2 m_touchPanRecent = ae::Vec2( 0.0f ); // Net center movement, decaying over time
+	float m_touchZoomRecent = 0.0f; // Net separation change, decaying over time
+	ae::Optional< float > m_touchZoomWeight; // 0 pans, 1 zooms, empty until two fingers move
 	ae::Vec3 m_refocusPos = ae::Vec3( 0.0f );
 	float m_refocusSnappiness = 0.0f;
 	bool m_refocus = false;
@@ -6378,6 +6541,8 @@ public:
 	void Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels, uint32_t maxAudioDatas );
 	void Terminate();
 	
+	//! Returns null when \p data is not a complete WAV file or no audio data
+	//! slots remain.
 	const AudioData* LoadWavFile( const uint8_t* data, uint32_t length );
 
 	void SetVolume( float volume );
@@ -6638,7 +6803,6 @@ struct NetId
 	NetId( const NetId& ) = default;
 	explicit NetId( uint32_t id ) : m_id( id ) {}
 	bool operator==( const NetId& o ) const { return o.m_id == m_id; }
-	bool operator!=( const NetId& o ) const { return o.m_id != m_id; }
 	explicit operator bool () const { return m_id != 0; }
 	uint32_t GetInternalId() const { return m_id; }
 	void Serialize( BinaryStream* s ) { s->SerializeUInt32( m_id ); }
@@ -7334,7 +7498,6 @@ struct TypeId
 
 	constexpr operator uint32_t() const { return m_id; }
 	constexpr bool operator==( TypeId o ) const { return m_id == o.m_id; }
-	constexpr bool operator!=( TypeId o ) const { return m_id != o.m_id; }
 	constexpr bool operator<( TypeId o ) const { return m_id < o.m_id; }
 
 private:
@@ -7437,6 +7600,8 @@ public:
 class SourceFileAttribute final : public ae::Inheritor< ae::Attribute, SourceFileAttribute >
 {
 public:
+	SourceFileAttribute() = default;
+	SourceFileAttribute( const char* _path, uint32_t _line ) : path( _path ), line( _line ) {}
 	ae::Str256 path;
 	uint32_t line = 0;
 };
@@ -8246,7 +8411,15 @@ struct _Globals
 	ae::Map< ae::TypeId, ae::ClassType*, kMaxMetaTypes, ae::Hash32, ae::MapMode::Stable > classTypes;
 
 	// Platform
-	class GraphicsDevice* graphicsDevice = nullptr;
+	// ae::RenderTarget resources, owned by the ae::GraphicsDevice
+	struct
+	{
+		bool initialized = false;
+		VertexBuffer quad;
+		Shader shaderRGB;
+		Shader shaderSRGB;
+		bool rgbToSrgb = false;
+	} render;
 	class _Application* application = nullptr;
 	void* eaglLayer = nullptr; // iOS: CAEAGLLayer, set by aeApplicationDelegate before Window init
 	class Input* input = nullptr;
@@ -10738,25 +10911,6 @@ bool operator ==( const char* str0, const Str<N>& str1 )
 
 template< uint32_t N >
 template< uint32_t N2 >
-bool Str< N >::operator !=( const Str<N2>& str ) const
-{
-	return !operator==( str );
-}
-
-template< uint32_t N >
-bool Str< N >::operator !=( const char* str ) const
-{
-	return !operator==( str );
-}
-
-template< uint32_t N >
-bool operator !=( const char* str0, const Str<N>& str1 )
-{
-	return !operator==( str0, str1 );
-}
-
-template< uint32_t N >
-template< uint32_t N2 >
 bool Str< N >::operator <( const Str<N2>& str ) const
 {
 	return strcmp( m_str, str.c_str() ) < 0;
@@ -10977,12 +11131,6 @@ template< uint32_t N >
 inline bool operator==( const std::string& str0, const ae::Str< N >& str1 )
 {
 	return str0 == str1.c_str();
-}
-
-template< uint32_t N >
-inline bool operator!=( const std::string& str0, const ae::Str< N >& str1 )
-{
-	return str0 != str1.c_str();
 }
 
 //------------------------------------------------------------------------------
@@ -13924,8 +14072,8 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 
 	BVHNode* parent = &m_nodes[ parentIdx ];
 	AE_ASSERT( parent->leftIdx == -1 && parent->rightIdx == -1 );
-	parent->leftIdx = (int16_t)m_nodes.Length();
-	parent->rightIdx = (int16_t)( m_nodes.Length() + 1 );
+	parent->leftIdx = (int32_t)m_nodes.Length();
+	parent->rightIdx = (int32_t)( m_nodes.Length() + 1 );
 	parent->aabb = leftAABB;
 	parent->aabb.Expand( rightAABB );
 
@@ -13937,9 +14085,9 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 	BVHNode* right = &m_nodes[ rightIdx ];
 	
 	left->aabb = leftAABB;
-	left->parentIdx = (int16_t)parentIdx;
+	left->parentIdx = (int32_t)parentIdx;
 	right->aabb = rightAABB;
-	right->parentIdx = (int16_t)parentIdx;
+	right->parentIdx = (int32_t)parentIdx;
 
 #if _AE_DEBUG_ && ( N == 0 )
 	if( m_limit )
@@ -13962,7 +14110,7 @@ void BVH< T, N >::SetLeaf( int32_t nodeIdx, T* data, uint32_t count )
 	}
 	else
 	{
-		node->leafIdx = (int16_t)m_leaves.Length();
+		node->leafIdx = (int32_t)m_leaves.Length();
 		leaf = &m_leaves.Append( {} );
 	}
 	leaf->data = data;
@@ -14823,12 +14971,12 @@ ae::TypeId _ClassType_GetTypeId( const ae::ClassType& self, ae::ConstDataPointer
 	template<> struct ae::TypeT< ::_T > : public ae::_ClassTypeT< ::_T > { TypeT() : _ClassTypeT< ::_T >( AE_STRINGIFY(_T) ) {} };\
 	ae::_TypeCreator< ::_T > AE_GLUE_UNDERSCORE(_ae_type_creator, _N);\
 	template<> ae::Type* ae::FindMetaRegistrationFor< ::_T >() { return ae::TypeT< ::_T >::Get(); }\
-	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, SourceFileAttribute)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute), nullptr) );
+	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute) ( _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__, 0) ); static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, SourceFileAttribute)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute), nullptr) );
 
 #define AE_REGISTER_CLASS_VAR_IMPL( _N, _T, _V )\
 	AE_DISABLE_INVALID_OFFSET_WARNING\
 	static ae::_VarCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_V );\
-	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, SourceFileAttribute)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute), nullptr) );\
+	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute) ( _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__, 0) ); static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, SourceFileAttribute)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute), nullptr) );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
 
 #define AE_REGISTER_CLASS_ATTRIBUTE_IMPL( _N, _T, _AN, _AT, _ARGS )\
@@ -16416,9 +16564,14 @@ T* ae::Cast( C* obj )
 		@import OpenAL;
 		@import GameController;
 	#else
+		// The macOS SDK mixes enum types, which C++20 deprecates
+		#pragma clang diagnostic push
+		#pragma clang diagnostic ignored "-Wdeprecated-enum-enum-conversion"
+		#pragma clang diagnostic ignored "-Wdeprecated-anon-enum-enum-conversion"
 		#include <Cocoa/Cocoa.h>
 		#include <Carbon/Carbon.h>
 		#include <GameController/GameController.h>
+		#pragma clang diagnostic pop
 	#endif
 	#ifndef AE_ENABLE_OPENAL
 		#define AE_ENABLE_OPENAL 1
@@ -16439,9 +16592,9 @@ T* ae::Cast( C* obj )
 	#ifndef AE_ENABLE_OPENAL
 		#define AE_ENABLE_OPENAL 0
 	#endif
-#elif _AE_EMSCRIPTEN_
+#elif _AE_WASM_
 	#ifndef AE_ENABLE_OPENAL
-		#define AE_ENABLE_OPENAL 1
+		#define AE_ENABLE_OPENAL ( AE_ENABLE_AETHER_JS || _AE_EMSCRIPTEN_ )
 	#endif
 #endif
 // Socket
@@ -16482,13 +16635,69 @@ T* ae::Cast( C* obj )
 	#if _AE_APPLE_
 		#include <OpenAL/al.h>
 		#include <OpenAL/alc.h>
+	#elif AE_ENABLE_AETHER_JS
+		// The part of OpenAL 1.1 aether uses, provided by aether.js with WebAudio
+		typedef int ALenum;
+		typedef int ALint;
+		typedef int ALsizei;
+		typedef unsigned int ALuint;
+		typedef float ALfloat;
+		typedef char ALCboolean;
+		struct ALCdevice;
+		struct ALCcontext;
+		#define AL_NO_ERROR 0
+		#define AL_FALSE 0
+		#define AL_TRUE 1
+		#define AL_PITCH 0x1003
+		#define AL_POSITION 0x1004
+		#define AL_LOOPING 0x1007
+		#define AL_BUFFER 0x1009
+		#define AL_GAIN 0x100A
+		#define AL_MIN_GAIN 0x100D
+		#define AL_ORIENTATION 0x100F
+		#define AL_SOURCE_STATE 0x1010
+		#define AL_PLAYING 0x1012
+		#define AL_SEC_OFFSET 0x1024
+		#define AL_FORMAT_MONO8 0x1100
+		#define AL_FORMAT_MONO16 0x1101
+		#define AL_FORMAT_STEREO8 0x1102
+		#define AL_FORMAT_STEREO16 0x1103
+		#define AL_INVALID_NAME 0xA001
+		#define AL_INVALID_ENUM 0xA002
+		#define AL_INVALID_VALUE 0xA003
+		#define AL_INVALID_OPERATION 0xA004
+		#define AL_OUT_OF_MEMORY 0xA005
+		_AE_WASM_IMPORT( al, alcOpenDevice ) ALCdevice* alcOpenDevice( const char* name );
+		_AE_WASM_IMPORT( al, alcCloseDevice ) ALCboolean alcCloseDevice( ALCdevice* device );
+		_AE_WASM_IMPORT( al, alcCreateContext ) ALCcontext* alcCreateContext( ALCdevice* device, const int* attributes );
+		_AE_WASM_IMPORT( al, alcDestroyContext ) void alcDestroyContext( ALCcontext* context );
+		_AE_WASM_IMPORT( al, alcMakeContextCurrent ) ALCboolean alcMakeContextCurrent( ALCcontext* context );
+		_AE_WASM_IMPORT( al, alcGetCurrentContext ) ALCcontext* alcGetCurrentContext();
+		_AE_WASM_IMPORT( al, alcGetContextsDevice ) ALCdevice* alcGetContextsDevice( ALCcontext* context );
+		_AE_WASM_IMPORT( al, alGetError ) ALenum alGetError();
+		_AE_WASM_IMPORT( al, alGenBuffers ) void alGenBuffers( ALsizei n, ALuint* buffers );
+		_AE_WASM_IMPORT( al, alDeleteBuffers ) void alDeleteBuffers( ALsizei n, const ALuint* buffers );
+		_AE_WASM_IMPORT( al, alBufferData ) void alBufferData( ALuint buffer, ALenum format, const void* data, ALsizei size, ALsizei frequency );
+		_AE_WASM_IMPORT( al, alGenSources ) void alGenSources( ALsizei n, ALuint* sources );
+		_AE_WASM_IMPORT( al, alDeleteSources ) void alDeleteSources( ALsizei n, const ALuint* sources );
+		_AE_WASM_IMPORT( al, alSourcef ) void alSourcef( ALuint source, ALenum param, ALfloat value );
+		_AE_WASM_IMPORT( al, alSource3f ) void alSource3f( ALuint source, ALenum param, ALfloat v0, ALfloat v1, ALfloat v2 );
+		_AE_WASM_IMPORT( al, alSourcei ) void alSourcei( ALuint source, ALenum param, ALint value );
+		_AE_WASM_IMPORT( al, alGetSourcef ) void alGetSourcef( ALuint source, ALenum param, ALfloat* value );
+		_AE_WASM_IMPORT( al, alGetSourcei ) void alGetSourcei( ALuint source, ALenum param, ALint* value );
+		_AE_WASM_IMPORT( al, alSourcePlay ) void alSourcePlay( ALuint source );
+		_AE_WASM_IMPORT( al, alSourceStop ) void alSourceStop( ALuint source );
+		_AE_WASM_IMPORT( al, alListenerf ) void alListenerf( ALenum param, ALfloat value );
+		_AE_WASM_IMPORT( al, alListener3f ) void alListener3f( ALenum param, ALfloat v0, ALfloat v1, ALfloat v2 );
+		_AE_WASM_IMPORT( al, alListenerfv ) void alListenerfv( ALenum param, const ALfloat* values );
+	#elif _AE_WASM_ && !_AE_EMSCRIPTEN_
+		#error "AE_ENABLE_OPENAL has no binding in this WebAssembly build, see AE_ENABLE_AETHER_JS"
+		#undef AE_ENABLE_OPENAL
+		#define AE_ENABLE_OPENAL 0
 	#else
 		#include "AL/al.h"
 		#include "AL/alc.h"
 	#endif
-#endif
-#if !_AE_EMSCRIPTEN_
-#define EMSCRIPTEN_KEEPALIVE
 #endif
 #if defined(__ARM_NEON__) || defined(__ARM_NEON)
 	#include <arm_neon.h>
@@ -16590,7 +16799,7 @@ uint32_t GetPID()
 {
 #if _AE_WINDOWS_
 	return GetCurrentProcessId();
-#elif _AE_EMSCRIPTEN_ || _AE_WASM_
+#elif _AE_WASM_
 	return 0;
 #else
 	return getpid();
@@ -16640,13 +16849,6 @@ bool IsDebuggerAttached()
 }
 #endif
 
-#if _AE_EMSCRIPTEN_
-EM_JS( float, _ae_performance_now, (),
-{
-	return performance.now();
-} );
-#endif
-
 double GetTime()
 {
 #if _AE_WINDOWS_
@@ -16662,8 +16864,6 @@ double GetTime()
 	bool success = QueryPerformanceCounter( &performanceCount ) != 0;
 	AE_ASSERT( success );
 	return performanceCount.QuadPart / (double)counterFrequency.QuadPart;
-#elif _AE_EMSCRIPTEN_
-	return _ae_performance_now() / 1000.0f;
 #elif _AE_WASM_
 	struct timespec ts;
 	clock_gettime( CLOCK_MONOTONIC, &ts );
@@ -17658,11 +17858,6 @@ bool Quaternion::operator==( const Quaternion& q ) const
 	return ( i == q.i ) && ( j == q.j ) && ( k == q.k ) && ( r == q.r );
 }
 
-bool Quaternion::operator!=( const Quaternion& q ) const
-{
-	return !operator==( q );
-}
-
 Quaternion& Quaternion::operator*= ( const Quaternion& q )
 {
 	//http://www.mathworks.com/help/aeroblks/quaternionmultiplication.html
@@ -18300,11 +18495,6 @@ bool AABB::operator == ( const AABB& aabb ) const
 	return ( aabb.m_min == m_min ) && ( aabb.m_max == m_max );
 }
 
-bool AABB::operator != ( const AABB& aabb ) const
-{
-	return !( operator == ( aabb ) );
-}
-
 AABB& AABB::Expand( ae::Vec3 p )
 {
 	m_min = ae::Min( p, m_min );
@@ -18498,11 +18688,6 @@ bool OBB::operator == ( const OBB& obb ) const
 		&& ( obb.m_axes[ 1 ] == m_axes[ 1 ] )
 		&& ( obb.m_axes[ 2 ] == m_axes[ 2 ] )
 		&& ( obb.m_halfSize == m_halfSize );
-}
-
-bool OBB::operator != ( const OBB& obb ) const
-{
-	return !( operator == ( obb ) );
 }
 
 void OBB::SetTransform( const ae::Matrix4& transform )
@@ -19399,8 +19584,8 @@ void TimeStep::SetDt( float sec )
 
 void TimeStep::Tick()
 {
-#if _AE_EMSCRIPTEN_ || _AE_WASM_
-	// Frame rate of emscripten/WASM builds is controlled externally
+#if _AE_WASM_
+	// Frame rate of WASM builds is controlled externally
 	const bool allowSleep = false;
 #else
 	const bool allowSleep = ( m_timeStep > 0.0 );
@@ -19494,7 +19679,6 @@ ae::UUID ae::UUID::Generate()
 }
 
 bool UUID::operator==( const UUID& other ) const { return memcmp( data, other.data, sizeof( data ) ) == 0; }
-bool UUID::operator!=( const UUID& other ) const { return memcmp( data, other.data, sizeof( data ) ) != 0; }
 
 std::ostream& operator<<( std::ostream& os, const ae::UUID& uuid )
 {
@@ -20646,6 +20830,40 @@ bool HotLoader::GetCopyCommand( ae::Str256* copyCmdOut, const char* dest, const 
 }
 
 //------------------------------------------------------------------------------
+// aether.js host imports
+//------------------------------------------------------------------------------
+#if AE_ENABLE_AETHER_JS
+// The canvas aether.js gave the program, in virtual DPI units
+_AE_WASM_IMPORT( ae, _ae_CanvasWidth ) int32_t _ae_CanvasWidth();
+_AE_WASM_IMPORT( ae, _ae_CanvasHeight ) int32_t _ae_CanvasHeight();
+_AE_WASM_IMPORT( ae, _ae_CanvasScale ) float _ae_CanvasScale();
+// Sets the size of the canvas's drawing buffer in pixels
+_AE_WASM_IMPORT( ae, _ae_SetCanvasSize ) void _ae_SetCanvasSize( int32_t width, int32_t height );
+// Hands control to aether.js by unwinding back into it, so it never returns
+_AE_WASM_IMPORT( ae, _ae_RunHostLoop ) void _ae_RunHostLoop();
+_AE_WASM_IMPORT( ae, _ae_SetTitle ) void _ae_SetTitle( const char* title );
+// Whether the canvas is in the page's fullscreen element
+_AE_WASM_IMPORT( ae, _ae_Fullscreen ) int32_t _ae_Fullscreen();
+_AE_WASM_IMPORT( ae, _ae_SetFullscreen ) void _ae_SetFullscreen( int32_t fullscreen );
+// Only granted while handling a mousedown or mouseup
+_AE_WASM_IMPORT( ae, _ae_RequestPointerLock ) void _ae_RequestPointerLock();
+_AE_WASM_IMPORT( ae, _ae_ExitPointerLock ) void _ae_ExitPointerLock();
+// Gamepads use the standard mapping. Fills the first 4 axes, the values of the
+// first 17 buttons and a bit per pressed button, and returns whether connected.
+_AE_WASM_IMPORT( ae, _ae_GamepadCount ) int32_t _ae_GamepadCount();
+_AE_WASM_IMPORT( ae, _ae_Gamepad ) int32_t _ae_Gamepad( uint32_t index, float* axes, float* values, uint32_t* pressed );
+_AE_WASM_IMPORT( ae, _ae_SetCursorHidden ) void _ae_SetCursorHidden( int32_t hidden );
+// Fetches url, relative to the page, and calls the _ae_OnFileLoaded() or
+// _ae_OnFileFailed() export with file once done unless canceled first. A
+// timeoutMs of 0 never times out.
+_AE_WASM_IMPORT( ae, _ae_ReadFile ) void _ae_ReadFile( const char* url, void* file, uint32_t timeoutMs );
+_AE_WASM_IMPORT( ae, _ae_CancelFile ) void _ae_CancelFile( const void* file );
+// Writes the page's url, truncated to fit size including the terminator
+_AE_WASM_IMPORT( ae, _ae_PageUrl ) void _ae_PageUrl( char* url, uint32_t size );
+#endif
+
+#if AE_ENABLE_APPLICATION
+//------------------------------------------------------------------------------
 // ae::Window MSVC/Windows event callback
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
@@ -20686,7 +20904,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 		case WM_CLOSE:
 		{
 			PostQuitMessage( 0 );
-			break;
+			return 0; // The window stays open, see ae::Input::quit
 		}
 		default:
 			break;
@@ -20780,10 +20998,11 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
 {
-	AE_ASSERT( _aeWindow );
-	AE_ASSERT( _aeWindow->input );
 	// @TODO: Prevent Q from being sent to the window?
-	_aeWindow->input->quit = true;
+	if( _aeWindow && _aeWindow->input )
+	{
+		_aeWindow->input->quit = true;
+	}
 	return NSTerminateCancel;
 }
 - (void)ae_orderFrontStandardAboutPanel:(id)sender
@@ -20859,6 +21078,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 namespace ae {
 #endif
 
+
 //------------------------------------------------------------------------------
 // ae::_Application (internal)
 //------------------------------------------------------------------------------
@@ -20868,10 +21088,11 @@ namespace ae {
 class _Application
 {
 public:
-	AppInitializeFn Initialize;
-	AppUpdateFn Update;
-	AppTerminateFn Terminate;
+	ApplicationParams params;
 	int32_t Run( int32_t argc, char* argv[] );
+	void Suspend(); // Calls params.suspend once per suspension
+	void Resume(); // Calls params.resume if suspended
+	bool suspended = false;
 };
 
 //------------------------------------------------------------------------------
@@ -20897,17 +21118,42 @@ public:
 		CAEAGLLayer* layer = (CAEAGLLayer*)self.layer;
 		layer.opaque = YES;
 		layer.contentsScale = [UIScreen mainScreen].scale;
-		// SRGBA8 matches macOS's NSOpenGLPFAColorSize=24 default backing: the
-		// framebuffer auto-applies linear→sRGB on fragment write, so SRGB
-		// textures and linear shading round-trip correctly to display. The
-		// drawable is fully overwritten by GraphicsDevice::Present each frame.
+		// SRGBA8 encodes linear→sRGB on fragment write, so GraphicsDevice::Present
+		// skips manual encoding on iOS. The drawable is fully overwritten by
+		// GraphicsDevice::Present each frame.
 		layer.drawableProperties = @{
 			kEAGLDrawablePropertyColorFormat : kEAGLColorFormatSRGBA8,
 		};
 		self.multipleTouchEnabled = YES;
 		_touchIds = [NSMapTable weakToStrongObjectsMapTable];
+		UIHoverGestureRecognizer* hover = [[UIHoverGestureRecognizer alloc] initWithTarget:self action:@selector(aeHover:)];
+		hover.cancelsTouchesInView = NO;
+		[self addGestureRecognizer:hover];
 	}
 	return self;
+}
+// Mouse and trackpad cursor movement while no button is held
+- (void)aeHover:(UIHoverGestureRecognizer*)recognizer
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( !input || !input->m_window ) { return; }
+	input->m_TryNewFrame();
+	const CGPoint p = [recognizer locationInView:self];
+	input->m_SetMousePos( ae::Vec2( (float)p.x, (float)input->m_window->GetHeight() - (float)p.y ) );
+}
+// Mouse and trackpad presses arrive as touches, requires UIApplicationSupportsIndirectInputEvents
+- (BOOL)aeHandleIndirectPointer:(UITouch*)uiTouch event:(UIEvent*)event ended:(BOOL)ended
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( uiTouch.type != UITouchTypeIndirectPointer || !input || !input->m_window ) { return NO; }
+	const UIEventButtonMask buttons = ended ? 0 : event.buttonMask;
+	const ae::Vec2 pos = [self aePosForTouch:uiTouch];
+	input->m_SetMousePos( pos );
+	input->m_leftButton = ( buttons & UIEventButtonMaskPrimary );
+	input->m_rightButton = ( buttons & UIEventButtonMaskSecondary );
+	input->m_middleButton = ( buttons & UIEventButtonMaskForButtonNumber( 3 ) );
+	input->m_UpdateMousePointer( pos );
+	return YES;
 }
 - (ae::Vec2)aePosForTouch:(UITouch*)t
 {
@@ -20916,16 +21162,10 @@ public:
 	const float height = ( input && input->m_window ) ? (float)input->m_window->GetHeight() : (float)self.bounds.size.height;
 	return ae::Vec2( (float)p.x, height - (float)p.y );
 }
-- (ae::Touch*)aeFindTouchById:(uint32_t)id
+- (ae::InputPointer*)aeFindTouchById:(uint32_t)id
 {
 	ae::Input* input = ae::_Globals::Get()->input;
-	if( !input ) { return nullptr; }
-	const auto matchFn = [&]( ae::Touch* t ){ return t->id == id; };
-	int32_t idx = input->m_newTouches.FindFn( matchFn );
-	if( idx >= 0 ) { return input->m_newTouches[ idx ]; }
-	idx = input->m_touches.FindFn( matchFn );
-	if( idx >= 0 ) { return input->m_touches[ idx ]; }
-	return nullptr;
+	return input ? input->m_FindPointer( id ) : nullptr;
 }
 - (void)touchesBegan:(NSSet< UITouch* >*)touches withEvent:(UIEvent*)event
 {
@@ -20934,14 +21174,10 @@ public:
 	input->m_TryNewFrame();
 	for( UITouch* uiTouch in touches )
 	{
-		if( input->m_newTouches.Full() ) { break; }
-		ae::Touch* touch = input->m_touchPool.New();
+		if( [self aeHandleIndirectPointer:uiTouch event:event ended:NO] ) { continue; }
+		ae::InputPointer* touch = input->m_NewPointer( [self aePosForTouch:uiTouch] );
 		if( !touch ) { break; }
-		input->m_touchIndex++;
-		if( input->m_touchIndex == 0 ) { input->m_touchIndex = 1; }
-		touch->id = input->m_touchIndex;
-		touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
-		input->m_newTouches.Append( touch );
+		touch->source = ae::InputPointerSource::Touch;
 		[_touchIds setObject:@(touch->id) forKey:uiTouch];
 	}
 }
@@ -20952,9 +21188,10 @@ public:
 	input->m_TryNewFrame();
 	for( UITouch* uiTouch in touches )
 	{
+		if( [self aeHandleIndirectPointer:uiTouch event:event ended:NO] ) { continue; }
 		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
 		if( !idNum ) { continue; }
-		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		ae::InputPointer* touch = [self aeFindTouchById:idNum.unsignedIntValue];
 		if( touch && !touch->ended )
 		{
 			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
@@ -20968,9 +21205,10 @@ public:
 	input->m_TryNewFrame();
 	for( UITouch* uiTouch in touches )
 	{
+		if( [self aeHandleIndirectPointer:uiTouch event:event ended:YES] ) { continue; }
 		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
 		if( !idNum ) { continue; }
-		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		ae::InputPointer* touch = [self aeFindTouchById:idNum.unsignedIntValue];
 		if( touch )
 		{
 			touch->_AppendSample( ae::GetTime(), [self aePosForTouch:uiTouch] );
@@ -20986,9 +21224,10 @@ public:
 	input->m_TryNewFrame();
 	for( UITouch* uiTouch in touches )
 	{
+		if( [self aeHandleIndirectPointer:uiTouch event:event ended:YES] ) { continue; }
 		NSNumber* idNum = [_touchIds objectForKey:uiTouch];
 		if( !idNum ) { continue; }
-		ae::Touch* touch = [self aeFindTouchById:idNum.unsignedIntValue];
+		ae::InputPointer* touch = [self aeFindTouchById:idNum.unsignedIntValue];
 		if( touch ) { touch->ended = true; }
 		[_touchIds removeObjectForKey:uiTouch];
 	}
@@ -21070,21 +21309,31 @@ public:
 	// Provide the CAEAGLLayer so Window::Initialize() can attach its
 	// renderbuffer, then run the app's Initialize callback.
 	ae::_Globals::Get()->eaglLayer = (__bridge void*)self.viewController.glView.layer;
-	if( !ae::_Globals::Get()->application->Initialize() )
+	if( !ae::_Globals::Get()->application->params.initialize() )
 	{
-		const int32_t termResult = ae::_Globals::Get()->application->Terminate();
+		const int32_t termResult = ae::_Globals::Get()->application->params.terminate();
 		exit( termResult );
 	}
 	self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick: )];
 	[self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSDefaultRunLoopMode];
 	return YES;
 }
+- (void)applicationDidEnterBackground:(UIApplication*)app
+{
+	self.displayLink.paused = YES; // No GL calls while in the background
+	ae::_Globals::Get()->application->Suspend();
+}
+- (void)applicationWillEnterForeground:(UIApplication*)app
+{
+	ae::_Globals::Get()->application->Resume();
+	self.displayLink.paused = NO;
+}
 - (void)tick:(CADisplayLink*)link
 {
-	if( !ae::_Globals::Get()->application->Update() )
+	if( !ae::_Globals::Get()->application->params.update() )
 	{
 		[link invalidate];
-		const int32_t termResult = ae::_Globals::Get()->application->Terminate();
+		const int32_t termResult = ae::_Globals::Get()->application->params.terminate();
 		exit( termResult );
 	}
 }
@@ -21106,33 +21355,50 @@ int32_t _Application::Run( int32_t argc, char* argv[] )
 #else
 	(void)argc;
 	(void)argv;
-	if( !Initialize() )
+	if( !params.initialize() )
 	{
-		return Terminate();
+		return params.terminate();
 	}
-#	if _AE_EMSCRIPTEN_
-		emscripten_set_main_loop_arg( []( void* fn ) { ( *(decltype( Update )*)fn )(); }, &Update, 0, 1 );
+#	if AE_ENABLE_AETHER_JS
+		// aether.js calls the _ae_Update(), _ae_Suspend(), _ae_Resume() and
+		// _ae_Terminate() exports from here on
+		ae::_Globals::Get()->application = this;
+		_ae_RunHostLoop();
 #	else
-		while( Update() ) {}
+		while( params.update() ) {}
 #	endif
-	return Terminate();
+	return params.terminate();
 #endif
+}
+
+void _Application::Suspend()
+{
+	if( !suspended )
+	{
+		suspended = true;
+		if( params.suspend ) { params.suspend(); }
+	}
+}
+
+void _Application::Resume()
+{
+	if( suspended )
+	{
+		suspended = false;
+		if( params.resume ) { params.resume(); }
+	}
 }
 
 //------------------------------------------------------------------------------
 // ae::Application
 //------------------------------------------------------------------------------
-int32_t Application( int32_t argc, char* argv[],
-	const AppInitializeFn& initialize,
-	const AppUpdateFn& update,
-	const AppTerminateFn& terminate )
+int32_t Application( int32_t argc, char* argv[], const ApplicationParams& params )
 {
 	_Application app;
-	app.Initialize = initialize;
-	app.Update = update;
-	app.Terminate = terminate;
+	app.params = params;
 	return app.Run( argc, argv );
 }
+
 
 uint32_t _ae_GetCurrentFramebuffer();
 #if _AE_LINUX_ || _AE_WINDOWS_
@@ -21859,8 +22125,10 @@ const _WlListenerFn _kWlPointerListener[] =
 		ae::Input* input = wl->m_GetInput();
 		if( input && !( input->m_captureMouse && wl->relativePointer ) )
 		{
+			const ae::Vec2 pos( _WlFixedToFloat( x ), wl->size.y - _WlFixedToFloat( y ) );
 			input->m_mousePosSet = false; // Don't register movement from where the cursor left
-			input->m_SetMousePos( ae::Vec2( _WlFixedToFloat( x ), wl->size.y - _WlFixedToFloat( y ) ) );
+			input->m_SetMousePos( pos );
+			input->m_UpdateMousePointer( pos );
 		}
 	} ),
 	// leave
@@ -21872,9 +22140,10 @@ const _WlListenerFn _kWlPointerListener[] =
 		{
 			input->m_mousePosSet = false;
 			// Button releases are not sent after the pointer leaves
-			input->mouse.leftButton = false;
-			input->mouse.rightButton = false;
-			input->mouse.middleButton = false;
+			input->m_leftButton = false;
+			input->m_rightButton = false;
+			input->m_middleButton = false;
+			input->m_UpdateMousePointer( input->m_cursorPos );
 		}
 	} ),
 	// motion
@@ -21884,8 +22153,9 @@ const _WlListenerFn _kWlPointerListener[] =
 		ae::Input* input = wl->m_GetInput();
 		if( input && !( input->m_captureMouse && wl->relativePointer ) ) // Relative motion is used while captured
 		{
-			input->m_SetMousePos( ae::Vec2( _WlFixedToFloat( x ), wl->size.y - _WlFixedToFloat( y ) ) );
-			input->mouse.usingTouch = false;
+			const ae::Vec2 pos( _WlFixedToFloat( x ), wl->size.y - _WlFixedToFloat( y ) );
+			input->m_SetMousePos( pos );
+			input->m_UpdateMousePointer( pos );
 		}
 	} ),
 	// button
@@ -21897,12 +22167,12 @@ const _WlListenerFn _kWlPointerListener[] =
 			const bool pressed = ( state == 1 );
 			switch( button )
 			{
-				case BTN_LEFT: input->mouse.leftButton = pressed; break;
-				case BTN_RIGHT: input->mouse.rightButton = pressed; break;
-				case BTN_MIDDLE: input->mouse.middleButton = pressed; break;
+				case BTN_LEFT: input->m_leftButton = pressed; break;
+				case BTN_RIGHT: input->m_rightButton = pressed; break;
+				case BTN_MIDDLE: input->m_middleButton = pressed; break;
 				default: break;
 			}
-			input->mouse.usingTouch = false;
+			input->m_UpdateMousePointer( input->m_cursorPos );
 		}
 	} ),
 	// axis
@@ -22806,9 +23076,9 @@ void _Wayland::m_ApplyAxis()
 		{
 			scroll = axisValue;
 		}
-		input->mouse.scroll.x += scroll.x;
-		input->mouse.scroll.y -= scroll.y;
-		input->mouse.usingTouch = ( axisSource == kSourceFinger );
+		input->scroll.delta.x += scroll.x;
+		input->scroll.delta.y -= scroll.y;
+		input->scroll.isTrackpad = ( axisSource == kSourceFinger );
 	}
 	axisValue = ae::Vec2( 0.0f );
 	axisDiscrete = ae::Vec2( 0.0f );
@@ -23269,23 +23539,10 @@ struct _LinuxGamepads
 };
 #endif // _AE_LINUX_
 
+
 //------------------------------------------------------------------------------
 // ae::Screen functions
 //------------------------------------------------------------------------------
-#if _AE_EMSCRIPTEN_
-void _aeEmscriptenGetCanvasInfo( int32_t* widthOut, int32_t* heightOut, float* scaleOut )
-{
-	double width, height;
-	if( emscripten_get_element_css_size( "#canvas", &width, &height ) != EMSCRIPTEN_RESULT_SUCCESS )
-	{
-		AE_FAIL_MSG( "Failed to get canvas size" );
-	}
-	if( widthOut ) { *widthOut = width + 0.5; }
-	if( heightOut ) { *heightOut = height + 0.5; }
-	if( scaleOut ) { *scaleOut = emscripten_get_device_pixel_ratio(); }
-}
-#endif
-
 ae::Array< ae::Screen, 16 > GetScreens()
 {
 	ae::Array< Screen, 16 > result;
@@ -23328,11 +23585,13 @@ ae::Array< ae::Screen, 16 > GetScreens()
 	{
 		result.Clear();
 	}
-#elif _AE_EMSCRIPTEN_
+#elif AE_ENABLE_AETHER_JS
 	{
 		Screen& s = result.Append( {} );
 		s.position = ae::Int2( 0, 0 );
-		_aeEmscriptenGetCanvasInfo( &s.size.x, &s.size.y, nullptr );
+		s.size = ae::Int2( _ae_CanvasWidth(), _ae_CanvasHeight() );
+		s.scaleFactor = _ae_CanvasScale();
+		s.isPrimary = true;
 	}
 #elif _AE_LINUX_
 	if( _Wayland* wl = _Wayland::Get() )
@@ -23425,6 +23684,12 @@ void Window::m_UpdateFocused( bool focused )
 		// @TODO: Input::m_UpdateFocused()
 		input->SetCursorState( ae::CursorState::Normal );
 		input->m_mousePosSet = false;
+		// Held input is released; its key and button ups go to the newly focused window
+		memset( input->m_keys, 0, sizeof(input->m_keys) );
+		input->m_leftButton = false;
+		input->m_rightButton = false;
+		input->m_middleButton = false;
+		input->m_UpdateMousePointer( input->m_cursorPos );
 	}
 }
 
@@ -23466,7 +23731,7 @@ void Window::m_Initialize( const char* frameStorageKey )
 	ex.hCursor = LoadCursor( NULL, IDC_ARROW );
 	ex.hbrBackground = (HBRUSH)GetStockObject( BLACK_BRUSH );
 	ex.lpszClassName = WNDCLASSNAME;
-	if( !RegisterClassEx( &ex ) ) // Create the window
+	if( !RegisterClassEx( &ex ) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS )
 	{
 		AE_FAIL_MSG( "Failed to register window. Error: #", GetLastError() );
 	}
@@ -23710,24 +23975,13 @@ void Window::m_Initialize( const char* frameStorageKey )
 	m_width = contentScreenRect.size.width;
 	m_height = contentScreenRect.size.height;
 	m_scaleFactor = nsWindow.backingScaleFactor;
-#elif _AE_EMSCRIPTEN_
+#elif AE_ENABLE_AETHER_JS
+	m_width = _ae_CanvasWidth();
+	m_height = _ae_CanvasHeight();
+	m_scaleFactor = _ae_CanvasScale();
 #if AE_ENABLE_OPENGL
-	EmscriptenWebGLContextAttributes attrs;
-	emscripten_webgl_init_context_attributes( &attrs );
-	attrs.alpha = 0;
-	attrs.majorVersion = ae::GLMajorVersion();
-	attrs.minorVersion = ae::GLMinorVersion();
-	m_context = emscripten_webgl_create_context( "canvas", &attrs );
-	AE_ASSERT( m_context > 0 );
-	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
-	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+	m_context = this; // @NOTE: Internal. aether.js owns the WebGL context, any non-null value marks it as present
 #endif
-	_aeEmscriptenGetCanvasInfo( &m_width, &m_height, &m_scaleFactor );
-	if( m_width == 300 && m_height == 150 )
-	{
-		AE_WARN( "Canvas size was not configured. Defaulting to WxH 100\%." );
-		m_fixCanvasStyle = true;
-	}
 #elif _AE_IOS_
 #if AE_ENABLE_OPENGL
 	EAGLContext* eaglContext = [ [ EAGLContext alloc ] initWithAPI:kEAGLRenderingAPIOpenGLES3 ];
@@ -23801,12 +24055,55 @@ void Window::m_Initialize( const char* frameStorageKey )
 
 void Window::Terminate()
 {
+	AE_ASSERT_MSG( !input, "Terminate the ae::Input using this window first" );
+	AE_ASSERT_MSG( !graphicsDevice, "Terminate the ae::GraphicsDevice using this window first" );
 	if( m_backBuffer )
 	{
 		ae::Delete( m_backBuffer );
 		m_backBuffer = nullptr;
 	}
-#if _AE_LINUX_
+#if _AE_WINDOWS_
+	if( window )
+	{
+		HWND hwnd = (HWND)window;
+#if AE_ENABLE_OPENGL
+		if( m_context )
+		{
+			if( wglGetCurrentContext() == (HGLRC)m_context )
+			{
+				wglMakeCurrent( nullptr, nullptr );
+			}
+			wglDeleteContext( (HGLRC)m_context );
+			m_context = nullptr;
+		}
+#endif
+		DestroyWindow( hwnd );
+		window = nullptr;
+	}
+#elif _AE_OSX_
+	if( window )
+	{
+		NSWindow* nsWindow = (NSWindow*)window;
+#if AE_ENABLE_OPENGL
+		if( m_context && [NSOpenGLContext currentContext] == (NSOpenGLContext*)m_context )
+		{
+			[NSOpenGLContext clearCurrentContext];
+		}
+		m_context = nullptr;
+#endif
+		aeApplicationDelegate* applicationDelegate = (aeApplicationDelegate*)[NSApp delegate];
+		if( applicationDelegate.aeWindow == this )
+		{
+			applicationDelegate.aeWindow = nullptr;
+		}
+		aeWindowDelegate* windowDelegate = (aeWindowDelegate*)nsWindow.delegate;
+		nsWindow.delegate = nil;
+		[windowDelegate release];
+		[NSApp removeWindowsItem:nsWindow];
+		[nsWindow close];
+		window = nullptr;
+	}
+#elif _AE_LINUX_
 	if( window )
 	{
 		_Wayland::Get()->TerminateWindow();
@@ -23838,12 +24135,6 @@ void Window::ActivateContext()
 	if( m_context )
 	{
 		[ EAGLContext setCurrentContext:(__bridge EAGLContext*)m_context ];
-	}
-#elif _AE_EMSCRIPTEN_
-	if( m_context )
-	{
-		EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
-		AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
 	}
 #elif _AE_LINUX_
 	if( window )
@@ -23928,6 +24219,11 @@ int32_t Window::GetHeight() const
 	return m_height;
 }
 
+ae::Rect Window::GetArea() const
+{
+	return ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( (float)m_width, (float)m_height ) );
+}
+
 uint32_t Window::GetDrawWidth() const
 {
 	return (uint32_t)( m_width * m_scaleFactor );
@@ -23940,12 +24236,6 @@ uint32_t Window::GetDrawHeight() const
 
 ae::Rect Window::GetSafeArea() const
 {
-#if _AE_EMSCRIPTEN_
-	EM_ASM( {
-		console.log( window.innerWidth, window.innerHeight );
-		console.log( window.visualViewport );
-	} );
-#endif
 	return ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( m_width, m_height ) );
 }
 
@@ -23963,8 +24253,8 @@ void Window::SetTitle( const char* title )
 			// Keeps the Windows menu's window-list entry in sync with the new title.
 			[NSApp updateWindowsItem:nsWindow];
 		}
-#elif _AE_EMSCRIPTEN_
-		emscripten_set_window_title( title );
+#elif AE_ENABLE_AETHER_JS
+		_ae_SetTitle( title );
 #elif _AE_LINUX_
 		if( window ) { _Wayland::Get()->SetTitle( title ); }
 #endif
@@ -24017,10 +24307,8 @@ Window::Mode Window::m_QueryMode() const
 		return Mode::Maximized;
 	}
 	return Mode::Windowed;
-#elif _AE_EMSCRIPTEN_
-	EmscriptenFullscreenChangeEvent s;
-	emscripten_get_fullscreen_status( &s );
-	return s.isFullscreen ? Mode::Fullscreen : Mode::Windowed;
+#elif AE_ENABLE_AETHER_JS
+	return _ae_Fullscreen() ? Mode::Fullscreen : Mode::Windowed;
 #elif _AE_LINUX_
 	if( !window )
 	{
@@ -24166,21 +24454,11 @@ void Window::m_SetMode( ae::Window::Mode mode )
 				break;
 		}
 	}
-#elif _AE_EMSCRIPTEN_
-	if( mode == Mode::Fullscreen )
+#elif AE_ENABLE_AETHER_JS
+	if( ( mode == Mode::Fullscreen ) != ( m_QueryMode() == Mode::Fullscreen ) )
 	{
-		if( GetLoggingEnabled() ) { AE_INFO( "request full screen" ); }
-		EmscriptenFullscreenStrategy strategy;
-		memset( &strategy, 0, sizeof(strategy) );
-		strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_DEFAULT;
-		strategy.canvasResolutionScaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF;
-		strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
-		emscripten_request_fullscreen_strategy( "canvas", true, &strategy );
-	}
-	else
-	{
-		if( GetLoggingEnabled() ) { AE_INFO( "exit full screen" ); }
-		emscripten_exit_fullscreen();
+		if( GetLoggingEnabled() ) { AE_INFO( mode == Mode::Fullscreen ? "request full screen" : "exit full screen" ); }
+		_ae_SetFullscreen( mode == Mode::Fullscreen );
 	}
 #elif _AE_LINUX_
 	if( window )
@@ -24346,8 +24624,12 @@ namespace ae {
 //------------------------------------------------------------------------------
 // ae::Input member functions
 //------------------------------------------------------------------------------
-#if _AE_EMSCRIPTEN_
-EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
+#if AE_ENABLE_AETHER_JS
+//------------------------------------------------------------------------------
+// Browser input, sent by aether.js
+//------------------------------------------------------------------------------
+// Applies a KeyboardEvent, identified by its keyCode
+void _aeBrowserKey( Input* input, uint32_t keyCode, bool down )
 {
 	static const std::array< ae::Key, 255 > s_keyMap = []()
 	{
@@ -24422,173 +24704,180 @@ EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* ke
 		keyMap[ 222 ] = ae::Key::Apostrophe;
 		return keyMap;
 	}();
-
-	// Start key handling
-	AE_ASSERT( userData );
-	Input* input = (Input*)userData;
 	input->m_TryNewFrame();
-
-	if( keyEvent->which < s_keyMap.size() && (int)s_keyMap[ keyEvent->which ] )
+	if( keyCode < s_keyMap.size() && (int)s_keyMap[ keyCode ] )
 	{
-		bool pressed = ( EMSCRIPTEN_EVENT_KEYUP != eventType );
-		input->m_keys[ (int)s_keyMap[ keyEvent->which ] ] = pressed;
+		input->m_keys[ (int)s_keyMap[ keyCode ] ] = down;
 	}
 	input->m_keys[ (int)ae::Key::RightShift ] = input->m_keys[ (int)ae::Key::LeftShift ];
 	input->m_keys[ (int)ae::Key::RightControl ] = input->m_keys[ (int)ae::Key::LeftControl ];
 	input->m_keys[ (int)ae::Key::RightAlt ] = input->m_keys[ (int)ae::Key::LeftAlt ];
 	input->m_UpdateModifiers();
-	return true;
 }
 
-EM_BOOL _aeEmscriptenHandleWheel( int eventType, const EmscriptenWheelEvent* wheelEvent, void* userData )
+// Applies a MouseEvent. targetPos is relative to the canvas's top left, and
+// buttons is MouseEvent.buttons. activation is true for mousedown and mouseup,
+// the only events the browser grants pointer lock from.
+void _aeBrowserMouse( Input* input, ae::Vec2 targetPos, ae::Vec2 movement, uint32_t buttons, bool activation )
 {
-	AE_ASSERT( userData );
-	Input* input = (Input*)userData;
 	input->m_TryNewFrame();
-	// DOM_DELTA_PIXEL (0) is the trackpad path, already in virtual DPI points.
-	// DOM_DELTA_LINE (1) is the mouse wheel path, three lines to a detent.
-	// DOM_DELTA_PAGE (2) is not handled — too coarse for camera/UI input.
-	if( wheelEvent->deltaMode != DOM_DELTA_PAGE )
-	{
-		const float scale = ( wheelEvent->deltaMode == DOM_DELTA_LINE ) ? ( _kScrollPointsPerNotch / 3.0f ) : 1.0f;
-		const float dx = (float)wheelEvent->deltaX * scale;
-		const float dy = -(float)wheelEvent->deltaY * scale; // Negate Y: browser positive=down, aether positive=up
-		input->mouse.usingTouch = ( wheelEvent->deltaMode == DOM_DELTA_PIXEL );
-		// Browsers report deltas the OS scroll direction has already been applied
-		// to, and expose no momentum phase, so everything is user driven scroll
-		input->mouse.scroll.x += dx;
-		input->mouse.scroll.y += dy;
-	}
-	return true;
-}
-
-EM_BOOL _aeEmscriptenHandleFocus( int eventType, const EmscriptenFocusEvent* focusEvent, void* userData )
-{
-	AE_ASSERT( userData );
-	Input* input = (Input*)userData;
-	input->m_window->m_UpdateFocused( eventType == EMSCRIPTEN_EVENT_FOCUS );
-	return true;
-}
-
-EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent* mouseEvent, void* userData )
-{
-	AE_ASSERT( userData );
-	Input* input = (Input*)userData;
-	input->m_TryNewFrame();
-	
-	const ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY );
-	input->m_SetMousePos( pos, ae::Vec2( mouseEvent->movementX, -mouseEvent->movementY ) );
-	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
-	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
-	input->mouse.middleButton = ( mouseEvent->buttons & 4 );
-
-	// Pointer lock is only granted from a user activation event, and must be
-	// requested synchronously within it.
-	const bool activation = ( eventType == EMSCRIPTEN_EVENT_MOUSEDOWN ) || ( eventType == EMSCRIPTEN_EVENT_MOUSEUP );
+	const ae::Vec2 pos = ae::Vec2( targetPos.x, input->m_window->GetHeight() - targetPos.y );
+	input->m_SetMousePos( pos, ae::Vec2( movement.x, -movement.y ) );
+	input->m_leftButton = ( buttons & 1 );
+	input->m_rightButton = ( buttons & 2 );
+	input->m_middleButton = ( buttons & 4 );
+	input->m_UpdateMousePointer( pos );
 	if( activation && ( input->m_wantedCursorState == ae::CursorState::HiddenAndCaptured ) && !input->m_captureMouse )
 	{
 		input->m_mousePosSet = false;
 		input->m_capturedMousePos = ae::Optional< ae::Vec2 >( pos );
-		emscripten_request_pointerlock( "canvas", true );
+		_ae_RequestPointerLock();
 	}
-
-	return true;
 }
 
-EM_BOOL _aeEmscriptenHandleLockChange( int eventType, const EmscriptenPointerlockChangeEvent* pointerlockChangeEvent, void* userData )
+// Applies a pointerlockchange, or a pointerlockerror when the browser refused
+// this canvas's request
+void _aeBrowserPointerLock( Input* input, bool locked, bool error )
 {
-	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_POINTERLOCKCHANGE );
-	Input* input = (Input*)userData;
-	input->m_SetMouseCaptured( pointerlockChangeEvent->isActive );
-	return true;
-}
-
-// Sent when the browser refuses a pointer lock request.
-EM_BOOL _aeEmscriptenHandleLockError( int eventType, const void* reserved, void* userData )
-{
-	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_POINTERLOCKERROR );
-	Input* input = (Input*)userData;
-	if( const ae::Vec2* p = input->m_capturedMousePos.TryGet() )
+	if( !error )
 	{
-		input->mouse.position = *p;
+		input->m_SetMouseCaptured( locked );
 	}
-	return true;
+	else if( input->m_wantedCursorState == ae::CursorState::HiddenAndCaptured && !input->m_captureMouse )
+	{
+		if( const ae::Vec2* p = input->m_capturedMousePos.TryGet() )
+		{
+			input->m_cursorPos = *p;
+		}
+	}
 }
 
-EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* touchEvent, void* userData )
+// Applies a WheelEvent. deltaMode is WheelEvent.deltaMode, and ctrlKey is held
+// for a trackpad pinch.
+void _aeBrowserWheel( Input* input, ae::Vec2 delta, uint32_t deltaMode, bool ctrlKey, bool isTrackpad )
 {
-	AE_ASSERT( userData );
-	Input* input = (Input*)userData;
 	input->m_TryNewFrame();
-
-	const double now = ae::GetTime();
-	for( uint32_t i = 0; i < touchEvent->numTouches; i++ )
+	// DOM_DELTA_PIXEL (0) is already in virtual DPI points.
+	// DOM_DELTA_LINE (1) is a mouse wheel, three lines to a detent.
+	// DOM_DELTA_PAGE (2) is not handled — too coarse for camera/UI input.
+	// A trackpad pinch arrives as a wheel event holding ctrl without the key
+	if( ctrlKey && !input->Get( ae::Key::LeftControl ) )
 	{
-		const EmscriptenTouchPoint* emTouch = &touchEvent->touches[ i ];
-		if( !emTouch->isChanged ) { continue; }
-		ae::Vec2 pos( (float)emTouch->targetX, (float)emTouch->targetY );
-		pos.y = input->m_window->GetHeight() - pos.y;
-		const uint32_t id = (uint32_t)emTouch->identifier;
-		const auto matchFn = [&]( ae::Touch* t ){ return t->id == id; };
-		ae::Touch* touch = nullptr;
-		int32_t idx = input->m_newTouches.FindFn( matchFn );
-		if( idx >= 0 ) { touch = input->m_newTouches[ idx ]; }
-		else
-		{
-			idx = input->m_touches.FindFn( matchFn );
-			if( idx >= 0 ) { touch = input->m_touches[ idx ]; }
-		}
-		switch( eventType )
-		{
-			case EMSCRIPTEN_EVENT_TOUCHSTART:
-			{
-				if( touch ) { break; } // Already known
-				if( input->m_newTouches.Full() ) { break; }
-				touch = input->m_touchPool.New();
-				if( !touch ) { break; }
-				touch->id = id;
-				touch->_AppendSample( now, pos );
-				input->m_newTouches.Append( touch );
-				break;
-			}
-			case EMSCRIPTEN_EVENT_TOUCHEND:
-			{
-				if( !touch ) { break; }
-				touch->_AppendSample( now, pos );
-				touch->ended = true;
-				break;
-			}
-			case EMSCRIPTEN_EVENT_TOUCHCANCEL:
-			{
-				if( !touch ) { break; }
-				touch->ended = true;
-				break;
-			}
-			case EMSCRIPTEN_EVENT_TOUCHMOVE:
-			{
-				if( touch && !touch->ended )
-				{
-					touch->_AppendSample( now, pos );
-				}
-				break;
-			}
-			default:
-				break;
-		}
+		input->zoomDelta -= delta.y * 0.01f;
 	}
-
-	return true;
+	else if( deltaMode != 2 )
+	{
+		const float scale = ( deltaMode == 1 ) ? ( _kScrollPointsPerNotch / 3.0f ) : 1.0f;
+		input->scroll.isTrackpad = isTrackpad;
+		// Browsers report deltas the OS scroll direction has already been applied
+		// to, and expose no momentum phase, so everything is user driven scroll.
+		// Negate Y: browser positive=down, aether positive=up.
+		input->scroll.delta.x += delta.x * scale;
+		input->scroll.delta.y -= delta.y * scale;
+	}
 }
 
-EM_BOOL _aeEmscriptenHandleFullScreen( int eventType, const EmscriptenFullscreenChangeEvent* fullscreenChangeEvent, void* userData )
+enum class _aeTouchPhase { Start, Move, End, Cancel };
+
+// Applies one changed Touch of a TouchEvent. targetPos is relative to the
+// canvas's top left.
+void _aeBrowserTouch( Input* input, _aeTouchPhase phase, uint32_t id, ae::Vec2 targetPos, double time )
 {
-	AE_ASSERT( userData );
-	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_FULLSCREENCHANGE );
-	ae::Window* window = ( (Input*)userData )->m_window;
-	if( window->GetLoggingEnabled() ) { AE_INFO( "full screen -> #", ( fullscreenChangeEvent->isFullscreen ? "true" : "false" ) ); }
-	return true;
+	input->m_TryNewFrame();
+	const ae::Vec2 pos( targetPos.x, input->m_window->GetHeight() - targetPos.y );
+	// Identifiers are reused once a touch lifts, so ended touches never match
+	const auto matchFn = [&]( ae::InputPointer* t ){ return t->_platformId == id && t->source == ae::InputPointerSource::Touch && !t->ended; };
+	ae::InputPointer* touch = nullptr;
+	int32_t idx = input->m_newPointers.FindFn( matchFn );
+	if( idx >= 0 ) { touch = input->m_newPointers[ idx ]; }
+	else
+	{
+		idx = input->m_pointers.FindFn( matchFn );
+		if( idx >= 0 ) { touch = input->m_pointers[ idx ]; }
+	}
+	switch( phase )
+	{
+		case _aeTouchPhase::Start:
+			if( touch ) { break; } // Already known
+			touch = input->m_NewPointer( pos );
+			if( !touch ) { break; }
+			touch->source = ae::InputPointerSource::Touch;
+			touch->_platformId = id;
+			break;
+		case _aeTouchPhase::End:
+			if( !touch ) { break; }
+			touch->_AppendSample( time, pos );
+			touch->ended = true;
+			break;
+		case _aeTouchPhase::Cancel:
+			if( !touch ) { break; }
+			touch->ended = true;
+			break;
+		case _aeTouchPhase::Move:
+			if( touch && !touch->ended ) { touch->_AppendSample( time, pos ); }
+			break;
+	}
 }
+#endif
 
+#if AE_ENABLE_AETHER_JS
+//------------------------------------------------------------------------------
+// aether.js entry points
+//------------------------------------------------------------------------------
+} // ae end
+// The import ABI version, read by aether.js before instantiating
+__asm__( ".section .custom_section.aether_abi,\"\",@\n.ascii \"1\"\n.text\n" );
+extern "C" int __main_void();
+extern "C" __attribute__(( export_name( "_ae_Main" ) )) int32_t _ae_Main()
+{
+	return __main_void();
+}
+// Memory aether.js hands to the program, eg. arrays filled by an import
+extern "C" __attribute__(( export_name( "_ae_Alloc" ) )) void* _ae_Alloc( uint32_t size ) { return malloc( size ); }
+extern "C" __attribute__(( export_name( "_ae_Free" ) )) void _ae_Free( void* p ) { free( p ); }
+extern "C" __attribute__(( export_name( "_ae_Update" ) )) int32_t _ae_Update()
+{
+	return ae::_Globals::Get()->application->params.update();
+}
+extern "C" __attribute__(( export_name( "_ae_Suspend" ) )) void _ae_Suspend()
+{
+	ae::_Globals::Get()->application->Suspend();
+}
+extern "C" __attribute__(( export_name( "_ae_Resume" ) )) void _ae_Resume()
+{
+	ae::_Globals::Get()->application->Resume();
+}
+extern "C" __attribute__(( export_name( "_ae_Terminate" ) )) int32_t _ae_Terminate()
+{
+	return ae::_Globals::Get()->application->params.terminate();
+}
+extern "C" __attribute__(( export_name( "_ae_OnKey" ) )) void _ae_OnKey( uint32_t keyCode, int32_t down )
+{
+	if( ae::Input* input = ae::_Globals::Get()->input ) { ae::_aeBrowserKey( input, keyCode, down ); }
+}
+extern "C" __attribute__(( export_name( "_ae_OnMouse" ) )) void _ae_OnMouse( float x, float y, float movementX, float movementY, uint32_t buttons, int32_t activation )
+{
+	if( ae::Input* input = ae::_Globals::Get()->input ) { ae::_aeBrowserMouse( input, ae::Vec2( x, y ), ae::Vec2( movementX, movementY ), buttons, activation ); }
+}
+extern "C" __attribute__(( export_name( "_ae_OnPointerLock" ) )) void _ae_OnPointerLock( int32_t locked, int32_t error )
+{
+	if( ae::Input* input = ae::_Globals::Get()->input ) { ae::_aeBrowserPointerLock( input, locked, error ); }
+}
+extern "C" __attribute__(( export_name( "_ae_OnWheel" ) )) void _ae_OnWheel( float deltaX, float deltaY, uint32_t deltaMode, int32_t ctrlKey, int32_t isTrackpad )
+{
+	if( ae::Input* input = ae::_Globals::Get()->input ) { ae::_aeBrowserWheel( input, ae::Vec2( deltaX, deltaY ), deltaMode, ctrlKey, isTrackpad ); }
+}
+// phase: 0 start, 1 move, 2 end, 3 cancel
+extern "C" __attribute__(( export_name( "_ae_OnTouch" ) )) void _ae_OnTouch( uint32_t phase, uint32_t id, float x, float y )
+{
+	if( ae::Input* input = ae::_Globals::Get()->input ) { ae::_aeBrowserTouch( input, (ae::_aeTouchPhase)phase, id, ae::Vec2( x, y ), ae::GetTime() ); }
+}
+extern "C" __attribute__(( export_name( "_ae_OnFocus" ) )) void _ae_OnFocus( int32_t focused )
+{
+	ae::Input* input = ae::_Globals::Get()->input;
+	if( input && input->m_window ) { input->m_window->m_UpdateFocused( focused ); }
+}
+namespace ae {
 #endif
 
 Input::Input()
@@ -24615,27 +24904,7 @@ void Input::Initialize( Window* window )
 		gamepadsPrev[ i ].playerIndex = i;
 	}
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleKey );
-	emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleKey );
-	emscripten_set_mousedown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
-	emscripten_set_mouseup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
-	emscripten_set_mousemove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
-	emscripten_set_mouseenter_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
-	emscripten_set_mouseleave_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
-	emscripten_set_touchstart_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
-	emscripten_set_touchend_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
-	emscripten_set_touchmove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
-	emscripten_set_touchcancel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
-	// @NOTE: Internal. Window level wheel listeners are passive in Chrome, so
-	// preventDefault() is ignored there and the page scrolls.
-	emscripten_set_wheel_callback( "#canvas", this, true, &_aeEmscriptenHandleWheel );
-	emscripten_set_focus_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
-	emscripten_set_blur_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFocus );
-	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
-	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, true, &_aeEmscriptenHandleLockChange );
-	emscripten_set_pointerlockerror_callback( EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, true, &_aeEmscriptenHandleLockError );
-#elif _AE_OSX_
+#if _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
 	m_textInputHandler = textInput;
@@ -24648,8 +24917,11 @@ void Input::Initialize( Window* window )
 	[nsWindow orderFrontRegardless];
 	[GCController setShouldMonitorBackgroundEvents: YES];
 	m_naturalScroll = [[NSUserDefaults standardUserDefaults] boolForKey:@"com.apple.swipescrolldirection"];
-	// Triggers applicationWillFinishLaunching/applicationDidFinishLaunching.
-	[[NSApplication sharedApplication] run];
+	// Triggers applicationWillFinishLaunching/applicationDidFinishLaunching, once per process.
+	if( ![[NSRunningApplication currentApplication] isFinishedLaunching] )
+	{
+		[[NSApplication sharedApplication] run];
+	}
 #endif
 
 	Pump(); // Pump once to process any system window creation events
@@ -24666,6 +24938,11 @@ void Input::Terminate()
 	{
 		ae::_Globals::Get()->input = nullptr;
 	}
+	if( m_window && m_window->input == this )
+	{
+		m_window->input = nullptr;
+	}
+	m_window = nullptr;
 }
 
 void Input::m_TryNewFrame()
@@ -24673,18 +24950,18 @@ void Input::m_TryNewFrame()
 	if( m_pendingNewFrame )
 	{
 		memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-		mousePrev = mouse;
-		mouse.movement = ae::Vec2( 0.0f );
-		mouse.scroll = ae::Vec2( 0.0f );
-		mouse.scrollInertia = ae::Vec2( 0.0f );
-		// Discard touches that ended before they were adopted via PumpTouches().
+		cursorMovement = ae::Vec2( 0.0f );
+		scroll.delta = ae::Vec2( 0.0f );
+		scroll.inertia = ae::Vec2( 0.0f );
+		zoomDelta = 0.0f;
+		// Discard touches that ended before they were adopted via PumpPointers().
 		// Per the staged API contract, ended touches are never returned.
-		for( int32_t i = (int32_t)m_newTouches.Length() - 1; i >= 0; i-- )
+		for( int32_t i = (int32_t)m_newPointers.Length() - 1; i >= 0; i-- )
 		{
-			if( m_newTouches[ i ]->ended )
+			if( m_newPointers[ i ]->ended )
 			{
-				m_touchPool.Delete( m_newTouches[ i ] );
-				m_newTouches.Remove( i );
+				m_pointerPool.Delete( m_newPointers[ i ] );
+				m_newPointers.Remove( i );
 			}
 		}
 		m_pendingNewFrame = false;
@@ -24718,30 +24995,30 @@ void Input::Pump()
 			switch( msg.message )
 			{
 				case WM_LBUTTONDOWN:
-					mouse.leftButton = true;
+					m_leftButton = true;
 					break;
 				case WM_LBUTTONUP:
-					mouse.leftButton = false;
+					m_leftButton = false;
 					break;
 				case WM_MBUTTONDOWN:
-					mouse.middleButton = true;
+					m_middleButton = true;
 					break;
 				case WM_MBUTTONUP:
-					mouse.middleButton = false;
+					m_middleButton = false;
 					break;
 				case WM_RBUTTONDOWN:
-					mouse.rightButton = true;
+					m_rightButton = true;
 					break;
 				case WM_RBUTTONUP:
-					mouse.rightButton = false;
+					m_rightButton = false;
 					break;
 				case WM_MOUSEWHEEL:
 					// Detents, converted to points. Windows has no OS scroll
 					// direction setting and no momentum phase
-					mouse.scroll.y += ( GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA ) * _kScrollPointsPerNotch;
+					scroll.delta.y += ( GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA ) * _kScrollPointsPerNotch;
 					break;
 				case WM_MOUSEHWHEEL:
-					mouse.scroll.x += ( GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA ) * _kScrollPointsPerNotch;
+					scroll.delta.x += ( GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA ) * _kScrollPointsPerNotch;
 					break;
 				case WM_CHAR:
 				{
@@ -24770,6 +25047,24 @@ void Input::Pump()
 						m_text.pop_back();
 					}
 					break;
+			}
+			switch( msg.message )
+			{
+				case WM_MOUSEMOVE:
+				case WM_LBUTTONDOWN:
+				case WM_LBUTTONUP:
+				case WM_MBUTTONDOWN:
+				case WM_MBUTTONUP:
+				case WM_RBUTTONDOWN:
+				case WM_RBUTTONUP:
+				{
+					// Captured while held so the release is received outside the window
+					const bool held = m_leftButton || m_middleButton || m_rightButton;
+					if( held && GetCapture() != msg.hwnd ) { SetCapture( msg.hwnd ); }
+					else if( !held && GetCapture() == msg.hwnd ) { ReleaseCapture(); }
+					m_UpdateMousePointer( ae::Vec2( (float)GET_X_LPARAM( msg.lParam ), m_window->GetHeight() - (float)GET_Y_LPARAM( msg.lParam ) ) );
+					break;
+				}
 			}
 		}
 		TranslateMessage( &msg );
@@ -24830,71 +25125,78 @@ void Input::Pump()
 			bool anyClick = false;
 			switch( event.type )
 			{
-				// @NOTE: Move events are not sent if any mouse button is clicked
-				case NSEventTypeMouseMoved:
-				case NSEventTypeLeftMouseDragged:
-				case NSEventTypeRightMouseDragged:
-				case NSEventTypeOtherMouseDragged:
-					if( cursorWithinWindow )
-					{
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-					}
-					break;
 				case NSEventTypeLeftMouseDown:
 					if( cursorWithinWindow )
 					{
-						mouse.leftButton = true;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						m_leftButton = true;
 						anyClick = true;
 					}
 					break;
 				case NSEventTypeLeftMouseUp:
-					mouse.leftButton = false;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					m_leftButton = false;
 					break;
 				case NSEventTypeRightMouseDown:
 					if( cursorWithinWindow )
 					{
-						mouse.rightButton = true;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						m_rightButton = true;
 						anyClick = true;
 					}
 					break;
 				case NSEventTypeRightMouseUp:
-					mouse.rightButton = false;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					m_rightButton = false;
 					break;
 				case NSEventTypeOtherMouseDown:
 					if( cursorWithinWindow )
 					{
-						mouse.middleButton = true;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						m_middleButton = true;
 						anyClick = true;
 					}
 					break;
 				case NSEventTypeOtherMouseUp:
-					mouse.middleButton = false;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					m_middleButton = false;
 					break;
 				case NSEventTypeScrollWheel:
 					if( cursorWithinWindow )
 					{
-						mouse.usingTouch = [event hasPreciseScrollingDeltas]; // @NOTE: Scroll is never NSEventSubtypeTouch
+						scroll.isTrackpad = [event hasPreciseScrollingDeltas];
 						// Precise devices report points already, wheels report detents
-						const float scale = mouse.usingTouch ? 1.0f : _kScrollPointsPerNotch;
+						const float scale = scroll.isTrackpad ? 1.0f : _kScrollPointsPerNotch;
 						const float dx = (float)event.scrollingDeltaX * scale;
 						const float dy = (float)event.scrollingDeltaY * scale;
 						if( event.momentumPhase == NSEventPhaseNone )
 						{
-							mouse.scroll.x += dx;
-							mouse.scroll.y += dy;
+							scroll.delta.x += dx;
+							scroll.delta.y += dy;
 						}
 						else
 						{
-							mouse.scrollInertia.x += dx;
-							mouse.scrollInertia.y += dy;
+							scroll.inertia.x += dx;
+							scroll.inertia.y += dy;
 						}
 					}
+					break;
+				case NSEventTypeMagnify:
+					if( cursorWithinWindow )
+					{
+						zoomDelta += log1pf( (float)event.magnification );
+					}
+					break;
+				default:
+					break;
+			}
+			switch( event.type )
+			{
+				case NSEventTypeMouseMoved:
+				case NSEventTypeLeftMouseDragged:
+				case NSEventTypeRightMouseDragged:
+				case NSEventTypeOtherMouseDragged:
+				case NSEventTypeLeftMouseDown:
+				case NSEventTypeLeftMouseUp:
+				case NSEventTypeRightMouseDown:
+				case NSEventTypeRightMouseUp:
+				case NSEventTypeOtherMouseDown:
+				case NSEventTypeOtherMouseUp:
+					m_UpdateMousePointer( cursorLocalPos );
 					break;
 				default:
 					break;
@@ -24932,24 +25234,10 @@ void Input::Pump()
 		[NSApp updateWindowsItem:nsWindow];
 	}
 	m_window->m_SyncMode();
-#elif _AE_EMSCRIPTEN_
+#elif AE_ENABLE_AETHER_JS
+	if( m_window )
 	{
-		if( m_window->m_fixCanvasStyle )
-		{
-			// @NOTE: This is a hack to fix the canvas style when the size is
-			// not specified by the web page. This is needed in particular for
-			// the default Emscripten template.
-			EM_ASM( { document.getElementById('canvas').style.width = '100%'; } );
-			EM_ASM( { document.getElementById('canvas').style.height = '100%'; } );
-			// This is needed in addition to the width and height above to fix the
-			// aspect ratio when the canvas is resized so the height is not zero.
-			EM_ASM( { document.getElementById('canvas').style.aspectRatio = '2 / 1'; } );
-		}
-
-		int32_t width, height;
-		float scale;
-		_aeEmscriptenGetCanvasInfo( &width, &height, &scale );
-		m_window->m_UpdateSize( width, height, scale );
+		m_window->m_UpdateSize( _ae_CanvasWidth(), _ae_CanvasHeight(), _ae_CanvasScale() );
 		m_window->m_SyncMode();
 	}
 #elif _AE_LINUX_
@@ -24961,11 +25249,11 @@ void Input::Pump()
 	}
 #endif
 
-#if !_AE_EMSCRIPTEN_ && !_AE_LINUX_
+#if !AE_ENABLE_AETHER_JS && !_AE_LINUX_
 	// Mouse capture (Wayland uses relative pointer events instead of warping)
 	if( m_captureMouse )
 	{
-		mouse.movement = ae::Vec2( 0.0f );
+		cursorMovement = ae::Vec2( 0.0f );
 		if( m_window )
 		{
 			const ae::Vec2 localCenter( m_window->GetWidth() / 2.0f, m_window->GetHeight() / 2.0f );
@@ -24973,12 +25261,12 @@ void Input::Pump()
 			// Mouse pos is previously set elsewhere, so when the mouse position is set
 			// to the window center the movement vector needs to be reversed.
 			m_SetMousePos( localCenter );
-			mouse.movement = -mouse.movement;
+			cursorMovement = -cursorMovement;
 		}
 	}
 #endif
 
-	if( m_wantedCursorState == ae::CursorState::HiddenUntilMoved && mouse.movement != ae::Vec2( 0.0f ) )
+	if( m_wantedCursorState == ae::CursorState::HiddenUntilMoved && cursorMovement != ae::Vec2( 0.0f ) )
 	{
 		m_wantedCursorState = ae::CursorState::Normal;
 	}
@@ -25492,42 +25780,46 @@ void Input::Pump()
 			}
 		}
 	}
-#elif _AE_EMSCRIPTEN_
-	if( emscripten_sample_gamepad_data() == EMSCRIPTEN_RESULT_SUCCESS )
+#elif AE_ENABLE_AETHER_JS
 	{
-		const uint32_t gamepadCount = emscripten_get_num_gamepads();
+		const bool readGamepads = !m_gamepadRequiresFocus || ( m_window && m_window->GetFocused() );
+		const uint32_t gamepadCount = ae::Min( (uint32_t)_ae_GamepadCount(), countof( gamepads ) );
 		for( uint32_t i = 0; i < gamepadCount; i++ )
 		{
 			GamepadState& gp = gamepads[ i ];
-			EmscriptenGamepadEvent gamepadState;
-			if( emscripten_get_gamepad_status( i, &gamepadState ) == EMSCRIPTEN_RESULT_SUCCESS )
+			float axes[ 4 ] = {};
+			float values[ 17 ] = {};
+			uint32_t pressed = 0;
+			const bool connected = _ae_Gamepad( i, axes, values, &pressed );
+			const auto button = [ pressed ]( uint32_t b ) { return ( pressed & ( 1u << b ) ) != 0; };
+			if( !connected || !readGamepads )
 			{
-				gp.connected = true;
-				gp.leftAnalog = Vec2( gamepadState.axis[ 0 ], -gamepadState.axis[ 1 ] );
-				gp.rightAnalog = Vec2( gamepadState.axis[ 2 ], -gamepadState.axis[ 3 ] );
-				gp.up = gamepadState.digitalButton[ 12 ];
-				gp.down = gamepadState.digitalButton[ 13 ];
-				gp.left = gamepadState.digitalButton[ 14 ];
-				gp.right = gamepadState.digitalButton[ 15 ];
-				gp.start = gamepadState.digitalButton[ 9 ];
-				gp.select = gamepadState.digitalButton[ 8 ];
-				gp.a = gamepadState.digitalButton[ 0 ];
-				gp.b = gamepadState.digitalButton[ 1 ];
-				gp.x = gamepadState.digitalButton[ 2 ];
-				gp.y = gamepadState.digitalButton[ 3 ];
-				gp.leftBumper = gamepadState.digitalButton[ 4 ];
-				gp.rightBumper = gamepadState.digitalButton[ 5 ];
-				gp.leftTrigger = gamepadState.analogButton[ 6 ];
-				gp.rightTrigger = gamepadState.analogButton[ 7 ];
-				gp.leftAnalogClick = gamepadState.digitalButton[ 10 ];
-				gp.rightAnalogClick = gamepadState.digitalButton[ 11 ];
-				gp.batteryLevel = 1.0f;
-				gp.batteryState = GamepadState::BatteryState::Wired;
+				gp = GamepadState();
+				gp.playerIndex = i;
+				gp.connected = connected;
+				continue;
 			}
-			else
-			{
-				gp.connected = false;
-			}
+			gp.connected = true;
+			gp.leftAnalog = Vec2( axes[ 0 ], -axes[ 1 ] );
+			gp.rightAnalog = Vec2( axes[ 2 ], -axes[ 3 ] );
+			gp.up = button( 12 );
+			gp.down = button( 13 );
+			gp.left = button( 14 );
+			gp.right = button( 15 );
+			gp.start = button( 9 );
+			gp.select = button( 8 );
+			gp.a = button( 0 );
+			gp.b = button( 1 );
+			gp.x = button( 2 );
+			gp.y = button( 3 );
+			gp.leftBumper = button( 4 );
+			gp.rightBumper = button( 5 );
+			gp.leftTrigger = values[ 6 ];
+			gp.rightTrigger = values[ 7 ];
+			gp.leftAnalogClick = button( 10 );
+			gp.rightAnalogClick = button( 11 );
+			gp.batteryLevel = 1.0f;
+			gp.batteryState = GamepadState::BatteryState::Wired;
 		}
 	}
 #elif _AE_LINUX_
@@ -25553,12 +25845,75 @@ void Input::Pump()
 			|| fabsf(gp.leftAnalog.x) > 0.0f || fabsf(gp.leftAnalog.y) > 0.0f
 			|| fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
 	}
+	m_UpdateHoverPos();
+}
+
+void Input::m_UpdateHoverPos()
+{
+	hoverPos = m_cursorSeen ? ae::Optional< ae::Vec2 >( m_cursorPos ) : ae::Optional< ae::Vec2 >();
+}
+
+ae::InputPointer* Input::m_NewPointer( ae::Vec2 pos )
+{
+	ae::InputPointer* pointer = m_newPointers.Full() ? nullptr : m_pointerPool.New();
+	if( !pointer )
+	{
+		AE_WARN( "Pointer discarded, # claimed pointers have not been released with ae::Input::ReleasePointer()", m_pointers.Length() );
+		return nullptr;
+	}
+	m_pointerIndex++;
+	if( m_pointerIndex == 0 ) { m_pointerIndex = 1; }
+	pointer->id = m_pointerIndex;
+	pointer->_AppendSample( ae::GetTime(), pos );
+	m_newPointers.Append( pointer );
+	return pointer;
+}
+
+ae::InputPointer* Input::m_FindPointer( uint32_t id )
+{
+	if( !id ) { return nullptr; }
+	const auto matchFn = [ id ]( const ae::InputPointer* p ){ return p->id == id; };
+	int32_t idx = m_newPointers.FindFn( matchFn );
+	if( idx >= 0 ) { return m_newPointers[ idx ]; }
+	idx = m_pointers.FindFn( matchFn );
+	if( idx >= 0 ) { return m_pointers[ idx ]; }
+	return nullptr;
+}
+
+void Input::m_UpdateMousePointer( ae::Vec2 pos )
+{
+	// Indexed by ae::InputPointerButton
+	const bool held[ 3 ] = { m_leftButton, m_rightButton, m_middleButton };
+	for( uint32_t i = 0; i < 3; i++ )
+	{
+		ae::InputPointer* pointer = m_FindPointer( m_mousePointerIds[ i ] );
+		if( held[ i ] && !m_mouseButtonsHeld[ i ] )
+		{
+			pointer = m_NewPointer( pos );
+			if( pointer )
+			{
+				pointer->button = (ae::InputPointerButton)i;
+				pointer->source = ae::InputPointerSource::Mouse;
+			}
+			m_mousePointerIds[ i ] = pointer ? pointer->id : 0;
+		}
+		else if( pointer && pointer->Position() != pos )
+		{
+			pointer->_AppendSample( ae::GetTime(), pos );
+		}
+		if( !held[ i ] )
+		{
+			if( pointer ) { pointer->ended = true; }
+			m_mousePointerIds[ i ] = 0;
+		}
+		m_mouseButtonsHeld[ i ] = held[ i ];
+	}
 }
 
 void Input::SetCursorState( ae::CursorState state )
 {
 	const bool capture = ( state == ae::CursorState::HiddenAndCaptured );
-#if !_AE_EMSCRIPTEN_
+#if !AE_ENABLE_AETHER_JS
 	if( !m_window )
 	{
 		return;
@@ -25574,12 +25929,12 @@ void Input::SetCursorState( ae::CursorState state )
 		return;
 	}
 	m_wantedCursorState = state;
-#if _AE_EMSCRIPTEN_
+#if AE_ENABLE_AETHER_JS
 	// Releasing the pointer needs no user activation, acquiring it is deferred
 	// to the next mouse button event.
 	if( !capture && m_captureMouse )
 	{
-		emscripten_exit_pointerlock();
+		_ae_ExitPointerLock();
 	}
 #else
 	if( capture != m_captureMouse )
@@ -25640,7 +25995,7 @@ void Input::SetTextMode( bool enabled )
 bool Input::Get( ae::Key key ) const
 {
 	const bool result = m_keys[ static_cast< int >( key ) ];
-#if _AE_EMSCRIPTEN_ && _AE_DEBUG_
+#if AE_ENABLE_AETHER_JS && _AE_DEBUG_
 	if( key == ae::Key::Escape && result && !GetPrev( key ) )
 	{
 		AE_WARN( "The escape key is reserved in browsers to release the cursor and exit fullscreen" );
@@ -25653,8 +26008,65 @@ bool Input::GetPrev( ae::Key key ) const
 {
 	return m_keysPrev[ static_cast< int >( key ) ];
 }
+#else
+//------------------------------------------------------------------------------
+// ae::Window, ae::Input and ae::Application stubs, see AE_ENABLE_APPLICATION
+//------------------------------------------------------------------------------
+ae::Array< ae::Screen, 16 > GetScreens() { return {}; }
+int32_t Application( int32_t argc, char* argv[], const ApplicationParams& params )
+{
+	AE_FAIL_MSG( "ae::Application() requires AE_ENABLE_APPLICATION" );
+	return -1;
+}
+Window::Window() {}
+Input::Input() {}
+bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor, const char* frameStorageKey ) { return false; }
+bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor, const char* frameStorageKey ) { return false; }
+void Window::m_UpdateSize( int32_t width, int32_t height, float scaleFactor ) {}
+void Window::m_UpdateFocused( bool focused ) {}
+ae::Int2 Window::m_aeToNative( ae::Int2 pos, ae::Int2 size ) { return {}; }
+ae::Int2 Window::m_nativeToAe( ae::Int2 pos, ae::Int2 size ) { return {}; }
+void Window::m_Initialize( const char* frameStorageKey ) {}
+void Window::Terminate() {}
+void Window::ActivateContext() {}
+void Window::BindBackBuffer() {}
+void Window::Present() {}
+void Window::m_UpdateBackBuffer() {}
+bool Window::GetAlwaysOnTop() const { return false; }
+int32_t Window::GetWidth() const { return {}; }
+int32_t Window::GetHeight() const { return {}; }
+ae::Rect Window::GetArea() const { return {}; }
+uint32_t Window::GetDrawWidth() const { return {}; }
+uint32_t Window::GetDrawHeight() const { return {}; }
+ae::Rect Window::GetSafeArea() const { return {}; }
+void Window::SetTitle( const char* title ) {}
+Window::Mode Window::m_QueryMode() const { return {}; }
+void Window::SetFullScreen( bool fullScreen ) {}
+void Window::SetMaximized( bool maximized ) {}
+void Window::SetMinimized( bool minimized ) {}
+void Window::m_SetMode( ae::Window::Mode mode ) {}
+void Window::SetPosition( Int2 pos ) {}
+void Window::SetSize( uint32_t width, uint32_t height ) {}
+void Window::SetAlwaysOnTop( bool alwaysOnTop ) {}
+void Input::Initialize( Window* window ) {}
+float Input::GetScrollPointsPerNotch() const { return {}; }
+void Input::Terminate() {}
+void Input::m_TryNewFrame() {}
+void Input::Pump() {}
+void Input::m_UpdateHoverPos() {}
+ae::InputPointer* Input::m_NewPointer( ae::Vec2 pos ) { return nullptr; }
+ae::InputPointer* Input::m_FindPointer( uint32_t id ) { return nullptr; }
+void Input::m_UpdateMousePointer( ae::Vec2 pos ) {}
+void Input::SetCursorState( ae::CursorState state ) {}
+ae::CursorState Input::GetCursorState() const { return {}; }
+bool Input::GetCursorHidden() const { return false; }
+bool Input::GetCursorLocked() const { return false; }
+void Input::SetTextMode( bool enabled ) {}
+bool Input::Get( ae::Key key ) const { return false; }
+bool Input::GetPrev( ae::Key key ) const { return false; }
+#endif // AE_ENABLE_APPLICATION
 
-ae::Vec2 Touch::Position() const
+ae::Vec2 InputPointer::Position() const
 {
 	if( samples.Length() )
 	{
@@ -25667,7 +26079,12 @@ ae::Vec2 Touch::Position() const
 	}
 }
 
-ae::Vec2 Touch::StartPosition() const
+ae::Vec2 InputPointer::StartDelta() const
+{
+	return Position() - StartPosition();
+}
+
+ae::Vec2 InputPointer::StartPosition() const
 {
 	if( samples.Length() )
 	{
@@ -25680,12 +26097,7 @@ ae::Vec2 Touch::StartPosition() const
 	}
 }
 
-ae::Vec2 Touch::StartDelta() const
-{
-	return Position() - StartPosition();
-}
-
-double Touch::Lifetime() const
+double InputPointer::Lifetime() const
 {
 	if( samples.Length() < 2 )
 	{
@@ -25694,7 +26106,7 @@ double Touch::Lifetime() const
 	return samples[ samples.Length() - 1 ].time - samples[ 0 ].time;
 }
 
-void Touch::_AppendSample( double time, ae::Vec2 position )
+void InputPointer::_AppendSample( double time, ae::Vec2 position )
 {
 	if( samples.Full() )
 	{
@@ -25719,46 +26131,62 @@ void Touch::_AppendSample( double time, ae::Vec2 position )
 		samples.Remove( dropIdx );
 	}
 	samples.Append( { time, position } );
+	_maxStartDistance = ae::Max( _maxStartDistance, ( position - samples[ 0 ].position ).Length() );
 }
 
-const ae::Touch* Input::PumpTouches()
+#if AE_ENABLE_APPLICATION
+const ae::InputPointer* Input::PumpPointers()
 {
-	if( !m_newTouches.Length() || m_touches.Full() )
+	if( !m_newPointers.Length() || m_pointers.Full() )
 	{
 		return nullptr;
 	}
-	ae::Touch* result = m_newTouches[ 0 ];
-	m_newTouches.Remove( 0 );
-	m_touches.Append( result );
+	ae::InputPointer* result = m_newPointers[ 0 ];
+	m_newPointers.Remove( 0 );
+	m_pointers.Append( result );
 	return result;
 }
 
-void Input::ReleaseTouch( const ae::Touch* touch )
+bool Input::ClaimPointer( const ae::InputPointer* pointer )
 {
-	const int32_t idx = m_touches.Find( touch );
+	const int32_t idx = m_newPointers.Find( pointer );
+	if( idx < 0 || m_pointers.Full() )
+	{
+		return false;
+	}
+	m_newPointers.Remove( idx );
+	m_pointers.Append( const_cast< ae::InputPointer* >( pointer ) );
+	return true;
+}
+
+void Input::ReleasePointer( const ae::InputPointer* pointer )
+{
+	const int32_t idx = m_pointers.Find( pointer );
 	if( idx >= 0 )
 	{
-		m_touches.Remove( idx );
-		m_touchPool.Delete( const_cast< ae::Touch* >( touch ) );
+		m_pointers.Remove( idx );
+		m_pointerPool.Delete( const_cast< ae::InputPointer* >( pointer ) );
 	}
 }
 
 void Input::m_SetMousePos( ae::Vec2 pos )
 {
 	AE_ASSERT( m_window );
+	m_cursorSeen = true;
 	if( m_mousePosSet )
 	{
-		mouse.movement += pos - mouse.position;
+		cursorMovement += pos - m_cursorPos;
 	}
-	mouse.position = pos;
+	m_cursorPos = pos;
 	m_mousePosSet = true;
 }
 
 void Input::m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement )
 {
 	AE_ASSERT( m_window );
-	mouse.movement += movement;
-	mouse.position = pos;
+	m_cursorSeen = true;
+	cursorMovement += movement;
+	m_cursorPos = pos;
 	m_mousePosSet = true;
 }
 
@@ -25805,7 +26233,7 @@ void Input::m_SetMouseCaptured( bool captured )
 		if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
 		{
 			m_WarpCursor( *pos );
-			mouse.position = *pos;
+			m_cursorPos = *pos;
 		}
 	}
 	m_UpdateCursorHidden();
@@ -25821,7 +26249,7 @@ void Input::m_ApplyMouseCapture( bool capture )
 	if( capture )
 	{
 		// Remember original cursor position
-		m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( mouse.position ) : ae::Optional< ae::Vec2 >();
+		m_capturedMousePos = m_mousePosSet ? ae::Optional< ae::Vec2 >( m_cursorPos ) : ae::Optional< ae::Vec2 >();
 		m_UpdateCursorHidden();
 #if _AE_LINUX_
 		_Wayland::Get()->SetPointerLocked( true );
@@ -25830,14 +26258,14 @@ void Input::m_ApplyMouseCapture( bool capture )
 		m_WarpCursor( localCenter );
 		m_mousePosSet = false;
 #if _AE_LINUX_
-		mouse.position = localCenter; // Stays centered, relative pointer events drive mouse.movement
+		m_cursorPos = localCenter; // Stays centered, relative pointer events drive cursorMovement
 #endif
 	}
 	else if( const ae::Vec2* pos = m_capturedMousePos.TryGet() )
 	{
 		// Restore original cursor position
 		m_WarpCursor( *pos );
-		mouse.position = *pos;
+		m_cursorPos = *pos;
 	}
 #if _AE_LINUX_
 	if( !capture )
@@ -25855,6 +26283,14 @@ void Input::m_UpdateCursorHidden()
 		( m_wantedCursorState == ae::CursorState::Hidden ) ||
 		( m_wantedCursorState == ae::CursorState::HiddenUntilMoved ) ||
 		( m_wantedCursorState == ae::CursorState::HiddenAndCaptured && m_captureMouse );
+#if AE_ENABLE_AETHER_JS
+	// The cursor is only hidden over the canvas, so a drag that leaves it shows
+	// the cursor again
+	const ae::Vec2 pos = m_cursorPos;
+	const bool over = ( pos.x >= 0.0f && pos.y >= 0.0f &&
+		pos.x < m_window->GetWidth() && pos.y < m_window->GetHeight() );
+	_ae_SetCursorHidden( hide && over );
+#endif
 	if( hide == m_hideCursor )
 	{
 		return;
@@ -25870,15 +26306,6 @@ void Input::m_UpdateCursorHidden()
 	else
 	{
 		[ NSCursor unhide ];
-	}
-#elif _AE_EMSCRIPTEN_
-	if( hide )
-	{
-		EM_ASM( { document.getElementById('canvas').style.cursor = 'none'; } );
-	}
-	else
-	{
-		EM_ASM( { document.getElementById('canvas').style.cursor = 'auto'; } );
 	}
 #elif _AE_LINUX_
 	if( m_window && m_window->window )
@@ -25903,6 +26330,18 @@ void Input::m_UpdateModifiers()
 	m_keys[ (int)ae::Key::Super ] = m_keys[ (int)ae::Key::LeftSuper ] || m_keys[ (int)ae::Key::RightSuper ];
 	m_keys[ (int)ae::Key::Meta ] = m_keys[ (int)ae::Key::LeftMeta ] || m_keys[ (int)ae::Key::RightMeta ];
 }
+#else
+const ae::InputPointer* Input::PumpPointers() { return nullptr; }
+bool Input::ClaimPointer( const ae::InputPointer* pointer ) { return false; }
+void Input::ReleasePointer( const ae::InputPointer* pointer ) {}
+void Input::m_SetMousePos( ae::Vec2 pos ) {}
+void Input::m_SetMousePos( ae::Vec2 pos, ae::Vec2 movement ) {}
+void Input::m_WarpCursor( ae::Vec2 pos ) {}
+void Input::m_SetMouseCaptured( bool captured ) {}
+void Input::m_ApplyMouseCapture( bool capture ) {}
+void Input::m_UpdateCursorHidden() {}
+void Input::m_UpdateModifiers() {}
+#endif // AE_ENABLE_APPLICATION
 
 //------------------------------------------------------------------------------
 // ae::File member functions
@@ -25972,7 +26411,7 @@ FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCo
 
 bool FileSystem::IsAbsolutePath( const char* path )
 {
-#if _AE_EMSCRIPTEN_
+#if AE_ENABLE_AETHER_JS
 	const char* result = strchr( path, ':' );
 	return ( result && result[ 1 ] == '/' && result[ 2 ] == '/' );
 #elif _AE_WINDOWS_
@@ -26087,22 +26526,6 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	// Something like C:\Users\someone\AppData\Local\Company\Game
 	return FileSystem_GetDir( FOLDERID_LocalAppData, outDir );
 }
-#elif _AE_EMSCRIPTEN_
-bool FileSystem_GetUserDir( Str256* outDir )
-{
-	return false;
-}
-bool FileSystem_GetCacheDir( Str256* outDir )
-{
-	return false;
-}
-void _ae_GetCurrentWorkingDir( Str256* outDir )
-{
-	char url[ 256 ];
-	url[ 0 ] = 0;
-	EM_ASM( { stringToUTF8(window.location.href, $0, 256) }, url );
-	*outDir = ae::FileSystem::GetDirectoryFromPath( url );
-}
 #elif _AE_WASM_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
@@ -26113,25 +26536,35 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	return false;
 }
 #endif
+#if AE_ENABLE_AETHER_JS
+void _ae_GetCurrentWorkingDir( Str256* outDir )
+{
+	char url[ 256 ];
+	_ae_PageUrl( url, sizeof( url ) );
+	*outDir = ae::FileSystem::GetDirectoryFromPath( url );
+}
+#endif
 
 } // namespace ae
 
-extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length )
+#if AE_ENABLE_AETHER_JS
+// Allocates the data of a file aether.js has read, which it copies in before
+// any other call into the program
+extern "C" __attribute__(( export_name( "_ae_OnFileLoaded" ) )) uint8_t* _ae_OnFileLoaded( void* _file, uint32_t length )
 {
-	ae::File* file = (ae::File*)arg;
+	ae::File* file = (ae::File*)_file;
 	file->m_finishTime = ae::GetTime();
 	file->m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FILE, length + 1, 8 );
-	memcpy( file->m_data, data, length );
 	file->m_data[ length ] = 0;
 	file->m_length = length;
-
 	file->m_status = ae::File::Status::Success;
 	file->m_code = 200;
+	return file->m_data;
 }
 
-extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout )
+extern "C" __attribute__(( export_name( "_ae_OnFileFailed" ) )) void _ae_OnFileFailed( void* _file, uint32_t code, int32_t timeout )
 {
-	ae::File* file = (ae::File*)arg;
+	ae::File* file = (ae::File*)_file;
 	file->m_finishTime = ae::GetTime();
 	file->m_code = code;
 	if( timeout )
@@ -26151,77 +26584,6 @@ extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_ReadFail( void* arg, uint32_
 		}
 	}
 }
-
-#if _AE_EMSCRIPTEN_
-extern "C" void EMSCRIPTEN_KEEPALIVE _ae_em_free( void* p )
-{
-	free( p ); // -Oz prevents free() from being linked so force it
-}
-
-EM_JS( void, _ae_FileSystem_ReadImpl, ( const char* url, void* arg, uint32_t timeoutMs ),
-{
-	var handled = false; // Prevent double-calling callbacks
-	var xhr = new XMLHttpRequest();
-	xhr.timeout = timeoutMs;
-	xhr.open('GET', UTF8ToString(url), true);
-	xhr.responseType = 'arraybuffer';
-	xhr.ontimeout = function xhr_ontimeout() {
-		if (!handled) {
-			handled = true;
-			__ae_FileSystem_ReadFail(arg, xhr.status, true);
-		}
-	};
-	xhr.onload = function xhr_onload() {
-		if (!handled) {
-			handled = true;
-			if(xhr.status != 200) {
-				__ae_FileSystem_ReadFail(arg, xhr.status, false);
-				return;
-			}
-			if(!xhr.response) {
-				__ae_FileSystem_ReadSuccess(arg, 0, 0);
-				return;
-			}
-			var byteArray = new Uint8Array(xhr.response);
-			var buffer = _malloc(byteArray.length);
-			if(!buffer) {
-				__ae_FileSystem_ReadFail(arg, 0, false);
-				return;
-			}
-			HEAPU8.set(byteArray, buffer);
-			__ae_FileSystem_ReadSuccess(arg, buffer, byteArray.length);
-			__ae_em_free(buffer);
-		}
-	};
-	xhr.onerror = function xhr_onerror() {
-		if (!handled) {
-			handled = true;
-			__ae_FileSystem_ReadFail(arg, xhr.status || 0, false); // CORS errors may have status=0
-		}
-	};
-	xhr.onabort = function xhr_onabort() {
-		if (!handled) {
-			handled = true;
-			__ae_FileSystem_ReadFail(arg, 0, false);
-		}
-	};
-	xhr.onloadend = function xhr_onloadend() {
-		// Safety net: catches edge cases where other handlers don't fire
-		if (!handled) {
-			handled = true;
-			__ae_FileSystem_ReadFail(arg, xhr.status || 0, false);
-		}
-	};
-	
-	try {
-		xhr.send(null);
-	} catch(e) {
-		if (!handled) {
-			handled = true;
-			__ae_FileSystem_ReadFail(arg, 0, false);
-		}
-	}
-} );
 #endif
 
 namespace ae {
@@ -26532,8 +26894,8 @@ void FileSystem::m_Read( ae::File* file, float timeoutSec ) const
 		timeoutMs = timeoutSec * 1000.0f;
 		timeoutMs = ae::Max( 1u, timeoutMs ); // Prevent rounding down to infinite timeout
 	}
-#if _AE_EMSCRIPTEN_
-	_ae_FileSystem_ReadImpl( file->m_url.c_str(), file, timeoutMs );
+#if AE_ENABLE_AETHER_JS
+	_ae_ReadFile( file->m_url.c_str(), file, timeoutMs );
 #else
 	if( uint32_t length = GetSize( file->m_url.c_str() ) )
 	{
@@ -26558,6 +26920,9 @@ void FileSystem::Destroy( const File* file )
 		const int32_t idx = m_files.Find( file );
 		AE_ASSERT_MSG( idx >= 0, "Unknown file pointer provided for destruction" );
 		m_files.Remove( idx );
+#if AE_ENABLE_AETHER_JS
+		if( file->m_status == ae::File::Status::Pending ) { _ae_CancelFile( file ); }
+#endif
 		ae::Free( file->m_data );
 		ae::Delete( file );
 	}
@@ -26567,6 +26932,9 @@ void FileSystem::DestroyAll()
 {
 	for( auto file : m_files )
 	{
+#if AE_ENABLE_AETHER_JS
+		if( file->m_status == ae::File::Status::Pending ) { _ae_CancelFile( file ); }
+#endif
 		ae::Free( file->m_data );
 		ae::Delete( file );
 	}
@@ -26933,7 +27301,7 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 			return result;
 		}
 	}
-#elif _AE_EMSCRIPTEN_
+#elif AE_ENABLE_AETHER_JS
 	ae::Str256 result;
 	if( IsAbsolutePath( filePath ) )
 	{
@@ -26943,6 +27311,8 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 	_ae_GetCurrentWorkingDir( &result );
 	AppendToPath( &result, filePath );
 	return result;
+#elif _AE_WASM_
+	return filePath; // Resolved by the host
 #else
 	#warning "ae::FileSystem::GetAbsolutePath() not implemented. ae::FileSystem functionality will be limited."
 	return filePath;
@@ -27587,9 +27957,7 @@ void _CloseSocket( int sock )
 	closesocket( sock );
 #else
 	shutdown( sock, SHUT_RDWR );
-	#if !_AE_EMSCRIPTEN_
-		close( sock );
-	#endif
+	close( sock );
 #endif
 }
 
@@ -28331,6 +28699,45 @@ uint32_t ListenerSocket::GetConnectionCount() const
 	return m_connections.Length();
 }
 
+#else
+
+//------------------------------------------------------------------------------
+// ae::Socket and ae::ListenerSocket on the web
+//------------------------------------------------------------------------------
+// @TODO: A web transport. Until then connecting and listening fail.
+Socket::Socket( ae::Tag tag ) : m_sendData( tag ), m_recvData( tag ) {}
+Socket::Socket( ae::Tag tag, int s, Protocol proto, const char* addr, uint16_t port ) : m_sendData( tag ), m_recvData( tag ) {}
+Socket::~Socket() {}
+bool Socket::Connect( ae::Socket::Protocol proto, const char* address, uint16_t port )
+{
+	m_protocol = proto;
+	m_address = address;
+	m_port = port;
+	return false;
+}
+void Socket::Disconnect() {}
+bool Socket::IsConnected() const { return false; }
+bool Socket::QueueData( const void* data, uint32_t length ) { return false; }
+bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset ) { return false; }
+bool Socket::ReceiveData( void* dataOut, uint16_t length ) { return false; }
+bool Socket::DiscardData( uint16_t length ) { return false; }
+uint32_t Socket::ReceiveDataLength() { return 0; }
+bool Socket::QueueMsg( const void* data, uint16_t length ) { return false; }
+uint16_t Socket::ReceiveMsg( void* dataOut, uint16_t maxLength ) { return 0; }
+bool Socket::DiscardMsg() { return false; }
+uint32_t Socket::SendAll() { return 0; }
+
+ListenerSocket::ListenerSocket( ae::Tag tag ) : m_tag( tag ), m_connections( tag ) {}
+ListenerSocket::~ListenerSocket() {}
+bool ListenerSocket::Listen( ae::Socket::Protocol proto, bool allowRemote, uint16_t port, uint32_t maxConnections ) { return false; }
+bool ListenerSocket::IsListening() const { return false; }
+ae::Socket* ListenerSocket::Accept() { return nullptr; }
+void ListenerSocket::StopListening() {}
+void ListenerSocket::Destroy( ae::Socket* sock ) {}
+void ListenerSocket::DestroyAll() {}
+ae::Socket* ListenerSocket::GetConnection( uint32_t idx ) { return nullptr; }
+uint32_t ListenerSocket::GetConnectionCount() const { return 0; }
+
 #endif // !_AE_WASM_
 
 }  // ae end
@@ -28352,15 +28759,15 @@ enum _ae_GLProfileEnum
 	int32_t _ae_GLMajorVersion() { return 0; }
 	int32_t _ae_GLMinorVersion() { return 0; }
 	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_None; }
-#elif _AE_IOS_ || _AE_EMSCRIPTEN_
+#elif _AE_IOS_ || _AE_EMSCRIPTEN_ || AE_ENABLE_AETHER_JS
 	int32_t _ae_GLMajorVersion() { return 3; }
 	int32_t _ae_GLMinorVersion() { return 0; }
 	int32_t _ae_GLProfileEnum() { return _AE_GLProfile_ES; }
 #elif _AE_WASM_
 	// Instead of defining values here, the WASM host must provide these function implementations
-	AE_WASM_IMPORT( ae ) int32_t _ae_GLMajorVersion();
-	AE_WASM_IMPORT( ae ) int32_t _ae_GLMinorVersion();
-	AE_WASM_IMPORT( ae ) int32_t _ae_GLProfileEnum();
+	_AE_WASM_IMPORT( ae, _ae_GLMajorVersion ) int32_t _ae_GLMajorVersion();
+	_AE_WASM_IMPORT( ae, _ae_GLMinorVersion ) int32_t _ae_GLMinorVersion();
+	_AE_WASM_IMPORT( ae, _ae_GLProfileEnum ) int32_t _ae_GLProfileEnum();
 #else
 	int32_t _ae_GLMajorVersion() { return 4; }
 	int32_t _ae_GLMinorVersion() { return 1; }
@@ -28500,8 +28907,10 @@ enum _ae_GLProfileEnum
 
 		// GL_VERSION_1_2
 #		define GL_TEXTURE_3D                     0x806F
-#		define GL_BGR                            0x80E0
-#		define GL_BGRA                           0x80E1
+#		if !_AE_WASM_
+#			define GL_BGR                            0x80E0
+#			define GL_BGRA                           0x80E1
+#		endif
 #		define GL_CLAMP_TO_EDGE                  0x812F
 		// GL_VERSION_1_3
 #		define GL_TEXTURE0                       0x84C0
@@ -28649,12 +29058,12 @@ enum _ae_GLProfileEnum
 		_AE_EACH_GL_FUNC
 #		undef _AE_GL_FUNC
 
-#	elif _AE_WASM_
+#	elif _AE_WASM_ && !_AE_EMSCRIPTEN_
 
 #		ifdef AE_GL_IMPORT
 #			define _AE_GL_IMPORT_ATTRIBUTE __attribute__(( AE_GL_IMPORT ))
 #		else
-#			define _AE_GL_IMPORT_ATTRIBUTE
+#			define _AE_GL_IMPORT_ATTRIBUTE __attribute__(( import_module( "gl" ) ))
 #		endif
 #		define _AE_GL_FUNC( ret, name, params ) _AE_GL_IMPORT_ATTRIBUTE __attribute__(( import_name( #name ) )) extern ret name params;
 		_AE_EACH_GL_FUNC
@@ -28676,7 +29085,7 @@ enum _ae_GLProfileEnum
 
 #if AE_ENABLE_OPENGL
 
-#	if _AE_EMSCRIPTEN_ || _AE_IOS_ || _AE_WASM_ || _AE_WINDOWS_ || _AE_LINUX_
+#	if _AE_IOS_ || _AE_WASM_ || _AE_WINDOWS_ || _AE_LINUX_
 #		define glClearDepth glClearDepthf
 #	endif
 
@@ -28999,12 +29408,12 @@ const UniformList::Value* UniformList::Get( const char* name ) const
 // ae::Shader member functions
 //------------------------------------------------------------------------------
 } // ae end
-#if _AE_WASM_
+#if _AE_WASM_ && !_AE_EMSCRIPTEN_ && !AE_ENABLE_AETHER_JS
 
-AE_WASM_IMPORT( ae ) void _ae_SetShaderHash( uint32_t hash );
-AE_WASM_IMPORT( ae ) void _ae_SetUniformHash( uint32_t hash );
-AE_WASM_IMPORT( ae ) uint32_t _ae_GetShaderHash();
-AE_WASM_IMPORT( ae ) uint32_t _ae_GetUniformHash();
+_AE_WASM_IMPORT( ae, _ae_SetShaderHash ) void _ae_SetShaderHash( uint32_t hash );
+_AE_WASM_IMPORT( ae, _ae_SetUniformHash ) void _ae_SetUniformHash( uint32_t hash );
+_AE_WASM_IMPORT( ae, _ae_GetShaderHash ) uint32_t _ae_GetShaderHash();
+_AE_WASM_IMPORT( ae, _ae_GetUniformHash ) uint32_t _ae_GetUniformHash();
 
 #else
 
@@ -29222,7 +29631,7 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 		}
 
 		// Wireframe
-#if _AE_IOS_ || _AE_EMSCRIPTEN_ || _AE_WASM_
+#if _AE_IOS_ || _AE_WASM_
 		AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on this platform" );
 #else
 		glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
@@ -29344,21 +29753,6 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 	}
 
 	// Input/output
-//	#if _AE_EMSCRIPTEN_
-//	shaderSource.Append( "#define AE_COLOR gl_FragColor\n" );
-//	shaderSource.Append( "#define AE_TEXTURE2D texture2d\n" );
-//	shaderSource.Append( "#define AE_UNIFORM_HIGHP uniform highp\n" );
-//	if( type == Type::Vertex )
-//	{
-//		shaderSource.Append( "#define AE_IN_HIGHP attribute highp\n" );
-//		shaderSource.Append( "#define AE_OUT_HIGHP varying highp\n" );
-//	}
-//	else if( type == Type::Fragment )
-//	{
-//		shaderSource.Append( "#define AE_IN_HIGHP varying highp\n" );
-//		shaderSource.Append( "#define AE_UNIFORM_HIGHP uniform highp\n" );
-//	}
-// #else
 	shaderSource.Append( "#define AE_TEXTURE2D texture\n" );
 	shaderSource.Append( "#define AE_UNIFORM uniform\n" );
 	shaderSource.Append( "#define AE_UNIFORM_HIGHP uniform\n" );
@@ -29368,7 +29762,6 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 	{
 		shaderSource.Append( "out vec4 AE_COLOR;\n" );
 	}
-// #endif
 
 	AE_ASSERT( shaderSource.Length() <= kPrependMax );
 
@@ -29734,7 +30127,7 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms, cons
 		AE_CHECK_GL_ERROR();
 	}
 
-	#if !_AE_EMSCRIPTEN_ && !_AE_IOS_
+	#if !_AE_WASM_ && !_AE_IOS_
 	if( m_primitive == Vertex::Primitive::Point )
 	{
 		glEnable( GL_VERTEX_PROGRAM_POINT_SIZE );
@@ -30320,7 +30713,7 @@ void Texture2D::Initialize( const TextureParams& params )
 #else
 	const bool formatSupportsAutoMipmaps = true;
 #endif
-	const bool mipmapsEnabled = !_AE_EMSCRIPTEN_ && params.autoGenerateMipmaps && formatSupportsAutoMipmaps;
+	const bool mipmapsEnabled = !_AE_WASM_ && params.autoGenerateMipmaps && formatSupportsAutoMipmaps;
 	if( mipmapsEnabled )
 	{
 		glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
@@ -30335,7 +30728,7 @@ void Texture2D::Initialize( const TextureParams& params )
 	glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( params.wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
 
 	// this is the type of data passed in, conflating with internal format type
-#if _AE_EMSCRIPTEN_ || _AE_IOS_
+#if _AE_WASM_ || _AE_IOS_
 	const auto GL_BGR = GL_RGB;
 	const auto GL_BGRA = GL_RGBA;
 #endif
@@ -30532,7 +30925,7 @@ void Texture2D::Initialize( const TextureParams& params )
 	
 	// Handle vertical flip and/or BGR conversion if needed
 	const bool needsFlip = !params.bottomToTopData; // UV 0,0 corresponds to the bottom-left corner in OpenGL
-#if _AE_EMSCRIPTEN_ || _AE_IOS_
+#if _AE_WASM_ || _AE_IOS_
 	// GLES has no GL_BGR/GL_BGRA — those are aliased to GL_RGB/GL_RGBA above,
 	// so the bytes must be swizzled in software before upload.
 	const bool needsBGRConversion = ( params.bgrData && components >= 3 );
@@ -30590,7 +30983,7 @@ void Texture2D::Initialize( const TextureParams& params )
 		{
 			ae::Free( tempData );
 		}
-#if !_AE_EMSCRIPTEN_
+#if !_AE_WASM_
 		// autogen only works for uncompressed textures
 		// Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
 		if( mipmapsEnabled && numberOfMipmaps > 1 )
@@ -30692,7 +31085,7 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 		return;
 	}
 
-#if _AE_EMSCRIPTEN_
+#if _AE_WASM_
 	Texture::Format format = Texture::Format::RGBA8;
 	Texture::Type type = Texture::Type::UInt8;
 #else
@@ -30720,7 +31113,7 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 		return;
 	}
 
-#if _AE_EMSCRIPTEN_
+#if _AE_WASM_
 	Texture::Format format = Texture::Format::Depth16;
 	Texture::Type type = Texture::Type::UInt16;
 #else
@@ -30789,19 +31182,19 @@ void RenderTarget::Clear( Color color )
 void RenderTarget::Render( const Shader* shader, const UniformList& uniforms )
 {
 	_Globals* globals = ae::_Globals::Get();
-	AE_ASSERT( globals->graphicsDevice );
+	AE_ASSERT( globals->render.initialized );
 
 	glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 	AE_CHECK_GL_ERROR();
 	
-	globals->graphicsDevice->m_renderQuad.Bind( shader, uniforms );
-	globals->graphicsDevice->m_renderQuad.Draw();
+	globals->render.quad.Bind( shader, uniforms );
+	globals->render.quad.Draw();
 }
 
 void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 {
 	_Globals* globals = ae::_Globals::Get();
-	AE_ASSERT( globals->graphicsDevice );
+	AE_ASSERT( globals->render.initialized );
 
 	glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 	AE_CHECK_GL_ERROR();
@@ -30809,11 +31202,9 @@ void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 	UniformList uniforms;
 	uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
 	uniforms.Set( "u_tex", GetTexture( textureIndex ) );
-	Shader* shader = globals->graphicsDevice->m_rgbToSrgb
-		? &globals->graphicsDevice->m_renderShaderSRGB
-		: &globals->graphicsDevice->m_renderShaderRGB;
-	globals->graphicsDevice->m_renderQuad.Bind( shader, uniforms );
-	globals->graphicsDevice->m_renderQuad.Draw();
+	Shader* shader = globals->render.rgbToSrgb ? &globals->render.shaderSRGB : &globals->render.shaderRGB;
+	globals->render.quad.Bind( shader, uniforms );
+	globals->render.quad.Draw();
 }
 
 const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
@@ -30912,8 +31303,8 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
 	_Globals* globals = ae::_Globals::Get();
-	AE_ASSERT_MSG( !globals->graphicsDevice, "Only one instance of ae::GraphicsDevice is supported" );
-	globals->graphicsDevice = this;
+	AE_ASSERT_MSG( !globals->render.initialized, "Only one instance of ae::GraphicsDevice is supported" );
+	globals->render.initialized = true;
 
 	AE_ASSERT( window );
 	AE_ASSERT( window->GetWidth() && window->GetHeight() );
@@ -30921,7 +31312,7 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT( !window->graphicsDevice );
 	window->graphicsDevice = this;
 
-#if !_AE_EMSCRIPTEN_ && !_AE_IOS_
+#if !_AE_IOS_ && !AE_ENABLE_AETHER_JS
 	AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
 #endif
 
@@ -30959,18 +31350,16 @@ void GraphicsDevice::Initialize( class Window* window )
 		{ _kQuadVertPos[ 3 ], _kQuadVertUvs[ 3 ] },
 	};
 	AE_STATIC_ASSERT( countof( quadVerts ) == _kQuadVertCount );
-	m_renderQuad.Initialize( sizeof( Vertex ), sizeof( _kQuadIndex ), _kQuadVertCount, _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
-	m_renderQuad.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
-	m_renderQuad.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( Vertex, uv ) );
-	m_renderQuad.UploadVertices( 0, quadVerts, _kQuadVertCount );
-	m_renderQuad.UploadIndices( 0, _kQuadIndices, _kQuadIndexCount );
+	globals->render.quad.Initialize( sizeof( Vertex ), sizeof( _kQuadIndex ), _kQuadVertCount, _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+	globals->render.quad.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
+	globals->render.quad.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( Vertex, uv ) );
+	globals->render.quad.UploadVertices( 0, quadVerts, _kQuadVertCount );
+	globals->render.quad.UploadIndices( 0, _kQuadIndices, _kQuadIndexCount );
 	AE_CHECK_GL_ERROR();
 
-	// @NOTE: GL_FRAMEBUFFER_SRGB is not completely reliable on every platform (web, wide color
-	// display targets, etc), mostly because of limited control over the back buffer format.
-	// On web its not possible to specify the back buffer format, but browsers typically expect SRGB anyway.
-	// On OpenGLES GL_FRAMEBUFFER_SRGB is always enabled.
-	// Because of all of this it's easiest to convert to SRGB manually on non-OpenGLES platforms.
+	// @NOTE: Only the iOS back buffer encodes sRGB on write (kEAGLColorFormatSRGBA8). Other
+	// platforms have no portable sRGB default framebuffer (WebGL has none), so displays expecting
+	// sRGB are given manually encoded output by the AE_SRGB_TARGET variant.
 	const char* vertexStr = R"(
 		AE_UNIFORM_HIGHP mat4 u_localToNdc;
 		AE_IN_HIGHP vec2 a_uv;
@@ -30992,16 +31381,16 @@ void GraphicsDevice::Initialize( class Window* window )
 				vec3 higher = vec3(1.055) * pow(color.rgb, vec3(1.0/2.4)) - vec3(0.055);
 				vec3 lower = color.rgb * vec3(12.92);
 				AE_COLOR.rgb = mix(higher, lower, cutoff);
-				// Always full opacity when converting to srgb. Blending does not work without GL_FRAMEBUFFER_SRGB.
+				// Always opaque, blending manually encoded values is not linear
 				AE_COLOR.a = 1.0;
 			#else
 				AE_COLOR = color;
 			#endif
 		})";
 	const char* srgbDefine = "#define AE_SRGB_TARGET";
-	m_renderShaderRGB.Initialize( vertexStr, fragStr, nullptr, 0 );
-	m_renderShaderRGB.SetBlending( true );  // This is required on some implementations of OpenGL for GL_FRAMEBUFFER_SRGB to work
-	m_renderShaderSRGB.Initialize( vertexStr, fragStr, &srgbDefine, 1 ); // Do not blend when manually converting to srgb without GL_FRAMEBUFFER_SRGB
+	globals->render.shaderRGB.Initialize( vertexStr, fragStr, nullptr, 0 );
+	globals->render.shaderRGB.SetBlending( true );
+	globals->render.shaderSRGB.Initialize( vertexStr, fragStr, &srgbDefine, 1 );
 	AE_CHECK_GL_ERROR();
 	
 	Activate(); // Init primary render target
@@ -31016,7 +31405,7 @@ void GraphicsDevice::SetVsyncEnabled( bool enabled )
 	{
 		wglSwapIntervalEXT( enabled ? 1 : 0 );
 	}
-#elif _AE_LINUX_
+#elif _AE_LINUX_ && AE_ENABLE_APPLICATION
 	if( _Wayland* wl = _Wayland::Get() )
 	{
 		wl->vsync = enabled;
@@ -31028,7 +31417,7 @@ bool GraphicsDevice::GetVsyncEnabled() const
 {
 #if _AE_WINDOWS_
 	return wglGetSwapIntervalEXT && wglGetSwapIntervalEXT() != 0;
-#elif _AE_LINUX_
+#elif _AE_LINUX_ && AE_ENABLE_APPLICATION
 	if( const _Wayland* wl = _Wayland::Get() )
 	{
 		return wl->vsync;
@@ -31042,13 +31431,19 @@ void GraphicsDevice::Terminate()
 	if( m_context )
 	{
 		_Globals* globals = ae::_Globals::Get();
-		AE_ASSERT( globals->graphicsDevice == this );
-		globals->graphicsDevice = nullptr;
+		AE_ASSERT( globals->render.initialized );
+		globals->render.initialized = false;
 
-		m_renderShaderSRGB.Terminate();
-		m_renderShaderRGB.Terminate();
-		m_renderQuad.Terminate();
+		globals->render.shaderSRGB.Terminate();
+		globals->render.shaderRGB.Terminate();
+		globals->render.quad.Terminate();
+		m_canvas.Terminate();
 
+		if( m_window && m_window->graphicsDevice == this )
+		{
+			m_window->graphicsDevice = nullptr;
+		}
+		m_window = nullptr;
 		m_context = 0;
 	}
 }
@@ -31063,7 +31458,7 @@ void GraphicsDevice::Activate()
 	const int32_t contentHeight = m_window->GetDrawHeight();
 	if( contentWidth != m_canvas.GetWidth() || contentHeight != m_canvas.GetHeight() )
 	{
-#if _AE_EMSCRIPTEN_
+#if AE_ENABLE_AETHER_JS
 		const double currentTime = ae::GetTime();
 		if( m_resizeWidthPrev != contentWidth || m_resizeHeightPrev != contentHeight )
 		{
@@ -31075,10 +31470,10 @@ void GraphicsDevice::Activate()
 		if( m_lastResize + 0.25 < currentTime || ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 ) )
 		{
 			// @NOTE: The window size is the 'real' size of the canvas dom, which
-			// is determined by the web page. This function sets the emscripten
-			// managed back buffer size.
+			// is determined by the web page. This sets the size of its drawing
+			// buffer.
 			if( m_window->GetLoggingEnabled() ) { AE_INFO( "resize #x#", contentWidth, contentHeight ); }
-			emscripten_set_canvas_element_size( "canvas", contentWidth, contentHeight );
+			_ae_SetCanvasSize( contentWidth, contentHeight );
 			m_HandleResize( contentWidth, contentHeight );
 		}
 #else
@@ -31124,15 +31519,16 @@ void GraphicsDevice::Present()
 	AE_CHECK_GL_ERROR();
 	
 	// @NOTE: Conversion to srgb is only needed for the back buffer. The rest of the pipeline should be implemented as linear.
+	_Globals* globals = ae::_Globals::Get();
 #if _AE_IOS_
-	// SRGB conversion is automatic on ios/OpenGLES because GL_FRAMEBUFFER_SRGB is always on
-	m_rgbToSrgb = false;
+	// The iOS drawable is kEAGLColorFormatSRGBA8, which encodes on write
+	globals->render.rgbToSrgb = false;
 #else
 	// Currently all platforms expect the back buffer contents to be in sRGB space
-	m_rgbToSrgb = true;
+	globals->render.rgbToSrgb = true;
 #endif
 	m_canvas.Render2D( 0, ae::Rect::FromCenterAndSize( ae::Vec2( 0.0f ), ae::Vec2( 2.0f ) ), 0.5f );
-	m_rgbToSrgb = false;
+	globals->render.rgbToSrgb = false;
 	
 	AE_CHECK_GL_ERROR();
 	m_window->Present();
@@ -32337,42 +32733,201 @@ void DebugCamera::SetDistanceLimits( float min, float max )
 	m_Precalculate();
 }
 
-void DebugCamera::Update( ae::Input* input, float dt )
+void DebugCamera::SetModifierKey( ae::Optional< ae::Key > key )
 {
-	AE_ASSERT_MSG( input, "Input system is required to update debug camera" );
+	m_modifierKey = key;
+}
+
+bool DebugCamera::m_UpdatePointers( const UpdateParams& params )
+{
+	ae::Input* input = params.input;
+	const ae::Vec2 viewportSize = params.viewport.GetSize();
+	const bool enabled = m_inputEnabled && viewportSize.x > 0.0f && viewportSize.y > 0.0f;
+	bool fingersChanged = false;
+	for( int32_t i = (int32_t)m_pointers.Length() - 1; i >= 0; i-- )
+	{
+		if( !enabled || m_pointers[ i ]->Ended() )
+		{
+			input->ReleasePointer( m_pointers[ i ] );
+			m_pointers.Remove( i );
+			fingersChanged = true;
+		}
+	}
+	if( !enabled )
+	{
+		return false;
+	}
+
+	// Claim fingers joining a gesture, or start one once two fingers are down
+	// or a single finger drags
+	const auto canClaim = [ &params ]( const ae::InputPointer* touch )
+	{
+		return touch->source == ae::InputPointerSource::Touch && !touch->Ended() && params.viewport.Contains( touch->StartPosition() );
+	};
+	const ae::InputPointerArray unclaimed = input->GetUnclaimedPointers();
+	uint32_t live = 0;
+	bool dragging = false;
+	for( const ae::InputPointer* touch : unclaimed )
+	{
+		if( canClaim( touch ) )
+		{
+			live++;
+			dragging = dragging || touch->MaxStartDistance() > 10.0f;
+		}
+	}
+	if( m_pointers.Length() || live >= 2 || dragging )
+	{
+		for( const ae::InputPointer* touch : unclaimed )
+		{
+			if( !m_pointers.Full() && canClaim( touch ) && input->ClaimPointer( touch ) )
+			{
+				m_pointers.Append( touch );
+				fingersChanged = true;
+			}
+		}
+	}
+	const uint32_t count = m_pointers.Length();
+	if( !count )
+	{
+		return false;
+	}
+
+	ae::Vec2 center( 0.0f );
+	for( const ae::InputPointer* touch : m_pointers ) { center += touch->Position(); }
+	center /= (float)count;
+	float spread = 0.0f;
+	for( const ae::InputPointer* touch : m_pointers ) { spread += ( touch->Position() - center ).Length(); }
+	spread /= (float)count;
+	// A finger joining or lifting moves the center, so the gesture restarts from here
+	if( fingersChanged )
+	{
+		m_touchCenter = center;
+		m_touchSpread = spread;
+		m_touchPanRecent = ae::Vec2( 0.0f );
+		m_touchZoomRecent = 0.0f;
+		m_touchZoomWeight.Clear();
+	}
+	const ae::Vec2 movement = center - m_touchCenter;
+	const float spreadChange = spread - m_touchSpread;
+	m_touchCenter = center;
+	m_touchSpread = spread;
+
+	if( count == 2 )
+	{
+		// Two fingers blend pan and zoom, weighted heavily towards whichever
+		// has moved more recently. Net motion is compared, so a hand's back
+		// and forth jitter cancels out.
+		const float decay = expf( -params.dt / 0.25f );
+		m_touchPanRecent = m_touchPanRecent * decay + movement;
+		m_touchZoomRecent = m_touchZoomRecent * decay + spreadChange * 2.0f;
+		const float pan = m_touchPanRecent.Length();
+		const float zoom = ae::Abs( m_touchZoomRecent );
+		// Blending starts once one has moved at least twice as far
+		const float* weight = m_touchZoomWeight.TryGet();
+		if( ae::Max( pan, zoom ) > 10.0f && ( weight || zoom > pan * 2.0f || pan > zoom * 2.0f ) )
+		{
+			const float ratio = zoom / ( pan + zoom );
+			const float bias = powf( ratio, 4.0f );
+			const float target = bias / ( bias + powf( 1.0f - ratio, 4.0f ) );
+			m_touchZoomWeight = weight ? ae::DtLerp( *weight, 3.25f, params.dt, target ) : target;
+		}
+
+		m_mode = Mode::Pan;
+		m_refocus = false;
+		if( const float* zoomWeight = m_touchZoomWeight.TryGet() )
+		{
+			if( spread > 1.0f && spread - spreadChange > 1.0f )
+			{
+				m_dist *= powf( ( spread - spreadChange ) / spread, *zoomWeight );
+			}
+			// World units per window unit at the pivot's distance
+			const float panSpeed = 2.0f * m_dist * tanf( params.yFov * 0.5f ) / params.viewport.GetHeight();
+			const ae::Vec2 panMovement = movement * ( 1.0f - *zoomWeight );
+			m_pivot -= m_right * ( panMovement.x * panSpeed );
+			m_pivot -= m_up * ( panMovement.y * panSpeed );
+			m_mode = ( *zoomWeight > 0.5f ) ? Mode::Zoom : Mode::Pan;
+		}
+	}
+	else if( count == 1 )
+	{
+		m_mode = Mode::Rotate;
+		m_yaw -= movement.x * 0.005f;
+		m_pitch += movement.y * 0.005f;
+		m_pitch = ae::Clip( m_pitch, -ae::HALF_PI * 0.99f, ae::HALF_PI * 0.99f );
+	}
+	return true;
+}
+
+void DebugCamera::Update( const UpdateParams& params )
+{
+	ae::Input* input = params.input;
+	const float dt = params.dt;
+	AE_ASSERT_MSG( input, "ae::DebugCamera::UpdateParams::input is required" );
+	AE_ASSERT_MSG( params.yFov > 0.0f, "ae::DebugCamera::UpdateParams::yFov is required" );
+
+	// Touch gestures take over from the mouse while active. Mouse gestures
+	// only start inside the viewport, then continue outside it.
+	const bool touching = m_UpdatePointers( params );
+	const ae::Vec2 viewportSize = params.viewport.GetSize();
+	const bool hasViewport = viewportSize.x > 0.0f && viewportSize.y > 0.0f;
+	if( m_mousePointer && ( m_mousePointer->Ended() || !m_inputEnabled || !hasViewport ) )
+	{
+		input->ReleasePointer( m_mousePointer );
+		m_mousePointer = nullptr;
+	}
+	// A pointer per held mouse button, indexed by ae::InputPointerButton
+	const ae::InputPointer* mousePointers[ 3 ] = {};
+	if( m_mousePointer )
+	{
+		mousePointers[ (uint32_t)m_mousePointer->button ] = m_mousePointer;
+	}
+	for( const ae::InputPointer* pointer : input->GetUnclaimedPointers() )
+	{
+		if( pointer->source == ae::InputPointerSource::Mouse && !pointer->Ended() && params.viewport.Contains( pointer->StartPosition() ) )
+		{
+			const ae::InputPointer*& slot = mousePointers[ (uint32_t)pointer->button ];
+			if( !slot ) { slot = pointer; }
+		}
+	}
+	const bool mousePressed = mousePointers[ 0 ] || mousePointers[ 1 ] || mousePointers[ 2 ];
+	const ae::Vec2* hoverPos = input->hoverPos.TryGet();
+	const bool mouseInViewport = hoverPos && params.viewport.Contains( *hoverPos );
+	const bool mouseEnabled = m_inputEnabled && hasViewport && !touching && ( m_mode != Mode::None || mouseInViewport || mousePressed );
 
 	// Input
-	const ae::Vec2 movement = m_inputEnabled ? ae::Vec2( input->mouse.movement ) : ae::Vec2( 0.0f );
+	const ae::Vec2 movement = mouseEnabled ? input->cursorMovement : ae::Vec2( 0.0f );
 	// Momentum included so trackpad panning and zooming glide as expected
-	const ae::Vec2 scrollPoints = input->mouse.scroll + input->mouse.scrollInertia;
-	const ae::Vec2 scroll = m_inputEnabled ? ( scrollPoints * 0.01f ) : ae::Vec2( 0.0f );
-	const bool alt = m_inputEnabled ? input->Get( ae::Key::LeftAlt ) : false;
-	const bool shift = m_inputEnabled ? input->Get( ae::Key::LeftShift ) : false;
-	const bool control = m_inputEnabled ? input->Get( ae::Key::LeftControl ) : false;
-	const bool command = m_inputEnabled ? input->Get( ae::Key::LeftSuper ) : false;
-	const bool modifier = m_inputEnabled ? ( ( control || command ) && ( !control || !command ) ) : false; // Either but not both
-	const bool usingTouch = m_inputEnabled ? input->mouse.usingTouch : false;
-	const bool lmb = ( m_inputEnabled && !usingTouch ) ? input->mouse.leftButton : false;
-	const bool mmb = ( m_inputEnabled && !usingTouch ) ? input->mouse.middleButton : false;
-	const bool rmb = ( m_inputEnabled && !usingTouch ) ? input->mouse.rightButton : false;
-	const bool isTouching = usingTouch && ( input->mouse.leftButton || input->mouse.middleButton || input->mouse.rightButton );
-	const bool isTouchScrolling = usingTouch && scroll.LengthSquared();
+	const ae::Vec2 scrollPoints = input->scroll.delta + input->scroll.inertia;
+	const ae::Vec2 scroll = mouseEnabled ? ( scrollPoints * 0.01f ) : ae::Vec2( 0.0f );
+	const ae::Key* modifierKey = m_modifierKey.TryGet();
+	const bool modifierHeld = mouseEnabled ? ( !modifierKey || input->Get( *modifierKey ) ) : false;
+	const bool shift = mouseEnabled ? input->Get( ae::Key::LeftShift ) : false;
+	const bool control = mouseEnabled ? input->Get( ae::Key::LeftControl ) : false;
+	const bool command = mouseEnabled ? input->Get( ae::Key::LeftSuper ) : false;
+	const bool modifier = mouseEnabled ? ( ( control || command ) && ( !control || !command ) ) : false; // Either but not both
+	const bool isTrackpad = mouseEnabled ? input->scroll.isTrackpad : false;
+	const bool lmb = mouseEnabled && mousePointers[ (uint32_t)ae::InputPointerButton::Primary ];
+	const bool mmb = mouseEnabled && mousePointers[ (uint32_t)ae::InputPointerButton::Tertiary ];
+	const bool rmb = mouseEnabled && mousePointers[ (uint32_t)ae::InputPointerButton::Secondary ];
+	const bool isTrackpadScrolling = isTrackpad && scroll.LengthSquared();
+	// A held button drives the mode with the cursor, otherwise trackpad scrolling does
+	const bool scrollDriven = isTrackpad && !lmb && !mmb && !rmb;
 
 	// Update mode
 	Mode nextMode = m_mode;
-	if( modifier && isTouchScrolling ) // It's possible to right click
+	if( modifier && isTrackpadScrolling ) // It's possible to right click
 	{
 		nextMode = Mode::Zoom;
 	}
-	else if( ( alt && mmb ) || ( shift && isTouchScrolling ) )
+	else if( ( modifierHeld && mmb ) || ( shift && isTrackpadScrolling ) )
 	{
 		nextMode = Mode::Pan;
 	}
-	else if( ( alt && lmb ) || isTouchScrolling )
+	else if( ( modifierHeld && lmb ) || isTrackpadScrolling )
 	{
 		nextMode = Mode::Rotate;
 	}
-	else if( alt && rmb )
+	else if( modifierHeld && rmb )
 	{
 		nextMode = Mode::Zoom;
 	}
@@ -32386,6 +32941,10 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	{
 		nextMode = Mode::None;
 	}
+	if( touching )
+	{
+		nextMode = m_mode; // Set by the touch gesture
+	}
 
 	// Delay releasing the mouse so checks to mouse click up etc. fail
 	if( m_preventModeExitImm )
@@ -32396,13 +32955,25 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	{
 		m_moveAccum += movement.Length();
 	}
+	// The button driving the current mode is claimed once dragged
+	const ae::InputPointer* modePointer = ( m_mode == Mode::Rotate ) ? mousePointers[ (uint32_t)ae::InputPointerButton::Primary ]
+		: ( m_mode == Mode::Pan ) ? mousePointers[ (uint32_t)ae::InputPointerButton::Tertiary ]
+		: ( m_mode == Mode::Zoom ) ? mousePointers[ (uint32_t)ae::InputPointerButton::Secondary ] : nullptr;
+	if( !m_mousePointer && modePointer && m_moveAccum >= 5.0f && input->ClaimPointer( modePointer ) )
+	{
+		m_mousePointer = modePointer;
+	}
 	// Change modes
 	if( m_mode != nextMode )
 	{
 		if( nextMode != Mode::None )
 		{
 			m_mode = nextMode;
+#if AE_ENABLE_AETHER_JS
+			input->SetCursorState( ae::CursorState::Hidden );
+#else
 			input->SetCursorState( ae::CursorState::HiddenAndCaptured );
+#endif
 		}
 		else if( !m_preventModeExitImm )
 		{
@@ -32424,7 +32995,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	{
 		// Assume right handed coordinate system
 		// The focal point should move in the direction that the users hand is moving
-		if( usingTouch )
+		if( scrollDriven )
 		{
 			m_yaw += scroll.x * 0.35f;
 			m_pitch += scroll.y * 0.35f;
@@ -32443,7 +33014,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	// Zoom
 	if( m_mode == Mode::Zoom )
 	{
-		if( usingTouch )
+		if( scrollDriven )
 		{
 			m_dist -= scroll.y * 12.0f * zoomSpeed;
 			m_dist += scroll.x * 12.0f * zoomSpeed;
@@ -32454,10 +33025,14 @@ void DebugCamera::Update( ae::Input* input, float dt )
 			m_dist -= movement.x * 0.1f * zoomSpeed;
 		}
 	}
-	// Don't zoom when scrolling with touch
-	if( !usingTouch )
+	// Don't zoom when scrolling with a trackpad
+	if( !isTrackpad )
 	{
 		m_dist += scroll.y * 2.5f * zoomSpeed;
+	}
+	if( mouseEnabled )
+	{
+		m_dist *= expf( -input->zoomDelta );
 	}
 	m_dist = ae::Clip( m_dist, m_min, m_max );
 
@@ -32469,7 +33044,7 @@ void DebugCamera::Update( ae::Input* input, float dt )
 	{
 		m_refocus = false; // Cancel refocus
 	
-		if( usingTouch )
+		if( scrollDriven )
 		{
 			m_pivot -= m_right * ( scroll.x * 2.0f * panSpeed );
 			m_pivot += m_up * ( scroll.y * 2.0f * panSpeed );
@@ -33649,6 +34224,28 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 	}
 	const ae::Vec3 rootBoneAnchor = ikBones[ rootBoneIndex ].modelPos;
 
+	// Only bones between the solve root and a target, orientation target, or
+	// distance constraint are solved. All other bones keep their input local
+	// transform and are carried rigidly by their parent after solving.
+	ae::Array< bool > solved( tag, false, ikBones.Length() );
+	ae::Array< uint32_t > solvedChildCount( tag, 0u, ikBones.Length() );
+	solved[ rootBoneIndex ] = true;
+	auto MarkSolved = [&]( uint32_t index )
+	{
+		for( const Bone* walk = ( index < pose.GetBoneCount() ) ? pose.GetBoneByIndex( index ) : nullptr; walk && !solved[ walk->index ]; walk = walk->parent )
+		{
+			solved[ walk->index ] = true;
+			if( walk->parent ) { solvedChildCount[ walk->parent->index ]++; }
+		}
+	};
+	for( const auto& target : targets ) { MarkSolved( target.key ); }
+	for( const auto& targetOri : targetOrientations ) { MarkSolved( targetOri.key ); }
+	for( const IKDistanceConstraint& constraint : distanceConstraints )
+	{
+		MarkSolved( (uint32_t)constraint.idx0 );
+		MarkSolved( (uint32_t)constraint.idx1 );
+	}
+
 	// FABRIK cannot fold a chain that lies exactly on the line to a nearer
 	// target: every correction stays on that line and the effector never
 	// closes the remaining distance. Nudge the interior joints of any such
@@ -33826,12 +34423,18 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		// intermediate sub-bases, the same technique should be used.
 		auto reverseIter = [&]( auto&& reverseIter, _IKBone* ikBone, const Bone* poseBone ) -> void
 		{
-			if( poseBone->firstChild )
+			if( solvedChildCount[ poseBone->index ] )
 			{
 				uint32_t count = 0;
 				ae::Vec3 averageChildPos = ae::Vec3( 0.0f );
+				const Bone* firstSolvedChild = nullptr;
 				for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
 				{
+					if( !solved[ poseChild->index ] )
+					{
+						continue;
+					}
+					firstSolvedChild = firstSolvedChild ? firstSolvedChild : poseChild;
 					// (b) relocate and reorient joint p4 to target t
 					_IKBone* ikChild = &ikBones[ poseChild->index ];
 					reverseIter( reverseIter, ikChild, poseChild );
@@ -33876,13 +34479,29 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				// bones deterministically track their first child instead.
 				// The decision comes from the bind pose alone and cannot pop
 				// between frames.
-				const _IKBone* ikChild = &ikBones[ poseBone->firstChild->index ];
+				const _IKBone* ikChild = &ikBones[ firstSolvedChild->index ];
 				ae::Vec3 localAlignDir = ae::Vec3( 0.0f );
 				ae::Vec3 worldAlignDir = ae::Vec3( 0.0f );
 				for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
 				{
+					if( !solved[ poseChild->index ] )
+					{
+						continue;
+					}
 					localAlignDir += ikBones[ poseChild->index ].parentBindDir;
 					worldAlignDir += ( ikBones[ poseChild->index ].modelPos - ikBone->modelPos ).SafeNormalizeCopy();
+				}
+				if( localAlignDir.SafeNormalize() < 0.2f )
+				{
+					// Unsolved children hold their current direction
+					localAlignDir = ae::Vec3( 0.0f );
+					worldAlignDir = ae::Vec3( 0.0f );
+					for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
+					{
+						const _IKBone* ikAlignChild = &ikBones[ poseChild->index ];
+						localAlignDir += ikAlignChild->parentBindDir;
+						worldAlignDir += solved[ poseChild->index ] ? ( ikAlignChild->modelPos - ikBone->modelPos ).SafeNormalizeCopy() : ikBone->boneToModelRot.Rotate( ikAlignChild->parentBindDir );
+					}
 				}
 				if( localAlignDir.SafeNormalize() < 0.2f )
 				{
@@ -33896,7 +34515,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 			}
 			else
 			{
-				// Is an extent since there's no child. Set to target for
+				// Is an extent since there's no solved child. Set to target for
 				// correct initial pose this iteration.
 				if( const ae::Vec3* target = targets.TryGet( poseBone->index ) )
 				{
@@ -33939,7 +34558,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 				continue;
 			}
 			const Bone* extentBone = pose.GetBoneByIndex( extentIndex );
-			if( extentBone->firstChild || !extentBone->parent )
+			if( solvedChildCount[ extentIndex ] || !extentBone->parent )
 			{
 				continue;
 			}
@@ -34013,7 +34632,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					twistRequest[ poseBone->index ] = 0.0f;
 					twistRequestCount[ poseBone->index ] = 0;
 				}
-				if( !poseBone->firstChild )
+				if( !solvedChildCount[ poseBone->index ] )
 				{
 					if( const ae::Quaternion* extentOri = targetOrientations.TryGet( poseBone->index ) )
 					{
@@ -34047,9 +34666,13 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		}
 		auto forwardIter = [&]( auto&& forwardIter, _IKBone* ikBone, const Bone* poseBone ) -> void
 		{
-			const bool singleChild = poseBone->firstChild && !poseBone->firstChild->nextSibling;
+			const bool singleChild = ( solvedChildCount[ poseBone->index ] == 1 );
 			for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
 			{
+				if( !solved[ poseChild->index ] )
+				{
+					continue;
+				}
 				_IKBone* ikChild = &ikBones[ poseChild->index ];
 
 				if( const ae::Vec3* target = targets.TryGet( poseChild->index ) )
@@ -34197,6 +34820,27 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		};
 		twistIter( twistIter, &ikBones[ rootBoneIndex ], pose.GetBoneByIndex( rootBoneIndex ) );
 	}
+
+	// Carry unsolved bones rigidly with their solved parent using their input local transform
+	auto carryIter = [&]( auto&& carryIter, const Bone* poseBone ) -> void
+	{
+		const _IKBone* ikBone = &ikBones[ poseBone->index ];
+		const ae::Quaternion inputRot = poseBone->boneToModel.GetRotation();
+		const ae::Vec3 inputPos = poseBone->boneToModel.GetTranslation();
+		for( const Bone* poseChild = poseBone->firstChild; poseChild; poseChild = poseChild->nextSibling )
+		{
+			if( !solved[ poseChild->index ] )
+			{
+				_IKBone* ikChild = &ikBones[ poseChild->index ];
+				const ae::Quaternion localRot = inputRot.GetInverse() * poseChild->boneToModel.GetRotation();
+				const ae::Vec3 localPos = inputRot.GetInverse().Rotate( poseChild->boneToModel.GetTranslation() - inputPos );
+				ikChild->boneToModelRot = ikBone->boneToModelRot * localRot;
+				ikChild->modelPos = ikBone->modelPos + ikBone->boneToModelRot.Rotate( localPos );
+			}
+			carryIter( carryIter, poseChild );
+		}
+	};
+	carryIter( carryIter, pose.GetBoneByIndex( rootBoneIndex ) );
 
 	poseOut->Initialize( &pose );
 	const ae::Bone* poseOutRoot = poseOut->GetBoneByIndex( rootBoneIndex );
@@ -34719,26 +35363,42 @@ void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* buffe
 	{
 		memcpy( &header, fileBuffer + fileOffset, sizeof(header) );
 		fileOffset += sizeof(header);
-		AE_ASSERT( ( fileSize - fileOffset ) >= header.chunkSize );
+		if( ( fileSize - fileOffset ) < header.chunkSize )
+		{
+			return; // Truncated
+		}
 		
 		if( memcmp( header.chunkId, "RIFF", 4 ) == 0 )
 		{
 			RiffChunk riff;
+			if( header.chunkSize < sizeof(riff) )
+			{
+				return;
+			}
 			memcpy( &riff, fileBuffer + fileOffset, sizeof(riff) );
-			AE_ASSERT( memcmp( riff.waveId, "WAVE", 4 ) == 0 );
+			if( memcmp( riff.waveId, "WAVE", 4 ) != 0 )
+			{
+				return;
+			}
 			fileOffset += sizeof(riff);
 		}
 		else
 		{
 			if( memcmp( header.chunkId, "fmt ", 4 ) == 0 )
 			{
-				AE_ASSERT( header.chunkSize >= sizeof(FormatChunk) );
+				if( header.chunkSize < sizeof(FormatChunk) )
+				{
+					return;
+				}
 				memcpy( &waveFormat, fileBuffer + fileOffset, sizeof(FormatChunk) );
 				hasReadFormat = true;
 			}
 			else if( memcmp( header.chunkId, "data", 4 ) == 0 )
 			{
-				AE_ASSERT( hasReadFormat );
+				if( !hasReadFormat )
+				{
+					return;
+				}
 				AE_ASSERT_MSG( dataSize == 0, "Combining WAV data chunks is currently not supported" );
 				
 				const uint8_t* data = ( fileBuffer + fileOffset );
@@ -34773,8 +35433,10 @@ void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* buffe
 		}
 	}
 
-	AE_ASSERT( hasReadFormat );
-	AE_ASSERT( dataSize );
+	if( !hasReadFormat || !dataSize )
+	{
+		return;
+	}
 	*lengthOut = dataSize / ( waveFormat.sampleRate * waveFormat.numChannels * waveFormat.bitsPerSample / 8.0f );
 #endif
 }

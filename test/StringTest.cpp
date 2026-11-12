@@ -204,6 +204,28 @@ TEST_CASE( "strings of different lengths can be compared alphabetically", "[aeSt
 	}
 }
 
+TEST_CASE( "Str equality with other string types", "[aeString]" )
+{
+	const ae::Str32 str32 = "abc";
+	const ae::Str16 str16 = "abc";
+	const ae::Str16 other16 = "xyz";
+	const std::string stdStr = "abc";
+	const std::string otherStdStr = "xyz";
+
+	REQUIRE( str32 == str16 );
+	REQUIRE( str16 == str32 );
+	REQUIRE( str32 != other16 );
+	REQUIRE( other16 != str32 );
+	REQUIRE_FALSE( str16 != str32 );
+
+	REQUIRE( stdStr == str32 );
+	REQUIRE( str32 == stdStr );
+	REQUIRE( otherStdStr != str32 );
+	REQUIRE( str32 != otherStdStr );
+	REQUIRE_FALSE( stdStr != str32 );
+	REQUIRE_FALSE( str32 != stdStr );
+}
+
 TEST_CASE( "ToString", "[aeString]" )
 {
 	REQUIRE( ae::ToString( ae::Vec2( 1.0f, 2.0f ) ) == "1.000 2.000" );

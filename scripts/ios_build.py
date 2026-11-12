@@ -4,8 +4,8 @@ ios_build.py TARGET [CONFIG]
 
 Builds an iOS target via the matching 'ios-<config>' build preset in
 CMakePresets.json. The preset carries -allowProvisioningUpdates (so Xcode
-auto-handles provisioning) and -destination generic/platform=iOS as
-nativeToolOptions. Signing identity + team are baked into the Xcode project
+auto-handles provisioning) as nativeToolOptions. Signing identity + team are
+baked into the Xcode project
 at configure time by examples/CMakeLists.txt (which defaults the team from
 $AE_APPLE_DEVELOPMENT_TEAM or scripts/config.env) and scripts/AddBundle.cmake,
 so this script does not pass any signing overrides.

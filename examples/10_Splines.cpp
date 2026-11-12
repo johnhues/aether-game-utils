@@ -74,6 +74,7 @@ int main( int argc, char* argv[] )
   ae::Shader spriteShader;
   ae::TimeStep timeStep;
   ae::Texture2D tex;
+  const ae::File* texFile = nullptr;
   float t = 0.0f;
   float angle = 0.0f;
 
@@ -98,20 +99,21 @@ int main( int argc, char* argv[] )
 
     timeStep.SetTimeStep( 1.0f / 60.0f );
 
-    {
-      const char* fileName = "circle.tga";
-      uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
-      AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
-      ae::Scratch< uint8_t > fileBuffer( fileSize );
-      fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-      ae::TargaFile targa = TAG_EXAMPLE;
-      targa.Load( fileBuffer.Data(), fileBuffer.Length() );
-      tex.Initialize( targa.textureParams );
-    }
+    texFile = fileSystem.Read( ae::FileSystem::Root::Data, "circle.tga", 0.0f );
     return true;
   };
   auto Update = [&]() -> bool
   {
+    if( texFile && texFile->GetStatus() != ae::File::Status::Pending )
+    {
+      AE_ASSERT_MSG( texFile->GetLength(), "Could not load #", texFile->GetURL() );
+      ae::TargaFile targa = TAG_EXAMPLE;
+      targa.Load( texFile->GetData(), texFile->GetLength() );
+      tex.Initialize( targa.textureParams );
+      fileSystem.Destroy( texFile );
+      texFile = nullptr;
+    }
+
     input.Pump();
     render.Activate();
     render.Clear( ae::Color::Black() );
@@ -142,7 +144,7 @@ int main( int argc, char* argv[] )
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.4f ) );
     spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::White() );
 
-    t += timeStep.GetTimeStep();
+    t += timeStep.GetDt();
     if( t > splineLen )
     {
       t -= splineLen;
@@ -151,7 +153,7 @@ int main( int argc, char* argv[] )
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.3f ) );
     spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Green() );
 
-    angle += timeStep.GetTimeStep();
+    angle += timeStep.GetDt();
     // Orbit dot
     ae::Vec3 rotPos = p + ae::Vec3( cosf(angle), sinf(angle), 0.0f ) * 0.5f;
     transform = ae::Matrix4::Translation( rotPos - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
@@ -167,11 +169,14 @@ int main( int argc, char* argv[] )
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
     spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::AetherDarkPurple() );
 
-    ae::UniformList uniforms;
-    uniforms.Set( "u_worldToProj", ae::Matrix4::Scaling( ae::Vec3( 0.2f / render.GetAspectRatio(), 0.2f, 1.0f ) ) );
-    uniforms.Set( "u_tex", &tex );
-    spriteRender.SetParams( 0, &spriteShader, uniforms );
-    spriteRender.Render();
+    if( tex.GetTexture() )
+    {
+      ae::UniformList uniforms;
+      uniforms.Set( "u_worldToProj", ae::Matrix4::Scaling( ae::Vec3( 0.2f / render.GetAspectRatio(), 0.2f, 1.0f ) ) );
+      uniforms.Set( "u_tex", &tex );
+      spriteRender.SetParams( 0, &spriteShader, uniforms );
+      spriteRender.Render();
+    }
     render.Present();
     timeStep.Tick();
     return !input.quit;
@@ -184,5 +189,9 @@ int main( int argc, char* argv[] )
     window.Terminate();
     return 0;
   };
-  return ae::Application( argc, argv, Initialize, Update, Terminate );
+  return ae::Application( argc, argv, {
+    .initialize = Initialize,
+    .update = Update,
+    .terminate = Terminate,
+  } );
 }

@@ -32,7 +32,7 @@
 #include "aether.h"
 
 // Push warning disables for imgui includes
-#if _AE_EMSCRIPTEN_
+#if _AE_WASM_
 	#pragma GCC diagnostic push
 	#if defined(__clang__) && __clang_major__ >= 15
 		#pragma GCC diagnostic ignored "-Wnontrivial-memaccess"
@@ -67,7 +67,7 @@
 #pragma GCC diagnostic pop
 
 // Pop warning disables for imgui includes
-#if _AE_EMSCRIPTEN_
+#if _AE_WASM_
 	#pragma GCC diagnostic pop
 #elif _AE_WINDOWS_
 	#pragma warning( pop )
@@ -95,7 +95,13 @@ public:
 	//! any imGui functions are called.
 	void WriteGlobals();
 
+	//! Call after ae::Input::Pump() and before other code reads pointers or
+	//! scroll. Pointers that start over an ImGui window are claimed for ImGui,
+	//! and scroll over an ImGui window is cleared.
 	void NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt );
+	//! Call between ImGui::Begin() and ImGui::End() each frame to leave pointers
+	//! and scroll over the current window to the application, eg. for a viewport.
+	void PassThrough();
 
 	void Render();
 
@@ -126,6 +132,10 @@ private:
 	bool m_init = false;
 	bool m_headless = false;
 	bool m_pendingRender = false;
+	// Input
+	ae::Array< const ae::InputPointer*, 3 > m_pointers; // Claimed, one touch or up to one per mouse button
+	uint32_t m_lastPointerId = 0; // Pointers up to this id have been hit tested
+	ae::Array< ImGuiID, 8 > m_passThrough; // Root windows from the previous frame
 	// Globals
 	ImGuiContext* m_globalContext = nullptr;
 	ImGuiMemAllocFunc m_globalAllocFn = nullptr;

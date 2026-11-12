@@ -21,6 +21,7 @@ cmake --build --preset ios-coverage-debug
 CC=clang CXX=clang++ cmake -G Ninja -B build_coverage_clang -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
 cmake --build build_coverage_clang --target all
 build_coverage_clang/test/test
+test/config/check.sh native
 
 # ubuntu_deprecated.yml, on the host toolchain
 CC=clang CXX=clang++ cmake -G Ninja -B build_coverage_deprecated -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF -DAE_DEPRECATED=ON
@@ -47,16 +48,27 @@ fi
 # ubuntu_mingw.yml
 cmake -G Ninja -B build_coverage_mingw -DCMAKE_TOOLCHAIN_FILE=.github/toolchains/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
 cmake --build build_coverage_mingw --target all
+CXX=x86_64-w64-mingw32-g++ test/config/check.sh native
 if command -v wine > /dev/null; then
 	wine build_coverage_mingw/test/test.exe
 else
 	echo "wine not installed, skipping the Windows test run. act -W ubuntu_mingw.yml below covers it."
 fi
 
-# emscripten.yml
-emcmake cmake -G Ninja -B build_coverage_emscripten -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
-cmake --build build_coverage_emscripten --target all
-node build_coverage_emscripten/test/test.js
+# web.yml, build
+cmake -G Ninja -B build_coverage_wasi -DCMAKE_TOOLCHAIN_FILE="${WASI_SDK_PATH:?set WASI_SDK_PATH to the wasi-sdk install directory}/share/cmake/wasi-sdk-p1.cmake" -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF -DAE_LOADERS_OFBX=ON
+cmake --build build_coverage_wasi --target all
+test/config/check.sh wasi
+node test/web/check.js build_coverage_wasi/examples/Release
+
+# web.yml, emscripten-guest
+if command -v emcc > /dev/null; then
+	test/emscripten/build.sh build_coverage_emscripten
+	node test/web/check.js build_coverage_emscripten --expect-log "Rendered 60 frames"
+	test/config/check.sh emscripten
+else
+	echo "emcc not on the PATH, skipping the Emscripten guest test. act -W web.yml below covers it."
+fi
 
 # The stages above all run the host toolchain. These run the workflows
 # themselves, in the CI container, and are the only real coverage for GCC and
@@ -64,8 +76,8 @@ node build_coverage_emscripten/test/test.js
 if [ "${AE_SKIP_ACT:-0}" != "1" ]; then
 	# Architecture per workflow. ubuntu_mingw needs amd64: arm64 wine starts an
 	# x86_64 PE in experimental ARM64EC mode and hangs. Everything else runs on
-	# the host architecture: Rosetta cannot translate node's JIT, so an amd64
-	# container aborts the emscripten workflow on Apple Silicon.
+	# the host architecture: Rosetta cannot translate node's JIT, so node aborts
+	# in an amd64 container on Apple Silicon.
 	# AE_BUILD_IMAGE points the workflows at the images docker2/docker_build.sh
 	# builds. The names exist in no registry, so nothing can replace them with a
 	# published copy. --pull=false is required with it: act pulls by default,
@@ -84,12 +96,17 @@ if [ "${AE_SKIP_ACT:-0}" != "1" ]; then
 			exit 1
 		fi
 	done
-	for _wf in ubuntu_clang ubuntu_gcc ubuntu_deprecated ubuntu_mingw emscripten; do
+	for _wf in ubuntu_clang ubuntu_gcc ubuntu_deprecated ubuntu_mingw; do
 		case "$_wf" in
 			ubuntu_mingw) _arch="linux/amd64" ;;
 			*)            _arch="$_host_arch" ;;
 		esac
 		act -W ".github/workflows/$_wf.yml" --container-architecture "$_arch" --var "AE_BUILD_IMAGE=aether-build:${_arch#linux/}" --pull=false --rm
+	done
+	# web.yml without publish-docs, which deploys to GitHub Pages. Its examples
+	# upload needs a local artifact server.
+	for _job in build emscripten-guest; do
+		act -W .github/workflows/web.yml -j "$_job" --artifact-server-path "$PWD/build_coverage_act_artifacts" --container-architecture "$_host_arch" --var "AE_BUILD_IMAGE=aether-build:${_host_arch#linux/}" --pull=false --rm
 	done
 fi
 

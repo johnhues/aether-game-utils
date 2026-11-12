@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "vadimcn.vscode-lldb",
+        "llvm-vs-code-extensions.lldb-dap",
+		"ms-vscode.cmake-tools"
+    ],
+	"unwantedRecommendations": [
+		"ms-vscode.cpptools",
+		"ms-vscode.cpptools-extension-pack"
+	]
+}

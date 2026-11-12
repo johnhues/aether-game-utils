@@ -97,9 +97,13 @@ int main( int argc, char* argv[] )
 	{
 		// Update input
 		input.Pump();
-		if( input.GetMousePressLeft() )
+		while( const ae::InputPointer* pointer = input.PumpPointers() )
 		{
-			input.SetCursorState( ae::CursorState::HiddenAndCaptured );
+			if( pointer->source == ae::InputPointerSource::Mouse && pointer->button == ae::InputPointerButton::Primary )
+			{
+				input.SetCursorState( ae::CursorState::HiddenAndCaptured );
+			}
+			input.ReleasePointer( pointer );
 		}
 		if( input.GetPress( ae::Key::Escape ) )
 		{
@@ -111,16 +115,16 @@ int main( int argc, char* argv[] )
 		ae::Vec2 mouseDir( 0.0f );
 		if( input.GetCursorLocked() )
 		{
-			mouseDir += input.mouse.movement * 0.5f;
+			mouseDir += input.cursorMovement * 0.5f;
 		}
 		// Scroll wheel
-		if( input.mouse.usingTouch )
+		if( input.scroll.isTrackpad )
 		{
-			mouseDir += input.mouse.scroll * ae::Vec2( 0.5f, -0.5f );
+			mouseDir += input.scroll.delta * ae::Vec2( 0.5f, -0.5f );
 		}
 		else
 		{
-			zoom += ( input.mouse.scroll.y + input.mouse.scrollInertia.y ) * 0.01f;
+			zoom += ( input.scroll.delta.y + input.scroll.inertia.y ) * 0.01f;
 			zoom = ae::Clip( zoom, 0.1f, 2.0f );
 		}
 		mouseDir.Trim( 1.0f );
@@ -159,5 +163,9 @@ int main( int argc, char* argv[] )
 		window.Terminate();
 		return 0;
 	};
-	return ae::Application( argc, argv, Initialize, Update, Terminate );
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }

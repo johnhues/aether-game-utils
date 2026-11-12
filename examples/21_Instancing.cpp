@@ -21,6 +21,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
+// Draws a 128x128x128 grid of cubes, 2,097,152 instances and 25,165,824
+// triangles, with one ae::VertexBuffer::DrawInstanced() call. Each cube's
+// offset is read from a per instance ae::InstanceData buffer.
+//------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
@@ -110,6 +114,7 @@ int main( int argc, char* argv[] )
 
 		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 1.5f ) );
 		camera.SetDistanceLimits( 1.5f, INFINITY );
+		camera.SetModifierKey( {} );
 
 		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 		shader.SetDepthTest( true );
@@ -145,7 +150,7 @@ int main( int argc, char* argv[] )
 	auto Update = [&]() -> bool
 	{
 		input.Pump();
-		camera.Update( &input, timeStep.GetDt() );
+		camera.Update( { .input = &input, .dt = timeStep.GetDt(), .yFov = 0.9f, .viewport = window.GetArea() } );
 
 		r0 += timeStep.GetDt() * 0.6f;
 		r1 += timeStep.GetDt() * 0.75f;
@@ -178,5 +183,9 @@ int main( int argc, char* argv[] )
 		return 0;
 	};
 
-	return ae::Application( argc, argv, Initialize, Update, Terminate );
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }

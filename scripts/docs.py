@@ -12,8 +12,10 @@ in build_docs/, so the checked-in Doxyfile never has to be edited to preview
 something. Everything generated lands in build_docs/, which .gitignore covers.
 
 Tasks:
-  preview   builds the site into build_docs/html and serves it
-  publish   assembles the site into build_docs/publish, nothing served
+  preview   builds the web examples, then the site into build_docs/html, and
+            serves it
+  publish   builds the web examples, then assembles the site into
+            build_docs/publish, nothing served
   report    ranks what is still undocumented
 
 CLI: python3 scripts/docs.py [preview|publish|report] [--no-open] [--yes]
@@ -22,6 +24,7 @@ Naming a task runs it once and exits, skipping the menu.
 import argparse
 import contextlib
 import functools
+import gzip
 import html
 import http.server
 import json
@@ -30,9 +33,11 @@ import platform
 import re
 import shutil
 import socket
+import signal
 import subprocess
 import sys
 import tarfile
+import time
 import urllib.request
 import zipfile
 from collections import Counter
@@ -51,11 +56,13 @@ except ImportError:
     # Windows has no POSIX terminal control; the prompt falls back to input().
     termios = None
 
-REPO_ROOT = Path( __file__ ).resolve().parent.parent
+SCRIPT    = Path( __file__ ).resolve()
+REPO_ROOT = SCRIPT.parent.parent
 DOXYFILE  = REPO_ROOT / "Doxyfile"
 BUILD_DIR = REPO_ROOT / "build_docs"
 DOCS_DIR  = REPO_ROOT / "docs"
 LOG_FILE  = BUILD_DIR / "doxygen.log"
+SERVE_LOG = BUILD_DIR / "serve.log"
 
 # Pinned: the site's post processing reads doxygen's markup, so the version is
 # part of the build, not whatever the machine has installed. This release is
@@ -73,11 +80,11 @@ PUBLISH_PORT = 8766
 TASKS = {
     "preview": (
         "Preview build",
-        "builds into build_docs/html and serves it"
+        "builds the examples and build_docs/html, serves it"
     ),
     "publish": (
         "Publish build",
-        "assembles the site into build_docs/publish, nothing served"
+        "builds the examples, assembles build_docs/publish"
     ),
     "report": (
         "Coverage report",
@@ -388,7 +395,7 @@ def summarize_log():
 UNLISTED = (
     "annotated.html", "annotated_dup.js",
     "hierarchy.html", "hierarchy.js", "inherits.html",
-    "files.html", "files_dup.js",
+    "files.html", "files_dup.js", "pages.html",
     "functions*.html", "functions*.js",
     "doxygen_crawl.html",
 )
@@ -599,16 +606,60 @@ def open_path( path, allowed ):
 #------------------------------------------------------------------------------
 # Preview server
 #------------------------------------------------------------------------------
+# Formats that are already compressed, sent as they are.
+PRECOMPRESSED = { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".woff", ".woff2", ".ico" }
+gzipped = {} # path -> ( mtime, compressed bytes )
+
+
 class NoStoreHandler( http.server.SimpleHTTPRequestHandler ):
     """Serves the site without caching. A preview is regenerated in place, so a
-    cached stylesheet or script shows the previous run's site."""
+    cached stylesheet or script shows the previous run's site. Connections
+    stay open between requests and files are gzipped for browsers that accept
+    it, as a static host like GitHub Pages serves them."""
+
+    protocol_version = "HTTP/1.1"
 
     def end_headers( self ):
         self.send_header( "Cache-Control", "no-store" )
         super().end_headers()
 
-    def log_message( self, *args ):
-        pass
+    def do_GET( self ):
+        path = Path( self.translate_path( self.path ) )
+        if ( "gzip" not in self.headers.get( "Accept-Encoding", "" )
+             or path.suffix.lower() in PRECOMPRESSED or not path.is_file() ):
+            return super().do_GET()
+        mtime = path.stat().st_mtime_ns
+        cached = gzipped.get( path )
+        if not cached or cached[ 0 ] != mtime:
+            cached = ( mtime, gzip.compress( path.read_bytes(), 6 ) )
+            gzipped[ path ] = cached
+        self.send_response( 200 )
+        self.send_header( "Content-Type", self.guess_type( str( path ) ) )
+        self.send_header( "Content-Encoding", "gzip" )
+        self.send_header( "Content-Length", str( len( cached[ 1 ] ) ) )
+        self.send_header( "Vary", "Accept-Encoding" )
+        self.end_headers()
+        self.wfile.write( cached[ 1 ] )
+
+
+def serve_host():
+    """The address the server listens on: every interface when remote access
+    is on, this computer only otherwise."""
+    return "0.0.0.0" if remembered( "remote", False ) else "127.0.0.1"
+
+
+def serve_urls( port ):
+    """Where the site can be opened, the host name one only with remote
+    access on."""
+    urls = [ f"http://127.0.0.1:{port}/index.html" ]
+    if remembered( "remote", False ):
+        urls.append( f"http://{socket.gethostname()}:{port}/index.html" )
+    return urls
+
+
+def port_in_use( port ):
+    with socket.socket( socket.AF_INET, socket.SOCK_STREAM ) as probe:
+        return probe.connect_ex( ( "127.0.0.1", port ) ) == 0
 
 
 def serve_site( html_dir, port ):
@@ -616,17 +667,34 @@ def serve_site( html_dir, port ):
     listening. A
     page that embeds a live example only runs over http; the browser refuses to
     fetch its wasm from a file:// page. The server outlives this script, and
-    regenerating the site needs no restart."""
-    with socket.socket( socket.AF_INET, socket.SOCK_STREAM ) as probe:
-        if probe.connect_ex( ( "127.0.0.1", port ) ) == 0:
+    regenerating the site needs no restart. A server this script started on
+    another address is replaced."""
+    host = serve_host()
+    record = BUILD_DIR / f"serve.{port}.pid"
+    if port_in_use( port ):
+        try:
+            pid, running = record.read_text().split()
+        except ( OSError, ValueError ):
+            return "an earlier preview is still serving it, kill it to change remote access"
+        if running == host:
             return "an earlier preview is still serving it"
-    process = subprocess.Popen(
-        [ sys.executable, __file__, "--serve", str( html_dir ),
-          "--port", str( port ) ],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        start_new_session=True
-    )
-    return f"serving as pid {process.pid}, kill it to stop"
+        try:
+            os.kill( int( pid ), signal.SIGTERM )
+        except OSError:
+            return "an earlier preview is still serving it, kill it to change remote access"
+        for _ in range( 30 ):
+            if not port_in_use( port ):
+                break
+            time.sleep( 0.1 )
+    with open( SERVE_LOG, "a" ) as log:
+        process = subprocess.Popen(
+            [ sys.executable, __file__, "--serve", str( html_dir ),
+              "--port", str( port ), "--host", host ],
+            stdout=subprocess.DEVNULL, stderr=log,
+            start_new_session=True
+        )
+    record.write_text( f"{process.pid} {host}\n" )
+    return f"serving as pid {process.pid}, kill it to stop, requests in {shorten( SERVE_LOG )}"
 
 
 #------------------------------------------------------------------------------
@@ -732,16 +800,16 @@ def add_demo_script( html_dir ):
 
 
 
-def emscripten_build_dir():
-    """Where the emscripten preset writes, read from CMakePresets.json so a
-    renamed build directory does not leave the preview pointing at nothing."""
+def web_build_dir():
+    """Where the wasi preset writes, read from CMakePresets.json so a renamed
+    build directory does not leave the preview pointing at nothing."""
     presets = REPO_ROOT / "CMakePresets.json"
     if presets.exists():
         import json
         for preset in json.loads( presets.read_text() ).get( "configurePresets", [] ):
-            if preset.get( "name" ) == "emscripten" and preset.get( "binaryDir" ):
+            if preset.get( "name" ) == "wasi" and preset.get( "binaryDir" ):
                 return Path( preset[ "binaryDir" ].replace( "${sourceDir}", str( REPO_ROOT ) ) )
-    return REPO_ROOT / "build_emscripten"
+    return REPO_ROOT / "build_wasi"
 
 
 def linked_config( html_dir ):
@@ -768,7 +836,7 @@ def referenced_examples( html_dir ):
 
 def place_examples( html_dir, source, copy=False ):
     """Puts the built web examples where a demo frame looks for them, and says
-    what it did. A config name links the directory the emscripten build writes
+    what it did. A config name links the directory the wasi build writes
     to, so a rebuild needs no regeneration; "published" copies docs/examples,
     which is what the site ships."""
     target = html_dir / "examples"
@@ -778,7 +846,7 @@ def place_examples( html_dir, source, copy=False ):
         shutil.rmtree( target )
 
     named = source in BUILD_CONFIGS
-    source = emscripten_build_dir() / "examples" / source if named else Path( source )
+    source = web_build_dir() / "examples" / source if named else Path( source )
     if not source.is_dir():
         return f"none: {source} does not exist"
     built = len( [ p for p in source.iterdir() if p.is_dir() and any( p.iterdir() ) ] )
@@ -797,6 +865,334 @@ def place_examples( html_dir, source, copy=False ):
         return f"{copied_count} of {built} copied from {source}"
     target.symlink_to( os.path.relpath( source, html_dir ) )
     return f"{built} linked from {shorten( source )}"
+
+
+def build_examples( config ):
+    """Builds the web examples for a config with the wasi presets,
+    configuring first when the build directory has never been configured."""
+    heading( f"Build {config} Examples" )
+    if not ( web_build_dir() / "CMakeCache.txt" ).exists():
+        if not os.environ.get( "WASI_SDK_PATH" ):
+            sys.exit( "ERROR: the wasi preset needs WASI_SDK_PATH set to the "
+                      "wasi-sdk install directory" )
+        step( "Configuring" )
+        if subprocess.run( [ "cmake", "--preset", "wasi" ], cwd=REPO_ROOT ).returncode:
+            sys.exit( "ERROR: configuring the wasi preset failed" )
+    step( "Building" )
+    preset = f"wasi-{config.lower()}"
+    if subprocess.run( [ "cmake", "--build", "--preset", preset ], cwd=REPO_ROOT ).returncode:
+        sys.exit( f"ERROR: building {preset} failed" )
+    note( f"built into {shorten( web_build_dir() / 'examples' / config )}" )
+
+
+#------------------------------------------------------------------------------
+# Examples
+#------------------------------------------------------------------------------
+# Every example program in examples/CMakeLists.txt in numbered order, spliced
+# into a copy of README.md at EXAMPLES_MARKER that doxygen reads as the main
+# page. An example's description is
+# the first comment block after its source file's banner and license.
+EXAMPLES_DIR = REPO_ROOT / "examples"
+MAIN_PAGE = BUILD_DIR / "README.md"
+EXAMPLES_MARKER = "<!-- examples -->"
+SOURCE_URL = "https://github.com/johnhues/aether-game-utils/blob/main/examples/"
+BUNDLE = re.compile( r'^\s*ae_add_bundle\(\s*"([^"]+)"(.*?)^\s*\)', re.M | re.S )
+NUMBERED = re.compile( r"^(\d+)_" )
+
+
+def bundle_arg( body, name ):
+    found = re.search( rf'^\s*{name}\s+"([^"]*)"', body, re.M )
+    return found.group( 1 ) if found else ""
+
+
+def example_description( path ):
+    """The first paragraph of the comment block naming what the file shows."""
+    sections, lines = [], []
+    for line in path.read_text().split( "\n" ):
+        if not line.startswith( "//" ):
+            break
+        if line.startswith( "//---" ):
+            sections.append( lines )
+            lines = []
+        else:
+            lines.append( line[ 2: ].strip() )
+    for section in sections[ 2: ]:
+        paragraph = []
+        for line in section:
+            if not line and paragraph:
+                break
+            paragraph.append( line )
+        text = "\n".join( paragraph ).strip()
+        if text.startswith( "Copyright" ) or not text.endswith( ( ".", ":" ) ) and "\n-" not in text:
+            continue
+        return text
+    return ""
+
+
+def example_references():
+    """Maps each example target and source file to the aether.h symbols and
+    groups whose documentation shows it, as markdown that links to them."""
+    lines = ( REPO_ROOT / "aether.h" ).read_text().split( "\n" )
+    found = {}
+    scope = ""
+    for i, line in enumerate( lines ):
+        opened = re.match( r"(?:class|struct)\s+(?:AE_ALIGN\(\s*\d+\s*\)\s*)?(\w+)\s*(?::.*)?$", line )
+        if opened:
+            scope = opened.group( 1 )
+        if not line.lstrip().startswith( "//!" ):
+            continue
+        keys = re.findall( r"\\demo\{examples/([^,}]+)", line )
+        keys += re.findall( r"\\snippet(?:\{\w+\})?\s+(\S+)", line )
+        if not keys:
+            continue
+        start = i
+        while start > 0 and lines[ start - 1 ].lstrip().startswith( "//!" ):
+            start -= 1
+        at = i + 1
+        while at < len( lines ) and re.match( r"\s*(//|template\b)", lines[ at ] ):
+            at += 1
+        group = re.search( r"\\defgroup\s+(\w+)", "\n".join( lines[ start:i + 1 ] ) )
+        declaration = lines[ at ] if at < len( lines ) else ""
+        kind = re.match( r"(\s*)(?:class|struct)\s+(?:AE_ALIGN\(\s*\d+\s*\)\s*)?(\w+)", declaration )
+        if group:
+            symbol = f"\\ref {group.group( 1 )}"
+        elif kind and not kind.group( 1 ):
+            symbol = f"ae::{kind.group( 2 )}"
+        else:
+            function = re.search( r"(~?\w+)\s*\(", declaration )
+            name = function.group( 1 ) if function else ""
+            nested = declaration[ :1 ].isspace() and scope
+            symbol = f"ae::{scope}::{name}" if nested else f"ae::{name}"
+        for key in keys:
+            found.setdefault( key, [] )
+            if symbol not in found[ key ]:
+                found[ key ].append( symbol )
+    return found
+
+
+def write_main_page():
+    """Writes the main page with the examples in it and returns how many it
+    lists."""
+    bundles = []
+    cmake = ( EXAMPLES_DIR / "CMakeLists.txt" ).read_text()
+    for match in BUNDLE.finditer( cmake ):
+        # Desktop only bundles have no web build to embed.
+        conditions = []
+        for line in cmake[ :match.start() ].split( "\n" ):
+            line = line.strip()
+            if re.match( r"if\s*\(", line ):
+                conditions.append( line )
+            elif re.match( r"endif\s*\(", line ):
+                conditions.pop()
+        web = not any( "AE_DESKTOP" in c for c in conditions )
+        target = bundle_arg( match.group( 2 ), "TARGET_NAME" ) or match.group( 1 )
+        sources = [
+            s for s in bundle_arg( match.group( 2 ), "SRC_FILES" ).split( ";" )
+            if s and "/" not in s and "$" not in s
+        ]
+        number = NUMBERED.match( target )
+        if number:
+            bundles.append( ( int( number.group( 1 ) ), match.group( 1 ), target, sources, web ) )
+    bundles.sort( key=lambda bundle: bundle[ 0 ] )
+
+    # A numbered file no bundle compiles directly belongs to every bundle
+    # sharing its number, like a shared header or the library a loader opens.
+    claimed = { s for bundle in bundles for s in bundle[ 3 ] }
+    unclaimed = [
+        p.name for p in sorted( EXAMPLES_DIR.iterdir() )
+        if p.suffix in ( ".cpp", ".mm", ".h" ) and NUMBERED.match( p.name )
+        and p.name not in claimed
+    ]
+
+    references = example_references()
+    shapes = dict( re.findall(
+        r"\\demo\{examples/([^,}]+),([^}]+)\}", ( REPO_ROOT / "aether.h" ).read_text()
+    ) )
+    out = [ "---", "# Examples", "", "---", "" ]
+    for number, title, target, sources, web in bundles:
+        sources = sources + [
+            n for n in unclaimed if int( NUMBERED.match( n ).group( 1 ) ) == number
+        ]
+        name = "ae_" + target.lower()
+        links = [ f"[{s}]({SOURCE_URL}{s})" for s in sources ]
+        symbols = []
+        for key in [ target ] + sources:
+            symbols += [ s for s in references.get( key, [] ) if s not in symbols ]
+        description = next(
+            ( d for d in ( example_description( EXAMPLES_DIR / s ) for s in sources ) if d ),
+            ""
+        )
+        out += [ f"## {name} ({title}) {{#{name}}}", "", "---", "", " · ".join( links + symbols ) ]
+        if description:
+            out += [ "", description ]
+        if web:
+            shape = f",{shapes[ target ]}" if target in shapes else ""
+            out += [ "", f"\\demo{{examples/{target}{shape}}}" ]
+        out += [ "", "---", "" ]
+    readme = ( REPO_ROOT / "README.md" ).read_text()
+    if EXAMPLES_MARKER not in readme:
+        sys.exit( f"ERROR: README.md has no {EXAMPLES_MARKER} line to place the examples at" )
+    MAIN_PAGE.write_text( readme.replace( EXAMPLES_MARKER, "\n".join( out ), 1 ) )
+    return len( bundles )
+
+
+#------------------------------------------------------------------------------
+# Web page
+#------------------------------------------------------------------------------
+# The Web page, from the WEB_PAGE block in aether.h followed by the aether.js
+# API, so each stays documented in its own file. The aether.js header comment
+# introduces the API, and each documented export and typedef becomes a section.
+JS_FILE = REPO_ROOT / "aether.js"
+WEB_PAGE = BUILD_DIR / "web.md"
+WEB_BLOCK = re.compile( r"^//! \\cond WEB_PAGE\n(.*?)^//! \\endcond", re.M | re.S )
+JSDOC = re.compile( r"/\*\*(.*?)\*/\s*(export\s+(?:async\s+)?(function|const)\s+(\w+)\s*(\([^)]*\))?)?", re.S )
+# Sections in reading order, the rest follow in file order
+JS_ORDER = [ "instantiate", "InstantiateOptions", "AetherInstance", "AetherStats", "abiVersion" ]
+
+
+def js_header( text ):
+    """The header comment after the license, as prose and indented code."""
+    blocks = text.split( "//------------------------------------------------------------------------------\n" )
+    lines = [ l[ 3: ] if l.startswith( "// " ) else l[ 2: ] for l in blocks[ 3 ].split( "\n" ) if l.startswith( "//" ) ]
+    return lines
+
+
+def js_braced( text ):
+    """Splits '{type} rest' into the type and the rest, braces may nest."""
+    if not text.startswith( "{" ):
+        return "", text
+    depth = 0
+    for i, c in enumerate( text ):
+        depth += ( c == "{" ) - ( c == "}" )
+        if depth == 0:
+            return text[ 1:i ].strip(), text[ i + 1: ].strip()
+    return text, ""
+
+
+def js_block( body ):
+    """A JSDoc comment as its description and its tags, continuation lines
+    joined onto the tag they continue. The description keeps its paragraphs
+    and list items on their own lines."""
+    lines = [ re.sub( r"^\s*\* ?", "", l ) for l in body.strip( "*\n " ).split( "\n" ) ]
+    description, tags = [], []
+    for line in lines:
+        tag = re.match( r"@(param|property|returns|typedef)\s+(.*)", line.strip() )
+        if tag:
+            tags.append( [ tag.group( 1 ), tag.group( 2 ) ] )
+        elif tags:
+            tags[ -1 ][ 1 ] += " " + line.strip()
+        elif not line.strip() or line.startswith( "- " ) or not description or not description[ -1 ]:
+            description.append( line.strip() )
+        else:
+            description[ -1 ] += " " + line.strip()
+    # Code names are JavaScript, never links to the C++ symbols they may share a name with
+    text = re.sub( r"`(\w+)`", r"`%\1`", "\n".join( description ).strip() )
+    return text, tags
+
+
+def js_note( text ):
+    """Moves an '@NOTE: Placeholder.' tail out of a description."""
+    match = re.search( r"\s*@NOTE: Placeholder\.\s*(.*)$", text, re.S )
+    if not match:
+        return text, ""
+    return text[ :match.start() ], match.group( 1 ).strip()
+
+
+def js_cell( text ):
+    return text.replace( "|", "\\|" ).replace( "\n", " " )
+
+
+def js_type( text ):
+    """A type in code, linking the types this page documents."""
+    linked = re.fullmatch( r"(?:Promise<)?(\w+)>?", text )
+    if linked and linked.group( 1 ) in JS_ORDER:
+        ref = f'\\ref aether_js_{linked.group( 1 ).lower()} "{linked.group( 1 )}"'
+        return ( "`Promise` of " if text.startswith( "Promise<" ) else "" ) + ref
+    return "`" + text.replace( "|", " or " ) + "`"
+
+
+def write_web_page():
+    """Writes the Web page and returns how many aether.js sections it has."""
+    block = WEB_BLOCK.search( ( REPO_ROOT / "aether.h" ).read_text() )
+    if not block:
+        sys.exit( "ERROR: aether.h has no WEB_PAGE block for the Web page" )
+    out = [ "# Web {#web}", "" ]
+    out += [ re.sub( r"^//! ?", "", line ) for line in block.group( 1 ).rstrip( "\n" ).split( "\n" ) ]
+    out += [ "", "Two instances of one program on a page, each on its own canvas and calling into the other:", "", "\\demo{examples/33_twins,2/1}", "" ]
+    out += [ "---", "", "## aether.js {#aether_js}", "" ]
+    text = JS_FILE.read_text()
+    code = False
+    for line in js_header( text ):
+        if line.startswith( "@NOTE: Placeholder." ):
+            line = "\\note " + line[ len( "@NOTE: Placeholder." ): ].strip()
+        indented = line.startswith( "  " )
+        if indented and not code:
+            out += [ "```js" ]
+        elif not indented and code:
+            out += [ "```" ]
+        code = indented
+        out += [ line[ 2: ] if indented else line ]
+    if code:
+        out += [ "```" ]
+    out += [ "" ]
+
+    sections = {}
+    for match in JSDOC.finditer( text ):
+        description, tags = js_block( match.group( 1 ) )
+        typedef = next( ( t[ 1 ] for t in tags if t[ 0 ] == "typedef" ), None )
+        if typedef:
+            name = js_braced( typedef )[ 1 ]
+            title = name
+        elif match.group( 4 ):
+            name = match.group( 4 )
+            title = name + re.sub( r"\s*=[^,)]*?(?=\s*[,)])", "", match.group( 5 ) or "" )
+        else:
+            continue
+        description, placeholder = js_note( description )
+        lines = [ "---", "", f"### {title} {{#aether_js_{name.lower()}}}", "" ]
+        if description:
+            lines += [ description, "" ]
+        if placeholder:
+            lines += [ f"\\note {placeholder}", "" ]
+        rows = []
+        for kind, value in tags:
+            if kind not in ( "param", "property" ):
+                continue
+            type_, rest = js_braced( value )
+            member = re.match( r"(\[[^\]]+\]|\S+)\s*(.*)", rest )
+            label, about = member.group( 1 ), member.group( 2 )
+            optional = label.startswith( "[" )
+            label = label.strip( "[]" )
+            about, note = js_note( about )
+            if note:
+                about += f" *Placeholder: {note}*"
+            rows.append( f"| `{label}`{' (optional)' if optional else ''} | {js_type( type_ )} | {js_cell( about )} |" )
+        if rows:
+            heading = "Parameter" if tags[ 0 ][ 0 ] == "param" else "Property"
+            lines += [ f"| {heading} | Type | Description |", "|---|---|---|" ] + rows + [ "" ]
+        returns = next( ( t[ 1 ] for t in tags if t[ 0 ] == "returns" ), None )
+        if returns:
+            type_, about = js_braced( returns )
+            lines += [ f"**Returns** {js_type( type_ )}: {about}", "" ]
+        sections[ name ] = lines
+    for name in JS_ORDER + [ n for n in sections if n not in JS_ORDER ]:
+        out += sections.get( name, [] )
+    WEB_PAGE.write_text( "\n".join( out ) + "\n" )
+    return len( sections )
+
+
+def main_page_overrides():
+    """Points doxygen at the main page copy in place of README.md, and adds
+    the Web page."""
+    return {
+        "INPUT": doxyfile_value( "INPUT" ).replace( "README.md", str( shorten( MAIN_PAGE ) ) ) + " " + str( shorten( WEB_PAGE ) ),
+        "USE_MDFILE_AS_MAINPAGE": shorten( MAIN_PAGE ),
+    }
+
+
+def doxyfile_value( tag ):
+    found = re.search( rf"^{tag}\s*=\s*(.*)$", DOXYFILE.read_text(), re.M )
+    return found.group( 1 ).strip() if found else ""
 
 
 #------------------------------------------------------------------------------
@@ -850,14 +1246,19 @@ def finish_site( html_dir, args ):
 def task_publish( args ):
     """Assembles the site for publishing: the examples the pages reference are
     copied in rather than linked, and nothing is served."""
-    heading( "Site" )
     args.publishing = True
     html_dir = Path( args.out ).resolve() if args.out else BUILD_DIR / "publish"
+    if not args.config_dir:
+        build_examples( args.config or "Release" )
+    heading( "Site" )
     if html_dir.exists():
         shutil.rmtree( html_dir )
     with generating():
         step( "Generating HTML" )
+        print( f"  {write_main_page()} examples listed" )
+        print( f"  {write_web_page()} aether.js sections on the Web page" )
         doxyfile = write_doxyfile( "publish", {
+            **main_page_overrides(),
             "OUTPUT_DIRECTORY": html_dir.parent,
             "HTML_OUTPUT": html_dir.name,
             "GENERATE_HTML": "YES",
@@ -873,21 +1274,24 @@ def task_publish( args ):
 
     step( "Serving" )
     port = args.port or PUBLISH_PORT
-    url = f"http://127.0.0.1:{port}/index.html"
-    print( f"  {url}" )
+    urls = serve_urls( port )
+    for url in urls:
+        print( f"  {url}" )
     note( serve_site( html_dir, port ) )
 
     step( "Next" )
     note( f"upload {shorten( html_dir )}" )
-    open_path( url, not args.no_open and remembered( "open", True ) )
+    open_path( urls[ 0 ], not args.no_open and remembered( "open", True ) )
 
 
 def task_preview( args ):
-    heading( "Preview build" )
     args.publishing = False
     html_dir = Path( args.out ).resolve() if args.out else BUILD_DIR / "html"
     if not args.config:
         args.config = linked_config( html_dir ) or "Release"
+    if not args.config_dir:
+        build_examples( args.config )
+    heading( "Preview build" )
     if args.clean and html_dir.exists():
         # Doxygen leaves a page it no longer generates where it is, and the
         # preview serves it like any other.
@@ -895,7 +1299,10 @@ def task_preview( args ):
         note( "cleared the previous site, every graph is drawn again" )
     with generating():
         step( "Generating HTML" )
+        print( f"  {write_main_page()} examples listed" )
+        print( f"  {write_web_page()} aether.js sections on the Web page" )
         overrides = {
+            **main_page_overrides(),
             "OUTPUT_DIRECTORY": BUILD_DIR,
             "HTML_OUTPUT": "html",
             "GENERATE_HTML": "YES",
@@ -911,14 +1318,15 @@ def task_preview( args ):
     summarize_log()
 
     step( "Serving" )
-    url = f"http://127.0.0.1:{args.port or PREVIEW_PORT}/index.html"
-    print( f"  {url}" )
+    urls = serve_urls( args.port or PREVIEW_PORT )
+    for url in urls:
+        print( f"  {url}" )
     note( serve_site( html_dir, args.port or PREVIEW_PORT ) )
 
     step( "Next" )
     note( "'report' ranks what is still undocumented" )
     note( "edit doxygen-custom.css to restyle, DoxygenLayout.xml to rename tabs" )
-    open_path( url, not args.no_open and remembered( "open", True ) )
+    open_path( urls[ 0 ], not args.no_open and remembered( "open", True ) )
 
 
 def task_report( args ):
@@ -978,12 +1386,42 @@ def task_report( args ):
 #------------------------------------------------------------------------------
 # Menu
 #------------------------------------------------------------------------------
+# The menu restarts on the edited script, then acts on the key that noticed it.
+script_stamp = SCRIPT.stat().st_mtime_ns
+
+
+def reload_if_changed( key, args ):
+    """Restarts this script with key replayed if the file changed since it
+    started. A file that no longer compiles is reported and the old code kept."""
+    global script_stamp
+    stamp = SCRIPT.stat().st_mtime_ns
+    if stamp == script_stamp:
+        return
+    script_stamp = stamp
+    try:
+        compile( SCRIPT.read_text(), str( SCRIPT ), "exec" )
+    except SyntaxError as error:
+        note( f"{SCRIPT.name}:{error.lineno}: {error.msg}, kept the running copy" )
+        return
+    note( f"{SCRIPT.name} changed, reloading" )
+    argv = [ sys.executable, str( SCRIPT ) ]
+    skip = False
+    for arg in sys.argv[ 1: ]:
+        if not skip and arg not in ( "--config", "--replay" ):
+            argv.append( arg )
+        skip = not skip and arg in ( "--config", "--replay" )
+    if args.config:
+        argv += [ "--config", args.config ]
+    sys.stdout.flush()
+    os.execv( sys.executable, argv + [ "--replay", key ] )
+
+
 def choose_config( args ):
     """Sets which web build the next preview's live examples come from. Escape,
     return and q all keep the current one."""
     print( "\n " + bold( "Config" ) + "\n" )
     for i, name in enumerate( BUILD_CONFIGS, 1 ):
-        where = f"linked from {emscripten_build_dir().name}/examples/{name}"
+        where = f"linked from {web_build_dir().name}/examples/{name}"
         current = args.config or linked_config( BUILD_DIR / "html" ) or "Release"
         print( f"   {i}  {'*' if name == current else ' '} {name:<15} {dim( where )}" )
     print( f"\n   q  {'Back':<17} {dim( 'or escape' )}" )
@@ -1013,24 +1451,41 @@ def choose_task( first, args ):
         shown = args.config or linked_config( BUILD_DIR / "html" ) or "Release"
         print( f"\n   c  {'Config':<17} {dim( shown )}" )
         opens = "open in browser" if remembered( "open", True ) else "browser disabled"
-        print( f"   b  {'On build':<17} {dim( opens )}" )
+        print( f"   o  {'On generate':<17} {dim( opens )}" )
+        remote = f"open to the network as {socket.gethostname()}" if remembered( "remote", False ) else "this computer only"
+        print( f"   r  {'Remote access':<17} {dim( remote )}" )
+        where = shorten( web_build_dir() / "examples" / shown )
+        built = f"compiles and links {where} wasm"
+        print( f"   b  {'Build examples':<17} {dim( built )}" )
         print( f"   q  {'Quit':<17} {dim( 'or escape' )}" )
         while True:
-            choice = read_key( "\n > " ).lower()
+            if args.replay:
+                choice, args.replay = args.replay, None
+                print( f"\n > {choice}" )
+            else:
+                choice = read_key( "\n > " ).lower()
             if choice == "q" or choice == ESCAPE:
                 raise Quit()
+            if choice:
+                reload_if_changed( choice, args )
             if choice == "c":
                 choose_config( args )
                 break
-            if choice == "b":
+            if choice == "o":
                 remember( "open", not remembered( "open", True ) )
+                break
+            if choice == "r":
+                remember( "remote", not remembered( "remote", False ) )
+                break
+            if choice == "b":
+                build_examples( shown )
                 break
             if choice in keys:
                 return choice
             if choice.isdigit() and 1 <= int( choice ) <= len( keys ):
                 return keys[ int( choice ) - 1 ]
             if choice:
-                print( dim( "   Pick a number, a task name, c, b, or q." ) )
+                print( dim( "   Pick a number, a task name, c, o, r, b, or q." ) )
         first = False
 
 
@@ -1088,7 +1543,7 @@ def main():
     )
     parser.add_argument(
         "--config-dir", metavar="DIR",
-        help="a build config's example directory, in place of --config"
+        help="a build config's example directory, in place of --config; not built"
     )
     parser.add_argument(
         "--out", metavar="DIR",
@@ -1102,15 +1557,21 @@ def main():
     parser.add_argument(
         "--serve", metavar="DIR", help=argparse.SUPPRESS
     )
+    parser.add_argument(
+        "--replay", metavar="KEY", help=argparse.SUPPRESS
+    )
+    parser.add_argument(
+        "--host", default="127.0.0.1", help=argparse.SUPPRESS
+    )
     args = parser.parse_args()
 
     if args.serve:
         handler = functools.partial( NoStoreHandler, directory=args.serve )
         http.server.ThreadingHTTPServer(
-            ( "127.0.0.1", args.port or PREVIEW_PORT ), handler ).serve_forever()
+            ( args.host, args.port or PREVIEW_PORT ), handler ).serve_forever()
         return
 
-    heading( "aether-game-utils documentation" )
+    heading( "aether-game-utils documentation builder" )
     if not print_tools():
         sys.exit( f"\nERROR: doxygen {DOXYGEN_VERSION} has no release for this platform" )
 

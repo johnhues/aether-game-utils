@@ -1,11 +1,18 @@
 # A single-header C++ collection of cross platform utilities
+[![Web](https://github.com/johnhues/aether-game-utils/actions/workflows/web.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/web.yml)
+[![MacOS](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml)
+[![Windows](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml)
+[![Ubuntu clang](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml)
+[![Ubuntu g++](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml)
+[![Ubuntu MinGW](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_mingw.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_mingw.yml)
+[![Ubuntu Deprecated](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_deprecated.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_deprecated.yml)
 
 For quickly creating small games or for supplementing existing projects. It provides a largely complete set of small carefully designed and optimized building blocks for game development. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:
 * Providing useful and performant utilities tailored for game development
 * Providing utilities that naturally conform to game development best practices
 * Not overstepping or imposing a particular game engine architecture
 
-[`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) is a single-header which contains all of the functionality provided by the library. Only system libraries are included, no other external dependencies are required. A CMakeLists.txt file is provided for building examples and tests, but is not needed or recommended for including in your own project. Instead [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) is designed to be included as a single header file. C++17 or later is required. Neither exceptions nor RTTI are used.
+[`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) is a single-header which contains all of the functionality provided by the library. Only system libraries are included, no other external dependencies are required. A CMakeLists.txt file is provided for building examples and tests, but is not needed or recommended for including in your own project. Instead [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/main/aether.h) is designed to be included as a single header file. C++20 or later is required. Neither exceptions nor RTTI are used.
 
 ---
 # Playable Example
@@ -18,7 +25,7 @@ For quickly creating small games or for supplementing existing projects. It prov
 </div>
 
 ---
-# Example Source
+# Playable Example Source
 
 ---
 
@@ -37,7 +44,7 @@ extern const char* kFragmentShader;
 //------------------------------------------------------------------------------
 // Main function
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
 	// Platform and core systems
 	ae::Window window;
@@ -176,18 +183,19 @@ int main()
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	// Terminate
-	fileSystem.DestroyAll();
-	input.Terminate();
-	graphicsDevice.Terminate();
-	window.Terminate();
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		fileSystem.DestroyAll();
+		input.Terminate();
+		graphicsDevice.Terminate();
+		window.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, {
+		.initialize = []() { return true; },
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }
 
 //------------------------------------------------------------------------------
@@ -221,6 +229,8 @@ const char* kFragmentShader = R"(
 ```
 
 This ~200 line example contains everythings needed for a cross-platform first person exploration game on: Web, MacOS, Windows, Linux, and iOS (and more platforms to come!).
+
+<!-- examples -->
 
 <!-- # Games using aether game utils
 [Bella Lunaux: The Case of the Diamond Panther Tiara](https://johnhues.itch.io/bella-lunaux-tiara)

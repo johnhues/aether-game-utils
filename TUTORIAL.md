@@ -21,32 +21,29 @@ curl --create-dirs -o data/level.tga https://raw.githubusercontent.com/johnhues/
 ## Building and Running on Mac
 Rename `main.cpp` to `main.mm`. Open the `Terminal` application. Type `cd` (with a space after it) and then drag the folder containing `main.mm` into the terminal window and press enter. With Xcode installed run the following:
 ```
-clang++ -std=c++17 -fmodules -fcxx-modules main.mm && ./a.out
+clang++ -std=c++20 -fmodules -fcxx-modules main.mm && ./a.out
 ```
 
 ## Building and Running on Windows
 With Visual Studio installed, right click inside the folder and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
 ```
-cl /std:c++17 -D_UNICODE -DUNICODE main.cpp
+cl /std:c++20 -D_UNICODE -DUNICODE main.cpp
 ```
 and run `main.exe`.
 
 ## Building and Running on Linux
 Change to the folder and run:
 ```
-g++ -std=c++17 main.cpp && ./a.out
+g++ -std=c++20 main.cpp && ./a.out
 ```
 Windowing requires a Wayland compositor (X11 is not supported). No development packages are needed to build: `libwayland-client`, `libwayland-egl`, `libEGL`, and `libxkbcommon` are loaded at runtime, and are installed by default on Wayland desktops.
 
-## Building and Running with Emscripten
-Also download [index.html](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/index.html) into the folder. Change to the folder, and with `emsdk` activated run:
+## Building and Running on the Web
+Also download [aether.js](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/aether.js) and [index.html](https://raw.githubusercontent.com/johnhues/aether-game-utils/main/examples/index.html) into the folder. With [wasi-sdk](https://github.com/WebAssembly/wasi-sdk/releases) installed at `$WASI_SDK_PATH`, change to the folder and run:
 ```
-em++ -std=c++17 -s MIN_WEBGL_VERSION=3 -s MAX_WEBGL_VERSION=3 -s ALLOW_MEMORY_GROWTH main.cpp -o index.js
+$WASI_SDK_PATH/bin/clang++ --target=wasm32-wasip1 -std=c++20 -fno-exceptions -O2 -mexec-model=reactor main.cpp -o index.wasm
 ```
-You can run and play the result of the above command by running this in the same folder:
-```
-emrun index.html
-```
+`index.html` runs `index.wasm` with `aether.js`, which must be loaded over http. Serve the folder, for example with `python3 -m http.server`, and open http://localhost:8000. See the [Web](https://johnhues.github.io/aether-game-utils/web.html) page for embedding a program in your own page.
 
 ## Running an Example on iOS
 The CMake-built examples can be deployed to a connected iOS device. Make sure your device is setup for development, trusted, connected, and unlocked. Set the following `AE_APPLE_DEVELOPMENT_TEAM` to your Apple "Organizational Unit" ID and `AE_IOS_DEVICE` to the device's UUID (find it with `xcrun devicectl list devices`). From a clone of the repository, the following configures, builds, installs, launches (held at entry), then attaches lldb:

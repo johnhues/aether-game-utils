@@ -5,11 +5,6 @@ message("")
 message("aether-game-utils test")
 message("")
 
-# Define aeAssertImpl to throw exceptions for REQUIRE_THROWS() tests
-if(EMSCRIPTEN)
-	add_compile_options(-sDISABLE_EXCEPTION_CATCHING=0)
-endif()
-
 # Catch2
 set(CMAKE_CATCH_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 FetchContent_Declare(
@@ -31,29 +26,16 @@ target_include_directories(ae_test PUBLIC
 	"${CURRENT_SOURCE_DIR}"
 )
 target_compile_definitions(ae_test PUBLIC AE_CONFIG_FILE="TestConfig.h")
-if(EMSCRIPTEN)
-	target_link_options(ae_test PUBLIC
-		-sALLOW_MEMORY_GROWTH
-		-sINITIAL_MEMORY=26214400
-		-sSTACK_SIZE=2097152
-		-sWASM=1
-		-sASSERTIONS=2
-		-sSAFE_HEAP=1
-		-sDISABLE_EXCEPTION_CATCHING=0 # Needed for callstack traces on asserts with node
-	)
-endif()
 
 # unit test executable
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
-add_executable(test ${TEST_SOURCES})
+add_executable(test ${TEST_SOURCES} "${AE_ROOT_DIR}/extras/aeCompactingAllocator.cpp")
 if(CMAKE_GENERATOR STREQUAL Xcode AND NOT IOS)
 	add_custom_command(TARGET test
 		POST_BUILD
 		COMMAND codesign --force -s - "$<TARGET_FILE:test>"
 		VERBATIM
 	)
-elseif(EMSCRIPTEN)
-	set_target_properties(test PROPERTIES SUFFIX ".js")
 endif()
 target_link_libraries(test PRIVATE
 	ae_test

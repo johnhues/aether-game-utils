@@ -162,7 +162,9 @@ int main( int argc, char* argv[] )
 		ae::Matrix4 targetToNdc = ae::Matrix4::Translation( -1.0f, -1.0f, 0.0f ) * ae::Matrix4::Scaling( 2.0f / target.GetWidth(), 2.0f / target.GetHeight(), 1.0f );
 		ae::Rect ndcRect = target.GetNDCFillRectForTarget( render.GetCanvas()->GetWidth(), render.GetCanvas()->GetHeight() );
 		ae::Matrix4 windowToTarget = target.GetTargetPixelsToLocalTransform( window.GetWidth(), window.GetHeight(), ndcRect );
-		ae::Vec4 mouse = windowToTarget * ae::Vec4( input.mouse.position.x, input.mouse.position.y, 0.0f, 1.0f );
+		const ae::InputPointerArray pointers = input.GetUnclaimedPointers();
+		const ae::Vec2 cursorPos = pointers.Length() ? pointers[ 0 ]->Position() : input.hoverPos.Get( ae::Vec2( 0.0f ) );
+		ae::Vec4 mouse = windowToTarget * ae::Vec4( cursorPos.x, cursorPos.y, 0.0f, 1.0f );
 
 		// Cube
 		ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
@@ -202,5 +204,9 @@ int main( int argc, char* argv[] )
 		return 0;
 	};
 
-	return ae::Application( argc, argv, Initialize, Update, Terminate );
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }

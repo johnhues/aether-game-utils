@@ -972,6 +972,13 @@ TEST_CASE( "Matrix4 Identity TransformPoint3x4", "[ae::Matrix4]" )
 	REQUIRE( ae::Matrix4::Identity().TransformPoint3x4( pt ) == pt );
 }
 
+TEST_CASE( "Matrix4 equality", "[ae::Matrix4]" )
+{
+	REQUIRE( ae::Matrix4::Identity() == ae::Matrix4::Identity() );
+	REQUIRE( ae::Matrix4::Identity() != ae::Matrix4::Translation( 1,2,3 ) );
+	REQUIRE_FALSE( ae::Matrix4::Translation( 1,2,3 ) != ae::Matrix4::Translation( 1,2,3 ) );
+}
+
 TEST_CASE( "Matrix4 Translation", "[ae::Matrix4]" )
 {
 	REQUIRE( ae::Matrix4::Translation( 1,2,3 ).GetTranslation() == ae::Vec3( 1,2,3 ) );

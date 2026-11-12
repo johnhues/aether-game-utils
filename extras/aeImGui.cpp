@@ -179,19 +179,87 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 
 	io.DisplaySize = ImVec2( render->GetWidth() / displayScale, render->GetHeight() / displayScale );
 	io.DisplayFramebufferScale = ImVec2( displayScale, displayScale );
-	io.DeltaTime = dt;
+	io.DeltaTime = ae::Max( dt, 0.00001f ); // ImGui requires a positive delta
 	
-	// @TODO: Check ImGuiIO::WantCaptureMouse https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#q-how-can-i-tell-whether-to-dispatch-mousekeyboard-to-dear-imgui-or-to-my-application
-	io.MouseDown[ 0 ] = input->mouse.leftButton;
-	io.MouseDown[ 1 ] = input->mouse.rightButton;
-	io.MouseDown[ 2 ] = input->mouse.middleButton;
+	// Pointers that start over an ImGui window are claimed, except over windows
+	// that called PassThrough() last frame. ImGui has one mouse, driven by the
+	// claimed touch or mouse buttons, otherwise the oldest unclaimed touch or
+	// the unclaimed mouse buttons, otherwise the hovering cursor. Button events
+	// are queued so a press and release within one frame is still a click.
+	const auto isOverUI = [ this, windowHeight ]( ae::Vec2 pos )
+	{
+		ImGuiWindow* hovered = nullptr;
+		ImGuiWindow* underMoving = nullptr;
+		ImGui::FindHoveredWindowEx( ImVec2( pos.x, windowHeight - pos.y ), true, &hovered, &underMoving );
+		return hovered && m_passThrough.Find( hovered->RootWindow->ID ) < 0;
+	};
+	const auto isTouch = []( const ae::InputPointer* p ){ return p->source == ae::InputPointerSource::Touch; };
+	for( const ae::InputPointer* pointer : input->GetUnclaimedPointers() )
+	{
+		if( pointer->id <= m_lastPointerId ) { continue; }
+		m_lastPointerId = pointer->id;
+		if( isOverUI( pointer->StartPosition() ) && input->ClaimPointer( pointer ) )
+		{
+			// A touch drives alone, mouse buttons share the mouse
+			if( !m_pointers.Length() || ( !isTouch( pointer ) && !isTouch( m_pointers[ 0 ] ) ) ) { m_pointers.Append( pointer ); }
+			else { input->ReleasePointer( pointer ); }
+		}
+	}
+	ae::Array< const ae::InputPointer*, 3 > source = m_pointers;
+	if( !source.Length() )
+	{
+		for( const ae::InputPointer* pointer : input->GetUnclaimedPointers() )
+		{
+			if( !source.Length() ) { source.Append( pointer ); }
+			else if( !isTouch( pointer ) && !isTouch( source[ 0 ] ) && !source.Full() ) { source.Append( pointer ); }
+		}
+	}
+	const ae::Vec2* hoverPos = input->hoverPos.TryGet();
+	io.AddMouseSourceEvent( ( source.Length() && isTouch( source[ 0 ] ) ) ? ImGuiMouseSource_TouchScreen : ImGuiMouseSource_Mouse );
+	if( source.Length() || hoverPos )
+	{
+		const ae::Vec2 pos = source.Length() ? source[ 0 ]->Position() : *hoverPos;
+		io.AddMousePosEvent( pos.x, windowHeight - pos.y );
+	}
+	else
+	{
+		io.AddMousePosEvent( -FLT_MAX, -FLT_MAX );
+	}
+	const ae::InputPointer* buttons[ 3 ] = {}; // ImGuiMouseButton_Left, Right, Middle
+	for( const ae::InputPointer* pointer : source )
+	{
+		switch( pointer->button )
+		{
+			case ae::InputPointerButton::Primary: buttons[ ImGuiMouseButton_Left ] = pointer; break;
+			case ae::InputPointerButton::Secondary: buttons[ ImGuiMouseButton_Right ] = pointer; break;
+			case ae::InputPointerButton::Tertiary: buttons[ ImGuiMouseButton_Middle ] = pointer; break;
+		}
+	}
+	for( uint32_t i = 0; i < 3; i++ )
+	{
+		io.AddMouseButtonEvent( (int)i, buttons[ i ] != nullptr );
+		if( buttons[ i ] && buttons[ i ]->Ended() ) { io.AddMouseButtonEvent( (int)i, false ); }
+	}
+	for( int32_t i = (int32_t)m_pointers.Length() - 1; i >= 0; i-- )
+	{
+		if( m_pointers[ i ]->Ended() )
+		{
+			input->ReleasePointer( m_pointers[ i ] );
+			m_pointers.Remove( i );
+		}
+	}
 	// ImGui measures a wheel unit as roughly five text lines, so convert from
 	// points using its own metrics. Momentum included for a native feeling glide
 	const float lineHeight = ( ImGui::GetTextLineHeight() > 0.0f ) ? ImGui::GetTextLineHeight() : 13.0f;
-	const float scrollPoints = input->mouse.scroll.y + input->mouse.scrollInertia.y;
-	io.MouseWheel += scrollPoints / ( 5.0f * lineHeight );
-	ae::Vec2 mousePos( input->mouse.position.x, windowHeight - input->mouse.position.y );
-	io.MousePos = ImVec2( mousePos.x, mousePos.y );
+	const float scrollPoints = input->scroll.delta.y + input->scroll.inertia.y;
+	io.AddMouseWheelEvent( 0.0f, scrollPoints / ( 5.0f * lineHeight ) );
+	if( hoverPos && isOverUI( *hoverPos ) )
+	{
+		input->scroll.delta = ae::Vec2( 0.0f );
+		input->scroll.inertia = ae::Vec2( 0.0f );
+		input->zoomDelta = 0.0f;
+	}
+	m_passThrough.Clear();
 	
 	// imgui derives KeyShift/KeyCtrl/KeyAlt/KeySuper from the per-key events below
 	for( uint32_t i = 0; i < 256; i++ )
@@ -211,6 +279,14 @@ void aeImGui::NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 	ImGui::NewFrame();
 	
 	m_pendingRender = true;
+}
+
+void aeImGui::PassThrough()
+{
+	if( !m_passThrough.Full() )
+	{
+		m_passThrough.Append( ImGui::GetCurrentWindow()->RootWindow->ID );
+	}
 }
 
 void aeImGui::Render()
@@ -386,7 +462,7 @@ void aeImGui::m_Initialize()
 	else
 	{
 		ae::Str32 glVersionStr = "#version ";
-#if _AE_IOS_ || _AE_EMSCRIPTEN_
+#if _AE_IOS_ || _AE_WASM_
 		glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion(), ae::GLMinorVersion() );
 #else
 		glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion(), ae::GLMinorVersion() );

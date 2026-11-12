@@ -37,3 +37,11 @@ TEST_CASE( "Create and destroy NetObjects", "[ae::NetObjectServer]" )
 	server.DestroyNetObject( netObj );
 	server.UpdateSendData();
 }
+
+TEST_CASE( "NetId equality", "[ae::NetId]" )
+{
+	REQUIRE( ae::NetId( 1 ) == ae::NetId( 1 ) );
+	REQUIRE( ae::NetId( 1 ) != ae::NetId( 2 ) );
+	REQUIRE_FALSE( ae::NetId( 1 ) != ae::NetId( 1 ) );
+	REQUIRE( ae::NetId() != ae::NetId( 1 ) );
+}

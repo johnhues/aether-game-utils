@@ -313,32 +313,52 @@ int main( int argc, char* argv[] )
 
 	auto Update = [&]() -> bool
 	{
-		const float dt = ae::Min( 0.1f, timeStep.GetDt() );
+		const float dt = timeStep.GetDt();
 		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 10000.0f );
 		const ae::Matrix4 worldToProj = viewToProj * worldToView;
-		const ae::Vec2 mousePosition = (ae::Vec2)input.mouse.position;
-		const ae::Vec4 ndc(
-			( (float)mousePosition.x / (float)window.GetWidth() ) * 2.0f - 1.0f,
-			( (float)mousePosition.y / (float)window.GetHeight() ) * 2.0f - 1.0f,
-			0.0f,
-			1.0f
-		);
-		const ae::Vec4 clipPos = worldToProj.GetInverse() * ndc;
-		const ae::Vec3 worldPos = ( clipPos.GetXYZ() / clipPos.w );
-		const ae::Vec3 ray = ( worldPos - camera.GetPosition() ).SafeNormalizeCopy() * 10000.0f;
-		const ae::RaycastResult result = collisionMesh.Raycast( {
-			.source=camera.GetPosition(),
-			.ray=ray,
-		} );
 		input.Pump();
-		camera.Update( &input, dt );
+		camera.Update( { .input = &input, .dt = dt, .yFov = 0.9f, .viewport = window.GetArea() } );
+
+		// Aim at the cursor, or at a finger the camera hasn't claimed
+		ae::Optional< ae::Vec2 > aim = input.hoverPos;
+		bool select = false;
+		for( const ae::InputPointer* pointer : input.GetUnclaimedPointers() )
+		{
+			if( pointer->source == ae::InputPointerSource::Touch && !aim.TryGet() )
+			{
+				aim = pointer->Position();
+			}
+			// A press, mouse or finger, released near where it started
+			if( pointer->Ended() && pointer->MaxStartDistance() < 10.0f )
+			{
+				aim = pointer->Position();
+				select = true;
+			}
+		}
+		ae::RaycastResult result;
+		if( const ae::Vec2* aimPosition = aim.TryGet() )
+		{
+			const ae::Vec4 ndc(
+				( aimPosition->x / (float)window.GetWidth() ) * 2.0f - 1.0f,
+				( aimPosition->y / (float)window.GetHeight() ) * 2.0f - 1.0f,
+				0.0f,
+				1.0f
+			);
+			const ae::Vec4 clipPos = worldToProj.GetInverse() * ndc;
+			const ae::Vec3 worldPos = ( clipPos.GetXYZ() / clipPos.w );
+			const ae::Vec3 ray = ( worldPos - camera.GetPosition() ).SafeNormalizeCopy() * 10000.0f;
+			result = collisionMesh.Raycast( {
+				.source=camera.GetPosition(),
+				.ray=ray,
+			} );
+		}
 
 		// Camera
 		if( result.hits.Length() && ( camera.GetMode() == ae::DebugCamera::Mode::None ) )
 		{
 			debugLines.AddSphere( result.hits[ 0 ].position, 5.0f, ae::Color::Red(), 12 );
-			if( input.GetMouseReleaseLeft() )
+			if( select )
 			{
 				camera.Refocus( result.hits[ 0 ].position );
 			}
@@ -544,5 +564,9 @@ int main( int argc, char* argv[] )
 		return 0;
 	};
 
-	return ae::Application( argc, argv, Initialize, Update, Terminate );
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }

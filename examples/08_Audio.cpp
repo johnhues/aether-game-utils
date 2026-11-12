@@ -41,7 +41,7 @@ int main( int argc, char* argv[] )
 	const ae::AudioData* music = nullptr;
 	const ae::AudioData* sfx = nullptr;
 	bool musicPlaying = false;
-	float musicTime = 0.0f;
+	double musicStart = 0.0;
 	float hitFade = 0.0f;
 
 	auto Initialize = [&]()
@@ -54,8 +54,8 @@ int main( int argc, char* argv[] )
 		input.Initialize( &window );
 		audio.Initialize( 1, 3, 0, 2 );
 		timeStep.SetTimeStep( 1.0f / 60.0f );
-		musicFile = fs.Read( ae::FileSystem::Root::Data, "music.wav", 5.0f );
-		sfxFile = fs.Read( ae::FileSystem::Root::Data, "sound.wav", 5.0f );
+		musicFile = fs.Read( ae::FileSystem::Root::Data, "music.wav", 0.0f );
+		sfxFile = fs.Read( ae::FileSystem::Root::Data, "sound.wav", 0.0f );
 		return true;
 	};
 	auto LoadAudio = [&]( const ae::File*& file, const ae::AudioData*& audioData )
@@ -74,19 +74,23 @@ int main( int argc, char* argv[] )
 		input.Pump();
 		LoadAudio( musicFile, music );
 		LoadAudio( sfxFile, sfx );
-		if( musicPlaying )
-		{
-			musicTime += timeStep.GetDt();
-		}
 		if( hitFade > 0.0f )
 		{
 			hitFade = ae::Max( 0.0f, hitFade - timeStep.GetDt() / 0.2f );
 		}
 
 		// Input
-		if( ( !input.mouse.rightButton && input.mousePrev.rightButton )
-			|| ( !input.Get( ae::Key::Space ) && input.GetPrev( ae::Key::Space ) )
-			|| ( !input.gamepads[ 0 ].y && input.gamepadsPrev[ 0 ].y ) )
+		bool doHit = ( input.gamepads[ 0 ].a && !input.gamepadsPrev[ 0 ].a ) ? 1 : 0;
+		bool toggleMusic = false;
+		while( const ae::InputPointer* pointer = input.PumpPointers() )
+		{
+			if( pointer->button == ae::InputPointerButton::Secondary ) { toggleMusic = true; }
+			else { doHit = true; }
+			input.ReleasePointer( pointer ); // Make sure new pointer events are only handled once
+		}
+		toggleMusic |= ( !input.Get( ae::Key::Space ) && input.GetPrev( ae::Key::Space ) ) || ( !input.gamepads[ 0 ].y && input.gamepadsPrev[ 0 ].y );
+
+		if( toggleMusic )
 		{
 			if( musicPlaying )
 			{
@@ -97,11 +101,10 @@ int main( int argc, char* argv[] )
 			{
 				audio.PlayMusic( music, 0.5f, 0 );
 				musicPlaying = true;
-				musicTime = 0.0f;
+				musicStart = ae::GetTime();
 			}
 		}
-		if( ( input.mouse.leftButton && !input.mousePrev.leftButton )
-			|| ( input.gamepads[ 0 ].a && !input.gamepadsPrev[ 0 ].a ) )
+		if( doHit )
 		{
 			audio.PlaySfx( sfx, 1.0f, 0 );
 			hitFade = 1.0f;
@@ -119,7 +122,7 @@ int main( int argc, char* argv[] )
 				ae::Color::AetherOrange(),
 				ae::Color::AetherDarkPurple()
 			};
-			const uint32_t beat = musicTime / 0.75f;
+			const uint32_t beat = ( ae::GetTime() - musicStart ) / 0.75;
 			color = beatColors[ beat % countof( beatColors ) ];
 		}
 		float hitOpacity = ae::Min( 1.0f, hitFade / 0.8f );
@@ -139,5 +142,9 @@ int main( int argc, char* argv[] )
 		fs.DestroyAll();
 		return 0;
 	};
-	return ae::Application( argc, argv, Initialize, Update, Terminate );
+	return ae::Application( argc, argv, {
+		.initialize = Initialize,
+		.update = Update,
+		.terminate = Terminate,
+	} );
 }

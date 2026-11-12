@@ -87,8 +87,8 @@ bool SmallEngine::Initialize( int argc, char* argv[] )
 	spriteRenderer.Initialize( 2, 2000 );
 
 	// @TODO: Move to Game.cpp
-	m_levelTextureFile = fs.Read( ae::FileSystem::Root::Data, "level.tga", 2.5f );
-	// m_fontTextureFile = fs.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
+	m_levelTextureFile = fs.Read( ae::FileSystem::Root::Data, "level.tga", 0.0f );
+	// m_fontTextureFile = fs.Read( ae::FileSystem::Root::Data, "font.tga", 0.0f );
 	meshShader.Initialize( kMeshVertShader, kMeshFragShader, nullptr, 0 );
 	meshShader.SetDepthTest( true );
 	meshShader.SetDepthWrite( true );
@@ -171,7 +171,6 @@ bool SmallEngine::Update()
 		}
 	}
 
-	if( input.GetMousePressLeft() ) { input.SetCursorState( ae::CursorState::HiddenAndCaptured ); }
 	if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetCursorState( window.GetFullScreen() ? ae::CursorState::HiddenAndCaptured : ae::CursorState::Normal ); }
 	if( input.GetPress( ae::Key::Escape ) ) { input.SetCursorState( ae::CursorState::Normal ); window.SetFullScreen( false ); }
 	if( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) ) { editor.Launch(); }
@@ -227,9 +226,22 @@ const SmallEngine::MeshResource* SmallEngine::GetMeshResource( const char* name 
 	if( resource && resource->status == MeshResource::Pending )
 	{
 		resource->status = MeshResource::Loading;
-		resource->file = fs.Read( ae::FileSystem::Root::Data, name, 2.5f );
+		resource->file = fs.Read( ae::FileSystem::Root::Data, name, 0.0f );
 	}
 	return resource;
+}
+
+bool SmallEngine::MeshesLoaded() const
+{
+	for( uint32_t i = 0; i < meshResources.Length(); i++ )
+	{
+		const MeshResource* resource = meshResources.GetValue( i );
+		if( resource && resource->status != MeshResource::Loaded )
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 void SmallEngine::GetUniforms( ae::UniformList* uniformList )

@@ -41,8 +41,8 @@ public:
 	ae::Vec3 velocity = ae::Vec3( 0.0f );
 	float yaw = 0.0f;
 	float pitch = 0.0f;
-	const ae::Touch* lookTouch = nullptr;
-	const ae::Touch* moveTouch = nullptr;
+	const ae::InputPointer* lookTouch = nullptr;
+	const ae::InputPointer* moveTouch = nullptr;
 	ae::Vec2 lookLastPos = ae::Vec2( 0.0f );
 };
 
@@ -114,19 +114,25 @@ void Player::Update( SmallEngine* engine )
 	engine->registry.SetEntityName( GetEntity(), "player" );
 
 	// Camera
-	if( lookTouch && lookTouch->Ended() ) { input.ReleaseTouch( lookTouch ); lookTouch = nullptr; }
-	if( moveTouch && moveTouch->Ended() ) { input.ReleaseTouch( moveTouch ); moveTouch = nullptr; }
-	while( const ae::Touch* t = input.PumpTouches() )
+	if( lookTouch && lookTouch->Ended() ) { input.ReleasePointer( lookTouch ); lookTouch = nullptr; }
+	if( moveTouch && moveTouch->Ended() ) { input.ReleasePointer( moveTouch ); moveTouch = nullptr; }
+	while( const ae::InputPointer* t = input.PumpPointers() )
 	{
+		if( t->source == ae::InputPointerSource::Mouse ) // The mouse looks with the captured cursor
+		{
+			if( t->button == ae::InputPointerButton::Primary ) { input.SetCursorState( ae::CursorState::HiddenAndCaptured ); }
+			input.ReleasePointer( t );
+			continue;
+		}
 		const bool onLeft = ( t->StartPosition().x < window.GetWidth() / 2.0f );
 		if( !moveTouch && onLeft ) { moveTouch = t; }
 		else if( !lookTouch ) { lookTouch = t; lookLastPos = t->StartPosition(); }
-		else { input.ReleaseTouch( t ); }
+		else { input.ReleasePointer( t ); }
 	}
 	const float displaySize = ae::Min( window.GetWidth(), window.GetHeight() );
 	const ae::Vec3 forward( cosf( yaw ) * cosf( pitch ), sinf( yaw ) * cosf( pitch ), sinf( pitch ) );
 	const ae::Vec3 right( forward.y, -forward.x, 0.0f );
-	if( input.GetCursorLocked() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
+	if( input.GetCursorLocked() ) { yaw -= input.cursorMovement.x * 0.001f; pitch += input.cursorMovement.y * 0.001f; }
 	yaw -= input.gamepads[ 0 ].rightAnalog.x * 2.0f * dt;
 	pitch += input.gamepads[ 0 ].rightAnalog.y * 2.0f * dt;
 	if( lookTouch )
@@ -149,33 +155,36 @@ void Player::Update( SmallEngine* engine )
 		dir += ( forward * touchDir.y + right * touchDir.x );
 	}
 
-	// Physics
-	velocity += ae::Vec3( dir.x, dir.y, 0.0f ).TrimCopy( 1.0f ) * dt * 15.0f;
-	velocity.SetXY( ae::DtSlerp( velocity.GetXY(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
-	position += velocity * dt;
-	ae::RaycastResult raycastResult;
-	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m )
+	// Physics, once the level's collision has loaded
+	if( engine->MeshesLoaded() )
 	{
-		const ae::RaycastParams params = { .source = position, .ray = ae::Vec3( 0.0f, 0.0f, -0.9f ) };
-		const ae::CollisionMeshRaycastParams meshParams = { .transform = m->transform };
-		raycastResult = m->meshResource ? m->meshResource->collision.Raycast( params, meshParams, raycastResult ) : raycastResult;
-	} );
-	if( raycastResult.hits.Length() )
-	{
-		position.z = raycastResult.hits[ 0 ].position.z + 0.8f;
-		velocity.z = ae::Max( 0.0f, velocity.z );
+		velocity += ae::Vec3( dir.x, dir.y, 0.0f ).TrimCopy( 1.0f ) * dt * 15.0f;
+		velocity.SetXY( ae::DtSlerp( velocity.GetXY(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
+		position += velocity * dt;
+		ae::RaycastResult raycastResult;
+		engine->registry.CallFn< Mesh >( [ & ]( Mesh* m )
+		{
+			const ae::RaycastParams params = { .source = position, .ray = ae::Vec3( 0.0f, 0.0f, -0.9f ) };
+			const ae::CollisionMeshRaycastParams meshParams = { .transform = m->transform };
+			raycastResult = m->meshResource ? m->meshResource->collision.Raycast( params, meshParams, raycastResult ) : raycastResult;
+		} );
+		if( raycastResult.hits.Length() )
+		{
+			position.z = raycastResult.hits[ 0 ].position.z + 0.8f;
+			velocity.z = ae::Max( 0.0f, velocity.z );
+		}
+		else
+		{
+			velocity.z -= dt * 10.0f;
+		}
+		ae::PushOutInfo pushOutInfo = { .sphere = ae::Sphere( position, 0.6f ), .velocity = velocity };
+		engine->registry.CallFn< Mesh >( [ & ]( Mesh* m )
+		{
+			const ae::CollisionMeshPushOutParams meshParams = { .transform = m->transform };
+			pushOutInfo = m->meshResource ? m->meshResource->collision.PushOut( {}, meshParams, pushOutInfo ) : pushOutInfo;
+		} );
+		position = pushOutInfo.sphere.center;
 	}
-	else
-	{
-		velocity.z -= dt * 10.0f;
-	}
-	ae::PushOutInfo pushOutInfo = { .sphere = ae::Sphere( position, 0.6f ), .velocity = velocity };
-	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m )
-	{
-		const ae::CollisionMeshPushOutParams meshParams = { .transform = m->transform };
-		pushOutInfo = m->meshResource ? m->meshResource->collision.PushOut( {}, meshParams, pushOutInfo ) : pushOutInfo;
-	} );
-	position = pushOutInfo.sphere.center;
 
 	// Update engine camera
 	engine->cameraPos = position;
@@ -291,5 +300,9 @@ int main( int argc, char* argv[] )
 	};
 	auto update = [ & ]() { return engine.Update(); };
 	auto terminate = [ & ]() { return engine.Terminate(); };
-	return ae::Application( argc, argv, initialize, update, terminate );
+	return ae::Application( argc, argv, {
+		.initialize = initialize,
+		.update = update,
+		.terminate = terminate,
+	} );
 }

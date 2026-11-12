@@ -48,8 +48,6 @@ inline void aeAssertImpl( const char* msgStr )
 		__debugbreak();
 	#elif _AE_APPLE_
 		__builtin_debugtrap();
-	#elif _AE_EMSCRIPTEN_
-		assert( 0 );
 	#elif defined( __aarch64__ )
 		asm( "brk #0" );
 	#else

@@ -323,7 +323,7 @@ div.ingroups a:hover {
 /* ===========================================================================
    Live example viewport
    ---------------------------------------------------------------------------
-   The emscripten build of an example, embedded in the page it documents.
+   The web build of an example, embedded in the page it documents.
    doxygen-demo.js fills the frame on play and arms it on click; an unarmed
    frame ignores the pointer so the page scrolls under the cursor. Press
    Escape or click the page to hand input back.
@@ -332,11 +332,20 @@ div.ingroups a:hover {
 	position: relative;
 	display: block;
 	width: 100%;
-	aspect-ratio: 2 / 1;
+	box-sizing: border-box;
+	max-width: calc( 80svh * var(--ae-ratio, 2) );
+	margin-inline: auto;
+	aspect-ratio: var(--ae-ratio, 2);
 	border: 1px solid var(--separator-color);
 	border-radius: var(--border-radius-medium);
 	background: var(--ae-black);
 	overflow: hidden;
+	/* A long press or repeated taps are game input, not a selection, a
+	   callout or a double tap zoom. The page still scrolls and pinches. */
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+	touch-action: manipulation;
 }
 
 .ae-demo iframe {
@@ -351,14 +360,15 @@ div.ingroups a:hover {
 	outline: 2px solid var(--primary-color);
 }
 
-/* Dims the example while it is not taking input. */
+/* Dims the example while it is not taking input, and takes its touches so
+   the page scrolls over it. @TODO: Remove once ae::Input captures scrolls,
+   see the note at the touch listeners in aether.js. */
 .ae-demo::after {
 	content: "";
 	position: absolute;
 	inset: 0;
 	background: var(--ae-black);
 	opacity: 0.5;
-	pointer-events: none;
 }
 
 .ae-demo.armed::after {
@@ -372,6 +382,24 @@ div.ingroups a:hover {
 
 .ae-demo.armed iframe {
 	pointer-events: auto;
+}
+
+/* Matches the status strip examples draw along their bottom edge. */
+.ae-demo-status {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1;
+	padding: 6px 10px;
+	font: 12px/1.4 system-ui, sans-serif;
+	color: #ddd;
+	background: rgba( 0, 0, 0, 0.6 );
+	pointer-events: none;
+}
+
+.ae-demo-status[hidden] {
+	display: none;
 }
 
 .ae-demo-play {
@@ -390,6 +418,34 @@ div.ingroups a:hover {
 	cursor: pointer;
 }
 
+.ae-demo:not( .ready ) .ae-demo-play,
 .ae-demo.armed .ae-demo-play {
 	display: none;
+}
+
+/* Measurements of the running example, under its frame. */
+.ae-demo-stats {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.15em 1.2em;
+	min-height: 1.6em;
+	margin: 0.4em auto 0;
+	font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-variant-numeric: tabular-nums;
+	color: var(--ae-muted);
+}
+
+.ae-demo-stats b {
+	font-weight: 600;
+	color: var(--ae-ink);
+}
+
+/* Long types in a table wrap, rather than squeezing its description column. */
+table.markdownTable td span.tt,
+table.markdownTable td code {
+	white-space: normal;
+}
+table.markdownTable td:last-child {
+	width: 45%;
 }

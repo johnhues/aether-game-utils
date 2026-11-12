@@ -2,28 +2,16 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Em: Debug Test (node)",
-			"type": "node",
-			"request": "launch",
-			"program": "${workspaceFolder}/build_emscripten/test/RelWithDebInfo/test.js",
-			"cwd": "${workspaceFolder}/build_emscripten",
-			"preLaunchTask": "Em: Build Test",
-			"presentation": {
-				"group": "emscripten",
-				"order": 1
-			}
-		},
-		{
-			"name": "Em: Debug Current (Chrome)",
+			"name": "Web: Debug Current (Chrome)",
 			"type": "chrome",
 			"request": "launch",
-			"url": "http://localhost:58000/build_emscripten/examples/RelWithDebInfo/${command:cmake.buildTargetName}/",
+			"url": "http://localhost:58000/build_wasi/examples/RelWithDebInfo/${command:cmake.buildTargetName}/",
 			"webRoot": "${workspaceFolder}",
 			"sourceMaps": true,
-			"preLaunchTask": "Em: Build Current",
+			"preLaunchTask": "Web: Build Current",
 			"presentation": {
-				"group": "emscripten",
-				"order": 2
+				"group": "web",
+				"order": 1
 			}
 		},
 		{

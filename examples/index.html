@@ -1,6 +1,8 @@
-<!DOCTYPE html5>
+<!DOCTYPE html>
 <html lang="en">
+  <meta charset="utf-8">
   <link rel="manifest" href="index.webmanifest">
+  <link rel="icon" type="image/png" href="data/WebIcon.png">
   <body bgcolor="#000000" id="bg">
     <style>
       body, html {
@@ -9,6 +11,21 @@
         -webkit-touch-callout: none;
         -webkit-user-select: none;
       }
+      /* Scrollable by 1px and never chaining, so a trackpad scroll over a frame
+         holding this page stops here instead of scrolling the embedding page. */
+      html {
+        height: 100%;
+        overflow: auto;
+        overscroll-behavior: none;
+        scrollbar-width: none;
+      }
+      html::-webkit-scrollbar {
+        display: none;
+      }
+      body {
+        margin: 0;
+        height: calc( 100% + 1px );
+      }
       #canvas {
         position: fixed;
         width: 100%;
@@ -16,20 +33,168 @@
         left: 0;
         bottom: 0;
       }
+      /* Loading progress along the bottom edge, or the reason the program halted over all of it. */
+      #ae-status {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 6px 10px;
+        font: 12px/1.4 system-ui, sans-serif;
+        color: #ddd;
+        background: rgba( 0, 0, 0, 0.6 );
+        pointer-events: none;
+      }
+      #ae-status[hidden] {
+        display: none;
+      }
+      #ae-status-bar {
+        height: 2px;
+        margin-top: 4px;
+        background: rgba( 255, 255, 255, 0.15 );
+      }
+      #ae-status-fill {
+        width: 0;
+        height: 100%;
+        background: #9cf;
+      }
+      #ae-status-log {
+        display: none;
+        margin: 8px 0 0;
+        font: 11px/1.4 ui-monospace, monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      #ae-status.halted {
+        top: 0;
+        padding: 16px;
+        overflow: auto;
+        background: rgba( 0, 0, 0, 0.85 );
+        pointer-events: auto;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      #ae-status.halted #ae-status-text {
+        color: #f77;
+        font-weight: bold;
+      }
+      #ae-status.halted #ae-status-bar {
+        display: none;
+      }
+      #ae-status.halted #ae-status-log {
+        display: block;
+      }
     </style>
     <div class="col-md-5">
-      <canvas class="emscripten" id="canvas"></canvas>
+      <canvas id="canvas"></canvas>
     </div>
-    <script type='text/javascript'>
-      var Module = {
-        preRun: [], 
-        postRun: [],
-        print: function(text) { console.log(text); },
-        printErr: function(text) { console.log(text); },
-        canvas: document.getElementById('canvas'),
-      };
-      Module.canvas.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); return false; }
+    <div id="ae-status">
+      <div id="ae-status-text">Loading</div>
+      <div id="ae-status-bar"><div id="ae-status-fill"></div></div>
+      <pre id="ae-status-log"></pre>
+    </div>
+    <script type="module">
+      // Runs this directory's program with aether.js. An embedding page, like
+      // the documentation, controls it through window.aeInstance and learns
+      // that it is 'ready' or 'halted' from a message.
+      import * as aether from './aether.js';
+
+      const root = document.getElementById( 'ae-status' );
+      const text = document.getElementById( 'ae-status-text' );
+      const fill = document.getElementById( 'ae-status-fill' );
+      const log = document.getElementById( 'ae-status-log' );
+      const canvas = document.getElementById( 'canvas' );
+      const recent = []; // Last lines printed, shown when the program halts
+      const files = {}; // url -> [ loaded, total ] while a request is in flight
+      let halted = false;
+      let booting = true; // Shown as loading until the program has started
+      let downloadBytes = 0;
+      let readyMs = 0;
+
+      function notify( state ) {
+        if( window.parent !== window ) { window.parent.postMessage( { aeDemo: state }, '*' ); }
+      }
+
+      function kb( bytes ) { return Math.ceil( bytes / 1024 ).toLocaleString() + ' KB'; }
+
+      function show() {
+        if( halted ) { return; }
+        const names = [];
+        let loaded = 0, total = 0, sized = true;
+        for( const url in files ) {
+          names.push( url.split( '/' ).pop() );
+          loaded += files[ url ][ 0 ];
+          total += files[ url ][ 1 ];
+          sized = sized && files[ url ][ 1 ] > 0;
+        }
+        root.hidden = !names.length && !booting;
+        text.textContent = names.length ? 'Loading ' + names.join( ', ' ) + ' · ' + kb( loaded ) + ( sized ? ' of ' + kb( total ) : '' ) : 'Loading';
+        fill.style.width = sized ? Math.min( 100, 100 * loaded / total ) + '%' : '0';
+      }
+
+      function print( line ) {
+        console.log( line );
+        recent.push( line );
+        if( recent.length > 12 ) { recent.shift(); }
+      }
+
+      function halt( reason ) {
+        if( halted ) { return; }
+        halted = true;
+        root.className = 'halted';
+        root.hidden = false;
+        text.textContent = 'Stopped: ' + reason;
+        log.textContent = recent.join( '\n' );
+        notify( 'halted' );
+      }
+
+      function progress( url, loaded, total, finished ) {
+        if( finished ) { delete files[ url ]; downloadBytes += loaded; }
+        else { files[ url ] = [ loaded, total ]; }
+        show();
+      }
+
+      // Ready to play once no file has been loading for several consecutive frames
+      function awaitReady() {
+        let idleFrames = 0;
+        function frame() {
+          if( halted ) { return; }
+          idleFrames = Object.keys( files ).length ? 0 : idleFrames + 1;
+          if( idleFrames < 10 ) { requestAnimationFrame( frame ); }
+          else { readyMs = performance.now(); notify( 'ready' ); }
+        }
+        booting = false;
+        show();
+        requestAnimationFrame( frame );
+      }
+
+      // iOS zooms the page on a quick second tap, which here is game input
+      let lastTouchEnd = -Infinity;
+      document.addEventListener( 'touchend', function( e ) {
+        if( e.timeStamp - lastTouchEnd < 350 ) { e.preventDefault(); }
+        lastTouchEnd = e.timeStamp;
+      }, { passive: false } );
+      canvas.oncontextmenu = function( e ) { e.preventDefault(); e.stopPropagation(); return false; };
+      window.addEventListener( 'error', function( e ) { halt( e.message || 'error' ); } );
+      window.addEventListener( 'unhandledrejection', function( e ) { halt( String( e.reason ) ); } );
+
+      try {
+        const instance = await aether.instantiate( 'index.wasm', canvas, { print: print, onProgress: progress, onHalt: halt } );
+        window.aeInstance = {
+          pause: instance.pause,
+          resume: instance.resume,
+          terminate: instance.terminate,
+          stats: function() { return Object.assign( instance.stats(), { downloadBytes: downloadBytes, readyMs: readyMs } ); },
+        };
+        // Leaving frees graphics and audio now rather than at garbage collection.
+        // A page restored from the back-forward cache has lost them, so it starts over.
+        window.addEventListener( 'pagehide', function() { instance.terminate(); } );
+        window.addEventListener( 'pageshow', function( e ) { if( e.persisted ) { location.reload(); } } );
+        awaitReady();
+      }
+      catch( error ) {
+        halt( String( error.message || error ) );
+      }
     </script>
-    <script async type="text/javascript" src="index.js"></script>
   </body>
 </html>

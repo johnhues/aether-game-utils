@@ -111,7 +111,7 @@ void UpdateResource( ae::FileSystem* fileSystem, const ae::File** _resourceFile,
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
-int main()
+int main( int argc, char* argv[] )
 {
 	AE_INFO( "Initialize" );
 
@@ -150,8 +150,8 @@ int main()
 	ae::Skin skin = TAG_ALL;
 	ae::VertexBuffer vertexData;
 	Vertex* vertices = nullptr;
-	const ae::File* tgaFile = fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", 2.5f );
-	const ae::File* fbxFile = fileSystem.Read( ae::FileSystem::Root::Data, "character.fbx", 2.5f );
+	const ae::File* tgaFile = fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", 0.0f );
+	const ae::File* fbxFile = fileSystem.Read( ae::FileSystem::Root::Data, "character.fbx", 0.0f );
 	AE_INFO( "Loading '#'", tgaFile->GetURL() );
 	AE_INFO( "Loading '#'", fbxFile->GetURL() );
 
@@ -351,7 +351,7 @@ int main()
 	AE_INFO( "Run" );
 	auto Update = [&]()
 	{
-		const float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
+		const float dt = timeStep.GetDt();
 		input.Pump();
 
 		if( UpdateResources() )
@@ -536,8 +536,8 @@ int main()
 			ImGui::ShowDemoWindow( &demoWindow );
 		}
 		
-		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
-		camera.Update( &input, dt );
+		camera.SetInputEnabled( !ImGuizmo::IsUsing() );
+		camera.Update( { .input = &input, .dt = dt, .yFov = 0.9f, .viewport = window.GetArea() } );
 		
 		if( fromBindPose && autoIK )
 		{
@@ -638,9 +638,10 @@ int main()
 		const ae::Matrix4 projToWorld = worldToProj.GetInverse();
 
 		// Mouse picking
-		if( window.GetFocused() && !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() )
+		const ae::Vec2* hoverPos = input.hoverPos.TryGet();
+		if( hoverPos && window.GetFocused() && !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() )
 		{
-			const ae::Vec4 ndcPos = ae::Vec4( input.mouse.position.x / (float)window.GetWidth() * 2.0f - 1.0f, input.mouse.position.y / (float)window.GetHeight() * 2.0f - 1.0f, 0.0f, 1.0f );
+			const ae::Vec4 ndcPos = ae::Vec4( hoverPos->x / (float)window.GetWidth() * 2.0f - 1.0f, hoverPos->y / (float)window.GetHeight() * 2.0f - 1.0f, 0.0f, 1.0f );
 			ae::Vec4 worldPos = projToWorld * ndcPos;
 			worldPos /= worldPos.w;
 			const ae::Vec3 rayOrigin = camera.GetPosition();
@@ -725,18 +726,19 @@ int main()
 		return !input.quit;
 	};
 
-#if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
-#else
-	while( Update() ) {}
-#endif
-
-	AE_INFO( "Terminate" );
-	ae::Delete( vertices );
-	vertices = nullptr;
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-
-	return 0;
+	auto Terminate = [&]() -> int32_t
+	{
+		AE_INFO( "Terminate" );
+		ae::Delete( vertices );
+		vertices = nullptr;
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+		return 0;
+	};
+	return ae::Application( argc, argv, {
+		.initialize = []() { return true; },
+		.update = [ &Update ]() { return Update(); },
+		.terminate = Terminate,
+	} );
 }

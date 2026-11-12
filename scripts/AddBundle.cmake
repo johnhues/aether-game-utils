@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
+if(POLICY CMP0156)
+	cmake_policy(SET CMP0156 NEW) # Link each static library once when the linker allows, the Apple linker warns about repeats
+endif()
+
+# aether.h and aether.js live one directory up
+set(_AE_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/..")
 
 # Meta property info for targets
 if(NOT AE_CMAKE_PROPERTY_LIST)
@@ -229,6 +235,7 @@ function(ae_add_bundle BUNDLE_NAME)
 				XCODE_ATTRIBUTE_INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad
 					"UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
 				XCODE_ATTRIBUTE_INFOPLIST_KEY_ITSAppUsesNonExemptEncryption NO
+				XCODE_ATTRIBUTE_INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents YES
 			)
 			target_link_libraries(${AEAB_TARGET_NAME} PRIVATE
 				"-framework UIKit" "-framework Foundation" "-framework QuartzCore"
@@ -252,88 +259,28 @@ function(ae_add_bundle BUNDLE_NAME)
 				FRAMEWORK DESTINATION "${AEAB_BUNDLE_NAME}.app/Contents/Frameworks"
 			)
 		endif()
-	elseif(EMSCRIPTEN)
-		set(_AE_EM_LINKER_FLAGS
-			"-lopenal"
-			"-s TEXTDECODER=2" # When marshalling C UTF-8 strings across the JS<->Wasm language boundary, favor smallest generated code size rather than performance
-			# "-s MINIMAL_RUNTIME=2" # Enable aggressive MINIMAL_RUNTIME mode.
-			"-s INITIAL_MEMORY=2GB" # Allocate the max possible safe memory, which for legacy reasons is 2GB. Leave it up to the browser/OS to decide how much of that memory to actually back with physical RAM.
-			"-s ALLOW_MEMORY_GROWTH=0"
-			"-s MIN_WEBGL_VERSION=2 -s MAX_WEBGL_VERSION=2" # Require WebGL 2 support in target browser, for smallest generated code size. (pass -s MIN_WEBGL_VERSION=1 to dual-target WebGL 1 and WebGL 2)
-			"-s ENVIRONMENT=web" # The generated build output is only to be expected to be run in a web browser, never in a native CLI shell, or in a web worker.
-			"-s ABORTING_MALLOC=0" # Fine tuning for code size: do not generate code to abort program execution on malloc() failures, that will not be interesting here.
-			"-s GL_SUPPORT_AUTOMATIC_ENABLE_EXTENSIONS=0" # Reduce WebGL code size: We do not need GLES2 emulation for automatic GL extension enabling
-			"-s GL_EXTENSIONS_IN_PREFIXED_FORMAT=0" # Reduce WebGL code size: We do not need GLES2 emulation for GL extension names
-			"-s GL_EMULATE_GLES_VERSION_STRING_FORMAT=0" # Reduce WebGL code size: No need to specify the GL_VENDOR/GL_RENDERER etc. fields in format required by GLES2 spec.
-			"-s GL_POOL_TEMP_BUFFERS=0" # Reduce WebGL code size at the expense of performance (this only has an effect in WebGL 1, practically a no-op here)
-			"-s GL_TRACK_ERRORS=0" # Reduce WebGL code size: WebGL bindings layer should not keep track of certain WebGL errors that are only meaningful for C/C++ applications. (good to enable for release when glGetError() is not used, but disable in debug)
-			"-s GL_SUPPORT_SIMPLE_ENABLE_EXTENSIONS=0" # Reduce WebGL code size: do not emit code for extensions that we might not need.
-			# "-s FILESYSTEM=0" # Reduce code size: We do not need native POSIX filesystem emulation support (Emscripten FS/MEMFS) @TODO: Filesystem is required for sockets
-			# Choose the oldest browser versions that should be supported. The higher minimum bar you choose, the less emulation code may be present for old browser quirks.
-			"-s MIN_FIREFOX_VERSION=130"
-			"-s MIN_SAFARI_VERSION=180100"
-			"-s MIN_CHROME_VERSION=130"
+	elseif(WASI)
+		# A reactor, so main() returns into aether.js through ae::Application()
+		target_link_options(${AEAB_TARGET_NAME} PRIVATE
+			"-mexec-model=reactor"
+			"-Wl,-z,stack-size=1048576" # Matches the smallest desktop main thread stack (Windows)
+			"-Wl,--initial-memory=16777216" # Reserved up front by every instance, mobile browsers can refuse large memories
+			"-Wl,--max-memory=268435456" # Upper limit of growth for each instance
 		)
-		# Per-config link flags. CMAKE_BUILD_TYPE is empty for multi-config
-		# generators, so the config must be selected by LINK_FLAGS_<CONFIG>.
-		set(_AE_EM_LINKER_FLAGS_DEBUG
-			"-s SAFE_HEAP=1" # Enable safe heap mode
-			"-s ASSERTIONS=1" # Enable assertions
-			"-s STACK_OVERFLOW_CHECK=1"
-			"-O0"
-			"-frtti"
-			"-fsanitize=undefined"
-			"-g" # Debug symbols (DWARF https://developer.chrome.com/blog/wasm-debugging-2020/)
-		)
-		# Closure mangles the generated JS, so it is release only. DWARF is kept
-		# for browser source level debugging.
-		set(_AE_EM_LINKER_FLAGS_RELWITHDEBINFO
-			"-O2"
-			"-g"
-			"-s ASSERTIONS=1"
-		)
-		set(_AE_EM_LINKER_FLAGS_RELEASE
-			"--closure=1" # Enable Closure compiler for aggressive JS size minification
-			"-O3"
-			# "-Wl,-u,htonl" # Workaround for -flto issue
-			# "-flto"
-			# "-fno-exceptions"
-		)
-		# list(APPEND _AE_EM_COMPILER_FLAGS
-		# 	"-flto"
-		# 	"-fno-exceptions"
-		# )
-		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
-		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS_DEBUG "${_AE_EM_LINKER_FLAGS_DEBUG}")
-		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS_RELWITHDEBINFO "${_AE_EM_LINKER_FLAGS_RELWITHDEBINFO}")
-		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS_RELEASE "${_AE_EM_LINKER_FLAGS_RELEASE}")
-		string (REPLACE ";" " " _AE_EM_COMPILER_FLAGS "${_AE_EM_COMPILER_FLAGS}")
-
 		# $<CONFIG> is explicit so multi-config generators do not append it after
 		# the target directory. Matches the <config>/<bundle> layout of the other
 		# platforms.
 		set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
-			ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/${AEAB_TARGET_NAME}"
-			LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/${AEAB_TARGET_NAME}"
 			RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/${AEAB_TARGET_NAME}"
-		)
-		
-		set(_AE_EM_OUT_SUFFIX ".html")
-		string(FIND "${AEAB_RESOURCES}" ".html" _AE_FOUND_HTML)
-		if(NOT _AE_FOUND_HTML EQUAL -1)
-			set(_AE_EM_OUT_SUFFIX ".js") # Export js if an html file is specified
-		endif()
-
-		set_target_properties(${AEAB_TARGET_NAME} PROPERTIES
-			LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
-			LINK_FLAGS_DEBUG "${_AE_EM_LINKER_FLAGS_DEBUG}"
-			LINK_FLAGS_RELWITHDEBINFO "${_AE_EM_LINKER_FLAGS_RELWITHDEBINFO}"
-			LINK_FLAGS_RELEASE "${_AE_EM_LINKER_FLAGS_RELEASE}"
-			LINK_FLAGS_MINSIZEREL "${_AE_EM_LINKER_FLAGS_RELEASE}"
-			COMPILE_FLAGS "${_AE_EM_COMPILER_FLAGS}"
 			OUTPUT_NAME "index"
-			SUFFIX ${_AE_EM_OUT_SUFFIX}
+			SUFFIX ".wasm"
 		)
+		add_custom_command(TARGET ${AEAB_TARGET_NAME} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"${_AE_ROOT_DIR}/aether.js"
+				$<TARGET_FILE_DIR:${AEAB_TARGET_NAME}>/aether.js
+		)
+		set_property(TARGET ${AEAB_TARGET_NAME} APPEND PROPERTY LINK_DEPENDS "${_AE_ROOT_DIR}/aether.js")
 	endif()
 	
 	if(NOT APPLE)
@@ -345,6 +292,8 @@ function(ae_add_bundle BUNDLE_NAME)
 					${RESOURCE_PATH}
 					$<TARGET_FILE_DIR:${AEAB_TARGET_NAME}>/${RESOURCE_RELATIVE}
 			)
+			# Relinks when the resource changes so the copy above runs (Ninja and Makefile generators)
+			set_property(TARGET ${AEAB_TARGET_NAME} APPEND PROPERTY LINK_DEPENDS ${RESOURCE_PATH})
 		endforeach()
 	endif()
 	

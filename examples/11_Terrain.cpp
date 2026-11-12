@@ -347,7 +347,7 @@ int main()
   while( !input.quit )
   {
     input.Pump();
-    float dt = ae::Max( 0.00001f, timeStep.GetDt() );
+    float dt = timeStep.GetDt();
 
     ui->NewFrame( &render, &input, dt );
 
@@ -521,8 +521,8 @@ int main()
     }
 
     // Camera input
-    camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
-    camera.Update( &input, dt );
+    camera.SetInputEnabled( !ImGuizmo::IsUsing() );
+    camera.Update( { .input = &input, .dt = dt, .yFov = 0.525f, .viewport = window.GetArea() } );
 
     if( !headless )
     {
