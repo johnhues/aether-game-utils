@@ -561,12 +561,29 @@ def serve_host():
     return "0.0.0.0" if remembered( "remote", False ) else "127.0.0.1"
 
 
+def tailscale_host():
+    """This computer's name on its tailnet, or None without a running
+    Tailscale."""
+    cli = shutil.which( "tailscale" ) or "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    try:
+        result = subprocess.run(
+            [ cli, "status", "--json" ], capture_output=True, text=True, timeout=5
+        )
+        name = json.loads( result.stdout )[ "Self" ][ "DNSName" ].rstrip( "." )
+    except ( OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError ):
+        return None
+    return name or None
+
+
 def serve_urls( port ):
-    """Where the site can be opened, the host name one only with remote
-    access on."""
+    """Where the site can be opened, the host name and tailnet ones only with
+    remote access on."""
     urls = [ f"http://127.0.0.1:{port}/index.html" ]
     if remembered( "remote", False ):
         urls.append( f"http://{socket.gethostname()}:{port}/index.html" )
+        tailnet = tailscale_host()
+        if tailnet:
+            urls.append( f"http://{tailnet}:{port}/index.html" )
     return urls
 
 

@@ -83,6 +83,12 @@ Notes:
   exception, a console or network error or warning, an aether `[warn]` log, or
   no frames. Needs Node 22+ and Chrome (`$CHROME`, or the macOS app). `web.yml`
   runs it, the CI image provides Node and Playwright's Chromium.
+- `node test/web/scroll.js <site>` flings the main page of a
+  `scripts/docs.py publish` site in headless Chrome, with WebKit's suspended
+  animation frames in out of view iframes. It fails when the live examples it
+  passes load, a frame is removed before its program starts, the last example
+  is slow to get ready, or the page hangs or logs an error. `web.yml` runs it in
+  `docs-scroll`.
 - `web.yml` also builds `test/emscripten` (`test/emscripten/build.sh`, needs
   `emcc` on the PATH), which checks `aether.h` still compiles cleanly as a guest
   of an Emscripten program. Emscripten is not otherwise a dependency.

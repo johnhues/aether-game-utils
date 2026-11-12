@@ -160,6 +160,11 @@ export async function instantiate( wasm, canvas, options = {} )
 			},
 			_ae_RequestPointerLock: function()
 			{
+				if( !canvas.requestPointerLock )
+				{
+					setTimeout( function() { call( "_ae_OnPointerLock", 0, 1 ); }, 0 );
+					return;
+				}
 				const request = canvas.requestPointerLock();
 				if( request && request.catch ) { request.catch( function() {} ); }
 			},
