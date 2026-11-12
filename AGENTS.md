@@ -78,6 +78,11 @@ Notes:
 - `test/config/check.sh native|wasi|emscripten` builds every supported
   combination of the `AE_ENABLE_*` feature flags and checks each unsupported one
   fails with only its `#error`. CI runs it in every workflow but `windows.yml`.
+- `node test/web/check.js <dir>` loads every example of a web build (eg.
+  `build_wasi/examples/Release`) in headless Chrome and fails on a halt, an
+  exception, a console or network error or warning, an aether `[warn]` log, or
+  no frames. Needs Node 22+ and Chrome (`$CHROME`, or the macOS app). `web.yml`
+  runs it, the CI image provides Node and Playwright's Chromium.
 - `web.yml` also builds `test/emscripten` (`test/emscripten/build.sh`, needs
   `emcc` on the PATH), which checks `aether.h` still compiles cleanly as a guest
   of an Emscripten program. Emscripten is not otherwise a dependency.

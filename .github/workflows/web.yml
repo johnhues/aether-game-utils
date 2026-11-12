@@ -22,11 +22,13 @@ jobs:
           echo "${SHA}  wasi-sdk.tar.gz" | sha256sum -c -
           mkdir -p /opt/wasi-sdk && tar xzf wasi-sdk.tar.gz -C /opt/wasi-sdk --strip-components=1
       - name: Configure
-        run: cmake -S . -B build_ci -G Ninja -DCMAKE_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
+        run: cmake -S . -B build_ci -G Ninja -DCMAKE_TOOLCHAIN_FILE=/opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF -DAE_LOADERS_OFBX=ON
       - name: Build
         run: cmake --build build_ci
       - name: Configurations
         run: WASI_SDK_PATH=/opt/wasi-sdk test/config/check.sh wasi
+      - name: Examples
+        run: node test/web/check.js build_ci/examples/Release
       - name: Collect Examples
         uses: actions/upload-artifact@v4
         with:
@@ -37,6 +39,14 @@ jobs:
   # aether as a guest in an Emscripten program, see test/emscripten
   emscripten-guest:
       runs-on: ubuntu-latest
+      container:
+        image: ${{ vars.AE_BUILD_IMAGE || 'ghcr.io/johnhues/aether-build:latest' }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      defaults:
+        run:
+          shell: bash # emsdk_env.sh needs bash to find its directory
       steps:
       - uses: actions/checkout@v4
       - name: Install Emscripten
@@ -45,7 +55,9 @@ jobs:
           /opt/emsdk/emsdk install 6.0.0
           /opt/emsdk/emsdk activate 6.0.0
       - name: Build
-        run: . /opt/emsdk/emsdk_env.sh && test/emscripten/build.sh
+        run: . /opt/emsdk/emsdk_env.sh && test/emscripten/build.sh build_emscripten_test
+      - name: Page
+        run: node test/web/check.js build_emscripten_test --expect-log "Rendered 60 frames"
       - name: Configurations
         run: . /opt/emsdk/emsdk_env.sh && test/config/check.sh emscripten
 

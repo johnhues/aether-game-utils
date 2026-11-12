@@ -13,7 +13,7 @@ emcc -std=c++20 -O2 -fno-exceptions -Werror \
 	-Wreturn-type -Wimplicit-fallthrough -Wnarrowing -Wuninitialized -Wreorder -Wmismatched-tags -Wimplicit-int-conversion \
 	-I"$root" "$here/Triangle.cpp" "$root/aether.cpp" \
 	-sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=web \
-	-o "$out/index.html"
+	--shell-file "$here/shell.html" -o "$out/index.html"
 
 node -e '
 const m = new WebAssembly.Module( require( "fs" ).readFileSync( process.argv[ 1 ] ) );

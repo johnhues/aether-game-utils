@@ -56,13 +56,15 @@ else
 fi
 
 # web.yml, build
-cmake -G Ninja -B build_coverage_wasi -DCMAKE_TOOLCHAIN_FILE="${WASI_SDK_PATH:?set WASI_SDK_PATH to the wasi-sdk install directory}/share/cmake/wasi-sdk-p1.cmake" -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
+cmake -G Ninja -B build_coverage_wasi -DCMAKE_TOOLCHAIN_FILE="${WASI_SDK_PATH:?set WASI_SDK_PATH to the wasi-sdk install directory}/share/cmake/wasi-sdk-p1.cmake" -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF -DAE_LOADERS_OFBX=ON
 cmake --build build_coverage_wasi --target all
 test/config/check.sh wasi
+node test/web/check.js build_coverage_wasi/examples/Release
 
 # web.yml, emscripten-guest
 if command -v emcc > /dev/null; then
 	test/emscripten/build.sh build_coverage_emscripten
+	node test/web/check.js build_coverage_emscripten --expect-log "Rendered 60 frames"
 	test/config/check.sh emscripten
 else
 	echo "emcc not on the PATH, skipping the Emscripten guest test. act -W web.yml below covers it."
