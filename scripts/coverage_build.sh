@@ -53,7 +53,9 @@ fi
 cmake -G Ninja -B build_coverage_mingw -DCMAKE_TOOLCHAIN_FILE=.github/toolchains/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
 cmake --build build_coverage_mingw --target all
 CXX=x86_64-w64-mingw32-g++ test/config/check.sh native
-if command -v wine > /dev/null; then
+if [ "$( uname -s )" = "Darwin" ]; then
+	echo "macOS host, skipping the Windows test run under wine. act -W ubuntu_mingw.yml below covers it."
+elif command -v wine > /dev/null; then
 	# As ubuntu_mingw.yml, in a prefix of its own rather than ~/.wine. The
 	# overrides skip the Mono and Gecko install prompts a new prefix shows.
 	WINEPREFIX="$PWD/build_coverage_mingw/wineprefix" WINEDLLOVERRIDES="mscoree,mshtml=" wine build_coverage_mingw/test/test.exe
@@ -83,8 +85,8 @@ fi
 
 # The stages above all run the host toolchain. These run the workflows
 # themselves, in the CI container, and are the only real coverage for GCC on
-# macOS, and for wine when it is not installed. Set AE_SKIP_ACT=1 to leave them
-# out while iterating, or on a machine without Docker.
+# macOS, and for wine on macOS or when it is not installed. Set AE_SKIP_ACT=1 to
+# leave them out while iterating, or on a machine without Docker.
 if [ "${AE_SKIP_ACT:-0}" != "1" ]; then
 	docker info # Verify Docker is running
 	# Architecture per workflow. ubuntu_mingw needs amd64: arm64 wine starts an
