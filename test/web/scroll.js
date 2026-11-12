@@ -30,6 +30,7 @@ const kVisits = 6; // Examples left mid-load
 const kVisitMs = 700; // Longer than doxygen-demo.js waits before loading
 const kAwayMs = 300;
 const kResponsiveMs = 2000; // Longest round trip into the page
+const kReplyMs = 60000; // Time Chrome has to answer each DevTools call
 const kTypes = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".wasm": "application/wasm", ".png": "image/png", ".json": "application/json", ".webmanifest": "application/manifest+json" };
 
 const args = process.argv.slice( 2 );
@@ -60,6 +61,24 @@ function findChrome()
 	}
 	const mac = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 	if( fs.existsSync( mac ) ) { return mac; }
+	for( const name of [ "google-chrome", "google-chrome-stable", "chromium", "chromium-browser" ] )
+	{
+		for( const dir of ( process.env.PATH || "" ).split( path.delimiter ).filter( Boolean ) )
+		{
+			const exe = path.join( dir, name );
+			if( fs.existsSync( exe ) ) { return exe; }
+		}
+	}
+	// Flathub's Chromium, the usual source on Linux distributions that have no
+	// deb, through the launcher flatpak exports for it
+	for( const dir of [ path.join( os.homedir(), ".local/share/flatpak/exports/bin" ), "/var/lib/flatpak/exports/bin" ] )
+	{
+		for( const id of [ "org.chromium.Chromium", "io.github.ungoogled_software.ungoogled_chromium" ] )
+		{
+			const exe = path.join( dir, id );
+			if( fs.existsSync( exe ) ) { return exe; }
+		}
+	}
 	throw new Error( "No Chrome found, set CHROME" );
 }
 
@@ -88,8 +107,21 @@ function serve()
 function launch( exe, profile )
 {
 	const flags = gpu ? [ "--use-angle=metal", "--enable-gpu", "--ignore-gpu-blocklist" ] : [ "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--use-webgpu-adapter=swiftshader" ];
+	// --password-store=basic: Linux otherwise encrypts cookies with a key from
+	// the desktop keyring, and while it is locked every page load waits for it
 	const chrome = spawn( exe, [ "--headless=new", "--no-sandbox", "--remote-debugging-port=0", "--user-data-dir=" + profile,
-		"--enable-unsafe-webgpu", "--autoplay-policy=no-user-gesture-required", "--window-size=834,1194", ...flags, "about:blank" ], { stdio: [ "ignore", "ignore", "pipe" ] } );
+		"--password-store=basic", "--enable-unsafe-webgpu", "--autoplay-policy=no-user-gesture-required", "--window-size=834,1194", ...flags, "about:blank" ],
+		{ stdio: [ "ignore", "ignore", "pipe" ], detached: true } );
+	// Chrome outlives this process unless killed, so a failure or a signal
+	// (eg. from timeout) would leave it running. It has its own process group,
+	// killed whole: a launcher such as a flatpak's does not pass signals on.
+	process.on( "exit", function()
+	{
+		try { process.kill( -chrome.pid, "SIGTERM" ); } catch( e ) {}
+		fs.rmSync( profile, { recursive: true, force: true } );
+	} );
+	process.on( "SIGINT", function() { process.exit( 130 ); } );
+	process.on( "SIGTERM", function() { process.exit( 143 ); } );
 	return new Promise( function( resolve, reject )
 	{
 		let err = "";
@@ -125,9 +157,17 @@ function connect( url )
 		ws.onopen = function()
 		{
 			resolve( {
+				// Rejects if Chrome does not answer, so a hung page fails the
+				// check instead of stalling it
 				send: function( method, params, sessionId )
 				{
-					return new Promise( function( r ) { id++; pending.set( id, r ); ws.send( JSON.stringify( { id, method, params, sessionId } ) ); } );
+					return new Promise( function( resolve, reject )
+					{
+						id++;
+						const timer = setTimeout( function() { reject( new Error( "No reply from Chrome to " + method + " within " + kReplyMs / 1000 + "s" ) ); }, kReplyMs );
+						pending.set( id, function( msg ) { clearTimeout( timer ); resolve( msg ); } );
+						ws.send( JSON.stringify( { id, method, params, sessionId } ) );
+					} );
 				},
 				on: function( h ) { handlers.push( h ); },
 				close: function() { ws.close(); },
@@ -268,7 +308,7 @@ async function check( cdp, base, result )
 		result.problems.push( error.message );
 	}
 	cdp.close();
-	await new Promise( function( r ) { chrome.removeAllListeners( "exit" ); chrome.on( "exit", r ); chrome.kill(); } );
+	await new Promise( function( r ) { chrome.removeAllListeners( "exit" ); chrome.on( "exit", r ); process.kill( -chrome.pid, "SIGTERM" ); } );
 	server.close();
 	fs.rmSync( profile, { recursive: true, force: true, maxRetries: 5 } );
 	const flung = result.loads.slice( result.flingStart, result.flingEnd ).length;

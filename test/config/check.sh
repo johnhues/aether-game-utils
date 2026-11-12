@@ -52,17 +52,32 @@ case "$toolchain" in
 		;;
 esac
 
-failures=0
-log="$out/log"
+# Every check runs in the background with its own log and output, so they
+# build in parallel. Results print in order once all have finished.
+count=0
 
 # Builds Main.cpp with aether under the given defines and expects no warnings
 pass()
 {
-	local name="$1"; shift
+	count=$(( count + 1 ))
+	check_pass "$count" "$@" > "$out/$count.result" &
+}
+
+# Compiles aether under the given defines and expects exactly one error, the
+# #error containing the expected message
+fail()
+{
+	count=$(( count + 1 ))
+	check_fail "$count" "$@" > "$out/$count.result" &
+}
+
+check_pass()
+{
+	local log="$out/$1.log"; local name="$2"; shift 2
 	if [ "$link" = "1" ]; then
 		local extra=""
 		[ "$toolchain" = "emscripten" ] && extra="-lopenal"
-		$cxx $flags $warnings "$@" "$here/Main.cpp" "$impl" $extra -o "$out/main.wasm" > "$log" 2>&1
+		$cxx $flags $warnings "$@" "$here/Main.cpp" "$impl" $extra -o "$out/$( basename "$log" .log ).wasm" > "$log" 2>&1
 	else
 		$cxx $flags $warnings "$@" -fsyntax-only "$here/Main.cpp" > "$log" 2>&1 &&
 			$cxx $flags $warnings "$@" -fsyntax-only "$impl" >> "$log" 2>&1
@@ -71,17 +86,14 @@ pass()
 	if [ $status -ne 0 ] || grep -q "warning:\|error:" "$log"; then
 		echo "FAIL  $name: expected a clean build"
 		sed 's/^/      /' "$log" | head -20
-		failures=$(( failures + 1 ))
 	else
 		echo "pass  $name"
 	fi
 }
 
-# Compiles aether under the given defines and expects exactly one error, the
-# #error containing the expected message
-fail()
+check_fail()
 {
-	local name="$1"; local message="$2"; shift 2
+	local log="$out/$1.log"; local name="$2"; local message="$3"; shift 3
 	$cxx $flags "$@" -fsyntax-only "$impl" > "$log" 2>&1
 	local status=$?
 	local errors="$( grep -c "error:" "$log" )"
@@ -89,7 +101,6 @@ fail()
 	if [ $status -eq 0 ] || [ "$errors" != "1" ] || [ "$warnings_seen" != "0" ] || ! grep -q "error:.*\"$message\"" "$log"; then
 		echo "FAIL  $name: expected only #error \"$message\""
 		sed 's/^/      /' "$log" | head -20
-		failures=$(( failures + 1 ))
 	else
 		echo "pass  $name (rejected)"
 	fi
@@ -124,6 +135,11 @@ case "$toolchain" in
 		;;
 esac
 
+wait
+for i in $( seq 1 "$count" ); do
+	cat "$out/$i.result"
+done
+failures=$( cat "$out"/*.result | grep -c "^FAIL" )
 if [ $failures -ne 0 ]; then
 	echo "$failures configuration check(s) failed"
 	exit 1

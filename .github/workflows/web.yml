@@ -72,19 +72,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       steps:
       - uses: actions/checkout@v4
-      - name: Install Doxygen
-        # The same pinned version as publish-docs. doxygen.nl ships x86_64 only.
-        run: |
-          wget -qO- "https://www.doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz" | tar xz
-          echo "$PWD/doxygen-${DOXYGEN_VERSION}/bin" >> $GITHUB_PATH
-        env:
-          DOXYGEN_VERSION: 1.18.0
       - name: Fetch Examples
         uses: actions/download-artifact@v4
         with:
           name: web-examples
           path: web-examples
       - name: Build Site
+        # docs.py downloads its pinned doxygen release
         run: python3 scripts/docs.py publish --yes --no-open --config-dir web-examples --out _site
       - name: Scroll
         run: node test/web/scroll.js _site

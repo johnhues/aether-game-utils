@@ -54,7 +54,9 @@ cmake -G Ninja -B build_coverage_mingw -DCMAKE_TOOLCHAIN_FILE=.github/toolchains
 cmake --build build_coverage_mingw --target all
 CXX=x86_64-w64-mingw32-g++ test/config/check.sh native
 if command -v wine > /dev/null; then
-	wine build_coverage_mingw/test/test.exe
+	# As ubuntu_mingw.yml, in a prefix of its own rather than ~/.wine. The
+	# overrides skip the Mono and Gecko install prompts a new prefix shows.
+	WINEPREFIX="$PWD/build_coverage_mingw/wineprefix" WINEDLLOVERRIDES="mscoree,mshtml=" wine build_coverage_mingw/test/test.exe
 else
 	echo "wine not installed, skipping the Windows test run. act -W ubuntu_mingw.yml below covers it."
 fi
@@ -65,13 +67,10 @@ cmake --build build_coverage_wasi --target all
 test/config/check.sh wasi
 node test/web/check.js build_coverage_wasi/examples/Release
 
-# web.yml, docs-scroll. Leaves the site served on docs.py's publish port.
-if command -v doxygen > /dev/null; then
-	python3 scripts/docs.py publish --yes --no-open --config-dir build_coverage_wasi/examples/Release --out build_coverage_docs
-	node test/web/scroll.js build_coverage_docs
-else
-	echo "doxygen not on the PATH, skipping the docs scroll test."
-fi
+# web.yml, docs-scroll. docs.py downloads its pinned doxygen into build_docs/.
+# Leaves the site served on docs.py's publish port.
+python3 scripts/docs.py publish --yes --no-open --config-dir build_coverage_wasi/examples/Release --out build_coverage_docs
+node test/web/scroll.js build_coverage_docs
 
 # web.yml, emscripten-guest
 if command -v em++ > /dev/null; then

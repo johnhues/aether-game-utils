@@ -82,13 +82,15 @@ Notes:
   `build_wasi/examples/Release`) in headless Chrome and fails on a halt, an
   exception, a console or network error or warning, an aether `[warn]` log, or
   no frames. Needs Node 22+ and Chrome (`$CHROME`, Playwright's Chromium in
-  `$PLAYWRIGHT_BROWSERS_PATH`, the macOS app, or Chrome/Chromium on the PATH). `web.yml`
+  `$PLAYWRIGHT_BROWSERS_PATH`, the macOS app, Chrome/Chromium on the PATH, or
+  Flathub's `org.chromium.Chromium`). `web.yml`
   runs it, the CI image provides Node and Playwright's Chromium.
 - `node test/web/scroll.js <site>` flings the main page of a
   `scripts/docs.py publish` site in headless Chrome, with WebKit's suspended
   animation frames in out of view iframes. It fails when the live examples it
   passes load, a frame is removed before its program starts, the last example
-  is slow to get ready, or the page hangs or logs an error. `web.yml` runs it in
+  is slow to get ready, or the page hangs or logs an error. It finds Chrome as
+  `check.js` does. `web.yml` runs it in
   `docs-scroll`.
 - `web.yml` also builds `test/emscripten` (`test/emscripten/build.sh`, needs
   `em++` on the PATH), which checks `aether.h` still compiles cleanly as a guest
@@ -116,20 +118,22 @@ Stages, in order:
 2. **clang** — `build_clang`, then runs `build_clang/test/test`.
 3. **clang + `AE_DEPRECATED=1`** — `build_deprecated`, then runs its `test`.
 4. **gcc** — `build_gcc`, then runs its `test`.
-5. **MinGW** — `build_mingw` via `.github/toolchains/mingw-w64.cmake`, **compile only**
-   (the `wine .../test.exe` run is commented out). **MinGW is the stand-in for Windows
-   on non-Windows hosts** — to Windows-compile-check from macOS/Linux use this
-   toolchain; "no Windows machine" does not mean "no Windows coverage". Re-enable the
-   `wine` line to actually run the Windows test binary.
-6. **Web** — `build_coverage_wasi` with the wasi-sdk toolchain (compile only), then
-   `test/emscripten/build.sh` when `em++` is on the PATH.
+5. **MinGW** — `build_mingw` via `.github/toolchains/mingw-w64.cmake`, then runs
+   `test.exe` under wine when it is installed, in a prefix inside the build directory as
+   `ubuntu_mingw.yml` does. **MinGW is the stand-in for Windows on non-Windows hosts** —
+   to Windows-check from macOS/Linux use this toolchain; "no Windows machine" does not
+   mean "no Windows coverage".
+6. **Web** — `build_coverage_wasi` with the wasi-sdk toolchain, its configuration
+   checks, and `test/web/check.js` on every example, then a `docs.py publish` site
+   of those examples in `build_coverage_docs` and `test/web/scroll.js` on it, then
+   `test/emscripten/build.sh` and its page when `em++` is on the PATH.
 7. **act** — `act -W .github/workflows/ubuntu_clang.yml` runs the Ubuntu-clang GitHub
    Actions workflow locally in Docker (the gcc/mingw workflow runs are commented out).
 
 Prerequisites (all currently installed on this machine): Docker running (checked
 with `docker info` before the act stage; set `AE_SKIP_ACT=1` without it),
 `WASI_SDK_PATH`, `em++` (optional, emsdk on PATH), `act`, `node`, the MinGW
-toolchain (`x86_64-w64-mingw32-g++`), and `wine` (only if the mingw test run is
-re-enabled). `AE_LEAN_AND_MEAN` is intentionally OFF here for iteration speed; CI
+toolchain (`x86_64-w64-mingw32-g++`), Chrome or Chromium (see `test/web/check.js`), and
+`wine` (runs the MinGW test binary, skipped without it). `AE_LEAN_AND_MEAN` is intentionally OFF here for iteration speed; CI
 builds the test suite with it ON, so a green local sweep does not exercise that
 configuration.
