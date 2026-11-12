@@ -41,9 +41,34 @@
 		return true;
 	}
 
+	// While a frame is armed the page holds an extra history entry, so a back
+	// swipe over the frame pops it instead of leaving the page.
+	let trapped = false;
+	window.addEventListener( "popstate", function()
+	{
+		if( trapped && document.querySelector( ".ae-demo.armed" ) )
+		{
+			history.pushState( null, "" );
+		}
+		else
+		{
+			trapped = false;
+		}
+	} );
+
 	function arm( demo, armed )
 	{
 		demo.classList.toggle( "armed", armed );
+		if( armed && !trapped )
+		{
+			trapped = true;
+			history.pushState( null, "" );
+		}
+		else if( !armed && trapped && !document.querySelector( ".ae-demo.armed" ) )
+		{
+			trapped = false;
+			history.back();
+		}
 		const frame = demo.querySelector( "iframe" );
 		if( frame && armed )
 		{
@@ -247,31 +272,50 @@
 			}, 500 );
 		}
 
-		// Frames in view load one at a time, nearest to its middle first, until
-		// each reports it is ready or halted.
-		const wanted = new Set();
+		// Frames that have stayed in view for kSettleMs load one at a time,
+		// nearest to its middle first, until each reports it has started or halted.
+		const kSettleMs = 500;
+		const wanted = new Map(); // Frame in view -> performance.now() it arrived
 		let loading = null;
+		let settleTimer = 0;
 		function loadNext()
 		{
 			if( loading )
 			{
 				return;
 			}
+			const now = performance.now();
 			const middle = window.innerHeight / 2;
 			let nearestDistance = Infinity;
-			wanted.forEach( function( demo )
+			let wait = Infinity;
+			wanted.forEach( function( since, demo )
 			{
+				if( demo.querySelector( "iframe" ) )
+				{
+					return;
+				}
+				const left = since + kSettleMs - now;
+				if( left > 0 )
+				{
+					wait = Math.min( wait, left );
+					return;
+				}
 				const rect = demo.getBoundingClientRect();
 				const distance = Math.abs( rect.top + rect.height / 2 - middle );
-				if( !demo.querySelector( "iframe" ) && distance < nearestDistance )
+				if( distance < nearestDistance )
 				{
 					loading = demo;
 					nearestDistance = distance;
 				}
 			} );
+			clearTimeout( settleTimer );
 			if( loading )
 			{
 				load( loading );
+			}
+			else if( wait < Infinity )
+			{
+				settleTimer = setTimeout( loadNext, wait );
 			}
 		}
 
@@ -283,7 +327,10 @@
 				{
 					if( entry.isIntersecting )
 					{
-						wanted.add( entry.target );
+						if( !wanted.has( entry.target ) )
+						{
+							wanted.set( entry.target, performance.now() );
+						}
 						if( !entry.target.querySelector( "iframe" ) )
 						{
 							label( entry.target, "Queued" );
@@ -292,11 +339,15 @@
 					else
 					{
 						wanted.delete( entry.target );
-						if( loading === entry.target )
+						if( !entry.target.querySelector( "iframe" ) )
 						{
-							loading = null;
+							label( entry.target, "" );
 						}
-						unload( entry.target );
+						// A frame still loading is removed once it reports
+						if( loading !== entry.target )
+						{
+							unload( entry.target );
+						}
 					}
 				} );
 				loadNext();
@@ -310,12 +361,14 @@
 
 		if( demos.length )
 		{
-			// A frame says when it has finished loading, which shows its play
-			// button, or that it halted. Either lets the next frame load.
+			// A frame says when its program has started, which lets the next
+			// frame load, when it has finished loading, which shows its play
+			// button, or that it halted. Ready needs animation frames, which
+			// Safari does not run in a frame out of view.
 			window.addEventListener( "message", function( event )
 			{
 				const state = event.data && event.data.aeDemo;
-				if( state !== "ready" && state !== "halted" )
+				if( state !== "started" && state !== "ready" && state !== "halted" )
 				{
 					return;
 				}
@@ -324,10 +377,17 @@
 					const frame = demo.querySelector( "iframe" );
 					if( frame && frame.contentWindow === event.source )
 					{
-						demo.classList.toggle( "ready", state === "ready" );
+						if( state !== "started" )
+						{
+							demo.classList.toggle( "ready", state === "ready" );
+						}
 						if( loading === demo )
 						{
 							loading = null;
+							if( !wanted.has( demo ) )
+							{
+								unload( demo );
+							}
 						}
 					}
 				} );

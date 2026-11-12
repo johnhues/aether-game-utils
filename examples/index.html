@@ -186,6 +186,7 @@
           terminate: instance.terminate,
           stats: function() { return Object.assign( instance.stats(), { downloadBytes: downloadBytes, readyMs: readyMs } ); },
         };
+        notify( 'started' );
         // Leaving frees graphics and audio now rather than at garbage collection.
         // A page restored from the back-forward cache has lost them, so it starts over.
         window.addEventListener( 'pagehide', function() { instance.terminate(); } );

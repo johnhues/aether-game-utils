@@ -65,6 +65,14 @@ cmake --build build_coverage_wasi --target all
 test/config/check.sh wasi
 node test/web/check.js build_coverage_wasi/examples/Release
 
+# web.yml, docs-scroll. Leaves the site served on docs.py's publish port.
+if command -v doxygen > /dev/null; then
+	python3 scripts/docs.py publish --yes --no-open --config-dir build_coverage_wasi/examples/Release --out build_coverage_docs
+	node test/web/scroll.js build_coverage_docs
+else
+	echo "doxygen not on the PATH, skipping the docs scroll test."
+fi
+
 # web.yml, emscripten-guest
 if command -v em++ > /dev/null; then
 	test/emscripten/build.sh build_coverage_emscripten

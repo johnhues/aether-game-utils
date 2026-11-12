@@ -118,10 +118,15 @@ void Player::Update( SmallEngine* engine )
 	if( moveTouch && moveTouch->Ended() ) { input.ReleasePointer( moveTouch ); moveTouch = nullptr; }
 	while( const ae::InputPointer* t = input.PumpPointers() )
 	{
-		if( t->source == ae::InputPointerSource::Mouse ) // The mouse looks with the captured cursor
+		if( t->source == ae::InputPointerSource::Mouse ) // The mouse drags to look until the cursor is captured
 		{
-			if( t->button == ae::InputPointerButton::Primary ) { input.SetCursorState( ae::CursorState::HiddenAndCaptured ); }
-			input.ReleasePointer( t );
+			if( t->button == ae::InputPointerButton::Primary && !lookTouch )
+			{
+				input.SetCursorState( ae::CursorState::HiddenAndCaptured );
+				lookTouch = t;
+				lookLastPos = t->StartPosition();
+			}
+			else { input.ReleasePointer( t ); }
 			continue;
 		}
 		const bool onLeft = ( t->StartPosition().x < window.GetWidth() / 2.0f );
@@ -140,8 +145,7 @@ void Player::Update( SmallEngine* engine )
 		const ae::Vec2 pos = lookTouch->Position();
 		const ae::Vec2 touchDir = ( pos - lookLastPos ) / ( displaySize * 0.35f );
 		lookLastPos = pos;
-		yaw -= touchDir.x;
-		pitch += touchDir.y;
+		if( !input.GetCursorLocked() ) { yaw -= touchDir.x; pitch += touchDir.y; }
 	}
 	pitch = ae::Clip( pitch, -1.0f, 1.0f );
 

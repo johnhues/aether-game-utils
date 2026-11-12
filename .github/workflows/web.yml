@@ -61,9 +61,37 @@ jobs:
       - name: Configurations
         run: . /opt/emsdk/emsdk_env.sh && test/config/check.sh emscripten
 
+  # The docs site flung up and down, see test/web/scroll.js
+  docs-scroll:
+      needs: build
+      runs-on: ubuntu-latest
+      container:
+        image: ${{ vars.AE_BUILD_IMAGE || 'ghcr.io/johnhues/aether-build:latest' }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      steps:
+      - uses: actions/checkout@v4
+      - name: Install Doxygen
+        # The same pinned version as publish-docs. doxygen.nl ships x86_64 only.
+        run: |
+          wget -qO- "https://www.doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz" | tar xz
+          echo "$PWD/doxygen-${DOXYGEN_VERSION}/bin" >> $GITHUB_PATH
+        env:
+          DOXYGEN_VERSION: 1.18.0
+      - name: Fetch Examples
+        uses: actions/download-artifact@v4
+        with:
+          name: web-examples
+          path: web-examples
+      - name: Build Site
+        run: python3 scripts/docs.py publish --yes --no-open --config-dir web-examples --out _site
+      - name: Scroll
+        run: node test/web/scroll.js _site
+
   publish-docs:
       if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-      needs: build
+      needs: [ build, docs-scroll ]
       runs-on: ubuntu-latest
       permissions:
         pages: write
