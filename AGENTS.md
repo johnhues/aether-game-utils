@@ -81,7 +81,8 @@ Notes:
 - `node test/web/check.js <dir>` loads every example of a web build (eg.
   `build_wasi/examples/Release`) in headless Chrome and fails on a halt, an
   exception, a console or network error or warning, an aether `[warn]` log, or
-  no frames. Needs Node 22+ and Chrome (`$CHROME`, or the macOS app). `web.yml`
+  no frames. Needs Node 22+ and Chrome (`$CHROME`, Playwright's Chromium in
+  `$PLAYWRIGHT_BROWSERS_PATH`, the macOS app, or Chrome/Chromium on the PATH). `web.yml`
   runs it, the CI image provides Node and Playwright's Chromium.
 - `web.yml` also builds `test/emscripten` (`test/emscripten/build.sh`, needs
   `em++` on the PATH), which checks `aether.h` still compiles cleanly as a guest
@@ -104,7 +105,8 @@ the first failure; the `+ `-prefixed trace line just before the error names the
 failing command.
 
 Stages, in order:
-1. **iOS** — `cmake --preset ios` + `cmake --build --preset ios-debug` (compile only).
+1. **iOS** — `cmake --preset ios` + `cmake --build --preset ios-debug` (compile only,
+   skipped on non-macOS hosts).
 2. **clang** — `build_clang`, then runs `build_clang/test/test`.
 3. **clang + `AE_DEPRECATED=1`** — `build_deprecated`, then runs its `test`.
 4. **gcc** — `build_gcc`, then runs its `test`.
@@ -118,8 +120,9 @@ Stages, in order:
 7. **act** — `act -W .github/workflows/ubuntu_clang.yml` runs the Ubuntu-clang GitHub
    Actions workflow locally in Docker (the gcc/mingw workflow runs are commented out).
 
-Prerequisites (all currently installed on this machine): Docker running (the script
-opens with `docker info`), `WASI_SDK_PATH`, `em++` (optional, emsdk on PATH), `act`, `node`, the MinGW
+Prerequisites (all currently installed on this machine): Docker running (checked
+with `docker info` before the act stage; set `AE_SKIP_ACT=1` without it),
+`WASI_SDK_PATH`, `em++` (optional, emsdk on PATH), `act`, `node`, the MinGW
 toolchain (`x86_64-w64-mingw32-g++`), and `wine` (only if the mingw test run is
 re-enabled). `AE_LEAN_AND_MEAN` is intentionally OFF here for iteration speed; CI
 builds the test suite with it ON, so a green local sweep does not exercise that

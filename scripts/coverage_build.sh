@@ -1,7 +1,6 @@
 #!/bin/bash
 set -xeuo pipefail
 cd "$(cd "$(dirname "$0")" && pwd)/.." # Up from scripts/ to repo root
-docker info # Verify Docker is running
 
 # Each stage below mirrors its .github/workflows counterpart: Release,
 # AE_LEAN_AND_MEAN=OFF, target 'all', then the test binary. The build type is
@@ -9,13 +8,18 @@ docker info # Verify Docker is running
 # optimizing, so an unset CMAKE_BUILD_TYPE hides the warnings CI treats as
 # errors.
 #
-# The host stages run Apple clang, so they stand in for macos.yml. 'g++' on
-# macOS is Apple clang, not GCC, so a real GCC build only happens under act
-# below.
+# On macOS the host stages run Apple clang, so they stand in for macos.yml.
+# 'g++' on macOS is Apple clang, not GCC, so a real GCC build only happens
+# under act below. On Linux they stand in for the Ubuntu workflows, and the
+# host 'g++' is a real GCC.
 
 # No workflow counterpart. Compile only, signing is expected to fail.
-cmake --preset ios-coverage
-cmake --build --preset ios-coverage-debug
+if [ "$( uname )" = "Darwin" ]; then
+	cmake --preset ios-coverage
+	cmake --build --preset ios-coverage-debug
+else
+	echo "Not on macOS, skipping the iOS compile check. Nothing else covers it."
+fi
 
 # macos.yml
 CC=clang CXX=clang++ cmake -G Ninja -B build_coverage_clang -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
@@ -71,9 +75,11 @@ else
 fi
 
 # The stages above all run the host toolchain. These run the workflows
-# themselves, in the CI container, and are the only real coverage for GCC and
-# for wine. Set AE_SKIP_ACT=1 to leave them out while iterating.
+# themselves, in the CI container, and are the only real coverage for GCC on
+# macOS, and for wine when it is not installed. Set AE_SKIP_ACT=1 to leave them
+# out while iterating, or on a machine without Docker.
 if [ "${AE_SKIP_ACT:-0}" != "1" ]; then
+	docker info # Verify Docker is running
 	# Architecture per workflow. ubuntu_mingw needs amd64: arm64 wine starts an
 	# x86_64 PE in experimental ARM64EC mode and hangs. Everything else runs on
 	# the host architecture: Rosetta cannot translate node's JIT, so node aborts
