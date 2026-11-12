@@ -62,12 +62,12 @@ test/config/check.sh wasi
 node test/web/check.js build_coverage_wasi/examples/Release
 
 # web.yml, emscripten-guest
-if command -v emcc > /dev/null; then
+if command -v em++ > /dev/null; then
 	test/emscripten/build.sh build_coverage_emscripten
 	node test/web/check.js build_coverage_emscripten --expect-log "Rendered 60 frames"
 	test/config/check.sh emscripten
 else
-	echo "emcc not on the PATH, skipping the Emscripten guest test. act -W web.yml below covers it."
+	echo "em++ not on the PATH, skipping the Emscripten guest test. act -W web.yml below covers it."
 fi
 
 # The stages above all run the host toolchain. These run the workflows

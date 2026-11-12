@@ -84,7 +84,7 @@ Notes:
   no frames. Needs Node 22+ and Chrome (`$CHROME`, or the macOS app). `web.yml`
   runs it, the CI image provides Node and Playwright's Chromium.
 - `web.yml` also builds `test/emscripten` (`test/emscripten/build.sh`, needs
-  `emcc` on the PATH), which checks `aether.h` still compiles cleanly as a guest
+  `em++` on the PATH), which checks `aether.h` still compiles cleanly as a guest
   of an Emscripten program. Emscripten is not otherwise a dependency.
 - The iOS build may stop at the code-signing/link step without provisioning; a
   clean *compile* of all sources is the signal that matters for header
@@ -114,12 +114,12 @@ Stages, in order:
    toolchain; "no Windows machine" does not mean "no Windows coverage". Re-enable the
    `wine` line to actually run the Windows test binary.
 6. **Web** — `build_coverage_wasi` with the wasi-sdk toolchain (compile only), then
-   `test/emscripten/build.sh` when `emcc` is on the PATH.
+   `test/emscripten/build.sh` when `em++` is on the PATH.
 7. **act** — `act -W .github/workflows/ubuntu_clang.yml` runs the Ubuntu-clang GitHub
    Actions workflow locally in Docker (the gcc/mingw workflow runs are commented out).
 
 Prerequisites (all currently installed on this machine): Docker running (the script
-opens with `docker info`), `WASI_SDK_PATH`, `emcc` (optional, emsdk on PATH), `act`, `node`, the MinGW
+opens with `docker info`), `WASI_SDK_PATH`, `em++` (optional, emsdk on PATH), `act`, `node`, the MinGW
 toolchain (`x86_64-w64-mingw32-g++`), and `wine` (only if the mingw test run is
 re-enabled). `AE_LEAN_AND_MEAN` is intentionally OFF here for iteration speed; CI
 builds the test suite with it ON, so a green local sweep does not exercise that
