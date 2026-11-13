@@ -25,6 +25,7 @@
 //------------------------------------------------------------------------------
 #include <catch2/catch_test_macros.hpp>
 #include "aether.h"
+#include <limits>
 
 //------------------------------------------------------------------------------
 // Math test helpers
@@ -712,7 +713,7 @@ TEST_CASE( "Vec2 Trim TrimCopy", "[ae::VecT]" )
 TEST_CASE( "Vec2 IsNAN", "[ae::VecT]" )
 {
 	REQUIRE_FALSE( ae::Vec2( 1,2 ).IsNAN() );
-	const float nan = 0.0f / 0.0f;
+	const float nan = std::numeric_limits< float >::quiet_NaN();
 	REQUIRE( ae::Vec2( nan, 0.0f ).IsNAN() );
 	REQUIRE( ae::Vec2( 0.0f, nan ).IsNAN() );
 }
@@ -765,7 +766,7 @@ TEST_CASE( "Vec4 Dot Length Normalize", "[ae::VecT]" )
 	v.Normalize();
 	REQUIRE( IsCloseEnough( v.Length(), 1.0f ) );
 	REQUIRE_FALSE( ae::Vec4( 1,2,3,4 ).IsNAN() );
-	const float nan = 0.0f / 0.0f;
+	const float nan = std::numeric_limits< float >::quiet_NaN();
 	REQUIRE( ae::Vec4( nan, 0,0,0 ).IsNAN() );
 }
 
@@ -1136,7 +1137,7 @@ TEST_CASE( "Matrix4 operator Vec4", "[ae::Matrix4]" )
 TEST_CASE( "Matrix4 IsNAN", "[ae::Matrix4]" )
 {
 	REQUIRE_FALSE( ae::Matrix4::Identity().IsNAN() );
-	const float nan = 0.0f / 0.0f;
+	const float nan = std::numeric_limits< float >::quiet_NaN();
 	ae::Matrix4 m = ae::Matrix4::Identity();
 	m.SetRow( 0, ae::Vec4( nan, 0,0,0 ) );
 	REQUIRE( m.IsNAN() );
@@ -1517,11 +1518,11 @@ TEST_CASE( "VecT shared: Dot, Length, LengthSquared", "[math]" )
 TEST_CASE( "VecT shared: IsNAN", "[math]" )
 {
 	REQUIRE( ae::Vec2( 1.0f, 2.0f ).IsNAN() == false );
-	REQUIRE( ae::Vec2( 0.0f / 0.0f, 0.0f ).IsNAN() == true );
+	REQUIRE( ae::Vec2( std::numeric_limits< float >::quiet_NaN(), 0.0f ).IsNAN() == true );
 	REQUIRE( ae::Vec3( 1.0f, 2.0f, 3.0f ).IsNAN() == false );
-	REQUIRE( ae::Vec3( 0.0f / 0.0f, 0.0f, 0.0f ).IsNAN() == true );
+	REQUIRE( ae::Vec3( std::numeric_limits< float >::quiet_NaN(), 0.0f, 0.0f ).IsNAN() == true );
 	REQUIRE( ae::Vec4( 1.0f, 2.0f, 3.0f, 4.0f ).IsNAN() == false );
-	REQUIRE( ae::Vec4( 0.0f / 0.0f, 0.0f, 0.0f, 0.0f ).IsNAN() == true );
+	REQUIRE( ae::Vec4( std::numeric_limits< float >::quiet_NaN(), 0.0f, 0.0f, 0.0f ).IsNAN() == true );
 }
 
 TEST_CASE( "Vec2 constructors", "[math]" )
@@ -2254,6 +2255,6 @@ TEST_CASE( "Matrix4 IsNAN", "[math]" )
 {
 	REQUIRE( ae::Matrix4::Identity().IsNAN() == false );
 	ae::Matrix4 mNaN = ae::Matrix4::Identity();
-	mNaN.data[ 0 ] = 0.0f / 0.0f;
+	mNaN.data[ 0 ] = std::numeric_limits< float >::quiet_NaN();
 	REQUIRE( mNaN.IsNAN() == true );
 }

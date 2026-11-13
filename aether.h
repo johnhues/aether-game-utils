@@ -8519,6 +8519,31 @@ constexpr uint32_t NormalizedWhiteSpaceTypeName( const char* str, char* out, uin
 	return length;
 }
 
+//! @NOTE: Internal. Removes the 'class ', 'struct ', 'enum ', and 'union '
+//! prefixes MSVC adds to type names, in place.
+constexpr void _RemoveTypeNameKeywords( char* str )
+{
+	auto isIdentifier = []( char c ) { return c == '_' || ( c >= '0' && c <= '9' ) || ( c >= 'a' && c <= 'z' ) || ( c >= 'A' && c <= 'Z' ); };
+	const char* const keywords[] = { "class ", "struct ", "enum ", "union " };
+	uint32_t length = 0;
+	for( uint32_t i = 0; str[ i ]; )
+	{
+		uint32_t skip = 0;
+		if( length == 0 || !isIdentifier( str[ length - 1 ] ) )
+		{
+			for( const char* keyword : keywords )
+			{
+				uint32_t k = 0;
+				while( keyword[ k ] && str[ i + k ] == keyword[ k ] ) { k++; }
+				if( !keyword[ k ] ) { skip = k; break; }
+			}
+		}
+		if( skip ) { i += skip; }
+		else { str[ length++ ] = str[ i++ ]; }
+	}
+	str[ length ] = '\0';
+}
+
 } // ae end
 
 // Get a string representation of this functions signature, which includes the
@@ -8568,6 +8593,9 @@ constexpr auto _ae_RawTypeName()
 	constexpr std::size_t rawLen = sizeof( compilerName ) - format.leadingChars - format.trailingChars;
 	std::array< char, rawLen > name{};
 	for( std::size_t i = 0; i < rawLen - 1; i++ ) { name[ i ] = compilerName[ i + format.leadingChars ]; }
+#ifdef _MSC_VER
+	ae::_RemoveTypeNameKeywords( name.data() );
+#endif
 	ae::NormalizedWhiteSpaceTypeName( name.data(), name.data(), (uint32_t)rawLen );
 	return name;
 }

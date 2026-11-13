@@ -6,6 +6,7 @@ RUN apt update -qq && \
 		ca-certificates \
 		gpg \
 		wget \
+		curl \
 		libgl1-mesa-dev \
 		uuid-dev \
 		clang \

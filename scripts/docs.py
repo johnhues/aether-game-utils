@@ -220,7 +220,10 @@ def download( url, dest ):
     if shutil.which( "curl" ):
         subprocess.run( [ "curl", "-fsSL", "-o", str( dest ), url ], check=True )
     else:
-        urllib.request.urlretrieve( url, dest )
+        # doxygen.nl rejects urllib's default User-Agent
+        request = urllib.request.Request( url, headers={ "User-Agent": "curl/8.0" } )
+        with urllib.request.urlopen( request ) as response, open( dest, "wb" ) as f:
+            shutil.copyfileobj( response, f )
 
 
 @functools.cache

@@ -441,37 +441,39 @@ ae_add_bundle("Shared Library"
 )
 
 # Hot Load
-add_library(HotLoadable SHARED "24_HotLoadable.cpp;24_HotLoad.h")
-target_compile_options(HotLoadable PUBLIC "-fvisibility=hidden") # See AE_EXPORT for more info
-set_target_properties(HotLoadable PROPERTIES PREFIX "")
-target_link_libraries(HotLoadable PUBLIC ae_shared) # Use shared library version of aether so symbols aren't duplicated
-ae_add_bundle("Hot Load"
-	TARGET_NAME "24_hot_load"
-	BUNDLE_ID "io.aether.HotLoad"
-	APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
-	MAJOR_MINOR_PATCH_VERSION "0.0.0"
-	ICNS_FILE "data/Icon.icns"
-	SRC_FILES "24_HotLoad.cpp;24_HotLoad.h"
-	RESOURCES "${AE_EXAMPLE_RESOURCES}"
-	PACKAGE_LIBS "ae_shared" # Use shared library version of aether so symbols aren't duplicated in HotLoadable library
-)
-add_dependencies(24_hot_load HotLoadable) # Make sure HotLoadable is built
-if(APPLE)
-	set_target_properties(HotLoadable PROPERTIES
-		# Output built HotLoadable library into app bundle
-		XCODE_ATTRIBUTE_SKIP_INSTALL "NO"
-		XCODE_ATTRIBUTE_INSTALL_PATH "Applications/Hot Load.app/Contents/Resources/data"
-		ARCHIVE_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
-		LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
-		RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+if(NOT MSVC) # @TODO: ae_shared exports no symbols with cl
+	add_library(HotLoadable SHARED "24_HotLoadable.cpp;24_HotLoad.h")
+	target_compile_options(HotLoadable PUBLIC "-fvisibility=hidden") # See AE_EXPORT for more info
+	set_target_properties(HotLoadable PROPERTIES PREFIX "")
+	target_link_libraries(HotLoadable PUBLIC ae_shared) # Use shared library version of aether so symbols aren't duplicated
+	ae_add_bundle("Hot Load"
+		TARGET_NAME "24_hot_load"
+		BUNDLE_ID "io.aether.HotLoad"
+		APPLE_DEVELOPMENT_TEAM "${AE_APPLE_DEVELOPMENT_TEAM}"
+		MAJOR_MINOR_PATCH_VERSION "0.0.0"
+		ICNS_FILE "data/Icon.icns"
+		SRC_FILES "24_HotLoad.cpp;24_HotLoad.h"
+		RESOURCES "${AE_EXAMPLE_RESOURCES}"
+		PACKAGE_LIBS "ae_shared" # Use shared library version of aether so symbols aren't duplicated in HotLoadable library
 	)
-elseif(UNIX)
-	# Output built HotLoadable library into the data directory next to the executable
-	set_target_properties(HotLoadable PROPERTIES
-		LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:24_hot_load>/data"
-	)
-else()
-	# @TODO
+	add_dependencies(24_hot_load HotLoadable) # Make sure HotLoadable is built
+	if(APPLE)
+		set_target_properties(HotLoadable PROPERTIES
+			# Output built HotLoadable library into app bundle
+			XCODE_ATTRIBUTE_SKIP_INSTALL "NO"
+			XCODE_ATTRIBUTE_INSTALL_PATH "Applications/Hot Load.app/Contents/Resources/data"
+			ARCHIVE_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+			LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+			RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+		)
+	elseif(UNIX)
+		# Output built HotLoadable library into the data directory next to the executable
+		set_target_properties(HotLoadable PROPERTIES
+			LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:24_hot_load>/data"
+		)
+	else()
+		# @TODO
+	endif()
 endif()
 
 endif() # AE_DESKTOP END

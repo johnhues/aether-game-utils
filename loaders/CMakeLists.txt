@@ -34,10 +34,12 @@ endif()
 file(GLOB_RECURSE openfbx_SOURCES CONFIGURE_DEPENDS "${openfbx_SOURCE_DIR}/src/*")
 add_library(openfbx ${openfbx_SOURCES})
 target_include_directories(openfbx INTERFACE "${openfbx_SOURCE_DIR}/src")
-target_compile_options(openfbx PRIVATE
-	-Wno-switch
-	-Wno-\#pragma-messages
-)
+if(NOT MSVC)
+	target_compile_options(openfbx PRIVATE
+		-Wno-switch
+		-Wno-\#pragma-messages
+	)
+endif()
 
 target_link_libraries(ae_loaders openfbx)
 target_sources(ae_loaders PRIVATE ofbx.cpp)
