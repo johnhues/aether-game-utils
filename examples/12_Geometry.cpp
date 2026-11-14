@@ -92,7 +92,7 @@ int main( int argc, char* argv[] )
 		fileSystem.Initialize( "data", "ae", "geometry" );
 		debug.Initialize( 2048 );
 		fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 0.0f );
-		AE_INFO( "Loading '#'", fontFile->GetURL() );
+		AE_INFO( "Loading '#'", fontFile ? fontFile->GetURL() : "null" );
 		meshShader.Initialize(
 			R"(
 				AE_UNIFORM_HIGHP mat4 u_modelToProj;
@@ -118,7 +118,7 @@ int main( int argc, char* argv[] )
 		meshShader.SetDepthWrite( true );
 		meshShader.SetDepthTest( true );
 		objFile = fileSystem.Read( ae::FileSystem::Root::Data, "bunny.obj", 0.0f );
-		AE_INFO( "Loading '#'", objFile->GetURL() );
+		AE_INFO( "Loading '#'", objFile ? objFile->GetURL() : "null" );
 		camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 		camera.SetModifierKey( {} );
 		AE_INFO( "Run" );

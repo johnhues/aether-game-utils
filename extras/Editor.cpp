@@ -1629,7 +1629,14 @@ void Editor::QueueRead( const char* levelPath )
 		m_fileSystem.Destroy( m_pendingLevel );
 	}
 	m_pendingLevel = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
-	AE_INFO( "Queuing level load '#'", m_pendingLevel->GetURL() );
+	if( m_pendingLevel )
+	{
+		AE_INFO( "Queuing level load '#'", m_pendingLevel->GetURL() );
+	}
+	else
+	{
+		AE_ERR( "Could not read level '#'", levelPath );
+	}
 }
 
 void Editor::HotLoad()
@@ -4226,6 +4233,10 @@ void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
 
 	AE_INFO( "Reading... '#'", filePath );
 	m_pendingLevel = program->fileSystem.Read( ae::FileSystem::Root::Data, filePath, 2.0f );
+	if( !m_pendingLevel )
+	{
+		AE_ERR( "Could not read level '#'", filePath );
+	}
 }
 
 void EditorServer::Unload( EditorProgram* program )

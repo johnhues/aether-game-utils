@@ -88,6 +88,10 @@ bool SmallEngine::Initialize( int argc, char* argv[] )
 
 	// @TODO: Move to Game.cpp
 	m_levelTextureFile = fs.Read( ae::FileSystem::Root::Data, "level.tga", 0.0f );
+	if( !m_levelTextureFile )
+	{
+		AE_ERR( "Could not load texture 'level.tga'" );
+	}
 	// m_fontTextureFile = fs.Read( ae::FileSystem::Root::Data, "font.tga", 0.0f );
 	meshShader.Initialize( kMeshVertShader, kMeshFragShader, nullptr, 0 );
 	meshShader.SetDepthTest( true );
@@ -123,6 +127,12 @@ bool SmallEngine::Update()
 	if( m_levelTextureFile && m_levelTextureFile->GetStatus() == ae::File::Status::Success )
 	{
 		LoadTarga( m_levelTextureFile, &defaultTexture );
+		m_levelTextureFile = nullptr;
+	}
+	else if( m_levelTextureFile && m_levelTextureFile->GetStatus() != ae::File::Status::Pending )
+	{
+		AE_ERR( "Could not load texture '#'", m_levelTextureFile->GetURL() );
+		fs.Destroy( m_levelTextureFile );
 		m_levelTextureFile = nullptr;
 	}
 	// if( m_fontTextureFile && m_fontTextureFile->GetStatus() == ae::File::Status::Success )
@@ -161,12 +171,18 @@ bool SmallEngine::Update()
 					resource->vertexData.UploadVertices( 0, objFile.vertices.Data(), objFile.vertices.Length() );
 					resource->vertexData.UploadIndices( 0, objFile.indices.Data(), objFile.indices.Length() );
 					objFile.InitializeCollisionMesh( &resource->collision );
+					resource->status = MeshResource::Loaded;
 				}
-				resource->status = MeshResource::Loaded;
+				else
+				{
+					AE_ERR( "Could not load mesh '#'", resource->file->GetURL() );
+					resource->status = MeshResource::Failed;
+				}
 			}
 			else if( resource->file->GetStatus() != ae::File::Status::Pending )
 			{
-				resource->status = MeshResource::Loaded;
+				AE_ERR( "Could not load mesh '#'", resource->file->GetURL() );
+				resource->status = MeshResource::Failed;
 			}
 		}
 	}
@@ -225,8 +241,12 @@ const SmallEngine::MeshResource* SmallEngine::GetMeshResource( const char* name 
 	}
 	if( resource && resource->status == MeshResource::Pending )
 	{
-		resource->status = MeshResource::Loading;
 		resource->file = fs.Read( ae::FileSystem::Root::Data, name, 0.0f );
+		resource->status = resource->file ? MeshResource::Loading : MeshResource::Failed;
+		if( !resource->file )
+		{
+			AE_ERR( "Could not load mesh '#'", name );
+		}
 	}
 	return resource;
 }
@@ -236,7 +256,7 @@ bool SmallEngine::MeshesLoaded() const
 	for( uint32_t i = 0; i < meshResources.Length(); i++ )
 	{
 		const MeshResource* resource = meshResources.GetValue( i );
-		if( resource && resource->status != MeshResource::Loaded )
+		if( resource && ( resource->status == MeshResource::Pending || resource->status == MeshResource::Loading ) )
 		{
 			return false;
 		}

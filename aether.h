@@ -4689,12 +4689,16 @@ public:
 	//! on all platforms.</b> Returns an ae::File object to be freed later
 	//! with ae::FileSystem::Destroy(). A zero or negative \p timeoutSec value
 	//! will disable the timeout. On the web, the onProgress option of
-	//! aether.js instantiate() receives each request's progress.
+	//! aether.js instantiate() receives each request's progress. Returns the
+	//! same ae::File for \p url until it is destroyed, which frees it for
+	//! every caller. Returns null when no read is attempted because of a local
+	//! error, eg. \p url is empty or \p root has no directory.
 	const ae::File* Read( Root root, const char* url, float timeoutSec );
 	//! Loads a file asynchronously from disk or from the network (@TODO: currently
 	//! only asynchronous on the web). Returns an ae::File object to be freed
 	//! later with ae::FileSystem::Destroy(). A zero or negative \p timeoutSec
-	//! value will disable the timeout.
+	//! value will disable the timeout. Returns the same ae::File for \p url
+	//! until it is destroyed, see ae::FileSystem::Read( Root, const char*, float ).
 	const ae::File* Read( const char* url, float timeoutSec );
 	//! Retry if reading or writing of the given \p file did not finish
 	//! successfully. It's recommended (but not necessary) that you call this
@@ -26839,18 +26843,7 @@ const File* FileSystem::Read( Root root, const char* url, float timeoutSec )
 		fullName += url;
 		return Read( fullName.c_str(), timeoutSec );
 	}
-	else
-	{
-		double t = ae::GetTime();
-		File* file = ae::New< File >( AE_ALLOC_TAG_FILE );
-		file->m_url = url;
-		file->m_startTime = t;
-		file->m_finishTime = t;
-		file->m_status = File::Status::Error;
-		file->m_timeout = timeoutSec;
-		m_files.Append( file );
-		return file;
-	}
+	return nullptr;
 }
 
 const File* FileSystem::Read( const char* url, float timeoutSec )
