@@ -75,14 +75,18 @@ Notes:
 - CI (`.github/workflows/`) covers desktop (macOS, Ubuntu clang/gcc/mingw,
   Windows) and web (`web.yml`) but **not iOS** — run the iOS compile
   check locally.
+- `ubuntu_clangcl.yml` cross compiles the MSVC paths with clang-cl against the
+  MSVC CRT and Windows SDK that xwin downloads, warnings as errors, and runs the
+  tests under wine. It is the local stand in for `windows.yml`, which needs a
+  Windows runner.
 - `test/config/check.sh native|wasi|emscripten` builds every supported
   combination of the `AE_ENABLE_*` feature flags and checks each unsupported one
-  fails with only its `#error`. CI runs it in every workflow but `windows.yml`.
+  fails with only its `#error`. CI runs it in every workflow but `windows.yml` and `ubuntu_clangcl.yml`.
 - `node test/web/check.js <dir>` loads every example of a web build (eg.
   `build_wasi/examples/Release`) in headless Chrome and fails on a halt, an
   exception, a console or network error or warning, an aether `[warn]` log, or
   no frames. Needs Node 22+ and Chrome (`$CHROME`, Playwright's Chromium in
-  `$PLAYWRIGHT_BROWSERS_PATH`, the macOS app, Chrome/Chromium on the PATH, or
+  `$PLAYWRIGHT_BROWSERS_PATH`, the macOS Chrome or Chromium app, Chrome/Chromium on the PATH, or
   Flathub's `org.chromium.Chromium`). `web.yml`
   runs it, the CI image provides Node and Playwright's Chromium.
 - `node test/web/scroll.js <site>` flings the main page of a

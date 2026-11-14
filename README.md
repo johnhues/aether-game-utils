@@ -5,6 +5,7 @@
 [![Ubuntu clang](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml)
 [![Ubuntu g++](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml)
 [![Ubuntu MinGW](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_mingw.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_mingw.yml)
+[![Ubuntu clang-cl](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clangcl.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clangcl.yml)
 [![Ubuntu Deprecated](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_deprecated.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_deprecated.yml)
 
 For quickly creating small games or for supplementing existing projects. It provides a largely complete set of small carefully designed and optimized building blocks for game development. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:

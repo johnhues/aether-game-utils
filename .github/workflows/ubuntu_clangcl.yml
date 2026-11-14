@@ -1,0 +1,25 @@
+name: Ubuntu clang-cl
+on: [push]
+jobs:
+  build-and-test:
+      runs-on: ubuntu-latest
+      container:
+        image: ${{ vars.AE_BUILD_IMAGE || 'ghcr.io/johnhues/aether-build:latest' }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      steps:
+      - uses: actions/checkout@v4
+      - name: Cache MSVC CRT and Windows SDK
+        uses: actions/cache@v4
+        with:
+          path: build_ci/xwin/splat
+          key: xwin-${{ hashFiles('.github/toolchains/clang-cl-xwin.cmake') }}
+      - name: Configure
+        run: cmake -G Ninja -S . -B build_ci -DCMAKE_TOOLCHAIN_FILE=.github/toolchains/clang-cl-xwin.cmake -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+      - name: Build
+        run: cmake --build build_ci --target all
+      - name: Test
+        env:
+          WINEPREFIX: /tmp/wineprefix
+        run: wine build_ci/test/test.exe

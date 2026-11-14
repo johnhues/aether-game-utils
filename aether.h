@@ -490,12 +490,12 @@ AE_POP_DISABLE_ALL_WARNINGS
 
 #endif // End example
 //------------------------------------------------------------------------------
-#if defined( _MSC_VER )
-	#define AE_PUSH_DISABLE_ALL_WARNINGS() #pragma warning( push, 0 )
-	#define AE_POP_DISABLE_ALL_WARNINGS() #pragma warning( pop )
-#elif defined( __clang__ )
+#if defined( __clang__ )
 	#define AE_PUSH_DISABLE_ALL_WARNINGS() _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Weverything\"")
 	#define AE_POP_DISABLE_ALL_WARNINGS() _Pragma("clang diagnostic pop")
+#elif defined( _MSC_VER )
+	#define AE_PUSH_DISABLE_ALL_WARNINGS() __pragma( warning( push, 0 ) )
+	#define AE_POP_DISABLE_ALL_WARNINGS() __pragma( warning( pop ) )
 #elif defined( __GNUC__ )
 	#define AE_PUSH_DISABLE_ALL_WARNINGS() _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wall\"") _Pragma("GCC diagnostic ignored \"-Wextra\"")
 	#define AE_POP_DISABLE_ALL_WARNINGS() _Pragma("GCC diagnostic pop")
@@ -562,7 +562,7 @@ Value* DataStructure::Find( Key key )
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
 #define _AE_PAGED_POOL template< bool P = Paged, typename = std::enable_if_t< P > >
 template< typename T > using _EnableIfFractional = std::enable_if_t< std::is_floating_point_v< T > || ( std::is_class_v< T > && std::is_convertible_v< T, float > ) >;
-#if _AE_MSVC_
+#if _AE_MSVC_ && !defined( __clang__ )
 	#define AE_DISABLE_INVALID_OFFSET_WARNING
 	#define AE_ENABLE_INVALID_OFFSET_WARNING
 #else
@@ -16542,17 +16542,17 @@ T* ae::Cast( C* obj )
 	#include <timeapi.h>
 	#include <xinput.h>
 	#if _AE_MSVC_
-		#pragma comment (lib, "Comdlg32.lib")
-		#pragma comment (lib, "Gdi32.lib")
-		#pragma comment (lib, "Imm32.lib")
-		#pragma comment (lib, "Ole32.lib")
-		#pragma comment (lib, "Setupapi.lib")
-		#pragma comment (lib, "Shell32.lib")
-		#pragma comment (lib, "User32.lib")
+		#pragma comment (lib, "comdlg32.lib")
+		#pragma comment (lib, "gdi32.lib")
+		#pragma comment (lib, "imm32.lib")
+		#pragma comment (lib, "ole32.lib")
+		#pragma comment (lib, "setupapi.lib")
+		#pragma comment (lib, "shell32.lib")
+		#pragma comment (lib, "user32.lib")
 		#pragma comment (lib, "version.lib")
-		#pragma comment (lib, "Winmm.lib")
-		#pragma comment (lib, "Ws2_32.lib")
-		#pragma comment (lib, "XInput.lib")
+		#pragma comment (lib, "winmm.lib")
+		#pragma comment (lib, "ws2_32.lib")
+		#pragma comment (lib, "xinput.lib")
 		#if AE_ENABLE_OPENGL
 			#pragma comment (lib, "opengl32.lib")
 			#pragma comment (lib, "glu32.lib")
@@ -19353,7 +19353,7 @@ void _LogImpl( ae::LogSeverity severity, const char* filePath, uint32_t line, co
 	static const bool s_logStdOut = !ae::IsDebuggerAttached();
 	if( s_logStdOut )
 	{
-		printf( os.str().c_str() ); // std out
+		printf( "%s", os.str().c_str() ); // std out
 		printf( "\n" );
 	}
 	else

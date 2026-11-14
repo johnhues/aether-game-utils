@@ -59,8 +59,10 @@ function findChrome()
 			}
 		}
 	}
-	const mac = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-	if( fs.existsSync( mac ) ) { return mac; }
+	for( const mac of [ "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium" ] )
+	{
+		if( fs.existsSync( mac ) ) { return mac; }
+	}
 	for( const name of [ "google-chrome", "google-chrome-stable", "chromium", "chromium-browser" ] )
 	{
 		for( const dir of ( process.env.PATH || "" ).split( path.delimiter ).filter( Boolean ) )

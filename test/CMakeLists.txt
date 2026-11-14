@@ -5,6 +5,10 @@ message("")
 message("aether-game-utils test")
 message("")
 
+if(MSVC)
+	string(REPLACE "/D_HAS_EXCEPTIONS=0" "/EHsc" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}") # Catch2 and the tests need exceptions
+endif()
+
 # Catch2
 set(CMAKE_CATCH_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 FetchContent_Declare(

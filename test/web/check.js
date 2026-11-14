@@ -4,8 +4,8 @@
 // Loads every example in a web build in headless Chrome and checks each one
 // starts on aether.js, keeps rendering, and reports no exceptions, console
 // errors or halts. Needs Node 22+ and Chrome or Chromium, found from $CHROME,
-// Playwright's browsers in $PLAYWRIGHT_BROWSERS_PATH, the macOS app, the PATH,
-// or a Chromium flatpak.
+// Playwright's browsers in $PLAYWRIGHT_BROWSERS_PATH, the macOS Chrome or
+// Chromium (eg. ungoogled-chromium) app, the PATH, or a Chromium flatpak.
 //
 // Usage: node test/web/check.js <dir> [name...] [--gpu] [--expect-log text]
 //   <dir>             eg. build_wasi/examples/Release, or one page's directory
@@ -56,8 +56,10 @@ function findChrome()
 			}
 		}
 	}
-	const mac = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-	if( fs.existsSync( mac ) ) { return mac; }
+	for( const mac of [ "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium" ] )
+	{
+		if( fs.existsSync( mac ) ) { return mac; }
+	}
 	for( const name of [ "google-chrome", "google-chrome-stable", "chromium", "chromium-browser" ] )
 	{
 		for( const dir of ( process.env.PATH || "" ).split( path.delimiter ).filter( Boolean ) )

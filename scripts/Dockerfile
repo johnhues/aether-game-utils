@@ -42,6 +42,20 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN npx -y playwright@1.65.0 install --with-deps chromium && \
 	rm -rf /var/lib/apt/lists/* /root/.npm
 
+# clang-cl, lld-link and xwin for ubuntu_clangcl.yml. MSVC STL 14.44 needs clang
+# 19 or newer. xwin downloads the MSVC CRT and Windows SDK.
+RUN apt update -qq && \
+	apt install -y --no-install-recommends clang-tools-20 lld-20 llvm-20 && \
+	rm -rf /var/lib/apt/lists/*
+RUN case "${TARGETARCH}" in \
+		amd64) XWIN_ARCH=x86_64; XWIN_SHA=d870eb4b2f390878af6da1ccd3cf321d22fcb72720984853b4be732ae597fc88 ;; \
+		arm64) XWIN_ARCH=aarch64; XWIN_SHA=6d56d28537a86f37aa3d041318898f25ee3100c6b6ec332ad873c28faf37be23 ;; \
+	esac && \
+	wget -q "https://github.com/Jake-Shadle/xwin/releases/download/0.10.0/xwin-0.10.0-${XWIN_ARCH}-unknown-linux-musl.tar.gz" -O /tmp/xwin.tar.gz && \
+	echo "${XWIN_SHA}  /tmp/xwin.tar.gz" | sha256sum -c - && \
+	tar xzf /tmp/xwin.tar.gz -C /usr/local/bin --strip-components=1 "xwin-0.10.0-${XWIN_ARCH}-unknown-linux-musl/xwin" && \
+	rm /tmp/xwin.tar.gz
+
 # Only for local development, not needed for github workflows
 # WORKDIR /workspace
 # CMD ["/bin/bash"]

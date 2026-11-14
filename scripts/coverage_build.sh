@@ -49,18 +49,42 @@ else
 	echo "No real GCC found, skipping the host gcc stage. act -W ubuntu_gcc.yml below covers it."
 fi
 
+# Runs <build dir>/test/test.exe under wine, in a prefix of its own rather than
+# ~/.wine. The overrides skip the Mono and Gecko install prompts a new prefix
+# shows. On macOS it runs in the amd64 CI image instead, which Docker translates
+# with Rosetta for Linux, so macOS Rosetta is not needed.
+ae_wine_test() {
+	if [ "$( uname -s )" != "Darwin" ] && command -v wine > /dev/null; then
+		WINEPREFIX="$PWD/$1/wineprefix" WINEDLLOVERRIDES="mscoree,mshtml=" wine "$1/test/test.exe"
+	elif docker image inspect aether-build:amd64 > /dev/null 2>&1; then
+		docker run --rm --pull=never --platform linux/amd64 -v "$PWD":/src -w /src -e WINEPREFIX=/tmp/wineprefix -e WINEDLLOVERRIDES="mscoree,mshtml=" --entrypoint wine aether-build:amd64 "$1/test/test.exe"
+	else
+		echo "No wine and no aether-build:amd64 image, skipping the $1 test run. act below covers it."
+	fi
+}
+
 # ubuntu_mingw.yml
 cmake -G Ninja -B build_coverage_mingw -DCMAKE_TOOLCHAIN_FILE=.github/toolchains/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
 cmake --build build_coverage_mingw --target all
 CXX=x86_64-w64-mingw32-g++ test/config/check.sh native
-if [ "$( uname -s )" = "Darwin" ]; then
-	echo "macOS host, skipping the Windows test run under wine. act -W ubuntu_mingw.yml below covers it."
-elif command -v wine > /dev/null; then
-	# As ubuntu_mingw.yml, in a prefix of its own rather than ~/.wine. The
-	# overrides skip the Mono and Gecko install prompts a new prefix shows.
-	WINEPREFIX="$PWD/build_coverage_mingw/wineprefix" WINEDLLOVERRIDES="mscoree,mshtml=" wine build_coverage_mingw/test/test.exe
+ae_wine_test build_coverage_mingw
+
+# ubuntu_clangcl.yml, when xwin, lld-link and clang-cl 19 or newer are
+# installed. The first configure downloads the MSVC CRT and Windows SDK into the
+# build directory. clang-cl is found in the same order as clang-cl-xwin.cmake.
+AE_CLANG_CL=""
+for _dir in /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm/bin $( ls -d /opt/homebrew/opt/llvm@*/bin /usr/local/opt/llvm@*/bin /usr/lib/llvm-*/bin 2> /dev/null | sort -V -r ); do
+	if [ -x "$_dir/clang-cl" ]; then
+		AE_CLANG_CL="$_dir/clang-cl"
+		break
+	fi
+done
+if [ -n "$AE_CLANG_CL" ] && [ "$( "$AE_CLANG_CL" --version | sed -n 's/.*clang version \([0-9]*\).*/\1/p' )" -ge 19 ] && command -v xwin > /dev/null && { [ -x "${AE_CLANG_CL%/*}/lld-link" ] || command -v lld-link > /dev/null; }; then
+	cmake -G Ninja -B build_coverage_clangcl -DCMAKE_TOOLCHAIN_FILE=.github/toolchains/clang-cl-xwin.cmake -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+	cmake --build build_coverage_clangcl --target all
+	ae_wine_test build_coverage_clangcl
 else
-	echo "wine not installed, skipping the Windows test run. act -W ubuntu_mingw.yml below covers it."
+	echo "No xwin, lld-link, or clang-cl 19 or newer, skipping the host clang-cl stage. act -W ubuntu_clangcl.yml below covers it."
 fi
 
 # web.yml, build
@@ -85,14 +109,14 @@ fi
 
 # The stages above all run the host toolchain. These run the workflows
 # themselves, in the CI container, and are the only real coverage for GCC on
-# macOS, and for wine on macOS or when it is not installed. Set AE_SKIP_ACT=1 to
-# leave them out while iterating, or on a machine without Docker.
+# macOS. Set AE_SKIP_ACT=1 to leave them out while iterating, or on a machine
+# without Docker.
 if [ "${AE_SKIP_ACT:-0}" != "1" ]; then
 	docker info # Verify Docker is running
-	# Architecture per workflow. ubuntu_mingw needs amd64: arm64 wine starts an
-	# x86_64 PE in experimental ARM64EC mode and hangs. Everything else runs on
-	# the host architecture: Rosetta cannot translate node's JIT, so node aborts
-	# in an amd64 container on Apple Silicon.
+	# Architecture per workflow. ubuntu_mingw and ubuntu_clangcl need amd64:
+	# arm64 wine starts an x86_64 PE in experimental ARM64EC mode and hangs.
+	# Everything else runs on the host architecture: Rosetta cannot translate
+	# node's JIT, so node aborts in an amd64 container on Apple Silicon.
 	# AE_BUILD_IMAGE points the workflows at the images docker2/docker_build.sh
 	# builds. The names exist in no registry, so nothing can replace them with a
 	# published copy. --pull=false is required with it: act pulls by default,
@@ -104,16 +128,16 @@ if [ "${AE_SKIP_ACT:-0}" != "1" ]; then
 		arm64|aarch64) _host_arch="linux/arm64" ;;
 		*)             _host_arch="linux/amd64" ;;
 	esac
-	for _tag in amd64 arm64; do
+	for _tag in amd64 "${_host_arch#linux/}"; do
 		if ! docker image inspect "aether-build:$_tag" > /dev/null 2>&1; then
 			echo "Missing local image aether-build:$_tag."
-			echo "Build both with scripts/docker_build.sh"
+			echo "Build it with scripts/docker_build.sh"
 			exit 1
 		fi
 	done
-	for _wf in ubuntu_clang ubuntu_gcc ubuntu_deprecated ubuntu_mingw; do
+	for _wf in ubuntu_clang ubuntu_gcc ubuntu_deprecated ubuntu_mingw ubuntu_clangcl; do
 		case "$_wf" in
-			ubuntu_mingw) _arch="linux/amd64" ;;
+			ubuntu_mingw|ubuntu_clangcl) _arch="linux/amd64" ;;
 			*)            _arch="$_host_arch" ;;
 		esac
 		act -W ".github/workflows/$_wf.yml" --container-architecture "$_arch" --var "AE_BUILD_IMAGE=aether-build:${_arch#linux/}" --pull=false --rm
@@ -125,4 +149,5 @@ if [ "${AE_SKIP_ACT:-0}" != "1" ]; then
 	done
 fi
 
-# windows.yml has no local counterpart: MSVC only runs on Windows.
+# windows.yml has no local counterpart: MSVC only runs on Windows. The
+# ubuntu_clangcl.yml stage above compiles the same MSVC paths with clang-cl.
