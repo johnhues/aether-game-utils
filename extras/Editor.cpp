@@ -356,6 +356,7 @@ enum class EditorNetMsg : uint8_t
 	Load,
 	Camera
 };
+const double kEditorSendInterval = 1.0 / 20.0; // Seconds between sends to the game
 
 //------------------------------------------------------------------------------
 // EditorDialog
@@ -464,6 +465,117 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// EditorSocket and EditorListenerSocket classes
+//------------------------------------------------------------------------------
+#if AE_ENABLE_AETHER_JS
+// TCP between instances on the same page, by port. Handles are never 0.
+_AE_WASM_IMPORT( ae, _ae_SocketConnect ) int32_t _ae_SocketConnect( uint32_t port );
+_AE_WASM_IMPORT( ae, _ae_SocketListen ) int32_t _ae_SocketListen( uint32_t port );
+_AE_WASM_IMPORT( ae, _ae_SocketAccept ) int32_t _ae_SocketAccept( int32_t listener );
+// Returns the bytes copied, or -1 once the connection is closed
+_AE_WASM_IMPORT( ae, _ae_SocketSend ) int32_t _ae_SocketSend( int32_t sock, const void* data, uint32_t length );
+_AE_WASM_IMPORT( ae, _ae_SocketReceive ) int32_t _ae_SocketReceive( int32_t sock, void* data, uint32_t length );
+_AE_WASM_IMPORT( ae, _ae_SocketClose ) void _ae_SocketClose( int32_t sock );
+
+// The ae::Socket subset the editor uses, over aether.js. QueueMsg() sends each
+// message immediately as one chunk, which must fit ReceiveMsg()'s \p maxLength.
+class EditorSocket
+{
+public:
+	EditorSocket( const ae::Tag& ) {}
+	EditorSocket( int32_t handle, uint16_t port ) : m_handle( handle ), m_port( port ) {}
+	~EditorSocket() { Disconnect(); }
+	bool Connect( ae::Socket::Protocol proto, const char*, uint16_t port )
+	{
+		Disconnect();
+		m_handle = ( proto == ae::Socket::Protocol::TCP ) ? _ae_SocketConnect( port ) : 0;
+		m_port = port;
+		return IsConnected();
+	}
+	void Disconnect()
+	{
+		if( m_handle ) { _ae_SocketClose( m_handle ); }
+		m_handle = 0;
+	}
+	bool IsConnected() const { return m_handle != 0; }
+	bool QueueMsg( const void* data, uint16_t length )
+	{
+		if( IsConnected() && _ae_SocketSend( m_handle, data, length ) < 0 ) { Disconnect(); }
+		return IsConnected();
+	}
+	uint16_t ReceiveMsg( void* dataOut, uint16_t maxLength )
+	{
+		const int32_t length = IsConnected() ? _ae_SocketReceive( m_handle, dataOut, maxLength ) : 0;
+		if( length < 0 ) { Disconnect(); }
+		return ( length > 0 ) ? (uint16_t)length : 0;
+	}
+	uint32_t SendAll() { return 0; }
+	const char* GetResolvedAddress() const { return "localhost"; }
+	uint16_t GetPort() const { return m_port; }
+private:
+	int32_t m_handle = 0;
+	uint16_t m_port = 0;
+};
+using EditorConnectionSocket = EditorSocket;
+
+// The ae::ListenerSocket subset the editor uses, over aether.js
+class EditorListenerSocket
+{
+public:
+	EditorListenerSocket( const ae::Tag& tag ) : m_tag( tag ), m_connections( tag ) {}
+	~EditorListenerSocket()
+	{
+		AE_ASSERT_MSG( !m_connections.Length(), "Allocated connections must be destroyed before ae::EditorListenerSocket destruction" );
+		if( m_handle ) { _ae_SocketClose( m_handle ); }
+	}
+	bool Listen( ae::Socket::Protocol proto, bool, uint16_t port, uint32_t maxConnections )
+	{
+		if( m_handle ) { _ae_SocketClose( m_handle ); }
+		m_handle = ( proto == ae::Socket::Protocol::TCP ) ? _ae_SocketListen( port ) : 0;
+		m_port = port;
+		m_maxConnections = maxConnections;
+		return IsListening();
+	}
+	bool IsListening() const { return m_handle != 0; }
+	EditorSocket* Accept()
+	{
+		const int32_t handle = IsListening() ? _ae_SocketAccept( m_handle ) : 0;
+		if( !handle ) { return nullptr; }
+		if( m_connections.Length() >= m_maxConnections )
+		{
+			_ae_SocketClose( handle );
+			return nullptr;
+		}
+		return m_connections.Append( ae::New< EditorSocket >( m_tag, handle, m_port ) );
+	}
+	void Destroy( EditorSocket* sock )
+	{
+		const int32_t index = m_connections.Find( sock );
+		if( index >= 0 )
+		{
+			m_connections.Remove( index );
+			ae::Delete( sock );
+		}
+	}
+	uint32_t GetConnectionCount() const { return m_connections.Length(); }
+private:
+	const ae::Tag m_tag;
+	int32_t m_handle = 0;
+	uint16_t m_port = 0;
+	uint32_t m_maxConnections = 0;
+	ae::Array< EditorSocket* > m_connections;
+};
+#else
+class EditorSocket : public ae::Socket
+{
+public:
+	using ae::Socket::Socket;
+};
+using EditorConnectionSocket = ae::Socket;
+using EditorListenerSocket = ae::ListenerSocket;
+#endif
+
+//------------------------------------------------------------------------------
 // EditorConnection
 //------------------------------------------------------------------------------
 class EditorConnection
@@ -471,7 +583,7 @@ class EditorConnection
 public:
 	~EditorConnection();
 	void Destroy( class EditorServer* editor );
-	ae::Socket* sock = nullptr;
+	EditorConnectionSocket* sock = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -489,6 +601,7 @@ public:
 		m_defaults( tag ),
 		m_doc( tag ),
 		m_connections( tag ),
+		m_pendingModifications( tag ),
 		m_framePickableEntities( tag ),
 		m_dialogs( tag )
 	{}
@@ -536,7 +649,7 @@ public:
 
 	ae::DocumentValue* GetDocumentObject( ae::Entity entity );
 	
-	ae::ListenerSocket sock;
+	EditorListenerSocket sock;
 	
 private:
 	// Serialization helpers
@@ -620,9 +733,18 @@ private:
 
 	// Connection to client
 	double m_nextHeartbeat = 0.0;
+	double m_nextSend = 0.0;
 	ae::Vec3 m_sentCameraPivot = ae::Vec3( 0.0f );
 	ae::Vec3 m_sentCameraPosition = ae::Vec3( 0.0f );
 	ae::Array< EditorConnection* > m_connections;
+	struct PendingModification
+	{
+		ae::Entity entity = kNullEntity;
+		ae::TypeId typeId = ae::kInvalidTypeId;
+		ae::Str32 varName;
+		ae::Str256 value;
+	};
+	ae::Array< PendingModification > m_pendingModifications; // Latest value of each variable changed since the last send
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 
 	// Selection
@@ -667,7 +789,7 @@ public:
 	{}
 	void Initialize();
 	void Terminate();
-	void Run();
+	bool Tick();
 	float GetDt() const { return m_dt; }
 	
 	ae::RectInt GetRenderRect() const;
@@ -711,6 +833,8 @@ public:
 	ae::VertexBuffer m_introMesh;
 	ae::VertexBuffer m_quad;
 	ae::Shader m_introShader;
+	float m_introAngle0 = 0.0f;
+	float m_introAngle1 = 0.0f;
 	ae::Shader m_meshShader;
 	ae::Shader m_iconShader;
 	ae::Texture2D m_cogTexture;
@@ -1168,122 +1292,121 @@ void EditorProgram::Terminate()
 	window.Terminate();
 }
 
-void EditorProgram::Run()
+bool EditorProgram::Tick()
 {
-	float r0 = 0.0f;
-	float r1 = 0.0f;
-	
-	AE_INFO( "Run" );
-	while( !input.quit )
+	m_dt = timeStep.GetDt();
+	if( m_dt > 0.0f && m_dt < timeStep.GetTimeStep() * 4.0f )
 	{
 		m_dt = timeStep.GetDt();
-		if( m_dt > 0.0f && m_dt < timeStep.GetTimeStep() * 4.0f )
-		{
-			m_dt = timeStep.GetDt();
-		}
-		else
-		{
-			m_dt = 0.00001f;
-		}
-
-		input.Pump();
-		ui.NewFrame( &render, &input, GetDt() );
-		const ImGuiID mainDockSpace = ImGui::DockSpaceOverViewport( 0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode );
-		static bool s_once = true;
-		if( s_once )
-		{
-			const ImGuiID dockLeftId = ImGui::DockBuilderSplitNode( mainDockSpace, ImGuiDir_Left, 0.2f, nullptr, nullptr );
-			ImGui::DockBuilderDockWindow( "Dev", dockLeftId );
-			ImGui::DockBuilderGetNode( dockLeftId )->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
-			s_once = false;
-		}
-
-		editor.Update( this );
-
-		r0 += timeStep.GetDt() * 0.6f;
-		r1 += timeStep.GetDt() * 0.75f;
-
-		{
-			const float scaleFactor = window.GetScaleFactor();
-			const ae::RectInt renderRectInt = GetRenderRect();
-			const ae::Rect renderRect = ae::Rect::FromPoints(
-				ae::Vec2( renderRectInt.GetPos() ) / scaleFactor,
-				ae::Vec2( renderRectInt.GetPos() + renderRectInt.GetSize() ) / scaleFactor
-			);
-			camera.Update( { .input = &input, .dt = GetDt(), .yFov = GetFOV(), .viewport = renderRect } );
-		}
-
-		const ae::Int2 oldSize( m_gameTarget.GetWidth(), m_gameTarget.GetHeight() );
-		const ae::Int2 targetSize = GetRenderRect().GetSize();
-		if( oldSize != targetSize )
-		{
-			m_gameTarget.Initialize( targetSize.x, targetSize.y );
-			m_gameTarget.AddTexture( ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp );
-			m_gameTarget.AddDepth( ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp );
-		}
-		m_gameTarget.Activate();
-		m_gameTarget.Clear( editor.GetBackgroundColor() );
-
-		m_worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
-		m_viewToProj = ae::Matrix4::ViewToProjection( GetFOV(), GetAspectRatio(), 0.25f, kEditorViewDistance );
-		m_worldToProj = m_viewToProj * m_worldToView;
-		m_projToWorld = m_worldToProj.GetInverse();
-		
-		// Update mouse ray
-		{
-			const float scaleFactor = window.GetScaleFactor();
-			const ae::RectInt renderRectInt = GetRenderRect();
-			const ae::Rect renderRect = ae::Rect::FromPoints(
-				ae::Vec2( renderRectInt.GetPos() ) / scaleFactor,
-				ae::Vec2( renderRectInt.GetPos() + renderRectInt.GetSize() ) / scaleFactor
-			);
-			
-			const ImVec2 imMousePos = ImGui::GetMousePos();
-			ae::Vec2 mouseGameWindowPixelPos = ImGui::IsMousePosValid( &imMousePos ) ? ae::Vec2( imMousePos.x, window.GetHeight() - imMousePos.y ) : ae::Vec2( 0.0f );
-			mouseGameWindowPixelPos -= ae::Vec2( renderRect.GetMin() );
-			
-			ae::Vec2 mouseGameWindowNdcPos = mouseGameWindowPixelPos / ae::Vec2( renderRect.GetSize() );
-			mouseGameWindowNdcPos *= 2.0f;
-			mouseGameWindowNdcPos -= ae::Vec2( 1.0f );
-			
-			ae::Vec4 worldPos( mouseGameWindowNdcPos, 1.0f, 1.0f );
-			worldPos = m_projToWorld * worldPos;
-			worldPos /= worldPos.w;
-			m_mouseRay = ( worldPos.GetXYZ() - camera.GetPosition() ).SafeNormalizeCopy();
-		}
-
-		editor.ShowMenuBar( this );
-		editor.ShowSideBar( this );
-		if( const ImGuiWindow* imWin = ImGui::FindWindowByName( "Dev" ) )
-		{
-			m_barWidth = imWin->Size.x * ImGui::GetIO().DisplayFramebufferScale.x;
-		}
-		
-		if( !editor.GetObjectCount() )
-		{
-			ae::UniformList uniformList;
-			ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
-			uniformList.Set( "u_worldToProj", m_viewToProj * m_worldToView * modelToWorld );
-			uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-			m_introMesh.Bind( &m_introShader, uniformList );
-			m_introMesh.Draw();
-		}
-
-		editor.Render( this );
-		
-		debugLines.Render( m_viewToProj * m_worldToView );
-
-		render.Activate();
-		render.Clear( ae::Color::Black() );
-		
-		float devNdc = ( m_barWidth / render.GetWidth() ) * 2.0f;
-		ae::Rect ndcRect = ae::Rect::FromCenterAndSize( ae::Vec2( devNdc - 1.0f + ( 2.0f - devNdc ) * 0.5f, 0.0f ), ae::Vec2( 2.0f - devNdc, 2.0f ) );
-		m_gameTarget.Render2D( 0, ndcRect, 0.0f );
-		ui.Render();
-		render.Present();
-
-		timeStep.Tick();
 	}
+	else
+	{
+		m_dt = 0.00001f;
+	}
+
+	input.Pump();
+	ui.NewFrame( &render, &input, GetDt() );
+	const ImGuiID mainDockSpace = ImGui::DockSpaceOverViewport( 0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode );
+	static bool s_once = true;
+	if( s_once )
+	{
+		const ImGuiID dockLeftId = ImGui::DockBuilderSplitNode( mainDockSpace, ImGuiDir_Left, 0.2f, nullptr, nullptr );
+		ImGui::DockBuilderDockWindow( "Dev", dockLeftId );
+		ImGui::DockBuilderGetNode( dockLeftId )->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+		s_once = false;
+	}
+
+	editor.Update( this );
+	{
+		ae::EditorEvent event;
+		event.type = ae::EditorEventType::Update;
+		SendPluginEvent( plugins, event );
+	}
+
+	m_introAngle0 += timeStep.GetDt() * 0.6f;
+	m_introAngle1 += timeStep.GetDt() * 0.75f;
+
+	{
+		const float scaleFactor = window.GetScaleFactor();
+		const ae::RectInt renderRectInt = GetRenderRect();
+		const ae::Rect renderRect = ae::Rect::FromPoints(
+			ae::Vec2( renderRectInt.GetPos() ) / scaleFactor,
+			ae::Vec2( renderRectInt.GetPos() + renderRectInt.GetSize() ) / scaleFactor
+		);
+		camera.Update( { .input = &input, .dt = GetDt(), .yFov = GetFOV(), .viewport = renderRect } );
+	}
+
+	const ae::Int2 oldSize( m_gameTarget.GetWidth(), m_gameTarget.GetHeight() );
+	const ae::Int2 targetSize = GetRenderRect().GetSize();
+	if( oldSize != targetSize )
+	{
+		m_gameTarget.Initialize( targetSize.x, targetSize.y );
+		m_gameTarget.AddTexture( ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp );
+		m_gameTarget.AddDepth( ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp );
+	}
+	m_gameTarget.Activate();
+	m_gameTarget.Clear( editor.GetBackgroundColor() );
+
+	m_worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
+	m_viewToProj = ae::Matrix4::ViewToProjection( GetFOV(), GetAspectRatio(), 0.25f, kEditorViewDistance );
+	m_worldToProj = m_viewToProj * m_worldToView;
+	m_projToWorld = m_worldToProj.GetInverse();
+	
+	// Update mouse ray
+	{
+		const float scaleFactor = window.GetScaleFactor();
+		const ae::RectInt renderRectInt = GetRenderRect();
+		const ae::Rect renderRect = ae::Rect::FromPoints(
+			ae::Vec2( renderRectInt.GetPos() ) / scaleFactor,
+			ae::Vec2( renderRectInt.GetPos() + renderRectInt.GetSize() ) / scaleFactor
+		);
+		
+		const ImVec2 imMousePos = ImGui::GetMousePos();
+		ae::Vec2 mouseGameWindowPixelPos = ImGui::IsMousePosValid( &imMousePos ) ? ae::Vec2( imMousePos.x, window.GetHeight() - imMousePos.y ) : ae::Vec2( 0.0f );
+		mouseGameWindowPixelPos -= ae::Vec2( renderRect.GetMin() );
+		
+		ae::Vec2 mouseGameWindowNdcPos = mouseGameWindowPixelPos / ae::Vec2( renderRect.GetSize() );
+		mouseGameWindowNdcPos *= 2.0f;
+		mouseGameWindowNdcPos -= ae::Vec2( 1.0f );
+		
+		ae::Vec4 worldPos( mouseGameWindowNdcPos, 1.0f, 1.0f );
+		worldPos = m_projToWorld * worldPos;
+		worldPos /= worldPos.w;
+		m_mouseRay = ( worldPos.GetXYZ() - camera.GetPosition() ).SafeNormalizeCopy();
+	}
+
+	editor.ShowMenuBar( this );
+	editor.ShowSideBar( this );
+	if( const ImGuiWindow* imWin = ImGui::FindWindowByName( "Dev" ) )
+	{
+		m_barWidth = imWin->Size.x * ImGui::GetIO().DisplayFramebufferScale.x;
+	}
+	
+	if( !editor.GetObjectCount() )
+	{
+		ae::UniformList uniformList;
+		ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( m_introAngle0 ) * ae::Matrix4::RotationZ( m_introAngle1 );
+		uniformList.Set( "u_worldToProj", m_viewToProj * m_worldToView * modelToWorld );
+		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
+		m_introMesh.Bind( &m_introShader, uniformList );
+		m_introMesh.Draw();
+	}
+
+	editor.Render( this );
+	
+	debugLines.Render( m_viewToProj * m_worldToView );
+
+	render.Activate();
+	render.Clear( ae::Color::Black() );
+	
+	float devNdc = ( m_barWidth / render.GetWidth() ) * 2.0f;
+	ae::Rect ndcRect = ae::Rect::FromCenterAndSize( ae::Vec2( devNdc - 1.0f + ( 2.0f - devNdc ) * 0.5f, 0.0f ), ae::Vec2( 2.0f - devNdc, 2.0f ) );
+	m_gameTarget.Render2D( 0, ndcRect, 0.0f );
+	ui.Render();
+	render.Present();
+
+	timeStep.Tick();
+	return !input.quit;
 }
 
 ae::RectInt EditorProgram::GetRenderRect() const
@@ -1430,16 +1553,23 @@ void EditorPlugin::DestroyMesh( EditorMeshInstance* instance )
 //------------------------------------------------------------------------------
 Editor::Editor( const ae::Tag& tag ) :
 	m_tag( tag ),
-	m_sock( tag ),
 	m_plugins( tag ),
 	m_editorEntities( tag )
 {
 	AE_ASSERT( m_tag != ae::Tag() );
+	m_sock = ae::New< EditorSocket >( m_tag, m_tag );
 }
 
 Editor::~Editor()
 {
 	Terminate();
+	ae::Delete( m_sock );
+	m_sock = nullptr;
+}
+
+bool Editor::IsConnected() const
+{
+	return m_sock->IsConnected();
 }
 
 bool Editor::Initialize( const EditorParams& params )
@@ -1467,28 +1597,36 @@ bool Editor::Initialize( const EditorParams& params )
 	if( run )
 	{
 		EditorProgram program( m_tag, params, m_plugins );
-		program.Initialize();
-
-		int32_t levelArg = -1;
-		for( int i = 0; i < params.argc; i++ )
-		{
-			if( strcmp( params.argv[ i ], "--level" ) == 0 )
+		ae::Application( params.argc, params.argv, {
+			.initialize = [ & ]()
 			{
-				levelArg = i + 1;
-				break;
-			}
-		}
-		if( levelArg >= 0 )
-		{
-			program.editor.OpenLevelWithPrompts( &program, params.argv[ levelArg ] );
-		}
-		else if( !params.levelPath.Empty() )
-		{
-			program.editor.OpenLevelWithPrompts( &program, params.levelPath.c_str() );
-		}
-
-		program.Run();
-		program.Terminate();
+				program.Initialize();
+				int32_t levelArg = -1;
+				for( int i = 0; i < params.argc; i++ )
+				{
+					if( strcmp( params.argv[ i ], "--level" ) == 0 )
+					{
+						levelArg = i + 1;
+						break;
+					}
+				}
+				if( levelArg >= 0 && levelArg < params.argc )
+				{
+					program.editor.OpenLevelWithPrompts( &program, params.argv[ levelArg ] );
+				}
+				else if( !params.levelPath.Empty() )
+				{
+					program.editor.OpenLevelWithPrompts( &program, params.levelPath.c_str() );
+				}
+				return true;
+			},
+			.update = [ & ]() { return program.Tick(); },
+			.terminate = [ & ]() -> int32_t
+			{
+				program.Terminate();
+				return 0;
+			},
+		} );
 		return true;
 	}
 	m_Connect();
@@ -1497,9 +1635,7 @@ bool Editor::Initialize( const EditorParams& params )
 
 void Editor::Terminate()
 {
-#if !_AE_WASM_
-	m_sock.Disconnect();
-#endif
+	m_sock->Disconnect();
 
 	if( m_pendingLevel )
 	{
@@ -1521,7 +1657,7 @@ void Editor::Launch()
 {
 	AE_ASSERT_MSG( m_params, "Must call Editor::Initialize()" );
 	m_Connect();
-	if( !m_sock.IsConnected() )
+	if( !m_sock->IsConnected() )
 	{
 		m_Fork();
 	}
@@ -1540,7 +1676,7 @@ void Editor::Update()
 	m_Connect();
 	
 	uint32_t msgLength = 0;
-	while( ( msgLength = m_sock.ReceiveMsg( m_msgBuffer, sizeof(m_msgBuffer) ) ) )
+	while( ( msgLength = m_sock->ReceiveMsg( m_msgBuffer, sizeof(m_msgBuffer) ) ) )
 	{
 		EditorNetMsg msgType = EditorNetMsg::None;
 		ae::BinaryReader rStream( m_msgBuffer, sizeof(m_msgBuffer) );
@@ -1754,12 +1890,10 @@ void Editor::m_Read()
 
 void Editor::m_Connect()
 {
-#if !_AE_WASM_
-	if( m_params->port && !m_sock.IsConnected() )
+	if( m_params->port && !m_sock->IsConnected() )
 	{
-		m_sock.Connect( ae::Socket::Protocol::TCP, "localhost", m_params->port );
+		m_sock->Connect( ae::Socket::Protocol::TCP, "localhost", m_params->port );
 	}
-#endif
 }
 
 //------------------------------------------------------------------------------
@@ -1785,16 +1919,16 @@ bool EditorServerObject::SetTransform( const ae::Matrix4& _transform, EditorProg
 	const ae::Matrix4 oldTransform = m_object->ObjectTryGet( "transform" )->OpaqueGet( ae::Matrix4::Identity() );
 	if( oldTransform != _transform )
 	{
-		// @TODO: This uses way too much memory when dragging objects around,
-		// but otherwise works perfectly. Only consecutive operations on the
-		// same object are merged, but that is never the case when dragging
-		// more than one object. Maybe its fine if memory usage per action
-		// is minimized?
 		m_object->ObjectTryGet( "transform" )->OpaqueSet( _transform );
 
-		const DocumentCallback fn = [ program, e = GetEntity(), _transform ]() { program->editor.HandleTransformChange( program, e, _transform ); };
-		m_object->GetDocument().AddUndoGroupAction( "Transform", fn, fn );
-		fn();
+		// Undo runs before the document restores the transform
+		const auto apply = [ program, e = GetEntity() ]( const ae::Matrix4& transform )
+		{
+			program->editor.GetObjectAssert( e )->m_object->ObjectTryGet( "transform" )->OpaqueSet( transform );
+			program->editor.HandleTransformChange( program, e, transform );
+		};
+		m_object->GetDocument().AddUndoGroupAction( "Transform", [ apply, oldTransform ]() { apply( oldTransform ); }, [ apply, _transform ]() { apply( _transform ); }, m_object );
+		program->editor.HandleTransformChange( program, GetEntity(), _transform );
 
 		const ae::Matrix4 relative = _transform * oldTransform.GetInverse();
 		const uint32_t childCount = GetChildCount();
@@ -2260,7 +2394,7 @@ void EditorServer::Update( EditorProgram* program )
 	{
 		sock.Listen( ae::Socket::Protocol::TCP, false, program->params.port, 8 );
 	}
-	while( ae::Socket* newConn = sock.Accept() )
+	while( EditorConnectionSocket* newConn = sock.Accept() )
 	{
 		AE_INFO( "ae::Editor client connected from #:#", newConn->GetResolvedAddress(), newConn->GetPort() );
 		EditorConnection* editorConn = m_connections.Append( ae::New< EditorConnection >( m_tag ) );
@@ -2268,43 +2402,70 @@ void EditorServer::Update( EditorProgram* program )
 	}
 	AE_ASSERT( m_connections.Length() == sock.GetConnectionCount() );
 	
-	// Send a heartbeat to keep the connection alive, and to check if the client is still connected
-	if( currentTime > m_nextHeartbeat )
+	// Sends at a fixed rate, independent of the frame rate
+	const bool send = ( currentTime >= m_nextSend );
+	if( send )
 	{
-		for( EditorConnection* (&conn) : m_connections )
+		m_nextSend = currentTime + kEditorSendInterval;
+
+		// Send a heartbeat to keep the connection alive, and to check if the client is still connected
+		if( currentTime > m_nextHeartbeat )
 		{
-			if( conn->sock->IsConnected() )
+			for( EditorConnection* (&conn) : m_connections )
 			{
-				ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
-				wStream.SerializeEnum( EditorNetMsg::Heartbeat );
-				AE_ASSERT( wStream.IsValid() );
+				if( conn->sock->IsConnected() )
+				{
+					ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
+					wStream.SerializeEnum( EditorNetMsg::Heartbeat );
+					AE_ASSERT( wStream.IsValid() );
+					conn->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
+				}
+			}
+			m_nextHeartbeat = currentTime + 0.1;
+		}
+
+		for( const PendingModification& modification : m_pendingModifications )
+		{
+			ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
+			wStream.SerializeEnum( EditorNetMsg::Modification );
+			wStream.SerializeUInt32( modification.entity );
+			wStream.SerializeObject( modification.typeId );
+			wStream.SerializeString( modification.varName );
+			wStream.SerializeString( modification.value );
+			if( !wStream.IsValid() )
+			{
+				AE_WARN( "Could not serialize modification message" );
+				continue;
+			}
+			for( EditorConnection* conn : m_connections )
+			{
 				conn->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
 			}
 		}
-		m_nextHeartbeat = currentTime + 0.1;
-	}
+		m_pendingModifications.Clear();
 
-	// Only sent while the camera is moving
-	const ae::Vec3 cameraPivot = program->camera.GetPivot();
-	const ae::Vec3 cameraPosition = program->camera.GetPosition();
-	if( cameraPivot != m_sentCameraPivot || cameraPosition != m_sentCameraPosition )
-	{
-		m_sentCameraPivot = cameraPivot;
-		m_sentCameraPosition = cameraPosition;
-		ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
-		wStream.SerializeEnum( EditorNetMsg::Camera );
-		wStream.SerializeFloat( cameraPivot.x );
-		wStream.SerializeFloat( cameraPivot.y );
-		wStream.SerializeFloat( cameraPivot.z );
-		wStream.SerializeFloat( cameraPosition.x );
-		wStream.SerializeFloat( cameraPosition.y );
-		wStream.SerializeFloat( cameraPosition.z );
-		AE_ASSERT( wStream.IsValid() );
-		for( EditorConnection* (&conn) : m_connections )
+		// Only sent while the camera is moving
+		const ae::Vec3 cameraPivot = program->camera.GetPivot();
+		const ae::Vec3 cameraPosition = program->camera.GetPosition();
+		if( cameraPivot != m_sentCameraPivot || cameraPosition != m_sentCameraPosition )
 		{
-			if( conn->sock->IsConnected() )
+			m_sentCameraPivot = cameraPivot;
+			m_sentCameraPosition = cameraPosition;
+			ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
+			wStream.SerializeEnum( EditorNetMsg::Camera );
+			wStream.SerializeFloat( cameraPivot.x );
+			wStream.SerializeFloat( cameraPivot.y );
+			wStream.SerializeFloat( cameraPivot.z );
+			wStream.SerializeFloat( cameraPosition.x );
+			wStream.SerializeFloat( cameraPosition.y );
+			wStream.SerializeFloat( cameraPosition.z );
+			AE_ASSERT( wStream.IsValid() );
+			for( EditorConnection* (&conn) : m_connections )
 			{
-				conn->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
+				if( conn->sock->IsConnected() )
+				{
+					conn->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
+				}
 			}
 		}
 	}
@@ -2313,7 +2474,10 @@ void EditorServer::Update( EditorProgram* program )
 	{
 		if( conn->sock->IsConnected() )
 		{
-			conn->sock->SendAll();
+			if( send )
+			{
+				conn->sock->SendAll();
+			}
 		}
 		else
 		{
@@ -3285,18 +3449,34 @@ void EditorServer::ShowSideBar( EditorProgram* program )
 			// @TODO: Only call this once after 
 			m_doc.EndUndoGroup();
 		}
-		else if( selectedObject->SetTransform( transform, program ) )
+		else if( transform != prevTransform )
 		{
 			const ae::Matrix4 change = ( mode == ImGuizmo::LOCAL ) ? prevTransform.GetInverse() * transform : transform * prevTransform.GetInverse();
+			// Selected descendants of selected objects move with their ancestor
+			const auto hasSelectedAncestor = [ this ]( const EditorServerObject* editorObject )
+			{
+				for( ae::Entity current = editorObject->GetParentEntity(); current; current = GetObjectAssert( current )->GetParentEntity() )
+				{
+					if( m_FindInSelection( current ) >= 0 )
+					{
+						return true;
+					}
+				}
+				return false;
+			};
 			for( uint32_t i = 0; i < m_docSelection->ArrayLength(); i++ )
 			{
 				const ae::Entity entity = m_docSelection->ArrayGet( i ).NumberGet< ae::Entity >();
-				if( entity == firstEntity )
+				EditorServerObject* editorObject = GetObjectAssert( entity );
+				if( hasSelectedAncestor( editorObject ) )
 				{
 					continue;
 				}
-				EditorServerObject* editorObject = GetObjectAssert( entity );
-				if( mode == ImGuizmo::LOCAL )
+				if( entity == firstEntity )
+				{
+					editorObject->SetTransform( transform, program );
+				}
+				else if( mode == ImGuizmo::LOCAL )
 				{
 					editorObject->SetTransform( editorObject->GetTransform() * change, program );
 				}
@@ -4018,7 +4198,6 @@ ae::AABB EditorServer::GetSelectedAABB( EditorProgram* program ) const
 
 void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity entity, const ae::Matrix4& transform )
 {
-	// @TODO: How to make sure this is called when undoing?
 	EditorServerObject* editorObject = GetObjectAssert( entity );
 
 	EditorEvent event;
@@ -4065,23 +4244,19 @@ void EditorServer::BroadcastVarChange( const ae::ClassVar* var, ae::Entity entit
 	{
 		return;
 	}
-	ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
-	wStream.SerializeEnum( EditorNetMsg::Modification );
-	wStream.SerializeUInt32( entity );
-	wStream.SerializeObject( typeId );
-	wStream.SerializeString( var->GetName() );
-	wStream.SerializeString( varDoc->StringGet() );
-	if( wStream.IsValid() )
+	if( !m_connections.Length() )
 	{
-		for( EditorConnection* conn : m_connections )
-		{
-			conn->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
-		}
+		return;
 	}
-	else
+	const int32_t index = m_pendingModifications.FindFn( [ & ]( const PendingModification& m )
 	{
-		AE_WARN( "Could not serialize modification message" );
-	}
+		return m.entity == entity && m.typeId == typeId && m.varName == var->GetName();
+	} );
+	PendingModification& modification = ( index >= 0 ) ? m_pendingModifications[ index ] : m_pendingModifications.Append( {} );
+	modification.entity = entity;
+	modification.typeId = typeId;
+	modification.varName = var->GetName();
+	modification.value = varDoc->StringGet();
 }
 
 void EditorServer::ActiveRefocus( EditorProgram* program )
@@ -5530,6 +5705,8 @@ JsonScene::~JsonScene()
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <processthreadsapi.h>
+#elif AE_ENABLE_AETHER_JS
+_AE_WASM_IMPORT( ae, _ae_Launch ) void _ae_Launch( const char* const* args, uint32_t count );
 #endif
 
 namespace ae {
@@ -5589,6 +5766,9 @@ void Editor::m_Fork()
 	// Don't need these so clean them up right away
 	CloseHandle( procInfo.hProcess );
 	CloseHandle( procInfo.hThread );
+#elif AE_ENABLE_AETHER_JS
+	const char* args[ 3 ] = { "--editor", "--level", levelPath };
+	_ae_Launch( args, levelPath[ 0 ] ? 3 : 1 );
 #endif
 }
 

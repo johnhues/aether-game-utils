@@ -38,7 +38,7 @@ extern const char* kMeshVertShader;
 extern const char* kMeshFragShader;
 extern const char* kSpriteVertShader;
 extern const char* kSpriteFragShader;
-bool LoadObj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut );
+bool LoadObj( const ae::File* file, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut );
 void LoadTarga( const ae::File* file, ae::Texture2D* tex );
 
 //------------------------------------------------------------------------------
@@ -301,7 +301,17 @@ void SmallEngineEditorPlugin::OnEvent( const ae::EditorEvent& event )
 ae::Optional< ae::EditorMesh > SmallEngineEditorPlugin::TryLoad( const char* resourceStr )
 {
 	ae::EditorMesh result = TAG_SMALL_ENGINE;
-	LoadObj( resourceStr, &m_engine->fs, nullptr, nullptr, &result );
+	const ae::File* file = m_engine->fs.Read( ae::FileSystem::Root::Data, resourceStr, 0.0f );
+	if( !file )
+	{
+		return result;
+	}
+	else if( file->GetStatus() == ae::File::Status::Pending )
+	{
+		return {};
+	}
+	LoadObj( file, nullptr, nullptr, &result );
+	m_engine->fs.Destroy( file );
 	return result;
 }
 
@@ -480,13 +490,10 @@ const char* kMeshFragShader = R"(
 		AE_COLOR.a = v_color.a;
 	})";
 
-bool LoadObj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
+bool LoadObj( const ae::File* file, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
 {
 	ae::OBJLoader objFile = TAG_SMALL_ENGINE;
-	const uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
-	ae::Scratch< uint8_t > fileBuffer( fileSize );
-	fs->Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileBuffer.Length() );
-	objFile.Load( { fileBuffer.Data(), fileBuffer.Length() } );
+	objFile.Load( { file->GetData(), file->GetLength() } );
 	if( !objFile.vertices.Length() )
 	{
 		return false;

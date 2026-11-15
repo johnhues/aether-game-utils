@@ -46,6 +46,87 @@
  */
 export const abiVersion = 1;
 
+// TCP for ae::Editor between the instances on this page, which connect by port
+// as if on localhost. Handles are never 0, and each is closed when the instance
+// that made or accepted it terminates or halts.
+const loopback = { next: 1, listeners: new Map(), handles: new Map() };
+
+function loopbackImports( memory, owned )
+{
+	const add = function( record )
+	{
+		const handle = loopback.next++;
+		loopback.handles.set( handle, record );
+		record.owned.add( handle );
+		return handle;
+	};
+	const close = function( handle )
+	{
+		const record = loopback.handles.get( handle );
+		if( !record ) { return; }
+		record.closed = true;
+		loopback.handles.delete( handle );
+		record.owned.delete( handle );
+		if( record.listening )
+		{
+			if( loopback.listeners.get( record.port ) === record ) { loopback.listeners.delete( record.port ); }
+			record.pending.forEach( close );
+		}
+	};
+	return {
+		closeAll: function() { Array.from( owned ).forEach( close ); },
+		imports: {
+			_ae_SocketListen: function( port )
+			{
+				if( loopback.listeners.has( port ) ) { return 0; }
+				const record = { listening: true, port: port, pending: [], owned: owned, closed: false };
+				loopback.listeners.set( port, record );
+				return add( record );
+			},
+			_ae_SocketAccept: function( handle )
+			{
+				const record = loopback.handles.get( handle );
+				while( record && record.pending.length )
+				{
+					const accepted = record.pending.shift();
+					if( loopback.handles.has( accepted ) ) { return accepted; }
+				}
+				return 0;
+			},
+			_ae_SocketConnect: function( port )
+			{
+				const listener = loopback.listeners.get( port );
+				if( !listener ) { return 0; }
+				const client = { queue: [], owned: owned, closed: false };
+				const server = { queue: [], owned: listener.owned, closed: false, peer: client };
+				client.peer = server;
+				listener.pending.push( add( server ) );
+				return add( client );
+			},
+			_ae_SocketSend: function( handle, ptr, length )
+			{
+				const record = loopback.handles.get( handle );
+				if( !record || record.peer.closed ) { return -1; }
+				record.peer.queue.push( new Uint8Array( memory(), ptr, length ).slice() );
+				return length;
+			},
+			_ae_SocketReceive: function( handle, ptr, length )
+			{
+				const record = loopback.handles.get( handle );
+				if( !record ) { return -1; }
+				if( !record.queue.length ) { return record.peer.closed ? -1 : 0; }
+				const chunk = record.queue[ 0 ];
+				const count = Math.min( length, chunk.length );
+				new Uint8Array( memory(), ptr, count ).set( chunk.subarray( 0, count ) );
+				if( count < chunk.length ) { record.queue[ 0 ] = chunk.subarray( count ); }
+				else { record.queue.shift(); }
+				return count;
+			},
+			_ae_SocketClose: close,
+		},
+	};
+}
+
 /**
  * Loads, links and starts an aether program on a canvas. Runs the program's
  * main(), which hands control to the page by calling ae::Application(). The
@@ -98,9 +179,18 @@ export async function instantiate( wasm, canvas, options = {} )
 		{
 			halted = true;
 			running = false;
+			sockets.closeAll();
 			cancelAnimationFrame( frame );
 			if( options.onHalt ) { options.onHalt( reason ); }
 		}
+	};
+	// Halts with error, printing its stack, which names the program's functions
+	// when its wasm keeps the name section
+	const fail = function( error )
+	{
+		if( error instanceof ProgramExit ) { halt( "exited with " + error.code ); return; }
+		if( !halted && error && error.stack ) { print( String( error.stack ) ); }
+		halt( String( error ) );
 	};
 	// Calls into the program, halting it if it traps or exits
 	const call = function( name, ...args )
@@ -112,7 +202,7 @@ export async function instantiate( wasm, canvas, options = {} )
 		}
 		catch( error )
 		{
-			halt( error instanceof ProgramExit ? "exited with " + error.code : String( error ) );
+			fail( error );
 			return 0;
 		}
 	};
@@ -120,6 +210,7 @@ export async function instantiate( wasm, canvas, options = {} )
 	const memory = function() { return exports.memory.buffer; };
 	const string = function( ptr ) { return readString( memory(), ptr ); };
 	const audio = alImports( memory );
+	const sockets = loopbackImports( memory, new Set() );
 	const gpu = webgpuImports( canvas, {
 		memory: memory,
 		call: call,
@@ -133,12 +224,12 @@ export async function instantiate( wasm, canvas, options = {} )
 			}
 			catch( error )
 			{
-				halt( error instanceof ProgramExit ? "exited with " + error.code : String( error ) );
+				fail( error );
 			}
 		},
 	} );
 	const imports = {
-		wasi_snapshot_preview1: wasiImports( memory, print, url ),
+		wasi_snapshot_preview1: wasiImports( memory, print, [ url ].concat( options.args || [] ) ),
 		ae: {
 			_ae_CanvasWidth: function() { return Math.round( canvas.getBoundingClientRect().width ); },
 			_ae_CanvasHeight: function() { return Math.round( canvas.getBoundingClientRect().height ); },
@@ -146,6 +237,14 @@ export async function instantiate( wasm, canvas, options = {} )
 			_ae_SetCanvasSize: function( width, height ) { canvas.width = width; canvas.height = height; },
 			_ae_RunHostLoop: function() { throw hostLoop; },
 			_ae_SetTitle: function( ptr ) { document.title = string( ptr ); },
+			_ae_Launch: function( argsPtr, count )
+			{
+				const args = [];
+				for( let i = 0; i < count; i++ ) { args.push( string( new DataView( memory() ).getUint32( argsPtr + i * 4, true ) ) ); }
+				// Outside the program's call, so the page can start an instance right away
+				if( options.onLaunch ) { setTimeout( function() { options.onLaunch( args ); } ); }
+				else { print( "aether.js: the page does not handle launching, see InstantiateOptions.onLaunch" ); }
+			},
 			_ae_Fullscreen: function()
 			{
 				const element = document.fullscreenElement || document.webkitFullscreenElement;
@@ -237,6 +336,13 @@ export async function instantiate( wasm, canvas, options = {} )
 				}
 			},
 			_ae_PageUrl: function( ptr, size ) { writeString( memory(), document.baseURI, ptr, size ); },
+			_ae_WriteFile: function( urlPtr, ptr, size )
+			{
+				if( !options.onWrite ) { return 0; }
+				options.onWrite( new URL( string( urlPtr ), document.baseURI ).href, new Uint8Array( memory(), ptr, size ).slice() );
+				return 1;
+			},
+			...sockets.imports,
 		},
 		gl: glImports( webgl, memory, stats ),
 		al: audio.imports,
@@ -270,17 +376,19 @@ export async function instantiate( wasm, canvas, options = {} )
 	{
 		if( error !== hostLoop )
 		{
-			halt( error instanceof ProgramExit ? "exited with " + error.code : String( error ) );
+			fail( error );
 			throw error;
 		}
 	}
 
+	const tapped = []; // Key codes to release after the next update
 	const update = function()
 	{
 		if( !running ) { return; }
 		frame = requestAnimationFrame( update );
 		const start = performance.now();
 		const keepGoing = call( "_ae_Update" );
+		tapped.splice( 0 ).forEach( function( code ) { call( "_ae_OnKey", code, 0 ); } );
 		stats.busyMs += performance.now() - start;
 		stats.frames++;
 		if( !keepGoing && !halted )
@@ -338,15 +446,20 @@ export async function instantiate( wasm, canvas, options = {} )
 	// Drags that leave the canvas keep reporting through pointer capture.
 	listen( canvas, "pointerdown", function( e )
 	{
-		canvas.setPointerCapture( e.pointerId );
+		try { canvas.setPointerCapture( e.pointerId ); }
+		catch( error ) {} // The pointer was already released
 		canvas.focus( { preventScroll: true } );
 	} );
 	listen( document, "pointerlockchange", function() { call( "_ae_OnPointerLock", document.pointerLockElement === canvas ? 1 : 0, 0 ); } );
 	listen( document, "pointerlockerror", function() { call( "_ae_OnPointerLock", 0, 1 ); } );
 	listen( canvas, "contextmenu", function( e ) { e.preventDefault(); } );
+	// macOS browsers drop the keyup of keys released while Command is held, so
+	// those are released after one update, and each autorepeat presses again.
 	const key = function( e )
 	{
-		call( "_ae_OnKey", e.keyCode, e.type === "keydown" ? 1 : 0 );
+		const down = ( e.type === "keydown" );
+		call( "_ae_OnKey", e.keyCode, down ? 1 : 0 );
+		if( down && e.metaKey && e.key !== "Meta" ) { tapped.push( e.keyCode ); }
 		e.preventDefault();
 	};
 	listen( canvas, "keydown", key );
@@ -430,6 +543,7 @@ export async function instantiate( wasm, canvas, options = {} )
 			if( terminated ) { return; }
 			call( "_ae_Terminate" );
 			terminated = true;
+			sockets.closeAll();
 			pause();
 			listeners.forEach( function( [ target, type, fn, opts ] ) { target.removeEventListener( type, fn, opts ); } );
 			listeners.length = 0;
@@ -484,6 +598,12 @@ export async function instantiate( wasm, canvas, options = {} )
  *   with ae::FileSystem. total is 0 when the server does not say.
  * @property {( reason: string ) => void} [onHalt] Called once if the program
  *   stops on its own, eg. by trapping.
+ * @property {string[]} [args] Arguments after the program's url, argv[1] on.
+ * @property {( url: string, data: Uint8Array ) => void} [onWrite] Stores
+ *   what the program writes with ae::FileSystem. Without it writing fails.
+ * @property {( args: string[] ) => void} [onLaunch] Called when the program
+ *   asks for another instance of itself with \p args, eg. ae::Editor opening
+ *   its editor. The page owns where it goes, see the DOM ownership rule.
  * @property {Object<string, Object<string, Function>>} [imports] Extra import
  *   modules, for functions a program declares with AE_WASM_IMPORT(). Must not
  *   name a module aether.js provides. @NOTE: Placeholder.
@@ -750,11 +870,11 @@ function alImports( memory )
 	};
 }
 
-// The part of WASI preview 1 that aether uses: output, clocks, randomness, the
-// program's url as its only argument, and no environment, input or files.
-function wasiImports( memory, print, url )
+// The part of WASI preview 1 that aether uses: output, clocks, randomness,
+// \p args as the arguments, and no environment, input or files.
+function wasiImports( memory, print, args )
 {
-	const argument = new TextEncoder().encode( url + "\0" );
+	const encoded = args.map( function( arg ) { return new TextEncoder().encode( arg + "\0" ); } );
 	const kSuccess = 0;
 	const kBadFile = 8;
 	const kNoEntry = 44;
@@ -769,14 +889,19 @@ function wasiImports( memory, print, url )
 	return {
 		args_sizes_get: function( countPtr, sizePtr )
 		{
-			view().setUint32( countPtr, 1, true );
-			view().setUint32( sizePtr, argument.length, true );
+			view().setUint32( countPtr, encoded.length, true );
+			view().setUint32( sizePtr, encoded.reduce( function( size, arg ) { return size + arg.length; }, 0 ), true );
 			return kSuccess;
 		},
 		args_get: function( argvPtr, bufferPtr )
 		{
-			view().setUint32( argvPtr, bufferPtr, true );
-			new Uint8Array( memory(), bufferPtr, argument.length ).set( argument );
+			for( const arg of encoded )
+			{
+				view().setUint32( argvPtr, bufferPtr, true );
+				new Uint8Array( memory(), bufferPtr, arg.length ).set( arg );
+				argvPtr += 4;
+				bufferPtr += arg.length;
+			}
 			return kSuccess;
 		},
 		environ_sizes_get: empty,
@@ -820,6 +945,7 @@ function wasiImports( memory, print, url )
 		fd_close: function() { return kBadFile; },
 		fd_fdstat_set_flags: function() { return kBadFile; },
 		path_open: function() { return kNoEntry; },
+		path_filestat_get: function() { return kNoEntry; },
 		fd_seek: function() { return kBadFile; },
 		fd_fdstat_get: function( fd, statPtr )
 		{
