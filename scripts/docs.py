@@ -665,14 +665,31 @@ def tailscale_host():
     return name or None
 
 
+def tailscale_serves( port ):
+    """True when tailscale serve offers HTTPS on the given port of this
+    computer's tailnet name."""
+    cli = shutil.which( "tailscale" ) or "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    try:
+        result = subprocess.run(
+            [ cli, "serve", "status", "--json" ], capture_output=True, text=True, timeout=5
+        )
+        return bool( json.loads( result.stdout ).get( "TCP", {} ).get( str( port ), {} ).get( "HTTPS" ) )
+    except ( OSError, subprocess.SubprocessError, ValueError, AttributeError ):
+        return False
+
+
 def serve_urls( port ):
-    """Where the site can be opened, the host name and tailnet ones only with
-    remote access on."""
+    """Where the site can be opened: this computer first, then the tailnet over
+    HTTPS when tailscale serve offers the port, then the host name and tailnet
+    over http with remote access on."""
     urls = [ f"http://127.0.0.1:{port}/index.html" ]
+    served = tailscale_serves( port )
+    tailnet = tailscale_host() if served or remembered( "remote", False ) else None
+    if served and tailnet:
+        urls.append( f"https://{tailnet}:{port}/index.html" )
     if remembered( "remote", False ):
         urls.append( f"http://{socket.gethostname()}:{port}/index.html" )
-        tailnet = tailscale_host()
-        if tailnet:
+        if tailnet and not served:
             urls.append( f"http://{tailnet}:{port}/index.html" )
     return urls
 
