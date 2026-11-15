@@ -13,12 +13,13 @@ cd "$(cd "$(dirname "$0")" && pwd)/.." # Up from scripts/ to repo root
 # under act below. On Linux they stand in for the Ubuntu workflows, and the
 # host 'g++' is a real GCC.
 
-# No workflow counterpart. Compile only, signing is expected to fail.
+# ios.yml, which compiles with signing off instead. Compile only, signing is
+# expected to fail.
 if [ "$( uname )" = "Darwin" ]; then
 	cmake --preset ios-coverage
 	cmake --build --preset ios-coverage-debug
 else
-	echo "Not on macOS, skipping the iOS compile check. Nothing else covers it."
+	echo "Not on macOS, skipping the iOS compile check. ios.yml covers it in CI."
 fi
 
 # macos.yml
@@ -45,6 +46,7 @@ if [ -n "$AE_GXX" ]; then
 	CC="${AE_GXX/g++/gcc}" CXX="$AE_GXX" cmake -G Ninja -B build_coverage_gcc -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
 	cmake --build build_coverage_gcc --target all
 	build_coverage_gcc/test/test
+	CXX="$AE_GXX" test/config/check.sh native
 else
 	echo "No real GCC found, skipping the host gcc stage. act -W ubuntu_gcc.yml below covers it."
 fi
@@ -108,10 +110,15 @@ else
 fi
 
 # The stages above all run the host toolchain. These run the workflows
-# themselves, in the CI container, and are the only real coverage for GCC on
-# macOS. Set AE_SKIP_ACT=1 to leave them out while iterating, or on a machine
-# without Docker.
-if [ "${AE_SKIP_ACT:-0}" != "1" ]; then
+# themselves, in the CI container, and are the only real coverage for GCC and
+# the Linux build on macOS, so there a missing Docker fails the sweep. A Linux
+# host without Docker leaves them out: the host stages above ran the same
+# toolchains. Set AE_SKIP_ACT=1 to leave them out while iterating.
+if [ "${AE_SKIP_ACT:-0}" = "1" ]; then
+	echo "AE_SKIP_ACT=1, skipping the act stage."
+elif [ "$( uname )" != "Darwin" ] && ! command -v docker > /dev/null; then
+	echo "No Docker, skipping the act stage. The host stages above ran the same toolchains."
+else
 	docker info # Verify Docker is running
 	# Architecture per workflow. ubuntu_mingw and ubuntu_clangcl need amd64:
 	# arm64 wine starts an x86_64 PE in experimental ARM64EC mode and hangs.
@@ -123,7 +130,9 @@ if [ "${AE_SKIP_ACT:-0}" != "1" ]; then
 	# and only a non forced pull tolerates the failure and falls back to the
 	# local image. One single architecture image per tag, because act only looks
 	# for a local image on the host architecture and tries to pull for any
-	# other.
+	# other. -P names a runner image, so act does not stop to ask for one on a
+	# machine without an actrc. Every job here runs in its container: image,
+	# which act uses in place of the runner image.
 	case "$( uname -m )" in
 		arm64|aarch64) _host_arch="linux/arm64" ;;
 		*)             _host_arch="linux/amd64" ;;
@@ -140,12 +149,12 @@ if [ "${AE_SKIP_ACT:-0}" != "1" ]; then
 			ubuntu_mingw|ubuntu_clangcl) _arch="linux/amd64" ;;
 			*)            _arch="$_host_arch" ;;
 		esac
-		act -W ".github/workflows/$_wf.yml" --container-architecture "$_arch" --var "AE_BUILD_IMAGE=aether-build:${_arch#linux/}" --pull=false --rm
+		act -W ".github/workflows/$_wf.yml" --container-architecture "$_arch" -P "ubuntu-latest=aether-build:${_arch#linux/}" --var "AE_BUILD_IMAGE=aether-build:${_arch#linux/}" --pull=false --rm
 	done
 	# web.yml without publish-docs, which deploys to GitHub Pages. Its examples
 	# upload needs a local artifact server.
 	for _job in build emscripten-guest; do
-		act -W .github/workflows/web.yml -j "$_job" --artifact-server-path "$PWD/build_coverage_act_artifacts" --container-architecture "$_host_arch" --var "AE_BUILD_IMAGE=aether-build:${_host_arch#linux/}" --pull=false --rm
+		act -W .github/workflows/web.yml -j "$_job" --artifact-server-path "$PWD/build_coverage_act_artifacts" --container-architecture "$_host_arch" -P "ubuntu-latest=aether-build:${_host_arch#linux/}" --var "AE_BUILD_IMAGE=aether-build:${_host_arch#linux/}" --pull=false --rm
 	done
 fi
 

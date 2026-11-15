@@ -1,0 +1,14 @@
+name: iOS
+on: [push]
+jobs:
+  # Compile and link only: there is no team to sign with, and nothing to run
+  # on. scripts/coverage_build.sh runs the same check on a macOS host; this is
+  # the only coverage for pushes from elsewhere.
+  compile:
+      runs-on: macos-latest
+      steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset ios-coverage
+      - name: Build
+        run: cmake --build build_coverage_ios --config Debug -- CODE_SIGNING_ALLOWED=NO

@@ -72,9 +72,10 @@ is missing.
 | iOS (Xcode, arm64) | `build_ios` | `cmake --build build_ios --config RelWithDebInfo --target test -- -allowProvisioningUpdates` |
 
 Notes:
-- CI (`.github/workflows/`) covers desktop (macOS, Ubuntu clang/gcc/mingw,
-  Windows) and web (`web.yml`) but **not iOS** — run the iOS compile
-  check locally.
+- CI (`.github/workflows/`) covers desktop (macOS, Ubuntu clang/gcc/mingw/clang-cl,
+  Windows), web (`web.yml`) and an iOS compile (`ios.yml`, signing off, nothing
+  runs). It is the only iOS coverage from a non-macOS host; on macOS run the iOS
+  compile check locally too.
 - `ubuntu_clangcl.yml` cross compiles the MSVC paths with clang-cl against the
   MSVC CRT and Windows SDK that xwin downloads, warnings as errors, and runs the
   tests under wine. It is the local stand in for `windows.yml`, which needs a
@@ -116,28 +117,47 @@ build agent / in the background, never inline. `set -xeuo pipefail` — it abort
 the first failure; the `+ `-prefixed trace line just before the error names the
 failing command.
 
-Stages, in order:
-1. **iOS** — `cmake --preset ios` + `cmake --build --preset ios-debug` (compile only,
-   skipped on non-macOS hosts).
-2. **clang** — `build_clang`, then runs `build_clang/test/test`.
-3. **clang + `AE_DEPRECATED=1`** — `build_deprecated`, then runs its `test`.
-4. **gcc** — `build_gcc`, then runs its `test`.
-5. **MinGW** — `build_mingw` via `.github/toolchains/mingw-w64.cmake`, then runs
-   `test.exe` under wine when it is installed, in a prefix inside the build directory as
-   `ubuntu_mingw.yml` does. **MinGW is the stand-in for Windows on non-Windows hosts** —
-   to Windows-check from macOS/Linux use this toolchain; "no Windows machine" does not
-   mean "no Windows coverage".
-6. **Web** — `build_coverage_wasi` with the wasi-sdk toolchain, its configuration
+Stages, in order. Every build is Release with `AE_LEAN_AND_MEAN=OFF`, as in the
+workflows:
+1. **iOS** — `cmake --preset ios-coverage` + `cmake --build --preset ios-coverage-debug`
+   (compile only, skipped on non-macOS hosts).
+2. **clang** — `build_coverage_clang`, runs its `test`, then
+   `test/config/check.sh native` with `clang++`. Apple clang on macOS (`macos.yml`),
+   the distro clang on Linux (`ubuntu_clang.yml`).
+3. **clang + `AE_DEPRECATED=ON`** — `build_coverage_deprecated`, then runs its `test`.
+4. **gcc** — `build_coverage_gcc`, runs its `test`, then `check.sh native` with `g++`.
+   Only when a real GCC is installed: macOS's `g++` is Apple clang, so there it is
+   left to act.
+5. **MinGW** — `build_coverage_mingw` via `.github/toolchains/mingw-w64.cmake`, its
+   `check.sh native`, then `test.exe` under wine in a prefix inside the build
+   directory, as `ubuntu_mingw.yml` does. macOS runs it in the `aether-build:amd64`
+   image instead of a host wine. **MinGW is the stand-in for Windows on non-Windows
+   hosts** — to Windows-check from macOS/Linux use this toolchain; "no Windows
+   machine" does not mean "no Windows coverage".
+6. **clang-cl** — `build_coverage_clangcl` via `.github/toolchains/clang-cl-xwin.cmake`,
+   warnings as errors, then `test.exe` under wine as in the MinGW stage. Only when
+   clang-cl 19 or newer, `lld-link` and `xwin` are installed, otherwise left to act.
+7. **Web** — `build_coverage_wasi` with the wasi-sdk toolchain, its configuration
    checks, and `test/web/check.js` on every example, then a `docs.py publish` site
    of those examples in `build_coverage_docs` and `test/web/scroll.js` on it, then
-   `test/emscripten/build.sh` and its page when `em++` is on the PATH.
-7. **act** — `act -W .github/workflows/ubuntu_clang.yml` runs the Ubuntu-clang GitHub
-   Actions workflow locally in Docker (the gcc/mingw workflow runs are commented out).
+   `test/emscripten/build.sh`, its page and its configuration checks when `em++` is
+   on the PATH.
+8. **act** — runs `ubuntu_clang`, `ubuntu_gcc`, `ubuntu_deprecated`, `ubuntu_mingw`
+   and `ubuntu_clangcl`, and `web.yml`'s `build` and `emscripten-guest` jobs, in
+   Docker on the `aether-build` images `scripts/docker_build.sh` builds. Skipped
+   with `AE_SKIP_ACT=1`, or on a Linux host without Docker, whose host stages
+   already run the same toolchains. On macOS it is the only GCC and Linux
+   coverage, so there a missing Docker fails the sweep.
 
-Prerequisites (all currently installed on this machine): Docker running (checked
-with `docker info` before the act stage; set `AE_SKIP_ACT=1` without it),
-`WASI_SDK_PATH`, `em++` (optional, emsdk on PATH), `act`, `node`, the MinGW
-toolchain (`x86_64-w64-mingw32-g++`), Chrome or Chromium (see `test/web/check.js`), and
-`wine` (runs the MinGW test binary, skipped without it). `AE_LEAN_AND_MEAN` is intentionally OFF here for iteration speed; CI
-builds the test suite with it ON, so a green local sweep does not exercise that
-configuration.
+Prerequisites: `WASI_SDK_PATH`, `node` (22+), Chrome or Chromium (see
+`test/web/check.js`), the MinGW toolchain (`x86_64-w64-mingw32-g++`), and on
+macOS Docker running (checked with `docker info`) with the `aether-build` images
+and `act`. Optional, each stage is skipped without it: `em++` (emsdk on the
+PATH), a real GCC, `wine` (Linux), and clang-cl 19+ with `lld-link` and `xwin`.
+On Linux, with all of those, the sweep covers everything the macOS sweep does
+except the Apple builds, iOS and macOS, which `ios.yml` and `macos.yml` cover in
+CI.
+
+Nothing builds with `AE_LEAN_AND_MEAN=ON`, the default when aether is a
+subproject: it leaves out the tests and examples, so neither the sweep nor CI
+exercises that configuration.
