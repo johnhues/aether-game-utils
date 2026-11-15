@@ -3302,7 +3302,10 @@ public:
 	//! will exactly match their state when the action was originally added.
 	//! \return The given 'redo' callback, so it can optionally be executed
 	//! while being added to the document.
-	const DocumentCallback& AddUndoGroupAction( const char* name, const DocumentCallback& undo, const DocumentCallback& redo );
+	//! \param target Optional. Adding an action again with the same \p target and
+	//! \p name in the current group keeps the first action's position and undo,
+	//! and replaces its redo, which must not depend on the document's state.
+	const DocumentCallback& AddUndoGroupAction( const char* name, const DocumentCallback& undo, const DocumentCallback& redo, const DocumentValue* target = nullptr );
 	bool EndUndoGroup();
 	void ClearUndo();
 	bool Undo();
@@ -3315,6 +3318,7 @@ private:
 	using OpStack = ae::Array< ae::Array< UndoOp > >;
 	bool m_UndoRedo( OpStack& source, OpStack& target );
 	void m_PushOp( const UndoOp& op );
+	UndoOp* m_LastGroupOp( const DocumentValue* target ); // Null if \p target has no operation in the current group
 	void m_AddRef( DocumentValue* value );
 	void m_RemoveRef( DocumentValue* value );
 	void m_ValidateState( const ae::Array< UndoOp >& operations );
@@ -3323,6 +3327,8 @@ private:
 	OpStack m_undoStack;
 	OpStack m_redoStack;
 	ae::Array< UndoOp > m_currentGroup;
+	ae::Map< const DocumentValue*, uint32_t > m_groupOps; // Index in m_currentGroup of each target's last operation
+	ae::Map< const DocumentValue*, uint32_t > m_groupActions; // Index in m_currentGroup of each target's last action
 	bool m_isUndoRedoing = false;
 };
 
@@ -4223,8 +4229,8 @@ enum class Key : uint8_t
 	Alt = 251,
 	Super = 252,
 	Meta = 253,
-	LeftMeta = 254, // Command on Apple, Control on others
-	RightMeta = 255, // Command on Apple, Control on others
+	LeftMeta = 254, // Command on Apple, Control on others, either in a browser
+	RightMeta = 255, // Command on Apple, Control on others, either in a browser
 };
 // @TODO: ae::Key ToString
 
@@ -4689,12 +4695,16 @@ public:
 	//! on all platforms.</b> Returns an ae::File object to be freed later
 	//! with ae::FileSystem::Destroy(). A zero or negative \p timeoutSec value
 	//! will disable the timeout. On the web, the onProgress option of
-	//! aether.js instantiate() receives each request's progress.
+	//! aether.js instantiate() receives each request's progress. Returns the
+	//! same ae::File for \p url until it is destroyed, which frees it for
+	//! every caller. Returns null when no read is attempted because of a local
+	//! error, eg. \p url is empty or \p root has no directory.
 	const ae::File* Read( Root root, const char* url, float timeoutSec );
 	//! Loads a file asynchronously from disk or from the network (@TODO: currently
 	//! only asynchronous on the web). Returns an ae::File object to be freed
 	//! later with ae::FileSystem::Destroy(). A zero or negative \p timeoutSec
-	//! value will disable the timeout.
+	//! value will disable the timeout. Returns the same ae::File for \p url
+	//! until it is destroyed, see ae::FileSystem::Read( Root, const char*, float ).
 	const ae::File* Read( const char* url, float timeoutSec );
 	//! Retry if reading or writing of the given \p file did not finish
 	//! successfully. It's recommended (but not necessary) that you call this
@@ -13823,12 +13833,11 @@ void DocumentValue::NumberSet( T value )
 	{
 		Initialize( DocumentValueType::Number );
 	}
-	// Try to combine with previous NumberSet operation in current group
+	// Try to combine with this value's previous NumberSet operation in current group
 	bool combined = false;
-	if( m_document->m_currentGroup.Length() > 0 )
+	if( const UndoOp* lastOp = m_document->m_LastGroupOp( this ) )
 	{
-		UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
-		if( lastOp.type == UndoOpType::OpaqueSet && lastOp.target == this )
+		if( lastOp->type == UndoOpType::OpaqueSet )
 		{
 			// Keep the original old value, just update current value
 			combined = true;
@@ -13887,12 +13896,11 @@ void DocumentValue::OpaqueSet( const T& value )
 	{
 		Initialize( DocumentValueType::Opaque );
 	}
-	// Try to combine with previous OpaqueSet operation in current group
+	// Try to combine with this value's previous OpaqueSet operation in current group
 	bool combined = false;
-	if( m_document->m_currentGroup.Length() > 0 )
+	if( const UndoOp* lastOp = m_document->m_LastGroupOp( this ) )
 	{
-		UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
-		if( lastOp.type == UndoOpType::OpaqueSet && lastOp.target == this )
+		if( lastOp->type == UndoOpType::OpaqueSet )
 		{
 			// Keep the original old value, just update current value
 			combined = true;
@@ -20045,12 +20053,11 @@ void DocumentValue::StringSet( const char* str )
 	}
 	if( m_string != str )
 	{
-		// Try to combine with previous StringSet operation in current group
+		// Try to combine with this value's previous StringSet operation in current group
 		bool combined = false;
-		if( m_document->m_currentGroup.Length() > 0 )
+		if( const UndoOp* lastOp = m_document->m_LastGroupOp( this ) )
 		{
-			UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
-			if( lastOp.type == UndoOpType::StringSet && lastOp.target == this )
+			if( lastOp->type == UndoOpType::StringSet )
 			{
 				// Keep the original old value, just update current value
 				combined = true;
@@ -20083,12 +20090,11 @@ void DocumentValue::BoolSet( bool value )
 	const bool* b = m_value.TryGet< bool >();
 	if( !b || ( *b != value ) )
 	{
-		// Try to combine with previous OpaqueSet operation in current group
+		// Try to combine with this value's previous OpaqueSet operation in current group
 		bool combined = false;
-		if( m_document->m_currentGroup.Length() > 0 )
+		if( const UndoOp* lastOp = m_document->m_LastGroupOp( this ) )
 		{
-			UndoOp& lastOp = m_document->m_currentGroup[ m_document->m_currentGroup.Length() - 1 ];
-			if( lastOp.type == UndoOpType::OpaqueSet && lastOp.target == this )
+			if( lastOp->type == UndoOpType::OpaqueSet )
 			{
 				// Keep the original old value, just update current value
 				combined = true;
@@ -20296,12 +20302,25 @@ const DocumentValue& DocumentValue::ObjectGetValue( uint32_t index ) const
 //------------------------------------------------------------------------------
 // ae::Document member functions
 //------------------------------------------------------------------------------
-Document::Document( const ae::Tag& tag ) : DocumentValue( this, tag ), m_tag( tag ), m_values( tag ), m_undoStack( tag ), m_redoStack( tag ), m_currentGroup( tag ) {}
+Document::Document( const ae::Tag& tag ) : DocumentValue( this, tag ), m_tag( tag ), m_values( tag ), m_undoStack( tag ), m_redoStack( tag ), m_currentGroup( tag ), m_groupOps( tag ), m_groupActions( tag ) {}
 Document::~Document() { m_values.DeleteAll(); }
 
-const DocumentCallback& Document::AddUndoGroupAction( const char* name, const DocumentCallback& undo, const DocumentCallback& redo )
+const DocumentCallback& Document::AddUndoGroupAction( const char* name, const DocumentCallback& undo, const DocumentCallback& redo, const DocumentValue* target )
 {
 	AE_ASSERT( !m_isUndoRedoing );
+	if( target )
+	{
+		if( const uint32_t* index = m_groupActions.TryGet( target ) )
+		{
+			UndoOp& previous = m_currentGroup[ *index ];
+			if( previous.action.name == name )
+			{
+				previous.action.redo = redo;
+				return previous.action.redo;
+			}
+		}
+		m_groupActions.Set( target, m_currentGroup.Length() );
+	}
 	UndoOp& op = m_currentGroup.Append( {} );
 	op.type = UndoOpType::Action;
 	op.action.name = name;
@@ -20316,6 +20335,8 @@ bool Document::EndUndoGroup()
 	{
 		m_undoStack.Append( std::move( m_currentGroup ) );
 		m_currentGroup.Clear();
+		m_groupOps.Clear();
+		m_groupActions.Clear();
 		return true;
 	}
 	return false;
@@ -20345,6 +20366,8 @@ void Document::ClearUndo()
 	m_undoStack.Clear();
 	m_redoStack.Clear();
 	m_currentGroup.Clear();
+	m_groupOps.Clear();
+	m_groupActions.Clear();
 }
 
 bool Document::Undo()
@@ -20457,8 +20480,15 @@ bool Document::m_UndoRedo( OpStack& source, OpStack& target )
 void Document::m_PushOp( const UndoOp& op )
 {
 	if( m_isUndoRedoing ) { return; }
+	m_groupOps.Set( op.target, m_currentGroup.Length() );
 	m_currentGroup.Append( op );
 	m_redoStack.Clear(); // Clear redo stack on new operation
+}
+
+DocumentValue::UndoOp* Document::m_LastGroupOp( const DocumentValue* target )
+{
+	const uint32_t* index = m_groupOps.TryGet( target );
+	return index ? &m_currentGroup[ *index ] : nullptr;
 }
 
 void Document::m_AddRef( DocumentValue* value )
@@ -20886,8 +20916,14 @@ _AE_WASM_IMPORT( ae, _ae_SetCursorHidden ) void _ae_SetCursorHidden( int32_t hid
 // timeoutMs of 0 never times out.
 _AE_WASM_IMPORT( ae, _ae_ReadFile ) void _ae_ReadFile( const char* url, void* file, uint32_t timeoutMs );
 _AE_WASM_IMPORT( ae, _ae_CancelFile ) void _ae_CancelFile( const void* file );
+// Hands size bytes to the page to store at url, relative to the page, see
+// InstantiateOptions.onWrite in aether.js. Returns whether the page took them.
+_AE_WASM_IMPORT( ae, _ae_WriteFile ) int32_t _ae_WriteFile( const char* url, const void* data, uint32_t size );
 // Writes the page's url, truncated to fit size including the terminator
 _AE_WASM_IMPORT( ae, _ae_PageUrl ) void _ae_PageUrl( char* url, uint32_t size );
+// Asks the page for another instance of this program with args, see
+// InstantiateOptions.onLaunch in aether.js. Used by ae::Editor.
+_AE_WASM_IMPORT( ae, _ae_Launch ) void _ae_Launch( const char* const* args, uint32_t count );
 #endif
 
 #if AE_ENABLE_APPLICATION
@@ -26348,6 +26384,10 @@ void Input::m_UpdateModifiers()
 #if _AE_APPLE_
 	m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftSuper ];
 	m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightSuper ];
+#elif AE_ENABLE_AETHER_JS
+	// Command on Apple keyboards and Control on others both work in a browser
+	m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftSuper ] || m_keys[ (int)ae::Key::LeftControl ];
+	m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightSuper ] || m_keys[ (int)ae::Key::RightControl ];
 #else
 	m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftControl ];
 	m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
@@ -26839,18 +26879,7 @@ const File* FileSystem::Read( Root root, const char* url, float timeoutSec )
 		fullName += url;
 		return Read( fullName.c_str(), timeoutSec );
 	}
-	else
-	{
-		double t = ae::GetTime();
-		File* file = ae::New< File >( AE_ALLOC_TAG_FILE );
-		file->m_url = url;
-		file->m_startTime = t;
-		file->m_finishTime = t;
-		file->m_status = File::Status::Error;
-		file->m_timeout = timeoutSec;
-		m_files.Append( file );
-		return file;
-	}
+	return nullptr;
 }
 
 const File* FileSystem::Read( const char* url, float timeoutSec )
@@ -27127,6 +27156,9 @@ uint32_t FileSystem::Read( const char* filePath, void* buffer, uint32_t bufferSi
 
 uint32_t FileSystem::Write( const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs )
 {
+#if AE_ENABLE_AETHER_JS
+	return _ae_WriteFile( filePath, buffer, bufferSize ) ? bufferSize : 0;
+#endif
 	if( createIntermediateDirs )
 	{
 		auto dir = GetDirectoryFromPath( filePath );
@@ -27560,6 +27592,8 @@ bool ae::FileSystem::IsWritable( const char* path )
 		// @TODO: Return false if the user does not have write permission to the containing folder
 		return true;
 	}
+#elif AE_ENABLE_AETHER_JS
+	return true; // ae::FileSystem::Write() fails if the page does not store files
 #endif
 	return false;
 }
@@ -27570,8 +27604,16 @@ void ae::FileSystem::NormalizePath( Str256* path )
 	{
 		return;
 	}
-	std::filesystem::path fsPath = std::filesystem::path( path->c_str() ).lexically_normal();
-	*path = fsPath.string().c_str();
+	// Only the path of a url, after its scheme and host
+	const char* scheme = strstr( path->c_str(), "://" );
+	const char* urlPath = scheme ? strchr( scheme + 3, '/' ) : nullptr;
+	if( scheme && !urlPath )
+	{
+		return;
+	}
+	const uint32_t prefixLength = urlPath ? (uint32_t)( urlPath - path->c_str() ) : 0;
+	std::filesystem::path fsPath = std::filesystem::path( path->c_str() + prefixLength ).lexically_normal();
+	*path = ( ae::Str256( prefixLength, path->c_str() ) + fsPath.string().c_str() );
 }
 
 #if _AE_WINDOWS_

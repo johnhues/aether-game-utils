@@ -152,8 +152,8 @@ int main( int argc, char* argv[] )
 	Vertex* vertices = nullptr;
 	const ae::File* tgaFile = fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", 0.0f );
 	const ae::File* fbxFile = fileSystem.Read( ae::FileSystem::Root::Data, "character.fbx", 0.0f );
-	AE_INFO( "Loading '#'", tgaFile->GetURL() );
-	AE_INFO( "Loading '#'", fbxFile->GetURL() );
+	AE_INFO( "Loading '#'", tgaFile ? tgaFile->GetURL() : "null" );
+	AE_INFO( "Loading '#'", fbxFile ? fbxFile->GetURL() : "null" );
 
 	ae::Skeleton currentPose = TAG_ALL;
 	ae::Map< uint32_t, ae::Vec3 > targets = TAG_ALL;

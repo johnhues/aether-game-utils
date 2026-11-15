@@ -122,7 +122,7 @@ int main( int argc, char* argv[] )
 		AE_INFO( "data dir: '#'", dataDir );
 
 		file = fs.Read( ae::FileSystem::Root::Data, "bunny.obj", 0.0f );
-		AE_INFO( "Start loading '#'", file->GetURL() );
+		AE_INFO( "Start loading '#'", file ? file->GetURL() : "null" );
 		AE_INFO( "Run" );
 		return true;
 	};

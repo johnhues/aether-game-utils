@@ -37,6 +37,7 @@ namespace ae {
 
 const uint32_t kMaxEditorMessageSize = 1024;
 class Editor;
+class EditorSocket;
 
 //------------------------------------------------------------------------------
 // Plugin registration
@@ -142,6 +143,7 @@ enum class EditorEventType
 	LevelLoad, //!< Received right after a level has been loaded
 	LevelUnload, //!< Received right before a level will be unloaded
 	ReloadResources, //!< Received when the user has requested a resource reload
+	Update, //!< Received once per editor frame
 
 	ComponentCreate, //!< Received when a component has been created
 	ComponentDestroy, //!< Received when a component has been destroyed
@@ -282,7 +284,7 @@ public:
 	//! AE_REGISTER_EDITOR_PLUGIN().
 	void HotLoad();
 
-	bool IsConnected() const { return m_sock.IsConnected(); }
+	bool IsConnected() const;
 
 private:
 	friend class EditorServer;
@@ -295,7 +297,7 @@ private:
 	ae::Str256 m_lastLoadedLevel;
 	ae::FileSystem m_fileSystem;
 	const ae::File* m_pendingLevel = nullptr;
-	ae::Socket m_sock;
+	EditorSocket* m_sock = nullptr;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 	ae::Array< std::pair< _EditorPluginInfo, EditorPlugin* > > m_plugins;
 	ae::Map< ae::Entity, bool > m_editorEntities; // Filter out entities created since last level load

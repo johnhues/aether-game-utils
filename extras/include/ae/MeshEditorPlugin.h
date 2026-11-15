@@ -51,8 +51,9 @@ public:
 	//! Pure virtual function to load a mesh resource. This should be
 	//! implemented by the application using the plugin.
 	//! \param resourceStr The resource identifier string.
-	//! \return An EditorMesh. If the resource could not be loaded, return an
-	//! empty optional.
+	//! \return An EditorMesh, or an empty optional while the mesh is loading
+	//! or if it can't be loaded. Called again each frame until a mesh is
+	//! returned.
 	virtual ae::Optional< ae::EditorMesh > TryLoad( const char* resourceStr ) = 0;
 
 private:
@@ -61,6 +62,7 @@ private:
 	void m_Unload();
 	ae::Map< std::string, ae::EditorMeshInstance* > m_resources;
 	ae::Map< const ae::EditorComponent*, ae::EditorMeshInstance* > m_components;
+	ae::Map< const ae::EditorComponent*, ae::Matrix4 > m_pending; // Waiting for TryLoad()
 };
 
 } // namespace ae

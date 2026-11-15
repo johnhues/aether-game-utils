@@ -61,7 +61,8 @@ std::pair< std::string, const MeshAttrib* > GetMeshResource( const ae::EditorCom
 MeshEditorPlugin::MeshEditorPlugin( const ae::Tag& tag ) :
 	EditorPlugin( tag ),
 	m_resources( tag ),
-	m_components( tag )
+	m_components( tag ),
+	m_pending( tag )
 {}
 
 MeshEditorPlugin::~MeshEditorPlugin()
@@ -116,7 +117,17 @@ void MeshEditorPlugin::OnEvent( const ae::EditorEvent& event )
 		case ae::EditorEventType::ComponentDestroy:
 		{
 			AE_ASSERT( event.component );
+			m_pending.Remove( event.component );
 			m_DestroyInstance( *event.component );
+			break;
+		}
+		case ae::EditorEventType::Update:
+		{
+			for( int32_t i = m_pending.Length() - 1; i >= 0; i-- )
+			{
+				const ae::Matrix4 transform = m_pending.GetValue( i );
+				m_UpdateInstance( *m_pending.GetKey( i ), transform );
+			}
 			break;
 		}
 		case ae::EditorEventType::LevelUnload:
@@ -150,6 +161,14 @@ void MeshEditorPlugin::m_UpdateInstance( const ae::EditorComponent& comp, const 
 				m_resources.Set( resourceId, resource );
 			}
 		}
+		if( resource )
+		{
+			m_pending.Remove( &comp );
+		}
+		else
+		{
+			m_pending.Set( &comp, transform );
+		}
 		newInstance = CloneMesh( resource, comp.entity );
 		AE_ASSERT( !oldInstance || oldInstance != newInstance );
 		if( newInstance )
@@ -166,7 +185,7 @@ void MeshEditorPlugin::m_UpdateInstance( const ae::EditorComponent& comp, const 
 	if( newInstance )
 	{
 		m_components.Set( &comp, newInstance );
-		AE_DEBUG( "Set component reference-># entity:# type:# resource:#", newInstance, comp.entity, comp.typeName, resourceId );
+		AE_DEBUG( "Set component reference-># entity:# type:# resource:# position:#", newInstance, comp.entity, comp.typeName, resourceId, newInstance->transform.GetTranslation() );
 	}
 	else if( oldInstance )
 	{
@@ -197,6 +216,7 @@ void MeshEditorPlugin::m_Unload()
 		DestroyMesh( instance );
 	}
 	m_resources.Clear();
+	m_pending.Clear();
 }
 
 } // namespace ae

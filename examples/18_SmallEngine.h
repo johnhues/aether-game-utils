@@ -70,7 +70,7 @@ public:
 	// Resources
 	struct MeshResource
 	{
-		enum Status { Pending, Loading, Loaded };
+		enum Status { Pending, Loading, Loaded, Failed };
 		ae::VertexBuffer vertexData;
 		ae::CollisionMesh<> collision = TAG_SMALL_ENGINE;
 		Status status = Pending;

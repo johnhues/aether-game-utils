@@ -26,12 +26,26 @@
         margin: 0;
         height: calc( 100% + 1px );
       }
-      #canvas {
+      /* The program's canvas, with any instance it launches to its left */
+      #ae-views {
         position: fixed;
-        width: 100%;
+        inset: 0;
+        display: flex;
+      }
+      #ae-views canvas {
+        flex: 1;
+        min-width: 0;
         height: 100%;
-        left: 0;
-        bottom: 0;
+      }
+      /* Drag to resize the canvases on either side */
+      .ae-divider {
+        flex: 0 0 6px;
+        cursor: col-resize;
+        background: #333;
+        touch-action: none;
+      }
+      .ae-divider:hover, .ae-divider.dragging {
+        background: #9cf;
       }
       /* Loading progress along the bottom edge, or the reason the program halted over all of it. */
       #ae-status {
@@ -85,7 +99,7 @@
         display: block;
       }
     </style>
-    <div class="col-md-5">
+    <div id="ae-views">
       <canvas id="canvas"></canvas>
     </div>
     <div id="ae-status">
@@ -175,21 +189,53 @@
         lastTouchEnd = e.timeStamp;
       }, { passive: false } );
       canvas.oncontextmenu = function( e ) { e.preventDefault(); e.stopPropagation(); return false; };
+      const instances = [];
+
+      // Starts another instance of the program on a new canvas to the left, eg. ae::Editor's editor
+      function launch( args ) {
+        const views = document.getElementById( 'ae-views' );
+        const view = document.createElement( 'canvas' );
+        view.oncontextmenu = canvas.oncontextmenu;
+        const divider = document.createElement( 'div' );
+        divider.className = 'ae-divider';
+        divider.addEventListener( 'pointerdown', function( e ) {
+          e.preventDefault();
+          divider.setPointerCapture( e.pointerId );
+          divider.classList.add( 'dragging' );
+        } );
+        divider.addEventListener( 'pointermove', function( e ) {
+          if( !divider.hasPointerCapture( e.pointerId ) ) { return; }
+          const before = divider.previousElementSibling;
+          const left = before.getBoundingClientRect().left;
+          const right = divider.nextElementSibling.getBoundingClientRect().right - divider.offsetWidth;
+          const kMinWidth = 64;
+          const width = Math.min( Math.max( e.clientX - left, kMinWidth ), right - left - kMinWidth );
+          before.style.flex = '0 0 ' + ( 100 * width / views.clientWidth ) + '%';
+        } );
+        divider.addEventListener( 'lostpointercapture', function() { divider.classList.remove( 'dragging' ); } );
+        views.insertBefore( divider, views.firstChild );
+        views.insertBefore( view, divider );
+        aether.instantiate( 'index.wasm', view, { args: args, print: print, onProgress: progress, onHalt: halt, onLaunch: launch } ).then(
+          function( instance ) { instances.push( instance ); },
+          function( error ) { halt( String( error.message || error ) ); } );
+      }
       window.addEventListener( 'error', function( e ) { halt( e.message || 'error' ); } );
       window.addEventListener( 'unhandledrejection', function( e ) { halt( String( e.reason ) ); } );
 
       try {
-        const instance = await aether.instantiate( 'index.wasm', canvas, { print: print, onProgress: progress, onHalt: halt } );
+        const instance = await aether.instantiate( 'index.wasm', canvas, { print: print, onProgress: progress, onHalt: halt, onLaunch: launch } );
+        instances.unshift( instance );
         window.aeInstance = {
-          pause: instance.pause,
-          resume: instance.resume,
-          terminate: instance.terminate,
+          pause: function() { instances.forEach( function( i ) { i.pause(); } ); },
+          resume: function() { instances.forEach( function( i ) { i.resume(); } ); },
+          terminate: function() { instances.forEach( function( i ) { i.terminate(); } ); },
           stats: function() { return Object.assign( instance.stats(), { downloadBytes: downloadBytes, readyMs: readyMs } ); },
+          allStats: function() { return instances.map( function( i ) { return i.stats(); } ); }, // This page's program first, then those it launched
         };
         notify( 'started' );
         // Leaving frees graphics and audio now rather than at garbage collection.
         // A page restored from the back-forward cache has lost them, so it starts over.
-        window.addEventListener( 'pagehide', function() { instance.terminate(); } );
+        window.addEventListener( 'pagehide', window.aeInstance.terminate );
         window.addEventListener( 'pageshow', function( e ) { if( e.persisted ) { location.reload(); } } );
         awaitReady();
       }

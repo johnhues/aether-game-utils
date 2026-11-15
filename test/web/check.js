@@ -7,10 +7,11 @@
 // Playwright's browsers in $PLAYWRIGHT_BROWSERS_PATH, the macOS Chrome or
 // Chromium (eg. ungoogled-chromium) app, the PATH, or a Chromium flatpak.
 //
-// Usage: node test/web/check.js <dir> [name...] [--gpu] [--expect-log text]
+// Usage: node test/web/check.js <dir> [name...] [--swiftshader] [--expect-log text]
 //   <dir>             eg. build_wasi/examples/Release, or one page's directory
 //   name              only these examples, default every directory with an index.html
-//   --gpu             use the GPU, default SwiftShader
+//   --swiftshader     render with SwiftShader, the default without a GPU, which
+//                     is everywhere but macOS
 //   --expect-log text for pages not run by aether.js: passes once the page
 //                     logs text, instead of checking its aether.js instance
 //------------------------------------------------------------------------------
@@ -26,14 +27,14 @@ const kReplyMs = 60000; // Time Chrome has to answer each DevTools call
 const kTypes = { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm", ".png": "image/png", ".json": "application/json", ".webmanifest": "application/manifest+json" };
 
 const args = process.argv.slice( 2 );
-const gpu = args.includes( "--gpu" );
+const gpu = process.platform === "darwin" && !args.includes( "--swiftshader" );
 const expectIndex = args.indexOf( "--expect-log" );
 const expectLog = expectIndex >= 0 ? args[ expectIndex + 1 ] : null;
-const [ dir, ...only ] = args.filter( ( a, i ) => a !== "--gpu" && ( expectIndex < 0 || ( i !== expectIndex && i !== expectIndex + 1 ) ) );
+const [ dir, ...only ] = args.filter( ( a, i ) => a !== "--swiftshader" && ( expectIndex < 0 || ( i !== expectIndex && i !== expectIndex + 1 ) ) );
 const root = dir && path.resolve( dir );
 if( !root || !fs.existsSync( root ) || ( expectIndex >= 0 && !expectLog ) )
 {
-	console.error( "Usage: node test/web/check.js <dir> [name...] [--gpu] [--expect-log text]" );
+	console.error( "Usage: node test/web/check.js <dir> [name...] [--swiftshader] [--expect-log text]" );
 	process.exit( 2 );
 }
 const names = only.length ? only

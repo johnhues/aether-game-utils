@@ -737,6 +737,34 @@ TEST_CASE( "DocumentUndo ValueCoalescing", "[ae::Document][undo]" )
 	REQUIRE( doc.GetRedoStackSize() == 0 );
 }
 
+TEST_CASE( "DocumentUndo ValueInterleavedCoalescing", "[ae::Document][undo]" )
+{
+	ae::Document doc( "test" );
+	doc.ObjectInitialize( 2 );
+	ae::DocumentValue& a = doc.ObjectSet( "a" );
+	ae::DocumentValue& b = doc.ObjectSet( "b" );
+	a.NumberSet( 0 );
+	b.StringSet( "start" );
+	doc.EndUndoGroup();
+
+	// Sets that alternate between values coalesce per value
+	for( int32_t i = 1; i <= 3; i++ )
+	{
+		a.NumberSet( i );
+		b.StringSet( ae::ToString( i ).c_str() );
+	}
+	doc.EndUndoGroup();
+	REQUIRE( doc.GetUndoStackSize() == 2 );
+
+	REQUIRE( doc.Undo() );
+	REQUIRE( doc.ObjectTryGet( "a" )->NumberGet< int32_t >() == 0 );
+	REQUIRE( doc.ObjectTryGet( "b" )->StringGet() == std::string( "start" ) );
+
+	REQUIRE( doc.Redo() );
+	REQUIRE( doc.ObjectTryGet( "a" )->NumberGet< int32_t >() == 3 );
+	REQUIRE( doc.ObjectTryGet( "b" )->StringGet() == std::string( "3" ) );
+}
+
 TEST_CASE( "DocumentUndo ValueSeparateGroups", "[ae::Document][undo]" )
 {
 	ae::Document doc( "test" );
@@ -3811,4 +3839,32 @@ TEST_CASE( "Document AddUndoGroupAction complex resource management", "[ae::Docu
 	REQUIRE( objects->ArrayLength() == 2 );
 	REQUIRE( resource.resources.Length() == 2 );
 	REQUIRE( resource.activeIds.Length() == 2 );
+}
+
+TEST_CASE( "Document AddUndoGroupAction target coalescing", "[ae::Document][AddUndoGroupAction]" )
+{
+	ae::Document doc( "test" );
+	ae::DocumentValue& value = doc.ObjectInitialize( 1 ).ObjectSet( "value" );
+	value.NumberSet( 0 );
+	doc.EndUndoGroup();
+	int32_t state = 0;
+
+	// Actions added again with the same target and name keep the first undo and the last redo
+	for( int32_t i = 1; i <= 3; i++ )
+	{
+		value.NumberSet( i );
+		doc.AddUndoGroupAction( "set", [ &state ]() { state = 0; }, [ &state, i ]() { state = i; }, &value )();
+	}
+	// A different name with the same target is a separate action
+	doc.AddUndoGroupAction( "other", [ &state ]() { state += 100; }, [ &state ]() { state -= 100; }, &value );
+	doc.EndUndoGroup();
+	REQUIRE( state == 3 );
+
+	REQUIRE( doc.Undo() );
+	REQUIRE( state == 0 );
+	REQUIRE( doc.ObjectTryGet( "value" )->NumberGet< int32_t >() == 0 );
+
+	REQUIRE( doc.Redo() );
+	REQUIRE( state == -97 );
+	REQUIRE( doc.ObjectTryGet( "value" )->NumberGet< int32_t >() == 3 );
 }
