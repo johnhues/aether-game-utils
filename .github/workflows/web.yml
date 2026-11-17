@@ -77,6 +77,12 @@ jobs:
         with:
           name: web-examples
           path: web-examples
+      - name: Cache Doxygen
+        uses: actions/cache@v4
+        with:
+          path: build_docs/doxygen-*
+          key: doxygen-${{ hashFiles('scripts/docs.py') }}
+          restore-keys: doxygen-
       - name: Build Site
         # docs.py downloads its pinned doxygen release
         run: python3 scripts/docs.py publish --yes --no-open --config-dir web-examples --out _site
@@ -100,6 +106,12 @@ jobs:
         with:
           name: web-examples
           path: web-examples
+      - name: Cache Doxygen
+        uses: actions/cache@v4
+        with:
+          path: build_docs/doxygen-*
+          key: doxygen-${{ hashFiles('scripts/docs.py') }}
+          restore-keys: doxygen-
       - name: Build Site
         # docs.py downloads its pinned doxygen release
         run: python3 scripts/docs.py publish --yes --config-dir web-examples --out _site
