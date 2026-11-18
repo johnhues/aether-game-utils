@@ -371,6 +371,8 @@
 #include <cinttypes>
 #include <climits>
 #include <cmath>
+#include <compare>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -557,11 +559,16 @@ Value* DataStructure::Find( Key key )
 //------------------------------------------------------------------------------
 // Internal Start
 // clang-format off
+// Data structures
 #define _AE_STATIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
 #define _AE_DYNAMIC_STORAGE template< uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 #define _AE_FIXED_POOL template< bool P = Paged, typename = std::enable_if_t< !P > >
 #define _AE_PAGED_POOL template< bool P = Paged, typename = std::enable_if_t< P > >
+// Math
 template< typename T > using _EnableIfFractional = std::enable_if_t< std::is_floating_point_v< T > || ( std::is_class_v< T > && std::is_convertible_v< T, float > ) >;
+// Strings
+template< typename T > concept _IsStr = ( std::is_convertible_v< const T&, const char* > && !std::is_null_pointer_v< std::remove_cvref_t< T > > ) || requires( const T& t ) { { t.c_str() } -> std::convertible_to< const char* >; };
+// Misc
 #if _AE_MSVC_ && !defined( __clang__ )
 	#define AE_DISABLE_INVALID_OFFSET_WARNING
 	#define AE_ENABLE_INVALID_OFFSET_WARNING
@@ -1916,39 +1923,28 @@ class Str
 {
 public:
 	Str();
-	template< uint32_t N2 > Str( const Str<N2>& str );
-	Str( const char* str );
+	//! Copies a string literal, char array, char pointer, any type implicitly
+	//! convertible to const char*, or any type with c_str() returning const char*.
+	template< typename T > Str( const T& str ) requires ae::_IsStr< T >;
 	Str( uint32_t length, const char* str );
-	//! Construct a string from a range of characters: [begining, end).
+	//! Construct a string from a range of characters: [beginning, end).
 	Str( const char* begin, const char* end );
 	Str( uint32_t length, char c );
 	template< typename... Args > static Str< N > Format( const char* format, Args... args );
 	explicit operator const char*() const;
-	
-	template< uint32_t N2 > void operator =( const Str<N2>& str );
-	template< uint32_t N2 > Str<N> operator +( const Str<N2>& str ) const;
-	template< uint32_t N2 > void operator +=( const Str<N2>& str );
-	template< uint32_t N2 > bool operator ==( const Str<N2>& str ) const;
-	template< uint32_t N2 > bool operator <( const Str<N2>& str ) const;
-	template< uint32_t N2 > bool operator >( const Str<N2>& str ) const;
-	template< uint32_t N2 > bool operator <=( const Str<N2>& str ) const;
-	template< uint32_t N2 > bool operator >=( const Str<N2>& str ) const;
-	Str<N> operator +( const char* str ) const;
-	void operator +=( const char* str );
-	bool operator ==( const char* str ) const;
-	bool operator <( const char* str ) const;
-	bool operator >( const char* str ) const;
-	bool operator <=( const char* str ) const;
-	bool operator >=( const char* str ) const;
+
+	template< typename T > Str< N >& operator =( const T& str ) requires ae::_IsStr< T >;
+	template< typename T > Str< N >& operator +=( const T& str ) requires ae::_IsStr< T >;
+	template< typename T > Str< N > operator +( const T& str ) const requires ae::_IsStr< T >;
+	template< typename T > bool operator ==( const T& str ) const requires ae::_IsStr< T >;
+	template< typename T > std::strong_ordering operator <=>( const T& str ) const requires ae::_IsStr< T >;
 
 	char& operator[]( uint32_t i );
 	char operator[]( uint32_t i ) const;
 	const char* c_str() const;
 
-	template< uint32_t N2 > void Append( const Str< N2 >& str );
-	void Append( const char* str );
-	template< uint32_t N2 > void Insert( uint32_t index, const Str< N2 >& str );
-	void Insert( uint32_t index, const char* str );
+	template< typename T > Str< N >& Append( const T& str ) requires ae::_IsStr< T >;
+	template< typename T > Str< N >& Insert( uint32_t index, const T& str ) requires ae::_IsStr< T >;
 	void Trim( uint32_t len );
 
 	uint32_t Length() const;
@@ -1962,13 +1958,13 @@ public:
 #endif
 
 private:
-	template< uint32_t N2 > friend class Str;
-	template< uint32_t N2 > friend bool operator ==( const char*, const Str< N2 >& );
-	template< uint32_t N2 > friend bool operator <( const char*, const Str< N2 >& );
-	template< uint32_t N2 > friend bool operator >( const char*, const Str< N2 >& );
-	template< uint32_t N2 > friend bool operator <=( const char*, const Str< N2 >& );
-	template< uint32_t N2 > friend bool operator >=( const char*, const Str< N2 >& );
 	template< uint32_t N2 > friend std::istream& operator>>( std::istream&, Str< N2 >& );
+	struct _StrView { const char* str; uint32_t length; };
+	template< typename T > static _StrView m_View( const T& str );
+	void m_Assign( _StrView str );
+	void m_Append( _StrView str );
+	void m_Insert( uint32_t index, _StrView str );
+	int32_t m_Compare( _StrView str ) const;
 	void m_Format( const char* format );
 	template< typename T, typename... Args >
 	void m_Format( const char* format, T value, Args... args );
@@ -10804,9 +10800,8 @@ std::ostream& operator<<( std::ostream& out, const Str< N >& str )
 template< uint32_t N >
 std::istream& operator>>( std::istream& in, Str< N >& str )
 {
-	in.getline( str.m_str, Str< N >::MaxLength() );
-	str.m_length = in.gcount();
-	str.m_str[ str.m_length ] = 0;
+	in.getline( str.m_str, Str< N >::MaxLength() + 1u );
+	str.m_length = (uint16_t)strlen( str.m_str );
 	return in;
 }
 
@@ -10819,20 +10814,10 @@ Str< N >::Str()
 }
 
 template< uint32_t N >
-template< uint32_t N2 >
-Str< N >::Str( const Str<N2>& str )
+template< typename T >
+Str< N >::Str( const T& str ) requires ae::_IsStr< T >
 {
-	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "Str:'#' Length:# Max:#", str, str.m_length, MaxLength() );
-	m_length = str.m_length;
-	memcpy( m_str, str.m_str, m_length + 1u );
-}
-
-template< uint32_t N >
-Str< N >::Str( const char* str )
-{
-	m_length = (uint16_t)strlen( str );
-	AE_ASSERT_MSG( m_length <= (uint16_t)MaxLength(), "Str:'#' Length:# Max:#", str, m_length, MaxLength() );
-	memcpy( m_str, str, m_length + 1u );
+	m_Assign( m_View( str ) );
 }
 
 template< uint32_t N >
@@ -10875,152 +10860,85 @@ const char* Str< N >::c_str() const
 }
 
 template< uint32_t N >
-template< uint32_t N2 >
-void Str< N >::operator =( const Str<N2>& str )
+template< typename T >
+Str< N >& Str< N >::operator =( const T& str ) requires ae::_IsStr< T >
 {
-	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "'#' > #", str, MaxLength() );
-	m_length = str.m_length;
-	memcpy( m_str, str.m_str, str.m_length + 1u );
+	m_Assign( m_View( str ) );
+	return *this;
 }
 
 template< uint32_t N >
-Str<N> Str< N >::operator +( const char* str ) const
+template< typename T >
+Str<N> Str< N >::operator +( const T& str ) const requires ae::_IsStr< T >
 {
 	Str<N> out( *this );
-	out += str;
+	out.m_Append( m_View( str ) );
 	return out;
 }
 
 template< uint32_t N >
-template< uint32_t N2 >
-Str<N> Str< N >::operator +( const Str<N2>& str ) const
+template< typename T >
+Str< N >& Str< N >::operator +=( const T& str ) requires ae::_IsStr< T >
 {
-	Str<N> out( *this );
-	out += str;
-	return out;
+	m_Append( m_View( str ) );
+	return *this;
 }
 
 template< uint32_t N >
-void Str< N >::operator +=( const char* str )
+template< typename T >
+typename Str< N >::_StrView Str< N >::m_View( const T& str )
 {
-	const uint32_t len = (uint32_t)strlen( str );
-	AE_ASSERT_MSG( m_length + len <= (uint16_t)MaxLength(), "'#' + '#' > #", m_str, str, MaxLength() );
-	// Check if str points into our own buffer (e.g., str += str.c_str())
-	const bool isSelf = ( str >= m_str && str <= m_str + m_length );
-	if( isSelf )
+	if constexpr( std::is_convertible_v< const T&, const char* > )
 	{
-		// Make a temporary copy to avoid corruption
-		char temp[ MaxLength() + 1u ];
-		memcpy( temp, str, len + 1u );
-		memcpy( m_str + m_length, temp, len + 1u );
+		const char* const p = str;
+		return { p, (uint32_t)strlen( p ) };
+	}
+	else if constexpr( requires { { str.Length() } -> std::convertible_to< uint32_t >; } )
+	{
+		return { str.c_str(), str.Length() };
 	}
 	else
 	{
-		memcpy( m_str + m_length, str, len + 1u );
+		return { str.c_str(), (uint32_t)strlen( str.c_str() ) };
 	}
-	m_length += len;
 }
 
 template< uint32_t N >
-template< uint32_t N2 >
-void Str< N >::operator +=( const Str<N2>& str )
+void Str< N >::m_Assign( _StrView str )
 {
-	*this += str.c_str();
+	AE_ASSERT_MSG( str.length <= MaxLength(), "Str:'#' Length:# Max:#", str.str, str.length, MaxLength() );
+	memmove( m_str, str.str, str.length + 1u );
+	m_length = (uint16_t)str.length;
 }
 
 template< uint32_t N >
-template< uint32_t N2 >
-bool Str< N >::operator ==( const Str<N2>& str ) const
+void Str< N >::m_Append( _StrView str )
 {
-	return strcmp( m_str, str.c_str() ) == 0;
+	AE_ASSERT_MSG( m_length + str.length <= MaxLength(), "'#' + '#' > #", m_str, str.str, MaxLength() );
+	memmove( m_str + m_length, str.str, str.length + 1u );
+	m_length += (uint16_t)str.length;
 }
 
 template< uint32_t N >
-bool Str< N >::operator ==( const char* str ) const
+int32_t Str< N >::m_Compare( _StrView str ) const
 {
-	return strcmp( m_str, str ) == 0;
+	const int32_t result = memcmp( m_str, str.str, ae::Min( (uint32_t)m_length, str.length ) );
+	return result ? result : ( (int32_t)m_length - (int32_t)str.length );
 }
 
 template< uint32_t N >
-bool operator ==( const char* str0, const Str<N>& str1 )
+template< typename T >
+bool Str< N >::operator ==( const T& str ) const requires ae::_IsStr< T >
 {
-	return strcmp( str0, str1.m_str ) == 0;
+	const _StrView view = m_View( str );
+	return m_length == view.length && memcmp( m_str, view.str, m_length ) == 0;
 }
 
 template< uint32_t N >
-template< uint32_t N2 >
-bool Str< N >::operator <( const Str<N2>& str ) const
+template< typename T >
+std::strong_ordering Str< N >::operator <=>( const T& str ) const requires ae::_IsStr< T >
 {
-	return strcmp( m_str, str.c_str() ) < 0;
-}
-
-template< uint32_t N >
-bool Str< N >::operator <( const char* str ) const
-{
-	return strcmp( m_str, str ) < 0;
-}
-
-template< uint32_t N >
-bool operator <( const char* str0, const Str<N>& str1 )
-{
-	return strcmp( str0, str1.m_str ) < 0;
-}
-
-template< uint32_t N >
-template< uint32_t N2 >
-bool Str< N >::operator >( const Str<N2>& str ) const
-{
-	return strcmp( m_str, str.c_str() ) > 0;
-}
-
-template< uint32_t N >
-bool Str< N >::operator >( const char* str ) const
-{
-	return strcmp( m_str, str ) > 0;
-}
-
-template< uint32_t N >
-bool operator >( const char* str0, const Str<N>& str1 )
-{
-	return strcmp( str0, str1.m_str ) > 0;
-}
-
-template< uint32_t N >
-template< uint32_t N2 >
-bool Str< N >::operator <=( const Str<N2>& str ) const
-{
-	return strcmp( m_str, str.c_str() ) <= 0;
-}
-
-template< uint32_t N >
-bool Str< N >::operator <=( const char* str ) const
-{
-	return strcmp( m_str, str ) <= 0;
-}
-
-template< uint32_t N >
-bool operator <=( const char* str0, const Str<N>& str1 )
-{
-	return strcmp( str0, str1.m_str ) <= 0;
-}
-
-template< uint32_t N >
-template< uint32_t N2 >
-bool Str< N >::operator >=( const Str<N2>& str ) const
-{
-	return strcmp( m_str, str.c_str() ) >= 0;
-}
-
-template< uint32_t N >
-bool Str< N >::operator >=( const char* str ) const
-{
-	return strcmp( m_str, str ) >= 0;
-}
-
-template< uint32_t N >
-bool operator >=( const char* str0, const Str<N>& str1 )
-{
-	return strcmp( str0, str1.m_str ) >= 0;
+	return m_Compare( m_View( str ) ) <=> 0;
 }
 
 template< uint32_t N >
@@ -11056,55 +10974,41 @@ bool Str< N >::Empty() const
 }
 
 template< uint32_t N >
-template< uint32_t N2 >
-void Str< N >::Append( const Str<N2>& str )
+template< typename T >
+Str< N >& Str< N >::Append( const T& str ) requires ae::_IsStr< T >
 {
-	*this += str;
+	m_Append( m_View( str ) );
+	return *this;
 }
 
 template< uint32_t N >
-void Str< N >::Append( const char* str )
+template< typename T >
+Str< N >& Str< N >::Insert( uint32_t index, const T& str ) requires ae::_IsStr< T >
 {
-	*this += str;
+	m_Insert( index, m_View( str ) );
+	return *this;
 }
 
 template< uint32_t N >
-template< uint32_t N2 >
-void Str< N >::Insert( uint32_t index, const Str<N2>& str )
-{
-	Insert( index, str.c_str() );
-}
-
-template< uint32_t N >
-void Str< N >::Insert( uint32_t index, const char* str )
+void Str< N >::m_Insert( uint32_t index, _StrView str )
 {
 	AE_ASSERT( index <= m_length );
-	const uint32_t len = (uint32_t)strlen( str );
-	AE_ASSERT_MSG( m_length + len <= (uint16_t)MaxLength(), "'#' insert '#' at # > #", m_str, str, index, MaxLength() );
-	if( len == 0 )
+	AE_ASSERT_MSG( m_length + str.length <= MaxLength(), "'#' insert '#' at # > #", m_str, str.str, index, MaxLength() );
+	if( str.length == 0 )
 	{
 		return;
 	}
+	char temp[ MaxLength() + 1u ];
 	// Check if str points into our own buffer (e.g., Insert(2, c_str()))
-	const bool isSelf = ( str >= m_str && str <= m_str + m_length );
-	if( isSelf )
+	if( str.str >= m_str && str.str <= m_str + m_length )
 	{
-		// Make a temporary copy to avoid corruption during memmove
-		char temp[ MaxLength() + 1u ];
-		memcpy( temp, str, len + 1u );
-		// Move existing characters to make room
-		memmove( m_str + index + len, m_str + index, m_length - index + 1u ); // +1 for null terminator
-		// Copy from temporary buffer
-		memcpy( m_str + index, temp, len );
+		memcpy( temp, str.str, str.length );
+		str.str = temp;
 	}
-	else
-	{
-		// Move existing characters to make room
-		memmove( m_str + index + len, m_str + index, m_length - index + 1u ); // +1 for null terminator
-		// Copy new string into the gap
-		memcpy( m_str + index, str, len );
-	}
-	m_length += len;
+	// Move existing characters to make room
+	memmove( m_str + index + str.length, m_str + index, m_length - index + 1u ); // +1 for null terminator
+	memcpy( m_str + index, str.str, str.length );
+	m_length += (uint16_t)str.length;
 }
 
 template< uint32_t N >
@@ -11163,12 +11067,6 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
 		head++;
 	}
 	m_Format( head, args... );
-}
-
-template< uint32_t N >
-inline bool operator==( const std::string& str0, const ae::Str< N >& str1 )
-{
-	return str0 == str1.c_str();
 }
 
 //------------------------------------------------------------------------------

@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+#include "TestUtils.h"
 #include <catch2/catch_test_macros.hpp>
 
 #if _AE_WINDOWS_
@@ -224,6 +225,48 @@ TEST_CASE( "Str equality with other string types", "[aeString]" )
 	REQUIRE( str32 != otherStdStr );
 	REQUIRE_FALSE( stdStr != str32 );
 	REQUIRE_FALSE( str32 != stdStr );
+}
+
+TEST_CASE( "Str chained assignment", "[aeString]" )
+{
+	SECTION( "same size" )
+	{
+		ae::Str16 a = "a";
+		ae::Str16 b = "b";
+		const ae::Str16 c = "abc";
+		a = b = c;
+		REQUIRE( a == "abc" );
+		REQUIRE( b == "abc" );
+	}
+
+	SECTION( "different sizes" )
+	{
+		ae::Str16 a = "a";
+		ae::Str32 b = "b";
+		ae::Str64 c = "abc";
+		a = b = c;
+		REQUIRE( a == "abc" );
+		REQUIRE( b == "abc" );
+	}
+
+	SECTION( "mixed string types" )
+	{
+		ae::Str16 a = "a";
+		ae::Str32 b = "b";
+		a = b = std::string( "abc" );
+		REQUIRE( a == "abc" );
+		REQUIRE( b == "abc" );
+		a = b = "xyz";
+		REQUIRE( a == "xyz" );
+		REQUIRE( a.Length() == 3 );
+	}
+
+	SECTION( "assign substring of itself" )
+	{
+		ae::Str16 a = "Hello";
+		REQUIRE( ( a = &a.c_str()[ 1 ] ) == "ello" );
+		REQUIRE( a.Length() == 4 );
+	}
 }
 
 TEST_CASE( "ToString", "[aeString]" )
@@ -515,4 +558,563 @@ TEST_CASE( "Str self-insert handling", "[aeString]" )
 		REQUIRE( str == "HeHellollo" );
 		REQUIRE( str.Length() == 10 );
 	}
+}
+
+//------------------------------------------------------------------------------
+// ae::Str coverage
+//------------------------------------------------------------------------------
+namespace
+{
+	//! Only provides c_str(), measured with strlen.
+	struct NameTag
+	{
+		const char* c_str() const { return name; }
+		const char* name;
+	};
+
+	//! Implicitly convertible to const char*.
+	struct Label
+	{
+		operator const char*() const { return text; }
+		const char* text;
+	};
+
+	//! Only convertible to const char* when non-const, which ae::Str rejects.
+	struct MutableLabel
+	{
+		operator const char*() { return text; }
+		const char* text;
+	};
+
+	template< typename A, typename B >
+	concept StrComparable = requires( const A& a, const B& b ) { a == b; a < b; };
+}
+
+TEST_CASE( "Str type constraints", "[aeString]" )
+{
+	static_assert( sizeof( ae::Str16 ) == 16 );
+	static_assert( sizeof( ae::Str256 ) == 256 );
+	static_assert( ae::Str16::MaxLength() == 13 );
+
+	static_assert( std::is_convertible_v< const char*, ae::Str16 > );
+	static_assert( std::is_convertible_v< char*, ae::Str16 > );
+	static_assert( std::is_convertible_v< const char( & )[ 4 ], ae::Str16 > );
+	static_assert( std::is_convertible_v< ae::Str64, ae::Str16 > );
+	static_assert( std::is_convertible_v< std::string, ae::Str16 > );
+	static_assert( std::is_convertible_v< NameTag, ae::Str16 > );
+	static_assert( std::is_convertible_v< Label, ae::Str16 > );
+
+	static_assert( !std::is_constructible_v< ae::Str16, std::nullptr_t > );
+	static_assert( !std::is_constructible_v< ae::Str16, int > );
+	static_assert( !std::is_constructible_v< ae::Str16, const wchar_t* > );
+	static_assert( !std::is_constructible_v< ae::Str16, std::wstring > );
+	static_assert( !std::is_constructible_v< ae::Str16, MutableLabel > );
+
+	static_assert( !std::is_convertible_v< ae::Str16, const char* > );
+	static_assert( std::is_constructible_v< const char*, ae::Str16 > );
+
+	static_assert( StrComparable< ae::Str16, ae::Str32 > );
+	static_assert( StrComparable< const char*, ae::Str16 > );
+	static_assert( StrComparable< std::string, ae::Str16 > );
+	static_assert( StrComparable< ae::Str16, NameTag > );
+	static_assert( !StrComparable< ae::Str16, std::nullptr_t > );
+	static_assert( !StrComparable< ae::Str16, int > );
+	static_assert( !StrComparable< ae::Str16, std::wstring > );
+
+	static_assert( std::is_same_v< decltype( ae::Str16() + ae::Str64() ), ae::Str16 > );
+	static_assert( std::is_same_v< decltype( ae::Str64() + ae::Str16() ), ae::Str64 > );
+	static_assert( std::is_same_v< decltype( ae::Str16() = "a" ), ae::Str16& > );
+	static_assert( std::is_same_v< decltype( ae::Str16() = ae::Str32() ), ae::Str16& > );
+	static_assert( std::is_same_v< decltype( ae::Str16() += "a" ), ae::Str16& > );
+	static_assert( std::is_same_v< decltype( ae::Str16() += ae::Str32() ), ae::Str16& > );
+	static_assert( std::is_same_v< decltype( ae::Str16().Append( "a" ) ), ae::Str16& > );
+	static_assert( std::is_same_v< decltype( ae::Str16().Append( ae::Str32() ) ), ae::Str16& > );
+	static_assert( std::is_same_v< decltype( ae::Str16().Insert( 0, "a" ) ), ae::Str16& > );
+	static_assert( std::is_same_v< decltype( ae::Str16().Insert( 0, ae::Str32() ) ), ae::Str16& > );
+	static_assert( std::is_same_v< decltype( ae::Str16() <=> "a" ), std::strong_ordering > );
+}
+
+TEST_CASE( "Str construction from string types", "[aeString]" )
+{
+	char buffer[ 8 ] = "abc";
+	char* const mutablePtr = buffer;
+	const char* const constPtr = "abc";
+	const NameTag tag = { "abc" };
+	const Label label = { "abc" };
+	const std::string stdStr = "abc";
+
+	SECTION( "default is empty" )
+	{
+		const ae::Str16 str;
+		REQUIRE( str.Empty() );
+		REQUIRE( str.Length() == 0 );
+		REQUIRE( str == "" );
+		REQUIRE( strcmp( str.c_str(), "" ) == 0 );
+	}
+
+	SECTION( "every accepted source type" )
+	{
+		const ae::Str16 strs[] =
+		{
+			ae::Str16( "abc" ),
+			ae::Str16( buffer ),
+			ae::Str16( mutablePtr ),
+			ae::Str16( constPtr ),
+			ae::Str16( ae::Str256( "abc" ) ),
+			ae::Str16( stdStr ),
+			ae::Str16( tag ),
+			ae::Str16( label ),
+		};
+		for( const ae::Str16& str : strs )
+		{
+			REQUIRE( str == "abc" );
+			REQUIRE( str.Length() == 3 );
+			REQUIRE( strlen( str.c_str() ) == 3 );
+		}
+	}
+
+	SECTION( "implicit conversion to function arguments" )
+	{
+		const auto length = []( const ae::Str16& str ) { return str.Length(); };
+		REQUIRE( length( "abcd" ) == 4 );
+		REQUIRE( length( std::string( "abcd" ) ) == 4 );
+		REQUIRE( length( ae::Str64( "abcd" ) ) == 4 );
+		REQUIRE( length( tag ) == 3 );
+		REQUIRE( length( label ) == 3 );
+	}
+
+	SECTION( "length and character constructors" )
+	{
+		REQUIRE( ae::Str16( 3u, "abcdef" ) == "abc" );
+		REQUIRE( ae::Str16( 3u, "abcdef" ).Length() == 3 );
+		REQUIRE( ae::Str16( 0u, "abcdef" ).Empty() );
+		REQUIRE( ae::Str16( 4u, 'x' ) == "xxxx" );
+		REQUIRE( ae::Str16( 4u, 'x' ).Length() == 4 );
+		REQUIRE( ae::Str16( 0u, 'x' ).Empty() );
+		const char* const range = "abcdef";
+		REQUIRE( ae::Str16( range + 1, range + 4 ) == "bcd" );
+		REQUIRE( ae::Str16( range, range ).Empty() );
+	}
+
+	SECTION( "max length" )
+	{
+		const ae::Str16 str( ae::Str16::MaxLength(), 'q' );
+		REQUIRE( str.Length() == ae::Str16::MaxLength() );
+		REQUIRE( ae::Str16( str.c_str() ) == str );
+		REQUIRE( ae::Str16( std::string( ae::Str16::MaxLength(), 'q' ) ) == str );
+	}
+}
+
+TEST_CASE( "Str assignment", "[aeString]" )
+{
+	SECTION( "every accepted source type" )
+	{
+		const NameTag tag = { "tag" };
+		const Label label = { "label" };
+		ae::Str16 str = "start";
+		str = "literal"; REQUIRE( str == "literal" ); REQUIRE( str.Length() == 7 );
+		str = std::string( "std" ); REQUIRE( str == "std" ); REQUIRE( str.Length() == 3 );
+		str = ae::Str64( "str64" ); REQUIRE( str == "str64" ); REQUIRE( str.Length() == 5 );
+		str = ae::Str16( "str16" ); REQUIRE( str == "str16" ); REQUIRE( str.Length() == 5 );
+		str = tag; REQUIRE( str == "tag" ); REQUIRE( str.Length() == 3 );
+		str = label; REQUIRE( str == "label" ); REQUIRE( str.Length() == 5 );
+		str = ""; REQUIRE( str.Empty() ); REQUIRE( strlen( str.c_str() ) == 0 );
+	}
+
+	SECTION( "shorter value terminates" )
+	{
+		ae::Str16 str = "abcdefgh";
+		str = "xy";
+		REQUIRE( str == "xy" );
+		REQUIRE( strlen( str.c_str() ) == 2 );
+	}
+
+	SECTION( "returns itself" )
+	{
+		ae::Str16 str;
+		REQUIRE( &( str = "a" ) == &str );
+		REQUIRE( &( str = ae::Str32( "b" ) ) == &str );
+		REQUIRE( &( str = ae::Str16( "c" ) ) == &str );
+		REQUIRE( &( str = std::string( "d" ) ) == &str );
+	}
+
+	SECTION( "self assignment" )
+	{
+		ae::Str16 str = "abc";
+		const ae::Str16& alias = str;
+		str = alias;
+		REQUIRE( str == "abc" );
+		str = str.c_str();
+		REQUIRE( str == "abc" );
+		REQUIRE( str.Length() == 3 );
+	}
+}
+
+TEST_CASE( "Str concatenation", "[aeString]" )
+{
+	const NameTag tag = { "tag" };
+	const Label label = { "label" };
+
+	SECTION( "operator+ with every accepted source type" )
+	{
+		const ae::Str32 str = "a";
+		REQUIRE( str + "b" == "ab" );
+		REQUIRE( str + std::string( "b" ) == "ab" );
+		REQUIRE( str + ae::Str16( "b" ) == "ab" );
+		REQUIRE( str + ae::Str64( "b" ) == "ab" );
+		REQUIRE( str + tag == "atag" );
+		REQUIRE( str + label == "alabel" );
+		REQUIRE( ( str + "bcd" ).Length() == 4 );
+		REQUIRE( str == "a" );
+	}
+
+	SECTION( "operator+ chain" )
+	{
+		const ae::Str32 str = ae::Str32( "a" ) + "b" + std::string( "c" ) + ae::Str16( "d" );
+		REQUIRE( str == "abcd" );
+		REQUIRE( str.Length() == 4 );
+	}
+
+	SECTION( "operator+= with every accepted source type" )
+	{
+		ae::Str32 str = "a";
+		str += "b";
+		str += std::string( "c" );
+		str += ae::Str16( "d" );
+		str += ae::Str64( "e" );
+		str += tag;
+		str += label;
+		str += "";
+		REQUIRE( str == "abcdetaglabel" );
+		REQUIRE( str.Length() == 13 );
+	}
+
+	SECTION( "Append with every accepted source type" )
+	{
+		ae::Str32 str = "a";
+		str.Append( std::string( "b" ) );
+		str.Append( ae::Str64( "c" ) );
+		str.Append( tag );
+		str.Append( label );
+		REQUIRE( str == "abctaglabel" );
+		REQUIRE( str.Length() == 11 );
+	}
+
+	SECTION( "operator+= returns itself" )
+	{
+		ae::Str32 str = "a";
+		REQUIRE( &( str += "b" ) == &str );
+		REQUIRE( &( str += ae::Str16( "c" ) ) == &str );
+		REQUIRE( &( str += std::string( "d" ) ) == &str );
+		( str += "e" ) += "f";
+		REQUIRE( str == "abcdef" );
+		REQUIRE( ( str += str ) == "abcdefabcdef" );
+		REQUIRE( str.Length() == 12 );
+	}
+
+	SECTION( "Append returns itself" )
+	{
+		ae::Str32 str = "a";
+		REQUIRE( &str.Append( "b" ) == &str );
+		REQUIRE( &str.Append( ae::Str16( "c" ) ) == &str );
+		REQUIRE( &str.Append( std::string( "d" ) ) == &str );
+		str.Append( "e" ).Append( "f" );
+		REQUIRE( str == "abcdef" );
+		REQUIRE( str.Append( str ) == "abcdefabcdef" );
+		REQUIRE( str.Length() == 12 );
+	}
+
+	SECTION( "fill to max length" )
+	{
+		ae::Str16 str = "abc";
+		str += "defghijklm";
+		REQUIRE( str.Length() == ae::Str16::MaxLength() );
+		REQUIRE( str == "abcdefghijklm" );
+	}
+}
+
+TEST_CASE( "Str::Insert with string types", "[aeString]" )
+{
+	SECTION( "into empty" )
+	{
+		ae::Str16 str;
+		str.Insert( 0, "abc" );
+		REQUIRE( str == "abc" );
+		REQUIRE( str.Length() == 3 );
+	}
+
+	SECTION( "every accepted source type" )
+	{
+		const NameTag tag = { "T" };
+		const Label label = { "L" };
+		ae::Str32 str = "ad";
+		str.Insert( 1, std::string( "b" ) );
+		str.Insert( 2, ae::Str64( "c" ) );
+		str.Insert( 0, tag );
+		str.Insert( 5, label );
+		REQUIRE( str == "TabcdL" );
+		REQUIRE( str.Length() == 6 );
+	}
+
+	SECTION( "returns itself" )
+	{
+		ae::Str32 str = "ad";
+		REQUIRE( &str.Insert( 1, "c" ) == &str );
+		REQUIRE( &str.Insert( 1, ae::Str16( "b" ) ) == &str );
+		REQUIRE( &str.Insert( 4, std::string( "f" ) ) == &str );
+		str.Insert( 4, "e" ).Insert( 0, "_" );
+		REQUIRE( str == "_abcdef" );
+		REQUIRE( str.Insert( 1, str ) == "__abcdefabcdef" );
+		REQUIRE( str.Length() == 14 );
+	}
+
+	SECTION( "fill to max length" )
+	{
+		ae::Str16 str = "am";
+		str.Insert( 1, "bcdefghijkl" );
+		REQUIRE( str == "abcdefghijklm" );
+		REQUIRE( str.Length() == ae::Str16::MaxLength() );
+	}
+
+	SECTION( "self insert at every index" )
+	{
+		for( uint32_t i = 0; i <= 4; i++ )
+		{
+			ae::Str32 str = "abcd";
+			std::string expected = "abcd";
+			expected.insert( i, expected );
+			str.Insert( i, str );
+			REQUIRE( str == expected );
+			REQUIRE( str.Length() == 8 );
+		}
+	}
+
+	SECTION( "self substring insert matches std::string" )
+	{
+		for( uint32_t index = 0; index <= 4; index++ )
+		{
+			for( uint32_t offset = 0; offset < 4; offset++ )
+			{
+				ae::Str32 str = "abcd";
+				std::string expected = "abcd";
+				expected.insert( index, expected.c_str() + offset );
+				str.Insert( index, str.c_str() + offset );
+				REQUIRE( str == expected );
+				REQUIRE( str.Length() == expected.size() );
+			}
+		}
+	}
+}
+
+TEST_CASE( "Str comparison", "[aeString]" )
+{
+	SECTION( "matches strcmp ordering" )
+	{
+		const char* const strs[] = { "", "a", "ab", "abc", "abd", "b", "B", "a\x7f", "a\xff", "\xff" };
+		for( const char* a : strs )
+		{
+			for( const char* b : strs )
+			{
+				const int32_t expected = strcmp( a, b );
+				const ae::Str16 strA = a;
+				const std::strong_ordering order = strA <=> b;
+				REQUIRE( ( order < 0 ) == ( expected < 0 ) );
+				REQUIRE( ( order == 0 ) == ( expected == 0 ) );
+				REQUIRE( ( order > 0 ) == ( expected > 0 ) );
+				REQUIRE( ( strA == ae::Str32( b ) ) == ( expected == 0 ) );
+				REQUIRE( ( strA < std::string( b ) ) == ( expected < 0 ) );
+				REQUIRE( ( b < strA ) == ( expected > 0 ) );
+				REQUIRE( ( std::string( b ) >= strA ) == ( expected <= 0 ) );
+			}
+		}
+	}
+
+	SECTION( "prefixes" )
+	{
+		const ae::Str16 ab = "ab";
+		const ae::Str32 abc = "abc";
+		REQUIRE( ab != abc );
+		REQUIRE( ab != "abc" );
+		REQUIRE( "abc" != ab );
+		REQUIRE( ab < abc );
+		REQUIRE( abc > ab );
+		REQUIRE( "ab" < abc );
+		REQUIRE( ( ab <=> abc ) == std::strong_ordering::less );
+		REQUIRE( ( abc <=> ab ) == std::strong_ordering::greater );
+		REQUIRE( ( "abc" <=> ab ) == std::strong_ordering::greater );
+		REQUIRE( ( ab <=> "ab" ) == std::strong_ordering::equal );
+	}
+
+	SECTION( "empty" )
+	{
+		const ae::Str16 empty;
+		REQUIRE( empty == "" );
+		REQUIRE( "" == empty );
+		REQUIRE( empty == ae::Str64() );
+		REQUIRE( empty == std::string() );
+		REQUIRE( empty < "a" );
+		REQUIRE( ( empty <=> "" ) == std::strong_ordering::equal );
+	}
+
+	SECTION( "custom string types" )
+	{
+		const NameTag tag = { "abc" };
+		const Label label = { "abd" };
+		const ae::Str16 str = "abc";
+		REQUIRE( str == tag );
+		REQUIRE( tag == str );
+		REQUIRE( str != label );
+		REQUIRE( str < label );
+		REQUIRE( label > str );
+	}
+
+	SECTION( "after modification" )
+	{
+		ae::Str16 str = "abcdef";
+		str.Trim( 3 );
+		REQUIRE( str == "abc" );
+		REQUIRE( str < "abcd" );
+		str[ 1 ] = 'z';
+		REQUIRE( str == "azc" );
+		REQUIRE( str > "ab" );
+		str += "d";
+		REQUIRE( str == "azcd" );
+	}
+
+	SECTION( "hash matches across sizes" )
+	{
+		REQUIRE( ae::GetHash32( ae::Str16( "abc" ) ) == ae::GetHash32( ae::Str64( "abc" ) ) );
+		REQUIRE( ae::GetHash64( ae::Str16( "abc" ) ) == ae::GetHash64( ae::Str64( "abc" ) ) );
+	}
+}
+
+TEST_CASE( "Str element access and size", "[aeString]" )
+{
+	SECTION( "operator[]" )
+	{
+		ae::Str16 str = "abc";
+		REQUIRE( str[ 0 ] == 'a' );
+		REQUIRE( str[ 2 ] == 'c' );
+		REQUIRE( str[ 3 ] == 0 );
+		str[ 0 ] = 'x';
+		const ae::Str16& constStr = str;
+		REQUIRE( constStr[ 0 ] == 'x' );
+		REQUIRE( constStr == "xbc" );
+	}
+
+	SECTION( "Trim" )
+	{
+		ae::Str16 str = "abcdef";
+		str.Trim( 10 );
+		REQUIRE( str == "abcdef" );
+		str.Trim( 6 );
+		REQUIRE( str == "abcdef" );
+		str.Trim( 3 );
+		REQUIRE( str == "abc" );
+		REQUIRE( str.Length() == 3 );
+		REQUIRE( strlen( str.c_str() ) == 3 );
+		str.Trim( 0 );
+		REQUIRE( str.Empty() );
+	}
+
+	SECTION( "Capacity and Empty" )
+	{
+		REQUIRE( ae::Str16().Capacity() == ae::Str16::MaxLength() );
+		REQUIRE( ae::Str256().Capacity() == ae::Str256::MaxLength() );
+		REQUIRE( ae::Str16().Empty() );
+		REQUIRE( !ae::Str16( "a" ).Empty() );
+	}
+
+	SECTION( "explicit const char*" )
+	{
+		const ae::Str16 str = "abc";
+		REQUIRE( static_cast< const char* >( str ) == str.c_str() );
+	}
+}
+
+TEST_CASE( "Str::Format", "[aeString]" )
+{
+	REQUIRE( ae::Str32::Format( "abc" ) == "abc" );
+	REQUIRE( ae::Str32::Format( "" ).Empty() );
+	REQUIRE( ae::Str32::Format( "#", 1 ) == "1" );
+	REQUIRE( ae::Str32::Format( "a#b#c", 1, "x" ) == "a1bxc" );
+	REQUIRE( ae::Str32::Format( "##", 1, 2 ) == "12" );
+	REQUIRE( ae::Str32::Format( "# #", true, false ) == "true false" );
+	REQUIRE( ae::Str32::Format( "#", 1.23456f ) == "1.235" );
+	REQUIRE( ae::Str32::Format( "#", ae::Str16( "str" ) ) == "str" );
+	REQUIRE( ae::Str32::Format( "#", std::string( "std" ) ) == "std" );
+	REQUIRE( ae::Str32::Format( "a#b" ) == "a#b" );
+	REQUIRE( ae::Str32::Format( "#", 1, 2 ) == "1" );
+	REQUIRE( ae::Str32::Format( "#-#", 12, 345 ).Length() == 6 );
+}
+
+TEST_CASE( "Str streams", "[aeString]" )
+{
+	SECTION( "operator<<" )
+	{
+		std::ostringstream out;
+		out << ae::Str16( "abc" ) << ae::Str64( "def" );
+		REQUIRE( out.str() == "abcdef" );
+	}
+
+	SECTION( "operator>> reads lines" )
+	{
+		std::istringstream in( "abc\n\nde f\nlast" );
+		ae::Str16 str = "start";
+		in >> str;
+		REQUIRE( str == "abc" );
+		REQUIRE( str.Length() == 3 );
+		in >> str;
+		REQUIRE( str.Empty() );
+		in >> str;
+		REQUIRE( str == "de f" );
+		REQUIRE( str.Length() == 4 );
+		in >> str;
+		REQUIRE( str == "last" );
+		REQUIRE( !in.fail() );
+	}
+
+	SECTION( "operator>> max length line" )
+	{
+		std::istringstream in( "abcdefghijklm\nnext\n" );
+		ae::Str16 str;
+		in >> str;
+		REQUIRE( str == "abcdefghijklm" );
+		REQUIRE( str.Length() == ae::Str16::MaxLength() );
+		REQUIRE( in.good() );
+		in >> str;
+		REQUIRE( str == "next" );
+	}
+
+	SECTION( "operator>> truncates long line" )
+	{
+		std::istringstream in( "abcdefghijklmn\n" );
+		ae::Str16 str;
+		in >> str;
+		REQUIRE( in.fail() );
+		REQUIRE( str == "abcdefghijklm" );
+		REQUIRE( str.Length() == ae::Str16::MaxLength() );
+	}
+}
+
+TEST_CASE( "Str length asserts", "[aeString]" )
+{
+	const char* const tooLong = "abcdefghijklmn";
+	ae::Str16 str = "abc";
+	AE_REQUIRE_THROWS( ae::Str16( tooLong ) );
+	AE_REQUIRE_THROWS( ae::Str16( std::string( tooLong ) ) );
+	AE_REQUIRE_THROWS( ae::Str16( ae::Str32( tooLong ) ) );
+	AE_REQUIRE_THROWS( ae::Str16( 14u, tooLong ) );
+	AE_REQUIRE_THROWS( ae::Str16( 14u, 'x' ) );
+	AE_REQUIRE_THROWS( ae::Str16( tooLong, tooLong + 14 ) );
+	AE_REQUIRE_THROWS( str = tooLong );
+	AE_REQUIRE_THROWS( str += "defghijklmn" );
+	AE_REQUIRE_THROWS( str + "defghijklmn" );
+	AE_REQUIRE_THROWS( str.Append( std::string( "defghijklmn" ) ) );
+	AE_REQUIRE_THROWS( str.Insert( 1, "defghijklmn" ) );
+	AE_REQUIRE_THROWS( str.Insert( 4, "d" ) );
+	AE_REQUIRE_THROWS( str[ 4 ] );
+	REQUIRE_NOTHROW( str[ 3 ] );
+	REQUIRE_NOTHROW( str += "defghijklm" );
+	REQUIRE( str.Length() == ae::Str16::MaxLength() );
 }

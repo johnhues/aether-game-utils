@@ -2230,6 +2230,10 @@ INCLUDE_FILE_PATTERNS  =
 
 PREDEFINED             = AE_ALIGN(x)= \
                          AE_DISABLE_COPY_ASSIGNMENT(x)= \
+                         _AE_STATIC_STORAGE= \
+                         _AE_DYNAMIC_STORAGE= \
+                         _AE_FIXED_POOL= \
+                         _AE_PAGED_POOL= \
                          AE_DOXYGEN=1
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
